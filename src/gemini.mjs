@@ -153,16 +153,21 @@ function buildSchedulePrompt(article, name, part) {
 - 배경색이 '흰색(white)'이면 → 번호표를 받은 '출근 확정(근무)' 상태입니다.  role = "work"
 반드시 "${name}"의 이름이 있는 칸의 '배경색'을 확인해서 판단하세요. (레이아웃/위치가 아니라 배경색이 기준입니다.)
 
+★ 스페어 순번 세는 법 (매우 중요):
+"${name}"이 스페어(회색)라면, 순번은 '회색 배경 사람들'만 위에서부터 센 순서입니다.
+흰색(출근 확정) 사람은 절대 세지 마세요. 맨 위 회색 사람이 1번입니다.
+예: 흰색 10명 + 회색에서 3번째 = 전체 13번째지만, 스페어 순번은 "3번"입니다.
+
 이미지에서 "${name}"을 찾아, 그 날 "${name}"의 상태를 판단해 JSON "하나만" 출력하세요(설명 금지):
 {
   "found": true 또는 false,
   "role": "work|spare|off|unknown",
   "cellColor": "gray|white|unknown",   // ${name} 칸의 배경색
-  "number": 정수 또는 null,             // ${name}의 번호(순번)
   "part": "문자열 또는 빈칸",
   "team": "문자열 또는 빈칸",
   "teeTime": "문자열 또는 빈칸",
-  "spareOrder": 정수 또는 null,         // 스페어일 때 대기 순번(= number 와 같을 수 있음)
+  "overallNumber": 정수 또는 null,      // 표 전체에서 ${name}의 위치(참고용)
+  "spareOrder": 정수 또는 null,         // ★회색(스페어) 사람들 중에서 ${name}이 몇 번째인지 (흰색 제외)
   "dateLabel": "문자열 또는 빈칸",
   "status": "work|spare|off|unknown",
   "message": "${name}님 기준 한국어 한 문장"
@@ -174,9 +179,10 @@ role/status 기준(위 배경색 규칙 우선):
 - 이름은 찾았으나 색 판단 불가 → "unknown"
 (role 과 status 는 같은 값으로 채우세요.)
 dateLabel 은 제목/이미지의 날짜를 그대로 (예: "7월 13일 월요일").
+message 의 스페어 번호는 반드시 spareOrder(회색 기준)를 쓰세요. overallNumber 는 쓰지 마세요.
 message 예:
-- work:  "${name}님, 7월 13일 출근 확정입니다 (${part}부 3번)"
-- spare: "${name}님, 7월 13일 스페어(대기) 2번입니다"
+- work:  "${name}님, 7월 13일 출근 확정입니다"
+- spare: "${name}님, 7월 13일 스페어(대기) 3번입니다"
 - off:   "${name}님, 7월 13일 번호표에 이름이 없어요"`;
 }
 
