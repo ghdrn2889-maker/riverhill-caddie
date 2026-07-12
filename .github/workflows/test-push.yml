@@ -1,0 +1,21 @@
+name: test-push
+
+on:
+  workflow_dispatch: {}   # 수동 실행 전용 (테스트 알림 1회 발송)
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: 테스트 알림 발송
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+        run: node action/test-push.mjs
