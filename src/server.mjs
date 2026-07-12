@@ -65,7 +65,7 @@ function saveRecent(article, result, ai) {
     status: ai?.status || null,
     detectedAt: Date.now(),
   });
-  saveJSON('recent.json', recent.slice(0, 50));
+  saveJSON('recent.json', recent.slice(0, 100));
 }
 
 const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13'; // 당일 변동사항
