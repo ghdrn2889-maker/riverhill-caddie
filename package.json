@@ -1,0 +1,21 @@
+{
+  "name": "riverhill-caddie-notifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "리버힐 골프장 캐디 일정 알림 — 네이버 카페 감시 + 웹푸시 PWA",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "gen-vapid": "node scripts/gen-vapid.mjs",
+    "gen-icons": "node scripts/gen-icons.mjs",
+    "spike": "node spike/read-cafe.mjs",
+    "probe": "node spike/probe.mjs"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "web-push": "^3.6.7"
+  }
+}

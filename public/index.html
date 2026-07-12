@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>리버힐 캐디 일정 알림</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b5d34" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <style>
+    :root { --green:#0b5d34; --green2:#0f7a44; --bg:#f4f6f5; --card:#fff; --line:#e5e9e7; --muted:#6b7772; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+           background:var(--bg); color:#1a201d; }
+    header { background:var(--green); color:#fff; padding:20px 18px calc(20px + env(safe-area-inset-bottom,0)); }
+    header h1 { margin:0; font-size:20px; }
+    header p { margin:6px 0 0; font-size:13px; opacity:.85; }
+    main { padding:16px; max-width:640px; margin:0 auto; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+    button { width:100%; border:0; border-radius:12px; padding:15px; font-size:16px; font-weight:700;
+             background:var(--green); color:#fff; cursor:pointer; }
+    button.secondary { background:#eef2f0; color:var(--green); }
+    button:disabled { opacity:.5; }
+    .status { font-size:14px; margin-top:10px; color:var(--muted); text-align:center; }
+    .status.on { color:var(--green2); font-weight:700; }
+    h2 { font-size:15px; margin:18px 4px 10px; color:var(--muted); }
+    .item { display:block; text-decoration:none; color:inherit; padding:13px 14px; border:1px solid var(--line);
+            border-radius:12px; margin-bottom:9px; background:#fff; }
+    .item .subj { font-size:15px; font-weight:600; line-height:1.35; }
+    .item .meta { font-size:12px; color:var(--muted); margin-top:5px; }
+    .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 7px; border-radius:20px;
+             background:#ffe1e1; color:#c02929; margin-right:6px; }
+    .badge.med { background:#fff0d6; color:#a86400; }
+    .empty { color:var(--muted); font-size:14px; text-align:center; padding:20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🏌️ 리버힐 캐디 일정 알림</h1>
+    <p>새 일정 소식이 뜨면 폰으로 바로 알려드려요</p>
+  </header>
+  <main>
+    <div class="card">
+      <button id="enableBtn">🔔 알림 켜기</button>
+      <div id="status" class="status">알림을 켜면 앱을 꺼도 소식이 도착합니다.</div>
+      <button id="testBtn" class="secondary" style="margin-top:10px; display:none;">테스트 알림 보내기</button>
+    </div>
+
+    <h2>최근 감지된 소식</h2>
+    <div id="recent"><div class="empty">아직 감지된 소식이 없어요.</div></div>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

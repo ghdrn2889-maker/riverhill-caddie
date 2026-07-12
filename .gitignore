@@ -1,0 +1,7 @@
+# 절대 커밋/공유 금지 — 로그인 쿠키 등 비밀정보
+.env
+*.zip
+
+node_modules/
+data/
+*.log

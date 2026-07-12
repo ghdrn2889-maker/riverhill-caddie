@@ -1,0 +1,56 @@
+name: watch-cafe
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 5분마다 (GitHub 최소 간격, 가끔 지연될 수 있음)
+  workflow_dispatch: {}      # 수동 실행 버튼
+
+permissions:
+  contents: write            # 상태(seen/recent) 커밋용
+
+concurrency:
+  group: watch-cafe
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: 감시 실행
+        env:
+          NID_AUT: ${{ secrets.NID_AUT }}
+          NID_SES: ${{ secrets.NID_SES }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-flash-latest
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          CAFE_CLUB_ID: '31185658'
+          MY_NAME: '김홍구'
+          MY_PART: '3'
+          WATCH_MENU_IDS: '2,13'
+          CHANGE_MENU_ID: '13'
+          KEYWORDS: '배치표,추가,변동,휴무,취소,대기,스페어,3부,근무'
+          NOTIFY_MODE: keyword
+        run: node action/watch.mjs
+
+      - name: 상태 저장(커밋)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/seen.json docs/recent.json || true
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+          else
+            git commit -m "update state [skip ci]"
+            git push
+          fi
