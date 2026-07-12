@@ -32,6 +32,13 @@
              background:#ffe1e1; color:#c02929; margin-right:6px; }
     .badge.med { background:#fff0d6; color:#a86400; }
     .empty { color:var(--muted); font-size:14px; text-align:center; padding:20px; }
+    .feedhead { display:flex; align-items:center; justify-content:space-between; margin:18px 4px 10px; }
+    .feedhead h2 { margin:0; }
+    .count { display:none; margin-left:8px; background:#c02929; color:#fff; font-size:12px; font-weight:700; padding:1px 8px; border-radius:20px; vertical-align:middle; }
+    .readall { width:auto; background:transparent; color:var(--green2); font-size:13px; font-weight:700; padding:6px 10px; border-radius:8px; }
+    .item.new { border-color:var(--green2); background:#f2fbf6; }
+    .item.new .subj::before { content:"● "; color:#c02929; font-size:10px; vertical-align:middle; }
+    .time { color:var(--green2); font-weight:600; }
     #subBox { display:none; margin-top:14px; }
     #subBox textarea { width:100%; height:96px; font-size:11px; border:1px solid var(--line); border-radius:10px; padding:8px; font-family:monospace; }
     #subBox ol { font-size:13px; color:#333; padding-left:18px; line-height:1.6; }
@@ -60,7 +67,10 @@
       </div>
     </div>
 
-    <h2>최근 감지된 소식</h2>
+    <div class="feedhead">
+      <h2>최근 감지된 소식<span id="unread" class="count"></span></h2>
+      <button id="readAll" class="readall" style="display:none;">모두 읽음</button>
+    </div>
     <div id="recent"><div class="empty">아직 감지된 소식이 없어요.</div></div>
   </main>
   <script src="app.js"></script>

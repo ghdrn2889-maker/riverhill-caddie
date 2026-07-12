@@ -98,6 +98,7 @@ async function checkOnce() {
     recent.unshift({
       id: a.id, subject: a.subject, url: a.url, menuName: a.menuName, writeDate: a.writeDate,
       aiMessage: ai?.message || null, status: ai?.status || null,
+      detectedAt: Date.now(),
     });
   }
   return true;
@@ -116,5 +117,5 @@ while (true) {
 }
 
 save(SEEN, [...seen].slice(-MAX_SEEN));
-save(RECENT, recent.slice(0, 50));
+save(RECENT, recent.slice(0, 100));
 console.log(`실행 종료 (총 ${n}회 확인)`);
