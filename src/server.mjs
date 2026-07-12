@@ -6,6 +6,7 @@ import express from 'express';
 import path from 'node:path';
 import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
+import { PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn } from './gemini.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
@@ -90,6 +91,14 @@ function titleForStatus(status) {
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
 async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
   const { mentionsMe, mentionsPart } = isForMe(full);
+
+  // 남의 개인 근태 신청글(휴무/후출/조출 등)은 내 이름이 없으면 제외.
+  // 본문/말머리까지 검사 (제목만으로 못 거른 경우의 백업).
+  const label = `${full.head || ''} ${full.subject}`;
+  if (PERSONAL_REQUEST_RE.test(label) && !mentionsMe) {
+    console.log(`·  (개인 근태글, 건너뜀) [${full.head || ''}] ${full.subject} — ${full.writer || ''}`);
+    return { skipped: true };
+  }
 
   // 당일 변동 게시판인데 이미지도 없고 나/3부 언급도 없으면
   // = 남의 개인 요청(예: "우정민 휴무신청") → 알림/피드에서 제외.

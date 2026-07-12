@@ -2,6 +2,9 @@
 // 게시판(menuId) 기반이 가장 정확 — 당일 변동사항(13), 배치 시간표(2)는 무조건 관련.
 // 이름/키워드는 보조. (실제 순번 계산은 gemini.mjs 가 담당)
 
+// 남의 개인 근태 신청글 패턴 (내 이름이 없으면 내 순번과 무관 → 제외)
+export const PERSONAL_REQUEST_RE = /(휴무|후출|조출|연차|반차|월차|병가)/;
+
 export function analyze(article) {
   const name = (process.env.MY_NAME || '').trim();               // 김홍구
   const part = (process.env.MY_PART || '').trim();               // 3
@@ -34,6 +37,15 @@ export function analyze(article) {
   // 4) 신호어(보조) — 표시용으로만 기록. 단독으로는 알림을 띄우지 않는다.
   //    (예: 남의 "휴무" 글이 키워드만으로 알림 오던 문제 방지)
   for (const k of keywords) if (subject.includes(k)) hits.push(k);
+
+  // 개인 근태 신청글(휴무/후출/조출/연차 등)은 남의 것이면 제외.
+  //   예: "김수인 7월 15일 후출신청 16일 후출취소합니다" → 내 이름 없으면 무관.
+  //   (3부 언급이 있어도 남의 개인 신청은 내 순번과 무관하므로 걸러낸다)
+  const isPersonal = PERSONAL_REQUEST_RE.test(subject);
+  const aboutMe = name && subject.includes(name);
+  if (isPersonal && !aboutMe) {
+    return { relevant: notifyAll, hits: [...hits, '개인근태(제외)'], priority: 'info' };
+  }
 
   // 알림 대상: 감시 게시판 / 내 이름 / 내 부(部) 언급이 있을 때만.
   // 키워드만 걸린 글은 제외한다.
