@@ -68,6 +68,16 @@ function saveRecent(article, result, ai) {
   saveJSON('recent.json', recent.slice(0, 100));
 }
 
+// 본문을 보고 '나(김홍구, 3부)와 관련 있는 글'인지 최종 판단.
+function isForMe(full) {
+  const name = (process.env.MY_NAME || '').trim();
+  const part = (process.env.MY_PART || '').trim();
+  const blob = `${full.subject}\n${full.head || ''}\n${full.text || ''}`;
+  const mentionsMe = name && blob.includes(name);
+  const mentionsPart = part && blob.includes(`${part}부`);
+  return { mentionsMe, mentionsPart };
+}
+
 const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13'; // 당일 변동사항
 
 function titleForStatus(status) {
@@ -79,6 +89,15 @@ function titleForStatus(status) {
 
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
 async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
+  const { mentionsMe, mentionsPart } = isForMe(full);
+
+  // 당일 변동 게시판인데 이미지도 없고 나/3부 언급도 없으면
+  // = 남의 개인 요청(예: "우정민 휴무신청") → 알림/피드에서 제외.
+  if (String(full.menuId) === CHANGE_MENU_ID && !full.images.length && !mentionsMe && !mentionsPart) {
+    console.log(`·  (나와 무관, 건너뜀) [${full.head || ''}] ${full.subject} — ${full.writer || ''}`);
+    return { skipped: true };
+  }
+
   let title = result.priority === 'high' ? '🔔 일정 소식' : '🏌️ 새 소식';
   let body = full.subject;
   let ai = null;
@@ -90,7 +109,7 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
   }
 
   saveRecent(
-    { id: full.id, subject: full.subject, url: full.url, menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate },
+    { id: full.id, subject: full.subject, writer: full.writer, url: full.url, menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate },
     result, ai,
   );
   await broadcast({ title, body, url: full.url });
@@ -101,6 +120,8 @@ startCrawler({
   onMatch: async (article, result) => {
     try {
       const full = await fetchArticle(article.id);
+      full.writer = full.writer || article.writer || '';
+      full.writeDate = full.writeDate || article.writeDate || '';
       await notifyForArticle(full, result);
     } catch (e) {
       console.error('본문 분석 실패, 제목으로 알림:', e.message);

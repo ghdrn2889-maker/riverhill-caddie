@@ -45,11 +45,12 @@ export function startCrawler({ onMatch, onCafeError }) {
 
     for (const a of fresh.reverse()) { // 오래된 것부터
       const result = analyze(a);
+      const who = [a.writer, a.writeDate].filter(Boolean).join(' · ');
       if (result.relevant) {
-        console.log(`🔔 [${result.priority}] ${a.subject}  (${result.hits.join(', ')})`);
+        console.log(`🔔 [${result.priority}] ${a.subject}  (${result.hits.join(', ')})  — ${who}`);
         try { await onMatch(a, result); } catch (e) { console.error('onMatch 오류:', e.message); }
       } else {
-        console.log(`·  (무관) ${a.subject}`);
+        console.log(`·  (무관) ${a.subject}  — ${who}`);
       }
     }
   }

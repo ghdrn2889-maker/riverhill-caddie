@@ -31,9 +31,12 @@ export function analyze(article) {
     hits.push(`${part}부`);
     if (priority !== 'high') priority = 'medium';
   }
-  // 4) 신호어(보조)
+  // 4) 신호어(보조) — 표시용으로만 기록. 단독으로는 알림을 띄우지 않는다.
+  //    (예: 남의 "휴무" 글이 키워드만으로 알림 오던 문제 방지)
   for (const k of keywords) if (subject.includes(k)) hits.push(k);
 
-  const relevant = notifyAll || hits.length > 0;
+  // 알림 대상: 감시 게시판 / 내 이름 / 내 부(部) 언급이 있을 때만.
+  // 키워드만 걸린 글은 제외한다.
+  const relevant = notifyAll || priority === 'high' || priority === 'medium';
   return { relevant, hits, priority };
 }

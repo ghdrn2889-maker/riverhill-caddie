@@ -117,7 +117,7 @@ async function loadRecent() {
 
       const parts = [];
       if (when) parts.push(`<span class="time">${escapeHtml(when)}</span>`);
-      const rest = [sub, a.menuName].filter(Boolean).join(' · ');
+      const rest = [sub, a.writer, a.menuName, a.writeDate].filter(Boolean).join(' · ');
       if (rest) parts.push(escapeHtml(rest));
       const metaLine = parts.join(' · ');
 

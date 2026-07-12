@@ -52,6 +52,7 @@ export async function fetchArticle(id) {
   return {
     id: String(id),
     subject: art.subject || '',
+    writer: art.writer?.nick || art.writer?.nickname || art.writerNick || '',
     menuId: art.menu?.id != null ? String(art.menu.id) : '',
     menuName: art.menu?.name || '',
     head: art.head || '',                       // 말머리 (당일추가/당일취소/휴무신청 등)

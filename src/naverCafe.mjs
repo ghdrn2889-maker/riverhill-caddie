@@ -39,6 +39,7 @@ export async function fetchLatestArticles(perPage = 20) {
     .map((a) => ({
       id: String(a.articleId),
       subject: a.subject,
+      writer: a.writerNickname ?? a.writerInfo?.nickName ?? a.writerInfo?.nickname ?? '',
       writeDate: a.writeDate ?? '',
       ts: a.writeDateTimestamp ?? null,
       menuId: a.menuId != null ? String(a.menuId) : '',
