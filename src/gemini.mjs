@@ -3,6 +3,26 @@
 //  - analyzeSchedule: '배치표'        → 오늘/내일 내가 근무인지 스페어인지
 // 키(GEMINI_API_KEY)가 없거나 실패하면 null 을 돌려주고, 서버는 제목 알림으로 폴백한다.
 
+// Gemini가 JSON 앞뒤에 코드펜스나 잡텍스트를 붙여도 첫 번째 완전한 {…} 만 뽑아 파싱.
+function parseJSONLoose(txt) {
+  let s = String(txt).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try { return JSON.parse(s); } catch {}
+  const start = s.indexOf('{');
+  if (start === -1) throw new Error('JSON 객체를 찾지 못함');
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return JSON.parse(s.slice(start, i + 1));
+  }
+  throw new Error('JSON 괄호가 안 맞음');
+}
+
 async function fetchImageBase64(url) {
   const res = await fetch(url, {
     headers: {
@@ -60,7 +80,7 @@ async function callGeminiJSON(promptText, imageUrl) {
       const data = await res.json();
       const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!txt) { console.error(`[gemini] 빈 응답 (시도 ${attempt})`); continue; }
-      return JSON.parse(txt);
+      return parseJSONLoose(txt);
     } catch (e) {
       console.error(`[gemini] 실패 (시도 ${attempt}):`, e.message);
     }
