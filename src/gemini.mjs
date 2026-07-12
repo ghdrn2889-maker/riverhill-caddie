@@ -9,6 +9,7 @@ async function fetchImageBase64(url) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       'Referer': 'https://cafe.naver.com/',
     },
+    signal: AbortSignal.timeout(15000),   // 15초 넘으면 중단 (무한 대기 방지)
   });
   if (!res.ok) throw new Error(`이미지 다운로드 HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -50,6 +51,7 @@ async function callGeminiJSON(promptText, imageUrl) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),   // 30초 넘으면 중단 후 재시도
       });
       if (!res.ok) {
         console.error(`[gemini] HTTP ${res.status} (시도 ${attempt})`, (await res.text()).slice(0, 200));

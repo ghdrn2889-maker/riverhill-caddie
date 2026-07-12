@@ -38,6 +38,7 @@ export async function fetchArticle(id) {
       'Cookie': `NID_AUT=${nidAut}; NID_SES=${nidSes}`,
       'Accept': 'application/json, text/plain, */*',
     },
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`글 읽기 HTTP ${res.status}`);
   const data = await res.json();

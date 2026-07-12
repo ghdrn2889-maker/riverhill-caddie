@@ -25,6 +25,7 @@ export async function fetchLatestArticles(perPage = 20) {
       'Cookie': `NID_AUT=${nidAut}; NID_SES=${nidSes}`,
       'Accept': 'application/json, text/plain, */*',
     },
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
