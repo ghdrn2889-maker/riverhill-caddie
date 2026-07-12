@@ -95,8 +95,8 @@ function titleForStatus(status) {
     case 'near':      return '🔔 곧 출근 순번!';
     case 'assigned':  return '✅ 오늘 근무 배정됨';
     case 'waiting':   return '🏌️ 3부 대기 현황';
-    case 'work':      return '✅ 근무입니다';
-    case 'spare':     return '🏌️ 스페어(대기)입니다';
+    case 'work':      return '✅ 출근 확정!';
+    case 'spare':     return '🏌️ 스페어(대기)';
     case 'off':       return '😴 근무 없음';
     default:          return '🏌️ 새 소식';
   }

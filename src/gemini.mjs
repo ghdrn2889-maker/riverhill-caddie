@@ -85,6 +85,12 @@ function buildTurnPrompt(article, name, part) {
 배경 지식: 제목의 "○○님까지 일됩니다"는 순번상 그 사람까지 근무가 배정됐다는 뜻입니다.
 대기 순번에서 배정 커트라인이 "${name}"에 도달하거나 지나면 "${name}"도 근무하러 나가야 합니다.
 
+★ 배경색 규칙 — 각 사람 이름 칸의 배경색:
+- '흰색(white)' = 번호표를 받아 이미 '출근 확정(근무 배정)'된 사람.
+- '회색(gray)'  = 아직 배정 안 된 '스페어(대기)' 사람.
+"${name}" 칸이 흰색이면 이미 배정된 것이고(status "assigned"), 회색이면 아직 대기 중입니다.
+회색이라면 커트라인(마지막 흰색)에서 "${name}"까지 남은 인원을 세어 remaining 을 구하세요.
+
 이미지와 제목을 함께 보고 아래를 계산해, 반드시 JSON "하나만" 출력하세요(설명 금지):
 {
   "found": true 또는 false,
@@ -113,37 +119,43 @@ export async function analyzeTurn(article) {
 
 // ── 2) 배치표 → 내가 근무인지 스페어인지 ─────────────────────
 function buildSchedulePrompt(article, name, part) {
-  return `당신은 골프장 캐디 배치표(배치 시간표)를 읽는 도우미입니다.
+  return `당신은 골프장 캐디 번호표(배치 시간표)를 읽는 도우미입니다.
 대상 캐디: 이름 "${name}", ${part}부 소속.
 
-아래는 특정 날짜의 '배치표' 게시글입니다.
+아래는 특정 날짜의 '번호표(배치표)' 게시글입니다.
 - 글 제목: "${article.subject}"
-- 첨부 이미지: 그 날짜의 캐디 배치표입니다. 보통 부(部)/팀(조)/티오프 시간별로 근무 캐디가 적혀 있고,
-  스페어(대기) 캐디는 '스페어' 또는 '대기' 칸에 따로 순서대로 적혀 있습니다.
+- 첨부 이미지: 캐디들이 번호(순번) 순서로 나열된 표입니다.
+
+★ 가장 중요한 판별 규칙 — 각 사람 '이름 칸(행/셀)의 배경색'으로 근무/스페어를 구분합니다:
+- 배경색이 '회색(gray)'이면  → 라운드 배치가 안 된 '스페어(대기)' 상태입니다.  role = "spare"
+- 배경색이 '흰색(white)'이면 → 번호표를 받은 '출근 확정(근무)' 상태입니다.  role = "work"
+반드시 "${name}"의 이름이 있는 칸의 '배경색'을 확인해서 판단하세요. (레이아웃/위치가 아니라 배경색이 기준입니다.)
 
 이미지에서 "${name}"을 찾아, 그 날 "${name}"의 상태를 판단해 JSON "하나만" 출력하세요(설명 금지):
 {
   "found": true 또는 false,
   "role": "work|spare|off|unknown",
+  "cellColor": "gray|white|unknown",   // ${name} 칸의 배경색
+  "number": 정수 또는 null,             // ${name}의 번호(순번)
   "part": "문자열 또는 빈칸",
   "team": "문자열 또는 빈칸",
   "teeTime": "문자열 또는 빈칸",
-  "spareOrder": 정수 또는 null,
+  "spareOrder": 정수 또는 null,         // 스페어일 때 대기 순번(= number 와 같을 수 있음)
   "dateLabel": "문자열 또는 빈칸",
   "status": "work|spare|off|unknown",
   "message": "${name}님 기준 한국어 한 문장"
 }
-role/status 기준:
-- 팀/시간에 배정되어 근무 → "work"
-- 스페어(대기) 목록에 있음 → "spare"
-- 배치표에 근무도 스페어도 없음(휴무 등) → "off"
-- 못 찾음 → "unknown"
+role/status 기준(위 배경색 규칙 우선):
+- 흰색 배경(번호표 받음) → "work"
+- 회색 배경(라운드 미배치) → "spare"
+- 표에서 "${name}"을 아예 못 찾음 → "off"(못 찾음은 unknown 아님, off 로)
+- 이름은 찾았으나 색 판단 불가 → "unknown"
 (role 과 status 는 같은 값으로 채우세요.)
 dateLabel 은 제목/이미지의 날짜를 그대로 (예: "7월 13일 월요일").
 message 예:
-- work:  "${name}님, 7월 13일 3부 5팀 07:20 근무입니다"
+- work:  "${name}님, 7월 13일 출근 확정입니다 (${part}부 3번)"
 - spare: "${name}님, 7월 13일 스페어(대기) 2번입니다"
-- off:   "${name}님, 7월 13일 배치표에 근무가 없어요"`;
+- off:   "${name}님, 7월 13일 번호표에 이름이 없어요"`;
 }
 
 // 반환: {found, role, part, team, teeTime, spareOrder, dateLabel, status, message} 또는 null
