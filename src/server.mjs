@@ -46,7 +46,7 @@ app.post('/api/simulate', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'id 필요 (예: /api/simulate?id=26231)' });
   try {
     const full = await fetchArticle(id);
-    const out = await notifyForArticle(full);
+    const out = await notifyForArticle(full, { hits: [], priority: 'high' }, { force: true });
     res.json({ ok: true, writer: full.writer, menuId: full.menuId, menuName: full.menuName, ...out });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -103,7 +103,7 @@ function titleForStatus(status) {
 }
 
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
-async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
+async function notifyForArticle(full, result = { hits: [], priority: 'high' }, opts = {}) {
   const trusted = isScheduleWriter(full.writer);
   const aboutMe = mentionsMe(full);
 
@@ -138,8 +138,9 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
   }
 
   // 3) 내 상태가 직전 알림과 동일하면(변동 없음) → 중복 알림 방지
+  //    (테스트 시엔 opts.force 로 이 검사를 건너뛴다)
   const sig = stateSig(full, ai);
-  if (sig) {
+  if (sig && !opts.force) {
     const last = loadJSON('laststate.json', {});
     if (last.sig === sig) {
       console.log(`·  (직전과 동일, 변동 없음 → 건너뜀) ${full.subject}`);
