@@ -47,7 +47,7 @@ app.post('/api/simulate', async (req, res) => {
   try {
     const full = await fetchArticle(id);
     const out = await notifyForArticle(full);
-    res.json({ ok: true, ...out });
+    res.json({ ok: true, writer: full.writer, menuId: full.menuId, menuName: full.menuName, ...out });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
