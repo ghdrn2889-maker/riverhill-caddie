@@ -41,6 +41,8 @@ jobs:
           CHANGE_MENU_ID: '13'
           KEYWORDS: '배치표,추가,변동,휴무,취소,대기,스페어,3부,근무'
           NOTIFY_MODE: keyword
+          LOOP_SECONDS: '240'       # 이 실행이 4분간 돌며
+          INTERVAL_SECONDS: '60'    # 60초마다 확인 → 5분 주기 예약과 합쳐 ≈1분 간격
         run: node action/watch.mjs
 
       - name: 상태 저장(커밋)
