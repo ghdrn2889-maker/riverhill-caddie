@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'node:path';
 import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
-import { PERSONAL_REQUEST_RE } from './analyzer.mjs';
+import { isScheduleWriter } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
@@ -69,14 +69,20 @@ function saveRecent(article, result, ai) {
   saveJSON('recent.json', recent.slice(0, 100));
 }
 
-// 본문을 보고 '나(김홍구, 3부)와 관련 있는 글'인지 최종 판단.
-function isForMe(full) {
+// 본문을 보고 '나(김홍구)'가 글/본문에 직접 언급됐는지.
+function mentionsMe(full) {
   const name = (process.env.MY_NAME || '').trim();
-  const part = (process.env.MY_PART || '').trim();
   const blob = `${full.subject}\n${full.head || ''}\n${full.text || ''}`;
-  const mentionsMe = name && blob.includes(name);
-  const mentionsPart = part && blob.includes(`${part}부`);
-  return { mentionsMe, mentionsPart };
+  return !!(name && blob.includes(name));
+}
+
+// AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
+function stateSig(full, ai) {
+  if (!ai || ai.found === false) return null;
+  const d = ai.dateLabel || full.writeDate || '';
+  if (ai.role) return `sch|${d}|${ai.role}|${ai.team || ''}|${ai.teeTime || ''}|${ai.spareOrder ?? ''}`;
+  if (ai.status) return `turn|${d}|${ai.status}|${ai.remaining ?? ''}|${ai.cutoffName || ''}`;
+  return null;
 }
 
 const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13';     // 당일 변동사항
@@ -98,20 +104,12 @@ function titleForStatus(status) {
 
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
 async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
-  const { mentionsMe, mentionsPart } = isForMe(full);
+  const trusted = isScheduleWriter(full.writer);
+  const aboutMe = mentionsMe(full);
 
-  // 남의 개인 근태 신청글(휴무/후출/조출 등)은 내 이름이 없으면 제외.
-  // 본문/말머리까지 검사 (제목만으로 못 거른 경우의 백업).
-  const label = `${full.head || ''} ${full.subject}`;
-  if (PERSONAL_REQUEST_RE.test(label) && !mentionsMe) {
-    console.log(`·  (개인 근태글, 건너뜀) [${full.head || ''}] ${full.subject} — ${full.writer || ''}`);
-    return { skipped: true };
-  }
-
-  // 당일 변동 게시판인데 이미지도 없고 나/3부 언급도 없으면
-  // = 남의 개인 요청(예: "우정민 휴무신청") → 알림/피드에서 제외.
-  if (String(full.menuId) === CHANGE_MENU_ID && !full.images.length && !mentionsMe && !mentionsPart) {
-    console.log(`·  (나와 무관, 건너뜀) [${full.head || ''}] ${full.subject} — ${full.writer || ''}`);
+  // 1) 신뢰 작성자(번호표/배치표 담당)도 아니고, 내 이름도 없으면 → 남의 소식 → 무시
+  if (!trusted && !aboutMe) {
+    console.log(`·  (무관 작성자, 건너뜀) ${full.subject} — ${full.writer || ''}`);
     return { skipped: true };
   }
 
@@ -121,7 +119,7 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
 
   if (process.env.GEMINI_API_KEY && full.images.length) {
     if (String(full.menuId) === CHANGE_MENU_ID) {
-      // 당일 변동사항 → 순번 계산
+      // 당일 변동사항(번호표) → 순번 계산
       ai = await analyzeTurn(full);
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
@@ -131,6 +129,23 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 배치표';
     }
+  }
+
+  // 2) 배치표/번호표에 내 이름이 없으면(found=false) → 나와 무관 → 알림 안 함
+  if (ai && ai.found === false) {
+    console.log(`·  (배치표/번호표에 내 이름 없음, 건너뜀) ${full.subject}`);
+    return { skipped: true };
+  }
+
+  // 3) 내 상태가 직전 알림과 동일하면(변동 없음) → 중복 알림 방지
+  const sig = stateSig(full, ai);
+  if (sig) {
+    const last = loadJSON('laststate.json', {});
+    if (last.sig === sig) {
+      console.log(`·  (직전과 동일, 변동 없음 → 건너뜀) ${full.subject}`);
+      return { skipped: true };
+    }
+    saveJSON('laststate.json', { sig, at: Date.now(), subject: full.subject });
   }
 
   saveRecent(
