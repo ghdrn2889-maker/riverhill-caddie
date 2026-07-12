@@ -8,7 +8,7 @@ import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
-import { analyzeTurn } from './gemini.mjs';
+import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
 initPush();
@@ -79,13 +79,21 @@ function isForMe(full) {
   return { mentionsMe, mentionsPart };
 }
 
-const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13'; // 당일 변동사항
+const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13';     // 당일 변동사항
+const SCHEDULE_MENU_ID = process.env.SCHEDULE_MENU_ID || '2';  // 배치 시간표(배치표)
 
+// AI가 판단한 상태(status)에 맞춰 알림 제목을 정한다.
 function titleForStatus(status) {
-  return status === 'your_turn' ? '🚨 지금 근무 차례!'
-    : status === 'near' ? '🔔 곧 근무 차례!'
-    : status === 'assigned' ? '✅ 오늘 근무 배정됨'
-    : '🏌️ 3부 변동사항';
+  switch (status) {
+    case 'your_turn': return '🚨 지금 출근 순번!';
+    case 'near':      return '🔔 곧 출근 순번!';
+    case 'assigned':  return '✅ 오늘 근무 배정됨';
+    case 'waiting':   return '🏌️ 3부 대기 현황';
+    case 'work':      return '✅ 근무입니다';
+    case 'spare':     return '🏌️ 스페어(대기)입니다';
+    case 'off':       return '😴 근무 없음';
+    default:          return '🏌️ 새 소식';
+  }
 }
 
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
@@ -111,10 +119,18 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }) {
   let body = full.subject;
   let ai = null;
 
-  if (process.env.GEMINI_API_KEY && String(full.menuId) === CHANGE_MENU_ID && full.images.length) {
-    ai = await analyzeTurn(full);
-    if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
-    else title = '🏌️ 3부 변동사항';
+  if (process.env.GEMINI_API_KEY && full.images.length) {
+    if (String(full.menuId) === CHANGE_MENU_ID) {
+      // 당일 변동사항 → 순번 계산
+      ai = await analyzeTurn(full);
+      if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
+      else title = '🏌️ 3부 변동사항';
+    } else if (String(full.menuId) === SCHEDULE_MENU_ID) {
+      // 배치표 → 내가 근무/스페어인지 번역
+      ai = await analyzeSchedule(full);
+      if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
+      else title = '🏌️ 배치표';
+    }
   }
 
   saveRecent(

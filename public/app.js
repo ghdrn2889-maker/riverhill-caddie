@@ -109,7 +109,9 @@ async function loadRecent() {
 
       const badge = a.status === 'your_turn' ? '<span class="badge">지금 차례</span>'
         : a.status === 'near' ? '<span class="badge">곧 차례</span>'
-        : a.status === 'assigned' ? '<span class="badge med">배정됨</span>'
+        : a.status === 'assigned' || a.status === 'work' ? '<span class="badge med">근무</span>'
+        : a.status === 'spare' ? '<span class="badge">스페어</span>'
+        : a.status === 'off' ? '<span class="badge med">근무없음</span>'
         : a.priority === 'high' ? '<span class="badge med">일정</span>' : '';
       const headline = a.aiMessage || a.subject;
       const sub = a.aiMessage ? a.subject : '';
