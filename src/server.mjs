@@ -109,18 +109,52 @@ function partRelevant(full) {
   return true; // 부/시간 단서 없음 → 전체 공지로 보고 통과
 }
 
-// 배치표에서 뽑은 '오늘의 김홍구 기준점'을 저장 → 이후 번호표 분석의 앵커로 사용.
+// 배치표에서 뽑은 '오늘의 김홍구 기준점 + 3부 스페어 명단'을 저장.
 function saveBaseline(full, ai) {
   const baseline = {
     date: ai.dateLabel || full.writeDate || '',
     name: (process.env.MY_NAME || '').trim(),
     part: ai.part || `${(process.env.MY_PART || '').trim()}부`,
     role: ai.role || ai.status || '',
+    dayStatus: ai.dayStatus || '',
+    spareList: Array.isArray(ai.spareList) ? ai.spareList : [],
+    myIndex: ai.myIndex ?? null,
     articleId: full.id,
     savedAt: Date.now(),
   };
   saveJSON('baseline.json', baseline);
-  console.log(`[기준점 저장] ${baseline.date} ${baseline.part} ${baseline.role}`);
+  console.log(`[기준점 저장] ${baseline.date} ${baseline.role} (스페어 ${baseline.myIndex ?? '-'}/${baseline.spareList.length}명)`);
+}
+
+// 저장된 3부 스페어 명단 + 변동글의 "○○님까지 근무/일됩니다" 로 남은 인원을 '코드로' 계산.
+// (Gemini 이미지 재분석 없이 명단 조회+산수 → 실수 없음). 계산 불가하면 null.
+function computeTurnFromRoster(full, baseline) {
+  const list = baseline?.spareList;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const name = baseline.name || (process.env.MY_NAME || '').trim();
+  const blob = `${full.subject}\n${full.text || ''}`;
+  const m = blob.match(/([가-힣]{2,4})\s*님?\s*까지/); // "○○님까지"
+  if (!m) return null;
+  const cutoff = m[1];
+  const norm = (s) => String(s).replace(/\(.*?\)/g, '').trim();
+  const ci = list.findIndex((n) => { const a = norm(n); return a === cutoff || a.includes(cutoff) || cutoff.includes(a); });
+  const mi = list.findIndex((n) => { const a = norm(n); return a === name || a.includes(name) || name.includes(a); });
+  if (ci < 0 || mi < 0) return null;
+
+  const remaining = mi - ci - 1; // 커트라인 다음 ~ 김홍구 직전 인원
+  let status, message;
+  if (remaining < 0) {
+    status = 'assigned';
+    message = `${name}님, 오늘 근무 배정됐어요! (${cutoff}님까지 근무)`;
+  } else if (remaining === 0) {
+    status = 'your_turn';
+    message = `${name}님, 지금 출근하실 차례예요! (${cutoff}님까지 근무)`;
+  } else {
+    status = remaining <= 2 ? 'near' : 'waiting';
+    const before = norm(list[mi - 1]);
+    message = `${name}님, 앞으로 ${remaining}명 남았어요 (바로 앞 ${before}님, ${cutoff}님까지 근무)`;
+  }
+  return { found: true, cutoffName: cutoff, remaining, status, message, source: 'roster' };
 }
 
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
@@ -179,15 +213,18 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
   let body = full.subject;
   let ai = null;
 
-  if (process.env.GEMINI_API_KEY && full.images.length) {
+  if (process.env.GEMINI_API_KEY) {
     if (String(full.menuId) === CHANGE_MENU_ID) {
-      // 당일 변동사항(번호표) → 순번 계산. 오늘 배치표 기준점을 앵커로 주입.
+      // 당일 변동사항(번호표) → 순번 계산.
       const baseline = loadJSON('baseline.json', null);
-      ai = await analyzeTurn(full, baseline);
+      // 1순위: 저장된 스페어 명단 + 제목의 "○○까지" 커트라인으로 코드 계산(정확, 이미지 불필요).
+      ai = computeTurnFromRoster(full, baseline);
+      // 2순위: 명단/커트라인 못 구하면 Gemini 이미지 분석(기준점 앵커 주입).
+      if (!ai && full.images.length) ai = await analyzeTurn(full, baseline);
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
-    } else if (String(full.menuId) === SCHEDULE_MENU_ID) {
-      // 배치표 → 내가 근무/스페어인지 번역 + 그날 기준점 저장
+    } else if (String(full.menuId) === SCHEDULE_MENU_ID && full.images.length) {
+      // 배치표 → 김홍구 상태 + 3부 스페어 명단 저장
       ai = await analyzeSchedule(full);
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 배치표';

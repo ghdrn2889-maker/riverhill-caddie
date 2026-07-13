@@ -151,45 +151,51 @@ export async function analyzeTurn(article, baseline = null) {
   return callGeminiJSON(buildTurnPrompt(article, name, part, baseline), article.images[0]);
 }
 
-// ── 2) 배치표 → 내가 근무인지 스페어인지 (정확한 순번은 계산하지 않음) ──
+// ── 2) 배치표 → 김홍구 상태 확인 + 3부 스페어 명단(순서) 추출 ──
 function buildSchedulePrompt(article, name, part) {
-  return `당신은 골프장 캐디 배치표(배치 시간표)를 읽는 도우미입니다.
-대상 캐디: 이름 "${name}", ${part}부 소속.
+  return `당신은 골프장 캐디 배치표를 읽는 도우미입니다. 대상 캐디: "${name}", ${part}부.
+글 제목: "${article.subject}"
 
-아래는 특정 날짜의 '배치표' 게시글입니다.
-- 글 제목: "${article.subject}"
-- 첨부 이미지: 1~3부 시간표와 조 배치가 함께 담긴 표입니다. "${name}"은 보통 조 배치표 안에
-  이름과 함께 근무 표시(예: "${part}부", "휴무", "당번" 등)로 나타납니다.
+[배치표 구조]
+- 오른쪽에 "1조 2조 3조 4조" 조 배치표가 있고, 각 사람 이름 옆에 근무표시가 붙습니다
+  (예: "${part}부", "휴무", "휴가", "병가", "54", "2,3", "당번", "선발", "조출", "정출", "배치").
+- 각 부(1부/2부/3부)마다 "OUT n부 IN" 시간표가 있고, 그 '왼쪽'에 그 부의 "순번/이름" 목록이 있습니다.
 
-목표는 딱 하나 — 그 날 "${name}"이 (1) 근무 배정인지 (2) 스페어(대기)인지 (3) 없는지 판단하는 것.
-정확한 대기 '순번'은 계산하지 마세요(이 표로는 부정확함). 근무 여부만 판단하면 됩니다.
+[1단계] 조 배치표(1~4조)에서 "${name}"을 찾아 옆의 근무표시를 읽으세요 → dayStatus.
+- "휴무/휴가/병가" → role="off" (오늘 쉼)
+- "54" → role="work" (1·2·3부 모두 근무)
+- "${part}부" 또는 "2,3" 등 ${part}부 포함 → ${part}부 관련 → 2단계로.
+- 조 배치표에서 "${name}"을 못 찾으면 found=false, role="off".
 
-판별 기준:
-- 이름 옆/칸에 "${part}부" 같은 대기 표시가 있고 특정 팀/시간에 배정돼 있지 않다 → "spare"(스페어/대기)
-- 특정 조·팀·티오프 시간에 배정되어 실제 라운드를 도는 것으로 보인다 → "work"(근무)
-- "휴무"로 표시되거나 표에서 "${name}"을 찾을 수 없다 → "off"
+[2단계] "${part}부 순번 목록"("OUT ${part}부 IN" 시간표 '왼쪽'의 순번/이름 목록)을 위에서부터 읽으세요.
+★ 배경색 = 신분:
+- 녹색(보통 "54") / 하늘색(보통 "2,3") / 흰색 = '근무 확정'
+- 회색 = '스페어(대기)'. 회색은 목록 맨 뒤에 연속으로 몰려 있습니다.
+"${name}"을 이 목록에서 찾아 배경색 확인:
+- 회색이면 role="spare". 회색(스페어) 사람들을 '위에서 아래로' 순서대로 모두 나열(spareList)하고,
+  그 안에서 "${name}"이 몇 번째인지(myIndex, 1부터) 세세요.
+- 근무색(녹/하늘/흰)이면 role="work".
 
-반드시 JSON "하나만" 출력하세요(설명 금지):
+반드시 JSON "하나만" 출력(설명 금지):
 {
   "found": true 또는 false,
+  "dayStatus": "조 배치표에서 ${name} 옆 표시(예: 3부/휴무/54)",
   "role": "work|spare|off|unknown",
-  "part": "문자열 또는 빈칸",
-  "team": "문자열 또는 빈칸",
-  "teeTime": "문자열 또는 빈칸",
-  "dateLabel": "문자열 또는 빈칸",
-  "status": "work|spare|off|unknown",
-  "message": "${name}님 기준 한국어 한 문장(순번 숫자는 넣지 말 것)"
+  "part": "${part}부",
+  "spareList": ["회색(스페어) 이름들을 순서대로", "..."],
+  "myIndex": 정수 또는 null,
+  "dateLabel": "제목/이미지의 날짜 그대로 (예: 7월 13일 월요일)",
+  "status": "role 과 동일 값",
+  "message": "${name}님 기준 한국어 한 문장"
 }
-(role 과 status 는 같은 값으로 채우세요.)
-dateLabel 은 제목/이미지의 날짜를 그대로 (예: "7월 13일 월요일").
-message 에는 순번 숫자를 넣지 마세요. (정확한 순번은 당일 번호표에서 따로 계산함)
+(spareList/myIndex 는 role=spare 일 때만 채우세요. myIndex 는 spareList 에서 ${name} 위치(1부터).)
 message 예:
+- off:   "${name}님, 7월 13일 휴무입니다. 편히 쉬세요"
 - work:  "${name}님, 7월 13일 ${part}부 근무(출근 확정)입니다"
-- spare: "${name}님, 7월 13일 ${part}부 스페어(대기)입니다"
-- off:   "${name}님, 7월 13일 배치표에 근무가 없어요(휴무/미포함)"`;
+- spare: "${name}님, 7월 13일 ${part}부 스페어 대기 N번입니다" (N=myIndex)`;
 }
 
-// 반환: {found, role, part, team, teeTime, spareOrder, dateLabel, status, message} 또는 null
+// 반환: {found, dayStatus, role, part, spareList, myIndex, dateLabel, status, message} 또는 null
 export async function analyzeSchedule(article) {
   if (!article.images?.length) return null;
   const { name, part } = nameAndPart();
