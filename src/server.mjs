@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'node:path';
 import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
-import { isScheduleWriter } from './analyzer.mjs';
+import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
@@ -76,10 +76,20 @@ function mentionsMe(full) {
   return !!(name && blob.includes(name));
 }
 
+// 내 부(3부) 티오프 시간대 (이 시간대의 추가/변동만 나와 관련). 기본: 3부=15시 이후.
+function myPartHours() {
+  const part = (process.env.MY_PART || '3').trim();
+  const def = part === '1' ? [5, 10] : part === '2' ? [10, 15] : [15, 24];
+  const s = Number(process.env.PART_START_HOUR ?? def[0]);
+  const e = Number(process.env.PART_END_HOUR ?? def[1]);
+  return [s, e];
+}
+
 // 내 부(3부)와 관련된 글인지 판단.
 //  - 내 이름/내 부(3부) 언급 → 관련(true)
-//  - 부 언급 자체가 없음(전체 공지 등) → 관련(true)
 //  - 다른 부(1·2·4·5부)만 언급 → 무관(false)
+//  - 티오프 시간이 있는데 전부 내 부 시간대 밖 → 무관(false)  (예: 아침 6:30 추가 = 1부)
+//  - 그 외(부/시간 정보 없음 = 전체 공지 등) → 관련(true)
 function partRelevant(full) {
   const part = (process.env.MY_PART || '').trim();
   if (!part) return true;
@@ -87,9 +97,16 @@ function partRelevant(full) {
   const blob = `${full.subject}\n${full.head || ''}\n${full.text || ''}`;
   if (name && blob.includes(name)) return true;
   if (blob.includes(`${part}부`)) return true;
+
   const others = ['1부', '2부', '3부', '4부', '5부'].filter((p) => p !== `${part}부`);
-  const mentionsOther = others.some((p) => blob.includes(p));
-  return !mentionsOther; // 다른 부만 언급 → 무관, 부 언급 없으면 전체공지로 보고 통과
+  if (others.some((p) => blob.includes(p))) return false; // 다른 부만 언급
+
+  // 티오프 시간대 판별 (HH:MM 들이 있는데 내 부 시간대가 하나도 없으면 무관)
+  const [startH, endH] = myPartHours();
+  const hours = [...blob.matchAll(/(\d{1,2}):(\d{2})/g)].map((m) => Number(m[1]));
+  if (hours.length && !hours.some((h) => h >= startH && h < endH)) return false;
+
+  return true; // 부/시간 단서 없음 → 전체 공지로 보고 통과
 }
 
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
@@ -129,7 +146,15 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
     return { skipped: true };
   }
 
-  // 1-2) 신뢰 작성자 글이라도, 내 이름이 없고 '다른 부(1·2부 등) 전용' 내용이면 제외.
+  // 1-2) 개인 근태 신청글(후출/휴무/조출 등)은 신뢰 작성자여도 내 이름 없으면 제외.
+  //      (예: "허웅진 후출 신청합니다" = 작성자 본인 개인글) — 이미지 번호표는 예외.
+  const personalLabel = `${full.head || ''} ${full.subject} ${full.menuName || ''}`;
+  if (!aboutMe && !full.images.length && PERSONAL_REQUEST_RE.test(personalLabel)) {
+    console.log(`·  (개인 근태글, 건너뜀) ${full.subject} — ${full.writer || ''}`);
+    return { skipped: true };
+  }
+
+  // 1-3) 신뢰 작성자 글이라도, 내 이름이 없고 '다른 부(1·2부 등)' 내용이면 제외.
   //      (전체 공지나 3부 관련이면 통과)
   if (!aboutMe && !partRelevant(full)) {
     console.log(`·  (다른 부 내용, 건너뜀) ${full.subject} — ${full.writer || ''}`);
