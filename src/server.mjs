@@ -152,6 +152,29 @@ function saveBaseline(full, ai) {
   console.log(`[기준점 저장] ${baseline.date} ${baseline.role} (스페어 ${baseline.myIndex ?? '-'}/${baseline.spareList.length}명)`);
 }
 
+// 티오프 시간(HH:MM) → 골프장 도착시간 + 집 출발시간 계산.
+//  도착(출근) = 티오프 - 준비시간(기본 60분),  집출발 = 도착 - 이동시간(기본 60분).
+function commuteInfo(teeTime) {
+  const m = String(teeTime || '').match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const prep = Number(process.env.PREP_MIN ?? 60);       // 골프장 도착 후 근무 준비
+  const commute = Number(process.env.COMMUTE_MIN ?? 60); // 집 → 골프장 이동
+  const tot = Number(m[1]) * 60 + Number(m[2]);
+  const fmt = (mins) => {
+    const x = ((mins % 1440) + 1440) % 1440;
+    return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+  };
+  return { tee: fmt(tot), arrive: fmt(tot - prep), leave: fmt(tot - prep - commute) };
+}
+
+// 출근 확정 시 메시지에 붙일 '티오프/도착/집출발' 안내 한 줄.
+function commuteLine(teeTime, course) {
+  const c = commuteInfo(teeTime);
+  if (!c) return '';
+  const crs = course ? ` (${String(course).toUpperCase()}코스)` : '';
+  return `\n⛳ 티오프 ${c.tee}${crs} · ${c.arrive} 도착 · 집에서 ${c.leave} 출발`;
+}
+
 // 남은 인원(remaining) → 상태/메시지 (계산은 항상 코드가; Gemini 산수 안 씀).
 function turnResult(name, cutoff, remaining, extra = {}) {
   let status, message;
@@ -166,6 +189,10 @@ function turnResult(name, cutoff, remaining, extra = {}) {
     status = remaining <= 2 ? 'near' : 'waiting';
     const before = extra.before ? ` (바로 앞 ${extra.before}님)` : '';
     message = `${name}님, 앞으로 ${remaining}명 남았어요${before}${tail}`;
+  }
+  // 출근 확정(배정/내 차례)이고 티오프 시간을 읽었으면 출근·출발 시간을 덧붙임.
+  if ((status === 'assigned' || status === 'your_turn') && extra.teeTime) {
+    message += commuteLine(extra.teeTime, extra.course);
   }
   return { found: true, cutoffName: cutoff, remaining, status, message, ...extra };
 }
@@ -205,7 +232,10 @@ function refineTurn(ai, name) {
   if (!ai || ai.found === false) return ai;
   const mp = Number(ai.myPosition), cp = Number(ai.cutoffPosition);
   if (!Number.isFinite(mp) || !Number.isFinite(cp)) return ai;
-  return turnResult(name, ai.cutoffName || '', mp - cp - 1, { source: 'vision', myPosition: mp, cutoffPosition: cp });
+  return turnResult(name, ai.cutoffName || '', mp - cp - 1, {
+    source: 'vision', myPosition: mp, cutoffPosition: cp,
+    teeTime: ai.teeTime || null, course: ai.course || '',
+  });
 }
 
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
@@ -213,7 +243,7 @@ function stateSig(full, ai) {
   if (!ai || ai.found === false) return null;
   const d = ai.dateLabel || full.writeDate || '';
   if (ai.role) return `sch|${d}|${ai.role}|${ai.team || ''}|${ai.teeTime || ''}|${ai.spareOrder ?? ''}`;
-  if (ai.status) return `turn|${d}|${ai.status}|${ai.remaining ?? ''}|${ai.cutoffName || ''}`;
+  if (ai.status) return `turn|${d}|${ai.status}|${ai.remaining ?? ''}|${ai.cutoffName || ''}|${ai.teeTime || ''}`;
   return null;
 }
 
