@@ -132,6 +132,7 @@ ${anchor}
   "cutoffPosition": 정수 또는 null,
   "remaining": 정수 또는 null,
   "status": "assigned|your_turn|near|waiting|unknown",
+  "nameList": ["번호표에 적힌 이름을 순번(위→아래) 순서대로 전부", "..."],
   "message": "${name}님 기준 한국어 한 문장 요약"
 }
 status 기준:

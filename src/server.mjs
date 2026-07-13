@@ -109,6 +109,15 @@ function partRelevant(full) {
   return true; // 부/시간 단서 없음 → 전체 공지로 보고 통과
 }
 
+// 번호표 이미지에서 읽은 순번 명단을 baseline 에 저장 (이후 텍스트-only 변동 계산에 재사용).
+function saveRoster(nameList) {
+  const b = loadJSON('baseline.json', {}) || {};
+  b.spareList = nameList;
+  b.rosterAt = Date.now();
+  saveJSON('baseline.json', b);
+  console.log(`[명단 저장] 번호표에서 ${nameList.length}명 순번 확보`);
+}
+
 // 배치표 조 표시(dayStatus)로 role 을 코드가 확정 (Gemini role 오판 방지) + 메시지 정리.
 function deriveScheduleRole(ai) {
   const name = (process.env.MY_NAME || '').trim();
@@ -258,7 +267,10 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
       ai = computeTurnFromRoster(full, baseline);
       // 2순위: Gemini 이미지 분석(위치만 읽고) → remaining 은 코드가 재계산.
       if (!ai && full.images.length) {
-        ai = refineTurn(await analyzeTurn(full, baseline), (process.env.MY_NAME || '').trim());
+        const raw = await analyzeTurn(full, baseline);
+        // 번호표에서 읽은 명단을 저장 → 이후 텍스트-only 변동에도 재활용
+        if (raw?.found && Array.isArray(raw.nameList) && raw.nameList.length >= 5) saveRoster(raw.nameList);
+        ai = refineTurn(raw, (process.env.MY_NAME || '').trim());
       }
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
