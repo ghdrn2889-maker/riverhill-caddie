@@ -275,9 +275,12 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
 
   const trusted = isScheduleWriter(full.writer);
   const aboutMe = mentionsMe(full);
+  // 일정 게시판(번호표=당일변동 / 배치표=배치시간표)은 작성자가 누구든 통과.
+  //  → 뒤의 부(部)·이름·Gemini found 필터가 관련성을 거른다. (핵심 글을 작성자 화이트리스트로 놓치는 것 방지)
+  const scheduleBoard = String(full.menuId) === CHANGE_MENU_ID || String(full.menuId) === SCHEDULE_MENU_ID;
 
-  // 1) 신뢰 작성자(번호표/배치표 담당)도 아니고, 내 이름도 없으면 → 남의 소식 → 무시
-  if (!trusted && !aboutMe) {
+  // 1) 신뢰 작성자도, 내 이름도, 일정 게시판도 아니면 → 남의 소식 → 무시
+  if (!trusted && !aboutMe && !scheduleBoard) {
     console.log(`·  (무관 작성자, 건너뜀) ${full.subject} — ${full.writer || ''}`);
     return { skipped: true };
   }
