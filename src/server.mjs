@@ -182,9 +182,18 @@ function computeTurnFromRoster(full, baseline) {
   const m = blob.match(/([가-힣]{2,4})\s*님?\s*까지/); // "○○님까지"
   if (!m) return null;
   const cutoff = m[1].replace(/님$/, ''); // 이름에 딸려온 "님" 제거
-  const norm = (s) => String(s).replace(/\(.*?\)/g, '').trim();
-  const ci = list.findIndex((n) => { const a = norm(n); return a === cutoff || a.includes(cutoff) || cutoff.includes(a); });
-  const mi = list.findIndex((n) => { const a = norm(n); return a === name || a.includes(name) || name.includes(a); });
+  const norm = (s) => String(s).replace(/\(.*?\)/g, '').trim();       // 괄호 밖(주 이름)
+  const paren = (s) => (String(s).match(/\(([^)]*)\)/) || [])[1] || ''; // 괄호 안
+  const isPerson = (p) => /[가-힣]{2,4}/.test(p) && !/54|2\s*,\s*3/.test(p);
+  // 순번 교환 반영: 'X(대상)'처럼 괄호 안에 대상이 있으면 그 자리가 진짜 순번(우선).
+  const findEff = (target) => {
+    let i = list.findIndex((n) => paren(n).includes(target)); // 괄호 안에 target
+    if (i < 0) i = list.findIndex((n) => norm(n) === target && !isPerson(paren(n))); // 주 이름 target (교환 아님)
+    if (i < 0) i = list.findIndex((n) => { const a = norm(n); return a.includes(target) || target.includes(a); });
+    return i;
+  };
+  const ci = findEff(cutoff);
+  const mi = findEff(name);
   if (ci < 0 || mi < 0) return null;
   const before = mi > 0 ? norm(list[mi - 1]) : '';
   return turnResult(name, cutoff, mi - ci - 1, { source: 'roster', before });
