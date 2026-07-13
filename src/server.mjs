@@ -178,7 +178,8 @@ function commuteLine(teeTime, course) {
 // 남은 인원(remaining) → 상태/메시지 (계산은 항상 코드가; Gemini 산수 안 씀).
 function turnResult(name, cutoff, remaining, extra = {}) {
   let status, message;
-  const tail = cutoff ? ` (${cutoff}님까지 근무)` : '';
+  // 티오프가 이미 잡혀 있으면 그 자체가 확정 증거 → 커트라인 꼬리표(지어냈을 수 있음)는 생략.
+  const tail = (cutoff && !extra.teeTime) ? ` (${cutoff}님까지 근무)` : '';
   if (remaining < 0) {
     status = 'assigned';
     message = `${name}님, 오늘 근무 배정됐어요!${tail}`;
@@ -230,11 +231,17 @@ function computeTurnFromRoster(full, baseline) {
 // (Gemini는 위치는 잘 읽지만 뺄셈을 자주 틀림 → 산수는 코드가 담당)
 function refineTurn(ai, name) {
   if (!ai || ai.found === false) return ai;
+  // 티오프가 배정돼 있으면 = 출근 확정. 커트라인 산수와 무관하게 assigned + 출근/출발시간.
+  if (ai.teeTime && /\d{1,2}:\d{2}/.test(ai.teeTime)) {
+    return turnResult(name, '', -1, {
+      source: 'vision', teeTime: ai.teeTime, course: ai.course || '',
+      myPosition: Number(ai.myPosition) || null,
+    });
+  }
   const mp = Number(ai.myPosition), cp = Number(ai.cutoffPosition);
   if (!Number.isFinite(mp) || !Number.isFinite(cp)) return ai;
   return turnResult(name, ai.cutoffName || '', mp - cp - 1, {
     source: 'vision', myPosition: mp, cutoffPosition: cp,
-    teeTime: ai.teeTime || null, course: ai.course || '',
   });
 }
 
