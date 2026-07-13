@@ -339,10 +339,18 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
     }
   }
 
-  // 2) 배치표/번호표에 내 이름이 없으면(found=false) → 나와 무관 → 알림 안 함
+  // 2) 배치표/번호표에 내 이름이 없으면(found=false).
+  //    - 일정 게시판(번호표/배치표)에선 Gemini 오독으로 진짜 글을 놓칠 수 있으므로
+  //      조용히 넘기지 않고 '직접 확인' 낮은 알림을 보냄(miss 방지). 다른 게시판은 기존대로 skip.
   if (ai && ai.found === false) {
-    console.log(`·  (배치표/번호표에 내 이름 없음, 건너뜀) ${full.subject}`);
-    return { skipped: true };
+    if (!scheduleBoard) {
+      console.log(`·  (내 이름 없음, 건너뜀) ${full.subject}`);
+      return { skipped: true };
+    }
+    console.log(`·  (자동판독 이름 미검출 → 확인 알림) ${full.subject}`);
+    title = '🏌️ 3부 시간표 — 직접 확인';
+    body = `${full.subject} (자동 판독 실패, 눌러서 확인)`;
+    ai = null; // 상태 불명 → 이 글 한 번만 알림(크롤러가 새 글일 때만 호출).
   }
 
   // 3) 내 상태가 직전 알림과 동일하면(변동 없음) → 중복 알림 방지
