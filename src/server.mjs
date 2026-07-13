@@ -121,7 +121,7 @@ function deriveScheduleRole(ai) {
   else if (new RegExp(`${part}부`).test(ds) || /2\s*[,、]\s*3/.test(ds)) role = 'spare';
   const message = role === 'off' ? `${name}님, ${d} 휴무입니다. 편히 쉬세요`
     : role === 'work' ? `${name}님, ${d} 근무입니다 (출근 확정)`
-    : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다`
+    : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다. 근무 순번이 오면 바로 알려드릴게요`
     : (ai.message || `${name}님, ${d} 배치표 확인하세요`);
   return { ...ai, role, status: role, message };
 }
@@ -215,6 +215,13 @@ function titleForStatus(status) {
 
 // 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
 async function notifyForArticle(full, result = { hits: [], priority: 'high' }, opts = {}) {
+  // 0) 가배치(임시·참고용)는 본배치와 결과가 완전히 달라 무조건 제외.
+  //    ("추가배치"는 오탐 방지로 제외)
+  if (/(?<!추)가\s*배치/.test(`${full.subject} ${full.head || ''}`)) {
+    console.log(`·  (가배치, 건너뜀) ${full.subject}`);
+    return { skipped: true };
+  }
+
   const trusted = isScheduleWriter(full.writer);
   const aboutMe = mentionsMe(full);
 
