@@ -174,6 +174,9 @@ function turnResult(name, cutoff, remaining, extra = {}) {
 function computeTurnFromRoster(full, baseline) {
   const list = baseline?.spareList;
   if (!Array.isArray(list) || list.length === 0) return null;
+  // 명단이 하루 지났으면(어제 것) 신뢰 안 함 → null 반환해 오늘 이미지로 다시 읽게 함
+  const age = baseline.rosterAt ? Date.now() - baseline.rosterAt : Infinity;
+  if (age > 18 * 3600 * 1000) return null;
   const name = baseline.name || (process.env.MY_NAME || '').trim();
   const blob = `${full.subject}\n${full.text || ''}`;
   const m = blob.match(/([가-힣]{2,4})\s*님?\s*까지/); // "○○님까지"
