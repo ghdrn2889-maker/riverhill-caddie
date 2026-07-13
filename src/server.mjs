@@ -109,6 +109,23 @@ function partRelevant(full) {
   return true; // 부/시간 단서 없음 → 전체 공지로 보고 통과
 }
 
+// 배치표 조 표시(dayStatus)로 role 을 코드가 확정 (Gemini role 오판 방지) + 메시지 정리.
+function deriveScheduleRole(ai) {
+  const name = (process.env.MY_NAME || '').trim();
+  const part = (process.env.MY_PART || '').trim();
+  const ds = ai.dayStatus || '';
+  const d = ai.dateLabel || '';
+  let role = ai.role || 'unknown';
+  if (/휴무|휴가|병가/.test(ds)) role = 'off';
+  else if (/\b54\b|54/.test(ds)) role = 'work';
+  else if (new RegExp(`${part}부`).test(ds) || /2\s*[,、]\s*3/.test(ds)) role = 'spare';
+  const message = role === 'off' ? `${name}님, ${d} 휴무입니다. 편히 쉬세요`
+    : role === 'work' ? `${name}님, ${d} 근무입니다 (출근 확정)`
+    : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다`
+    : (ai.message || `${name}님, ${d} 배치표 확인하세요`);
+  return { ...ai, role, status: role, message };
+}
+
 // 배치표에서 뽑은 '오늘의 김홍구 기준점 + 3부 스페어 명단'을 저장.
 function saveBaseline(full, ai) {
   const baseline = {
@@ -239,11 +256,15 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
     } else if (String(full.menuId) === SCHEDULE_MENU_ID && full.images.length) {
-      // 배치표 → 김홍구 상태 + 3부 스페어 명단 저장
+      // 배치표 → 김홍구 상태 확인. role 은 dayStatus 로 코드가 확정(Gemini 오판 방지).
       ai = await analyzeSchedule(full);
-      if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
-      else title = '🏌️ 배치표';
-      if (ai?.found) saveBaseline(full, ai);
+      if (ai) {
+        ai = deriveScheduleRole(ai);
+        body = ai.message; title = titleForStatus(ai.status);
+        if (ai.found) saveBaseline(full, ai);
+      } else {
+        title = '🏌️ 배치표';
+      }
     }
   }
 
