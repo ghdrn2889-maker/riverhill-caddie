@@ -181,7 +181,7 @@ function computeTurnFromRoster(full, baseline) {
   const blob = `${full.subject}\n${full.text || ''}`;
   const m = blob.match(/([가-힣]{2,4})\s*님?\s*까지/); // "○○님까지"
   if (!m) return null;
-  const cutoff = m[1];
+  const cutoff = m[1].replace(/님$/, ''); // 이름에 딸려온 "님" 제거
   const norm = (s) => String(s).replace(/\(.*?\)/g, '').trim();
   const ci = list.findIndex((n) => { const a = norm(n); return a === cutoff || a.includes(cutoff) || cutoff.includes(a); });
   const mi = list.findIndex((n) => { const a = norm(n); return a === name || a.includes(name) || name.includes(a); });
