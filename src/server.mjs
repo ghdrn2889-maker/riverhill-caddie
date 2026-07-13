@@ -126,8 +126,25 @@ function saveBaseline(full, ai) {
   console.log(`[기준점 저장] ${baseline.date} ${baseline.role} (스페어 ${baseline.myIndex ?? '-'}/${baseline.spareList.length}명)`);
 }
 
-// 저장된 3부 스페어 명단 + 변동글의 "○○님까지 근무/일됩니다" 로 남은 인원을 '코드로' 계산.
-// (Gemini 이미지 재분석 없이 명단 조회+산수 → 실수 없음). 계산 불가하면 null.
+// 남은 인원(remaining) → 상태/메시지 (계산은 항상 코드가; Gemini 산수 안 씀).
+function turnResult(name, cutoff, remaining, extra = {}) {
+  let status, message;
+  const tail = cutoff ? ` (${cutoff}님까지 근무)` : '';
+  if (remaining < 0) {
+    status = 'assigned';
+    message = `${name}님, 오늘 근무 배정됐어요!${tail}`;
+  } else if (remaining === 0) {
+    status = 'your_turn';
+    message = `${name}님, 지금 출근하실 차례예요!${tail}`;
+  } else {
+    status = remaining <= 2 ? 'near' : 'waiting';
+    const before = extra.before ? ` (바로 앞 ${extra.before}님)` : '';
+    message = `${name}님, 앞으로 ${remaining}명 남았어요${before}${tail}`;
+  }
+  return { found: true, cutoffName: cutoff, remaining, status, message, ...extra };
+}
+
+// 저장된 3부 스페어 명단 + 변동글의 "○○님까지" 로 남은 인원을 코드로 계산 (이미지 불필요).
 function computeTurnFromRoster(full, baseline) {
   const list = baseline?.spareList;
   if (!Array.isArray(list) || list.length === 0) return null;
@@ -140,21 +157,17 @@ function computeTurnFromRoster(full, baseline) {
   const ci = list.findIndex((n) => { const a = norm(n); return a === cutoff || a.includes(cutoff) || cutoff.includes(a); });
   const mi = list.findIndex((n) => { const a = norm(n); return a === name || a.includes(name) || name.includes(a); });
   if (ci < 0 || mi < 0) return null;
+  const before = mi > 0 ? norm(list[mi - 1]) : '';
+  return turnResult(name, cutoff, mi - ci - 1, { source: 'roster', before });
+}
 
-  const remaining = mi - ci - 1; // 커트라인 다음 ~ 김홍구 직전 인원
-  let status, message;
-  if (remaining < 0) {
-    status = 'assigned';
-    message = `${name}님, 오늘 근무 배정됐어요! (${cutoff}님까지 근무)`;
-  } else if (remaining === 0) {
-    status = 'your_turn';
-    message = `${name}님, 지금 출근하실 차례예요! (${cutoff}님까지 근무)`;
-  } else {
-    status = remaining <= 2 ? 'near' : 'waiting';
-    const before = norm(list[mi - 1]);
-    message = `${name}님, 앞으로 ${remaining}명 남았어요 (바로 앞 ${before}님, ${cutoff}님까지 근무)`;
-  }
-  return { found: true, cutoffName: cutoff, remaining, status, message, source: 'roster' };
+// Gemini가 읽은 '위치'(myPosition/cutoffPosition)로 remaining 을 코드가 다시 계산.
+// (Gemini는 위치는 잘 읽지만 뺄셈을 자주 틀림 → 산수는 코드가 담당)
+function refineTurn(ai, name) {
+  if (!ai || ai.found === false) return ai;
+  const mp = Number(ai.myPosition), cp = Number(ai.cutoffPosition);
+  if (!Number.isFinite(mp) || !Number.isFinite(cp)) return ai;
+  return turnResult(name, ai.cutoffName || '', mp - cp - 1, { source: 'vision', myPosition: mp, cutoffPosition: cp });
 }
 
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
@@ -219,8 +232,10 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
       const baseline = loadJSON('baseline.json', null);
       // 1순위: 저장된 스페어 명단 + 제목의 "○○까지" 커트라인으로 코드 계산(정확, 이미지 불필요).
       ai = computeTurnFromRoster(full, baseline);
-      // 2순위: 명단/커트라인 못 구하면 Gemini 이미지 분석(기준점 앵커 주입).
-      if (!ai && full.images.length) ai = await analyzeTurn(full, baseline);
+      // 2순위: Gemini 이미지 분석(위치만 읽고) → remaining 은 코드가 재계산.
+      if (!ai && full.images.length) {
+        ai = refineTurn(await analyzeTurn(full, baseline), (process.env.MY_NAME || '').trim());
+      }
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
     } else if (String(full.menuId) === SCHEDULE_MENU_ID && full.images.length) {
