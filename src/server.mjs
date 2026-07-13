@@ -109,6 +109,20 @@ function partRelevant(full) {
   return true; // 부/시간 단서 없음 → 전체 공지로 보고 통과
 }
 
+// 배치표에서 뽑은 '오늘의 김홍구 기준점'을 저장 → 이후 번호표 분석의 앵커로 사용.
+function saveBaseline(full, ai) {
+  const baseline = {
+    date: ai.dateLabel || full.writeDate || '',
+    name: (process.env.MY_NAME || '').trim(),
+    part: ai.part || `${(process.env.MY_PART || '').trim()}부`,
+    role: ai.role || ai.status || '',
+    articleId: full.id,
+    savedAt: Date.now(),
+  };
+  saveJSON('baseline.json', baseline);
+  console.log(`[기준점 저장] ${baseline.date} ${baseline.part} ${baseline.role}`);
+}
+
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
 function stateSig(full, ai) {
   if (!ai || ai.found === false) return null;
@@ -167,15 +181,17 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
 
   if (process.env.GEMINI_API_KEY && full.images.length) {
     if (String(full.menuId) === CHANGE_MENU_ID) {
-      // 당일 변동사항(번호표) → 순번 계산
-      ai = await analyzeTurn(full);
+      // 당일 변동사항(번호표) → 순번 계산. 오늘 배치표 기준점을 앵커로 주입.
+      const baseline = loadJSON('baseline.json', null);
+      ai = await analyzeTurn(full, baseline);
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 3부 변동사항';
     } else if (String(full.menuId) === SCHEDULE_MENU_ID) {
-      // 배치표 → 내가 근무/스페어인지 번역
+      // 배치표 → 내가 근무/스페어인지 번역 + 그날 기준점 저장
       ai = await analyzeSchedule(full);
       if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
       else title = '🏌️ 배치표';
+      if (ai?.found) saveBaseline(full, ai);
     }
   }
 

@@ -95,11 +95,22 @@ function nameAndPart() {
   };
 }
 
+function roleKorean(role) {
+  return role === 'spare' ? '스페어(대기)'
+    : role === 'work' ? '출근 확정(근무)'
+    : role === 'off' ? '휴무/미포함' : '미상';
+}
+
 // ── 1) 당일 변동사항 → 순번 계산 ─────────────────────────────
-function buildTurnPrompt(article, name, part) {
+function buildTurnPrompt(article, name, part, baseline) {
+  const anchor = (baseline && (baseline.role || baseline.part)) ? `
+[오늘 배치표 기준 참고 — 이걸 앵커로 삼으세요]
+- "${name}"은 ${baseline.part || `${part}부`} 소속이고, 오늘 배치표상 상태는 "${roleKorean(baseline.role)}"입니다.
+- 따라서 이 번호표에서 반드시 "${name}"을 찾아 순번을 판단하세요. 이미지에 "${name}"이 없으면 found=false.
+` : '';
   return `당신은 골프장 캐디 근무 배정을 분석하는 도우미입니다.
 대상 캐디: 이름 "${name}", ${part}부 소속.
-
+${anchor}
 아래는 오늘 '당일 변동사항' 게시글입니다.
 - 글 제목: "${article.subject}"
 - 첨부 이미지: ${part}부 캐디 "대기 순번" 목록(위에서 아래로 순서)일 가능성이 높습니다.
@@ -133,10 +144,11 @@ message 예: "${name}님, 앞으로 2명 남았어요 (도대영님까지 배정
 }
 
 // 반환: {found, myPosition, cutoffName, cutoffPosition, remaining, status, message} 또는 null
-export async function analyzeTurn(article) {
+// baseline: 오늘 배치표에서 뽑아둔 {name, part, role, date} (있으면 앵커로 사용)
+export async function analyzeTurn(article, baseline = null) {
   if (!article.images?.length) return null;
   const { name, part } = nameAndPart();
-  return callGeminiJSON(buildTurnPrompt(article, name, part), article.images[0]);
+  return callGeminiJSON(buildTurnPrompt(article, name, part, baseline), article.images[0]);
 }
 
 // ── 2) 배치표 → 내가 근무인지 스페어인지 (정확한 순번은 계산하지 않음) ──
