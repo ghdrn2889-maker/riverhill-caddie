@@ -76,6 +76,22 @@ function mentionsMe(full) {
   return !!(name && blob.includes(name));
 }
 
+// 내 부(3부)와 관련된 글인지 판단.
+//  - 내 이름/내 부(3부) 언급 → 관련(true)
+//  - 부 언급 자체가 없음(전체 공지 등) → 관련(true)
+//  - 다른 부(1·2·4·5부)만 언급 → 무관(false)
+function partRelevant(full) {
+  const part = (process.env.MY_PART || '').trim();
+  if (!part) return true;
+  const name = (process.env.MY_NAME || '').trim();
+  const blob = `${full.subject}\n${full.head || ''}\n${full.text || ''}`;
+  if (name && blob.includes(name)) return true;
+  if (blob.includes(`${part}부`)) return true;
+  const others = ['1부', '2부', '3부', '4부', '5부'].filter((p) => p !== `${part}부`);
+  const mentionsOther = others.some((p) => blob.includes(p));
+  return !mentionsOther; // 다른 부만 언급 → 무관, 부 언급 없으면 전체공지로 보고 통과
+}
+
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
 function stateSig(full, ai) {
   if (!ai || ai.found === false) return null;
@@ -110,6 +126,13 @@ async function notifyForArticle(full, result = { hits: [], priority: 'high' }, o
   // 1) 신뢰 작성자(번호표/배치표 담당)도 아니고, 내 이름도 없으면 → 남의 소식 → 무시
   if (!trusted && !aboutMe) {
     console.log(`·  (무관 작성자, 건너뜀) ${full.subject} — ${full.writer || ''}`);
+    return { skipped: true };
+  }
+
+  // 1-2) 신뢰 작성자 글이라도, 내 이름이 없고 '다른 부(1·2부 등) 전용' 내용이면 제외.
+  //      (전체 공지나 3부 관련이면 통과)
+  if (!aboutMe && !partRelevant(full)) {
+    console.log(`·  (다른 부 내용, 건너뜀) ${full.subject} — ${full.writer || ''}`);
     return { skipped: true };
   }
 
