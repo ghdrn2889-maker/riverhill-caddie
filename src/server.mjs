@@ -195,6 +195,10 @@ function turnResult(name, cutoff, remaining, extra = {}) {
   if ((status === 'assigned' || status === 'your_turn') && extra.teeTime) {
     message += commuteLine(extra.teeTime, extra.course);
   }
+  // 제목/본문에서 뽑은 주의사항(시간 변동 가능/취소 등)이 있으면 경고로 덧붙임.
+  if (extra.note && String(extra.note).trim()) {
+    message += `\n⚠️ ${String(extra.note).trim()}`;
+  }
   return { found: true, cutoffName: cutoff, remaining, status, message, ...extra };
 }
 
@@ -235,13 +239,13 @@ function refineTurn(ai, name) {
   if (ai.teeTime && /\d{1,2}:\d{2}/.test(ai.teeTime)) {
     return turnResult(name, '', -1, {
       source: 'vision', teeTime: ai.teeTime, course: ai.course || '',
-      myPosition: Number(ai.myPosition) || null,
+      myPosition: Number(ai.myPosition) || null, note: ai.note || '',
     });
   }
   const mp = Number(ai.myPosition), cp = Number(ai.cutoffPosition);
   if (!Number.isFinite(mp) || !Number.isFinite(cp)) return ai;
   return turnResult(name, ai.cutoffName || '', mp - cp - 1, {
-    source: 'vision', myPosition: mp, cutoffPosition: cp,
+    source: 'vision', myPosition: mp, cutoffPosition: cp, note: ai.note || '',
   });
 }
 

@@ -151,6 +151,7 @@ ${anchor}
   "status": "assigned|your_turn|near|waiting|unknown",
   "teeTime": "HH:MM 또는 null (확정 시 ${name}의 티오프 시간)",
   "course": "OUT 또는 IN 또는 빈칸 (확정 시 ${name}의 코스)",
+  "note": "제목·본문에 '시간이 바뀔 수 있음/취소/캔슬/시간조정/변동가능' 등 주의할 안내가 있으면 ${name}님께 알릴 한 문장(예: '티오프 시간이 바뀔 수 있으니 다시 확인하세요'), 없으면 빈칸",
   "nameList": ["번호표에 적힌 이름을 순번(위→아래) 순서대로 전부, 괄호도 있으면 그대로(예: 박수현(김홍구))", "..."],
   "message": "${name}님 기준 한국어 한 문장 요약"
 }
