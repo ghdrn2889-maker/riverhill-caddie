@@ -293,106 +293,73 @@ function titleForStatus(status) {
   }
 }
 
-// 전체 본문을 가져와 (필요시 AI 순번계산) 폰으로 푸시하고 최근목록에 저장.
-async function notifyForArticle(full, result = { hits: [], priority: 'high' }, opts = {}) {
-  // 0) 가배치(임시·참고용)는 본배치와 결과가 완전히 달라 무조건 제외.
-  //    ("추가배치"는 오탐 방지로 제외)
-  if (/(?<!추)가\s*배치/.test(`${full.subject} ${full.head || ''}`)) {
-    console.log(`·  (가배치, 건너뜀) ${full.subject}`);
-    return { skipped: true };
+// 피드에 저장할 항목 (관련·무관 모두 — 데이터는 절대 안 버린다).
+function saveRecentV2(full, out) {
+  const v = out.rawVerdict || {};
+  const recent = loadJSON('recent.json', []);
+  recent.unshift({
+    id: full.id, subject: full.subject, writer: full.writer, url: full.url,
+    menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate,
+    aiMessage: out.relevant ? out.body : (v.summary || null),
+    status: out.status || null,
+    category: v.category || null,
+    relevant: !!out.relevant,
+    push: out.push,
+    priority: out.push === 'high' ? 'high' : 'info',
+    detectedAt: Date.now(),
+  });
+  saveJSON('recent.json', recent.slice(0, 100));
+}
+
+// 배치표 판정에서 '오늘 내 기준(부/역할/순번/티오프)'을 뽑아 저장 → 다음 글 판단 앵커.
+function saveBaselineFromVerdict(full, v) {
+  const s = v.myStatus;
+  const role = (s === 'work' || s === 'assigned' || s === 'your_turn') ? 'work'
+    : s === 'off' ? 'off' : (s === 'spare' || s === 'waiting') ? 'spare' : '';
+  const baseline = {
+    date: v.dateLabel || full.writeDate || '',
+    name: (process.env.MY_NAME || '').trim(),
+    part: `${(process.env.MY_PART || '').trim()}부`,
+    role, myPosition: v.myPosition ?? null, teeTime: v.teeTime || '',
+    articleId: full.id, savedAt: Date.now(),
+  };
+  saveJSON('baseline.json', baseline);
+  console.log(`[기준표] ${baseline.date} ${role || '?'} pos=${baseline.myPosition ?? '-'} tee=${baseline.teeTime || '-'}`);
+}
+
+// 새 두뇌(judge)로 판단 → 피드-우선 저장 → 확신도 라우팅으로 푸시.
+//  push: 'high'(바로 알림) | 'check'(확인필요 알림) | 'low'(피드만, 무푸시)
+async function notifyForArticle(full, result = {}, opts = {}) {
+  const baseline = loadJSON('baseline.json', null);
+  const out = await judge(full, baseline);
+  const v = out.rawVerdict;
+  const ret = { push: out.push, title: out.title, body: out.body, status: out.status, relevant: out.relevant, category: v?.category || null };
+
+  // 피드-우선: 관련 여부와 무관하게 항상 피드에 기록(놓침 구조적 불가).
+  saveRecentV2(full, out);
+
+  // 배치표에서 내 상태를 읽었으면 기준표 갱신(다음 글 판단 앵커).
+  if (out.relevant && v && v.category === '배치표' && v.myStatus && v.myStatus !== 'unknown') {
+    saveBaselineFromVerdict(full, v);
   }
 
-  const trusted = isScheduleWriter(full.writer);
-  const aboutMe = mentionsMe(full);
-  // 일정 게시판(번호표=당일변동 / 배치표=배치시간표)은 작성자가 누구든 통과.
-  //  → 뒤의 부(部)·이름·Gemini found 필터가 관련성을 거른다. (핵심 글을 작성자 화이트리스트로 놓치는 것 방지)
-  const scheduleBoard = String(full.menuId) === CHANGE_MENU_ID || String(full.menuId) === SCHEDULE_MENU_ID;
-
-  // 1) 신뢰 작성자도, 내 이름도, 일정 게시판도 아니면 → 남의 소식 → 무시
-  if (!trusted && !aboutMe && !scheduleBoard) {
-    console.log(`·  (무관 작성자, 건너뜀) ${full.subject} — ${full.writer || ''}`);
-    return { skipped: true };
+  // 라우팅: 무관/가배치 → 피드에만, 푸시 안 함.
+  if (out.push === 'low') {
+    console.log(`·  (피드만) ${full.subject} — ${v?.category || ''} (relevant=${out.relevant})`);
+    return { pushed: false, ...ret };
   }
 
-  // 1-2) 개인 근태 신청글(후출/휴무/조출 등)은 신뢰 작성자여도 내 이름 없으면 제외.
-  //      (예: "허웅진 후출 신청합니다" = 작성자 본인 개인글) — 이미지 번호표는 예외.
-  const personalLabel = `${full.head || ''} ${full.subject} ${full.menuName || ''}`;
-  if (!aboutMe && !full.images.length && PERSONAL_REQUEST_RE.test(personalLabel)) {
-    console.log(`·  (개인 근태글, 건너뜀) ${full.subject} — ${full.writer || ''}`);
-    return { skipped: true };
-  }
-
-  // 1-3) 신뢰 작성자 글이라도, 내 이름이 없고 '다른 부(1·2부 등)' 내용이면 제외.
-  //      (전체 공지나 3부 관련이면 통과)
-  if (!aboutMe && !partRelevant(full)) {
-    console.log(`·  (다른 부 내용, 건너뜀) ${full.subject} — ${full.writer || ''}`);
-    return { skipped: true };
-  }
-
-  let title = result.priority === 'high' ? '🔔 일정 소식' : '🏌️ 새 소식';
-  let body = full.subject;
-  let ai = null;
-
-  if (process.env.GEMINI_API_KEY) {
-    if (String(full.menuId) === CHANGE_MENU_ID) {
-      // 당일 변동사항(번호표) → 순번 계산.
-      const baseline = loadJSON('baseline.json', null);
-      // 1순위: 저장된 스페어 명단 + 제목의 "○○까지" 커트라인으로 코드 계산(정확, 이미지 불필요).
-      ai = computeTurnFromRoster(full, baseline);
-      // 2순위: Gemini 이미지 분석(위치만 읽고) → remaining 은 코드가 재계산.
-      if (!ai && full.images.length) {
-        const raw = await analyzeTurn(full, baseline);
-        // 번호표에서 읽은 명단을 저장 → 이후 텍스트-only 변동에도 재활용
-        if (raw?.found && Array.isArray(raw.nameList) && raw.nameList.length >= 5) saveRoster(raw.nameList);
-        ai = refineTurn(raw, (process.env.MY_NAME || '').trim());
-      }
-      if (ai?.message) { body = ai.message; title = titleForStatus(ai.status); }
-      else title = '🏌️ 3부 변동사항';
-    } else if (String(full.menuId) === SCHEDULE_MENU_ID && full.images.length) {
-      // 배치표 → 김홍구 상태 확인. role 은 dayStatus 로 코드가 확정(Gemini 오판 방지).
-      ai = await analyzeSchedule(full);
-      if (ai) {
-        ai = deriveScheduleRole(ai);
-        body = ai.message; title = titleForStatus(ai.status);
-        if (ai.found) saveBaseline(full, ai);
-      } else {
-        title = '🏌️ 배치표';
-      }
-    }
-  }
-
-  // 2) 배치표/번호표에 내 이름이 없으면(found=false).
-  //    - 일정 게시판(번호표/배치표)에선 Gemini 오독으로 진짜 글을 놓칠 수 있으므로
-  //      조용히 넘기지 않고 '직접 확인' 낮은 알림을 보냄(miss 방지). 다른 게시판은 기존대로 skip.
-  if (ai && ai.found === false) {
-    if (!scheduleBoard) {
-      console.log(`·  (내 이름 없음, 건너뜀) ${full.subject}`);
-      return { skipped: true };
-    }
-    console.log(`·  (자동판독 이름 미검출 → 확인 알림) ${full.subject}`);
-    title = '🏌️ 3부 시간표 — 직접 확인';
-    body = `${full.subject} (자동 판독 실패, 눌러서 확인)`;
-    ai = null; // 상태 불명 → 이 글 한 번만 알림(크롤러가 새 글일 때만 호출).
-  }
-
-  // 3) 내 상태가 직전 알림과 동일하면(변동 없음) → 중복 알림 방지
-  //    (테스트 시엔 opts.force 로 이 검사를 건너뛴다)
-  const sig = stateSig(full, ai);
-  if (sig && !opts.force) {
+  // 중복 푸시 방지(글번호 기반 → 서로 다른 글은 항상 통과). opts.force 면 건너뜀.
+  if (!opts.force) {
+    const sig = `${full.id}|${out.status}|${v?.teeTime || ''}`;
     const last = loadJSON('laststate.json', {});
-    if (last.sig === sig) {
-      console.log(`·  (직전과 동일, 변동 없음 → 건너뜀) ${full.subject}`);
-      return { skipped: true };
-    }
+    if (last.sig === sig) { console.log(`·  (직전과 동일 → 무푸시) ${full.subject}`); return { pushed: false, ...ret }; }
     saveJSON('laststate.json', { sig, at: Date.now(), subject: full.subject });
   }
 
-  saveRecent(
-    { id: full.id, subject: full.subject, writer: full.writer, url: full.url, menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate },
-    result, ai,
-  );
-  await broadcast({ title, body, url: full.url });
-  return { title, body, ai };
+  await broadcast({ title: out.title, body: out.body, url: full.url });
+  console.log(`🔔 [${out.push}] ${out.title} | ${String(out.body).replace(/\n/g, ' ')}`);
+  return { pushed: true, ...ret };
 }
 
 startCrawler({
