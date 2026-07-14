@@ -3,7 +3,6 @@
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON } from './gemini.mjs';
-import { todayContext } from './today.mjs';
 
 function profile() {
   return {
@@ -30,10 +29,10 @@ function commuteLine(teeTime, course) {
   return `\n⛳ 티오프 ${c.tee}${crs} · ${c.arrive} 도착 · 집에서 ${c.leave} 출발`;
 }
 
-// ── Gemini 판정 프롬프트 ─────────────────────────────────
-function buildPrompt(article, today) {
+// ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
+function buildPrompt(article) {
   const { name, part } = profile();
-  const anchor = todayContext(today);
+  const anchor = '';
   const hasImg = !!article.images?.length;
   return `당신은 골프장 캐디 "${name}"(${part}부)의 개인 비서입니다.
 아래 네이버 카페 글이 "${name}"님에게 어떤 의미인지 판단하세요.${anchor}
@@ -153,9 +152,16 @@ export function decide(article, verdict) {
   return { relevant: true, push, status, verdict, title, body };
 }
 
-// 글 → (오늘 상황판 맥락으로) Gemini 판정 → 최종 결정. { relevant, push, title, body, status, rawVerdict }
+// 글 → Gemini가 '편견 없이' 판정(stateless) → 최종 결정. { relevant, push, title, body, status, rawVerdict }
+//  today 는 프롬프트에 넣지 않는다(이전 상태가 판독을 오염시키지 않게).
+//  단, 텍스트만 있어 순번을 못 읽었으면 '같은 날 잠긴 순번'으로만 코드가 채운다(안전한 보완).
 export async function judge(article, today = null) {
   const img = article.images?.[0] || null;
-  const verdict = await callGeminiJSON(buildPrompt(article, today), img);
+  const verdict = await callGeminiJSON(buildPrompt(article), img);
+  if (verdict && !Number.isFinite(Number(verdict.myPosition))
+      && today && today.myPosition
+      && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
+    verdict.myPosition = today.myPosition; // 잠긴 순번 보완(텍스트-only '○○까지' 계산용)
+  }
   return { ...decide(article, verdict), rawVerdict: verdict };
 }
