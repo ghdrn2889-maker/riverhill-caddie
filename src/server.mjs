@@ -58,8 +58,15 @@ app.post('/api/ingest', async (req, res) => {
   }
   const source = b.source || q.source || '카톡';
   const roomName = b.room || q.room || '';
-  const room = roomName ? ` · ${roomName}` : '';
   const sender = b.sender || q.sender || '';
+  // 허용된 단톡방만 처리(개인 카톡은 서버로 안 옴). ALLOWED_ROOMS 미설정이면 전체 허용.
+  //  방 이름이 넘어왔는데 허용 목록에 없으면 즉시 무시(저장·판단·푸시 안 함).
+  const allowed = (process.env.ALLOWED_ROOMS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (allowed.length && roomName && !allowed.some((a) => roomName.includes(a) || a.includes(roomName))) {
+    console.log(`💬 [ingest] 방 '${roomName}' 미허용 → 무시`);
+    return res.json({ ok: true, skipped: true, reason: 'room_not_allowed' });
+  }
+  const room = roomName ? ` · ${roomName}` : '';
   const pseudo = {
     id: `ingest-${req.query.id || Date.now()}`,
     subject: `[${source}${room}] ${text.slice(0, 40)}`,
