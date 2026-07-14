@@ -187,6 +187,13 @@ app.get('/api/worklog/export.csv', (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
   res.send(csv);
 });
+// 제출용 증빙 문서(사진 포함 HTML) — 인쇄→PDF 저장하면 단일 제출파일: ?year=2026&month=7
+app.get('/api/worklog/report.html', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(worklog.reportHTML({ year, month }));
+});
 
 const PORT = Number(process.env.PORT || 3000);
 app.listen(PORT, () => console.log(`🌐 서버 실행: http://localhost:${PORT}`));

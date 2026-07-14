@@ -69,13 +69,21 @@ async function main() {
     if (open) loadWorklog();
   };
   $('wlSave').onclick = async () => {
-    const km = Number($('wlKm').value) || 0;
-    await fetch('/api/worklog/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ homeGolfKmOneway: km }) });
+    const body = {
+      homeGolfKmOneway: Number($('wlKm').value) || 0,
+      driverName: $('wlName').value.trim(),
+      carNo: $('wlCar').value.trim(),
+    };
+    await fetch('/api/worklog/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     loadWorklog();
   };
   $('wlExport').onclick = () => {
     const y = new Date().getFullYear();
     window.open(`/api/worklog/export.csv?year=${y}`, '_blank');
+  };
+  $('wlReport').onclick = () => {
+    const y = new Date().getFullYear();
+    window.open(`/api/worklog/report.html?year=${y}`, '_blank');
   };
 }
 
@@ -92,6 +100,8 @@ async function loadWorklog() {
     if (s.blankDays) warn.push(`📷 기록 미입력 ${s.blankDays}일`);
     $('wlSub').textContent = (warn.length ? '⚠️ ' + warn.join(' · ') : '모두 정리됨') + ` · 왕복 ${s.roundKm || 0}km/일`;
     if ($('wlKm').value === '' || document.activeElement !== $('wlKm')) $('wlKm').value = set.homeGolfKmOneway ?? 30;
+    if (document.activeElement !== $('wlName')) $('wlName').value = set.driverName || '';
+    if (document.activeElement !== $('wlCar')) $('wlCar').value = set.carNo || '';
 
     const days = r.days || [];
     const LEG = [['start', '🏠 집출발'], ['work', '⛳ 직장도착'], ['home', '🏠 집복귀']];

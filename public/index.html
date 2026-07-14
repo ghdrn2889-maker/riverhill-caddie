@@ -123,10 +123,19 @@
         <span style="font-size:13px;">집→골프장 편도</span>
         <input id="wlKm" type="number" min="0" step="1" inputmode="numeric" />
         <span style="font-size:13px;">km (왕복 자동 ×2)</span>
+      </div>
+      <div class="wl-row">
+        <span style="font-size:13px;">성명</span>
+        <input id="wlName" type="text" style="width:90px;" placeholder="김홍구" />
+        <span style="font-size:13px;">차량번호</span>
+        <input id="wlCar" type="text" style="width:110px;" placeholder="12가3456" />
         <button id="wlSave" class="wl-btn wl-no">저장</button>
       </div>
       <div class="wl-row">
-        <button id="wlExport" class="wl-btn wl-yes" style="flex:1;">📄 올해 운행일지 CSV 내보내기</button>
+        <button id="wlReport" class="wl-btn wl-yes" style="flex:1;">📑 증빙 문서(사진 포함) 인쇄·PDF</button>
+      </div>
+      <div class="wl-row">
+        <button id="wlExport" class="wl-btn wl-no" style="flex:1;">📄 운행일지 CSV(엑셀) 내보내기</button>
       </div>
       <div class="wl-note">근무 확정이 감지되면 자동으로 목록에 올라와요. "예/아니오"로 <b>실제 근무한 날만</b> 확정하면 세무 자료가 정확해집니다. CSV는 세무사·홈택스에 그대로 제출 가능해요. (실제 공제는 주유 영수증 등과 함께, 세무사 상담 권장)</div>
     </div>

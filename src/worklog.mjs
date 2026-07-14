@@ -10,7 +10,7 @@ const FILE = 'worklog.json';
 const PHOTO_DIR = path.join(DATA_DIR, 'photos');
 export const LEGS = ['start', 'work', 'home']; // 집출발 / 직장도착 / 집복귀
 export const LEG_KO = { start: '집 출발', work: '직장 도착', home: '집 복귀' };
-const DEFAULTS = { homeGolfKmOneway: 30, workplace: '리버힐CC', fuelEnabled: false, kmPerL: 12, fuelPrice: 1700 };
+const DEFAULTS = { homeGolfKmOneway: 30, workplace: '리버힐CC', driverName: '', carNo: '', fuelEnabled: false, kmPerL: 12, fuelPrice: 1700 };
 
 function load() {
   const d = loadJSON(FILE, null) || { days: {}, settings: {} };
@@ -26,6 +26,8 @@ export function setSettings(patch = {}) {
   const clean = {};
   if (patch.homeGolfKmOneway != null) clean.homeGolfKmOneway = Math.max(0, Number(patch.homeGolfKmOneway) || 0);
   if (patch.workplace != null) clean.workplace = String(patch.workplace).slice(0, 40);
+  if (patch.driverName != null) clean.driverName = String(patch.driverName).slice(0, 20);
+  if (patch.carNo != null) clean.carNo = String(patch.carNo).slice(0, 20);
   if (patch.fuelEnabled != null) clean.fuelEnabled = !!patch.fuelEnabled;
   if (patch.kmPerL != null) clean.kmPerL = Math.max(1, Number(patch.kmPerL) || 12);
   if (patch.fuelPrice != null) clean.fuelPrice = Math.max(0, Number(patch.fuelPrice) || 0);
@@ -167,22 +169,120 @@ export function markReminded(dateISO, now = Date.now()) {
   if (d.days[dateISO]) { d.days[dateISO].remindedAt = now; save(d); }
 }
 
-// 차량운행일지 CSV (엑셀/세무사 제출용).
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const dow = (dateISO) => WD[new Date(dateISO + 'T00:00:00').getDay()];
+
+// 차량운행일지 CSV (엑셀/세무사 제출용). 국세청 운행기록부 항목(계기판 전/후·주행거리) 포함.
 export function toCSV({ year, month } = {}) {
   const s = load().settings;
   const rows = listDays({ year, month })
     .filter((x) => x.worked === true)
     .sort((a, b) => (a.date < b.date ? -1 : 1)); // CSV는 오래된 순
-  const header = ['일자', '요일', '사용목적', '출발지', '도착지', '왕복거리(km)', '티오프', '코스', '계기판사진', '비고'];
-  const wd = ['일', '월', '화', '수', '목', '금', '토'];
+  const header = ['일자', '요일', '사용목적', '출발지', '도착지', '주행전(km)', '주행후(km)', '주행거리(km)', '티오프', '코스', '계기판사진', '비고'];
   const line = (arr) => arr.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
   let totalKm = 0;
   const body = rows.map((r) => {
     const km = dayKm(r, s); totalKm += km;
-    const dow = wd[new Date(r.date + 'T00:00:00').getDay()];
+    const o = r.odo || {};
     const photos = r.photos ? Object.keys(r.photos).length : 0;
-    return line([r.date, dow, '업무(출퇴근)', '자택', s.workplace, km, r.teeTime || '', r.course || '', photos ? `사진 ${photos}장` : '', r.note || '']);
+    return line([r.date, dow(r.date), '업무(출퇴근)', '자택', s.workplace,
+      o.start ?? '', o.home ?? '', km, r.teeTime || '', r.course || '',
+      photos ? `사진 ${photos}장` : '', r.note || '']);
   });
-  const footer = line([`합계 ${rows.length}일`, '', '', '', '', totalKm, '', '', '', s.fuelEnabled ? `예상유류비 ${Math.round((totalKm / s.kmPerL) * (s.fuelPrice || 0))}원` : '']);
+  const footer = line([`합계 ${rows.length}일`, '', '', '', '', '', '', totalKm, '', '', '',
+    s.fuelEnabled ? `예상유류비 ${Math.round((totalKm / s.kmPerL) * (s.fuelPrice || 0))}원` : '']);
   return '﻿' + [line(header), ...body, footer].join('\r\n'); // BOM(엑셀 한글깨짐 방지)
+}
+
+// 사진 파일 → data URI (문서에 그대로 박아 자체 완결형 HTML 만들기).
+function photoDataUri(fname) {
+  try {
+    const buf = fs.readFileSync(path.join(PHOTO_DIR, fname));
+    const ext = fname.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+    return `data:image/${ext};base64,${buf.toString('base64')}`;
+  } catch { return null; }
+}
+
+// 제출용 증빙 문서(HTML): 운행기록부 표 + 그날 계기판 사진이 한 장에.
+// 브라우저에서 인쇄 → 'PDF로 저장'하면 세무사·홈택스 제출용 단일 파일 완성.
+export function reportHTML({ year, month } = {}) {
+  const s = load().settings;
+  const rows = listDays({ year, month })
+    .filter((x) => x.worked === true)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const period = `${year || '전체'}년${month ? ` ${month}월` : ''}`;
+  let totalKm = 0;
+
+  const tableRows = rows.map((r, i) => {
+    const km = dayKm(r, s); totalKm += km;
+    const o = r.odo || {};
+    return `<tr>
+      <td>${i + 1}</td><td>${esc(r.date)} (${dow(r.date)})</td>
+      <td>업무(출퇴근)</td><td>자택 → ${esc(s.workplace)}</td>
+      <td class="num">${o.start ?? '-'}</td><td class="num">${o.home ?? '-'}</td>
+      <td class="num strong">${km}</td>
+      <td>${esc(r.teeTime || '')}${r.course ? ` / ${esc(r.course)}` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const galleries = rows.map((r) => {
+    const photos = r.photos || {};
+    const slots = LEGS.map((leg) => {
+      const uri = photos[leg] ? photoDataUri(photos[leg]) : null;
+      const o = (r.odo || {})[leg];
+      return `<figure class="shot">
+        ${uri ? `<img src="${uri}" alt="${LEG_KO[leg]}"/>` : `<div class="noimg">사진 없음</div>`}
+        <figcaption>${LEG_KO[leg]}${o != null ? ` · ${o}km` : ''}</figcaption>
+      </figure>`;
+    }).join('');
+    const has = Object.keys(photos).length > 0 || (r.odo && Object.keys(r.odo).length > 0);
+    if (!has) return '';
+    return `<section class="day">
+      <h3>${esc(r.date)} (${dow(r.date)}) · ${esc(r.teeTime || '')} ${esc(r.course || '')}</h3>
+      <div class="shots">${slots}</div>
+    </section>`;
+  }).join('');
+
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>차량 운행기록부 ${esc(period)}</title>
+<style>
+  body{font-family:-apple-system,"Malgun Gothic",sans-serif;color:#1a201d;margin:0;padding:24px;background:#fff;}
+  h1{font-size:22px;margin:0 0 4px;} .sub{color:#666;font-size:13px;margin-bottom:16px;}
+  .meta{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:13px;}
+  .meta td{border:1px solid #ccc;padding:6px 10px;} .meta .k{background:#f4f6f5;font-weight:700;width:90px;}
+  table.log{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;}
+  table.log th,table.log td{border:1px solid #bbb;padding:6px 8px;text-align:left;}
+  table.log th{background:#0b5d34;color:#fff;font-weight:700;font-size:12px;}
+  table.log td.num{text-align:right;} table.log td.strong{font-weight:700;}
+  table.log tfoot td{background:#eef2f0;font-weight:700;}
+  .note{font-size:11px;color:#777;margin:10px 0 26px;line-height:1.6;}
+  .day{margin-bottom:20px;page-break-inside:avoid;}
+  .day h3{font-size:14px;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid #0b5d34;}
+  .shots{display:flex;gap:10px;} .shot{flex:1;margin:0;text-align:center;}
+  .shot img{width:100%;height:150px;object-fit:cover;border:1px solid #ccc;border-radius:6px;}
+  .shot .noimg{width:100%;height:150px;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;background:#fafafa;}
+  .shot figcaption{font-size:11px;color:#555;margin-top:4px;font-weight:600;}
+  .toolbar{position:sticky;top:0;background:#0b5d34;padding:10px;text-align:center;margin:-24px -24px 20px;}
+  .toolbar button{font-size:14px;font-weight:700;padding:9px 18px;border:0;border-radius:8px;background:#fff;color:#0b5d34;cursor:pointer;}
+  @media print{.toolbar{display:none;} body{padding:0;}}
+</style></head><body>
+<div class="toolbar"><button onclick="window.print()">🖨️ 인쇄 / PDF로 저장</button></div>
+<h1>차량 운행기록부</h1>
+<div class="sub">대상 기간: ${esc(period)} · 사업소득(캐디) 종합소득세 증빙</div>
+<table class="meta">
+  <tr><td class="k">성명</td><td>${esc(s.driverName || '(설정에서 입력)')}</td>
+      <td class="k">차량번호</td><td>${esc(s.carNo || '(설정에서 입력)')}</td></tr>
+  <tr><td class="k">사업장</td><td>${esc(s.workplace)}</td>
+      <td class="k">총 근무일</td><td>${rows.length}일 · 총 주행 ${totalKm}km</td></tr>
+</table>
+<table class="log">
+  <thead><tr><th>No</th><th>일자(요일)</th><th>사용목적</th><th>구간</th><th>주행 전</th><th>주행 후</th><th>주행거리</th><th>티오프/코스</th></tr></thead>
+  <tbody>${tableRows || '<tr><td colspan="8" style="text-align:center;color:#999;">기록된 근무일이 없습니다.</td></tr>'}</tbody>
+  <tfoot><tr><td colspan="6">합계</td><td class="num">${totalKm}km</td><td>${rows.length}일</td></tr></tfoot>
+</table>
+<div class="note">※ 계기판 '주행 전/후' 값은 운전자가 입력한 계기판 숫자이며, 아래 계기판 사진으로 뒷받침됩니다. 계기판 숫자 미입력일은 편도 ${s.homeGolfKmOneway}km 기준 왕복(${s.homeGolfKmOneway * 2}km)으로 추정 계상했습니다. 실제 경비 공제 가능 여부·범위는 신고 방식(장부작성 여부)에 따라 다르므로 세무사 상담을 권장합니다.</div>
+${galleries ? `<h2 style="font-size:16px;border-top:2px solid #0b5d34;padding-top:14px;">계기판 사진 증빙</h2>${galleries}` : ''}
+</body></html>`;
 }
