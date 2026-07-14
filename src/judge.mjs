@@ -34,6 +34,11 @@ function buildPrompt(article) {
   const { name, part } = profile();
   const anchor = '';
   const hasImg = !!article.images?.length;
+  const ts = Number(article.writeDate);
+  const postedHour = Number.isFinite(ts) && ts > 1e12 ? new Date(ts).getHours() : null;
+  const postedLine = postedHour != null
+    ? `- 게시 시각: ${postedHour}시 (${postedHour >= 12 ? '정오 이후' : '정오 이전'})`
+    : '';
   return `당신은 골프장 캐디 "${name}"(${part}부)의 개인 비서입니다.
 아래 네이버 카페 글이 "${name}"님에게 어떤 의미인지 판단하세요.${anchor}
 
@@ -41,6 +46,7 @@ function buildPrompt(article) {
 - 제목: ${article.subject || ''}
 - 게시판: ${article.menuName || ''}
 - 작성자: ${article.writer || ''}
+${postedLine}
 - 본문: ${(article.text || '').slice(0, 600)}
 - 첨부 이미지: ${hasImg ? '있음 — 배치표/번호표(순번·이름 목록 + 티오프 시간표)일 수 있으니 반드시 읽으세요.' : '없음 — 제목/본문 텍스트로만 판단.'}
 
@@ -63,6 +69,8 @@ function buildPrompt(article) {
 - part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
 - **절대 기본값으로 ${part}부라고 가정하지 마세요.** ${part}부라는 근거(명시된 "${part}부" / "${name}" 이름·순번 / ${part}부 배치표 / ${part}부 시간대(오후·저녁) 티오프)가 하나도 없으면 part는 실제 부 숫자 또는 "unknown"으로.
 - part 가 ${part}가 아닌 다른 부로 확인되면 relevant=false (다른 부는 "${name}"과 무관).
+- ⏰게시 시각 참고: ${part}부 추가·변동 소식은 보통 정오(12시) 이후 올라옵니다. 정오 이전엔 헷갈리지 않게 글에 "${part}부"라고 명시하는 편입니다. 따라서 **부 표시가 없고 정오 이후에 올라온 일정 변동/추가 글은 ${part}부일 가능성이 높습니다.** (단, 티오프 시간대가 다른 부를 가리키면 그 부가 우선 — 예: 정오 이후 올라와도 '아웃 7시대' 티오프는 1부.)
+- 우선순위: 명시된 "N부" > 티오프 시간대 > 게시 시각.
 
 ★★ 커트라인 규칙 (매우 중요 — 지어내기 금지):
 - cutoffName/cutoffPosition 은 **제목이나 본문 텍스트에 "○○님까지 일됩니다/근무/나갑니다" 처럼 명시적으로 적혀 있을 때만** 채우고, cutoffAnnounced=true 로 하세요.
