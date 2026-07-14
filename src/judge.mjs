@@ -58,7 +58,13 @@ function buildPrompt(article, baseline) {
 - "${name}"의 ${part}부 순번/근무/출근에 영향을 주거나 전체 공지면 relevant=true.
 - 다른 부만의 내용, 남의 개인 근태신청(내 이름 없음)은 relevant=false.
 - "${name}"이 근무 확정(흰색이거나 티오프 배정)이면 "${name}"의 티오프 시간(HH:MM)과 코스(OUT/IN)를 읽으세요(교환됐으면 바뀐 자리 기준).
-- "${name}"이 대기(회색)면 myPosition 과 커트라인(마지막 근무확정)의 cutoffName/cutoffPosition 을 읽으세요(남은 인원 계산은 시스템이 함).
+- "${name}"의 순번(myPosition)은 항상 읽으세요(이미지의 그 사람 번호).
+
+★★ 커트라인 규칙 (매우 중요 — 지어내기 금지):
+- cutoffName/cutoffPosition 은 **제목이나 본문 텍스트에 "○○님까지 일됩니다/근무/나갑니다" 처럼 명시적으로 적혀 있을 때만** 채우고, cutoffAnnounced=true 로 하세요.
+- 그런 명시 문구가 **없으면**(예: 그냥 "현재 배치표"·"3부 시간표" 스냅샷) cutoffName="", cutoffPosition=null, cutoffAnnounced=false. **이미지의 색깔만 보고 커트라인을 절대 추측하지 마세요.**
+- **회색(스페어)인 사람은 절대 커트라인이 아닙니다.** 커트라인은 반드시 근무 확정(흰색/녹색/하늘색/티오프배정)된 사람이어야 합니다.
+- 확실하지 않으면 비워두세요. 틀린 이름을 넣는 것보다 비우는 게 낫습니다.
 
 반드시 JSON "하나만" 출력(설명·코드펜스 금지):
 {
@@ -67,13 +73,14 @@ function buildPrompt(article, baseline) {
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
   "dateLabel": "예: 7월 14일 화요일 (모르면 빈칸)",
   "myPosition": 정수 또는 null,
-  "cutoffName": "커트라인 사람 이름 또는 빈칸",
+  "cutoffAnnounced": true 또는 false (텍스트에 '○○까지' 명시 여부),
+  "cutoffName": "명시된 커트라인 이름, 없으면 빈칸",
   "cutoffPosition": 정수 또는 null,
   "teeTime": "HH:MM 또는 null",
   "course": "OUT 또는 IN 또는 빈칸",
   "note": "시간 변동 가능/취소/조정 등 주의사항 한 문장, 없으면 빈칸",
   "confidence": 0.0~1.0 실수,
-  "summary": "${name}님 기준 한국어 한 문장"
+  "summary": "${name}님 기준 한국어 한 문장 (커트라인이 명시 안 됐으면 남은 인원 언급 금지)"
 }`;
 }
 
@@ -120,14 +127,20 @@ export function decide(article, verdict) {
     body = `${name}님, 오늘 근무 배정됐어요!${commuteLine(tee, verdict.course)}`;
   } else if (status === 'waiting' || status === 'near' || status === 'spare') {
     const mp = Number(verdict.myPosition), cp = Number(verdict.cutoffPosition);
-    if (Number.isFinite(mp) && Number.isFinite(cp)) {
+    // 남은 인원은 '○○까지'가 텍스트에 명시됐을 때만 계산(지어낸 커트라인 방지).
+    const announced = verdict.cutoffAnnounced && verdict.cutoffName
+      && Number.isFinite(mp) && Number.isFinite(cp);
+    if (announced) {
       const remaining = mp - cp - 1;
-      const cut = verdict.cutoffName ? ` (${verdict.cutoffName}님까지 근무)` : '';
+      const cut = ` (${verdict.cutoffName}님까지 근무)`;
       if (remaining < 0) { status = 'assigned'; body = `${name}님, 오늘 근무 배정됐어요!${cut}`; }
       else if (remaining === 0) { status = 'your_turn'; body = `${name}님, 지금 출근하실 차례예요!${cut}`; }
       else { status = remaining <= 2 ? 'near' : 'waiting'; body = `${name}님, 앞으로 ${remaining}명 남았어요${cut}`; }
-    } else if (status === 'spare') {
-      body = `${name}님, ${verdict.dateLabel || '오늘'} ${profile().part}부 스페어(대기)입니다. 순번 오면 바로 알려드릴게요`;
+    } else {
+      // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게 알림.
+      status = 'spare';
+      const pos = Number.isFinite(mp) ? ` (순번 ${mp}번)` : '';
+      body = `${name}님, ${verdict.dateLabel || '오늘'} ${profile().part}부 스페어 대기${pos}입니다. 아직 근무 확정 전 — 확정되면 바로 알려드릴게요`;
     }
   } else if (status === 'off') {
     body = `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
