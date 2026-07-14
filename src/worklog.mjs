@@ -2,9 +2,14 @@
 //  - 근무 확정을 감지하면 그날을 '임시 기록'(worked=null)으로 자동 저장 → 앱에서 실제근무 확인.
 //  - 근무일 × 왕복거리 = 주행거리. (유류비 추정은 옵션)
 //  - 원본은 data/worklog.json 에 장기 보관. CSV 로 내보내 세무사/홈택스 제출.
-import { loadJSON, saveJSON } from './store.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadJSON, saveJSON, DATA_DIR } from './store.mjs';
 
 const FILE = 'worklog.json';
+const PHOTO_DIR = path.join(DATA_DIR, 'photos');
+export const LEGS = ['start', 'work', 'home']; // 집출발 / 직장도착 / 집복귀
+export const LEG_KO = { start: '집 출발', work: '직장 도착', home: '집 복귀' };
 const DEFAULTS = { homeGolfKmOneway: 30, workplace: '리버힐CC', fuelEnabled: false, kmPerL: 12, fuelPrice: 1700 };
 
 function load() {
@@ -79,6 +84,52 @@ export function addWorkDay(dateISO, info = {}) {
   return d.days[dateISO];
 }
 
+// ── 계기판 사진 저장(증빙) ──────────────────────────────
+// base64 데이터URL(앱에서 압축본)을 파일로 저장하고 day.photos[leg] 에 연결.
+export function savePhoto(dateISO, leg, dataUrl) {
+  if (!dateISO || !LEGS.includes(leg)) return null;
+  const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!m) return null;
+  const ext = m[1] === 'image/png' ? 'png' : 'jpg';
+  fs.mkdirSync(PHOTO_DIR, { recursive: true });
+  const fname = `${dateISO}_${leg}.${ext}`;
+  fs.writeFileSync(path.join(PHOTO_DIR, fname), Buffer.from(m[2], 'base64'));
+  const d = load();
+  const cur = d.days[dateISO] || { date: dateISO, worked: null, source: 'manual', detectedAt: Date.now() };
+  cur.photos = { ...(cur.photos || {}), [leg]: fname };
+  d.days[dateISO] = cur;
+  save(d);
+  return cur;
+}
+export function photoPath(fname) { return path.join(PHOTO_DIR, fname); }
+
+// 계기판 숫자(선택) 입력 → 정확한 거리 계산에 사용.
+export function saveOdo(dateISO, odo = {}) {
+  if (!dateISO) return null;
+  const d = load();
+  const cur = d.days[dateISO] || { date: dateISO, worked: null, source: 'manual', detectedAt: Date.now() };
+  const o = { ...(cur.odo || {}) };
+  for (const leg of LEGS) if (odo[leg] != null && odo[leg] !== '') o[leg] = Number(odo[leg]);
+  cur.odo = o;
+  d.days[dateISO] = cur;
+  save(d);
+  return cur;
+}
+
+// 그 날 실제 왕복거리: 계기판 숫자가 있으면 그걸로, 없으면 설정 편도×2.
+function dayKm(day, settings) {
+  const o = day.odo || {};
+  if (o.start != null && o.home != null && o.home >= o.start) return o.home - o.start;
+  return (settings.homeGolfKmOneway || 0) * 2;
+}
+
+// 기록이 '비어있는' 근무일(사진·계기판 전혀 없음) → 리마인더 대상.
+function isBlank(day) {
+  const hasPhoto = day.photos && Object.keys(day.photos).length > 0;
+  const hasOdo = day.odo && Object.keys(day.odo).length > 0;
+  return !hasPhoto && !hasOdo && !day.recorded;
+}
+
 export function listDays({ year, month } = {}) {
   const days = Object.values(load().days);
   let out = days;
@@ -93,27 +144,45 @@ export function summary({ year, month } = {}) {
   const all = listDays({ year, month });
   const worked = all.filter((x) => x.worked === true);
   const pending = all.filter((x) => x.worked == null); // 확인 대기
+  const blank = worked.filter(isBlank);                // 근무했지만 기록 비어있음
   const roundKm = (s.homeGolfKmOneway || 0) * 2;
-  const totalKm = worked.length * roundKm;
+  const totalKm = worked.reduce((sum, d) => sum + dayKm(d, s), 0);
   const estFuel = s.fuelEnabled && s.kmPerL ? Math.round((totalKm / s.kmPerL) * (s.fuelPrice || 0)) : null;
-  return { workedDays: worked.length, pendingDays: pending.length, roundKm, totalKm, estFuel };
+  return { workedDays: worked.length, pendingDays: pending.length, blankDays: blank.length, roundKm, totalKm, estFuel };
+}
+
+// 리마인더 대상: 최근 3일 내 (근무확정 or 확인대기)인데 기록이 비어있고, 하루 안에 재알림 안 한 날.
+export function dueReminders(now = Date.now()) {
+  const cutoff = now - 3 * 86400 * 1000;
+  return Object.values(load().days).filter((day) => {
+    if (day.worked === false || !isBlank(day)) return false;
+    const t = new Date(day.date + 'T00:00:00').getTime();
+    if (isNaN(t) || t < cutoff) return false;
+    if (day.remindedAt && now - day.remindedAt < 20 * 3600 * 1000) return false;
+    return true;
+  });
+}
+export function markReminded(dateISO, now = Date.now()) {
+  const d = load();
+  if (d.days[dateISO]) { d.days[dateISO].remindedAt = now; save(d); }
 }
 
 // 차량운행일지 CSV (엑셀/세무사 제출용).
 export function toCSV({ year, month } = {}) {
   const s = load().settings;
-  const roundKm = (s.homeGolfKmOneway || 0) * 2;
   const rows = listDays({ year, month })
     .filter((x) => x.worked === true)
     .sort((a, b) => (a.date < b.date ? -1 : 1)); // CSV는 오래된 순
-  const header = ['일자', '요일', '사용목적', '출발지', '도착지', '왕복거리(km)', '티오프', '코스', '비고'];
+  const header = ['일자', '요일', '사용목적', '출발지', '도착지', '왕복거리(km)', '티오프', '코스', '계기판사진', '비고'];
   const wd = ['일', '월', '화', '수', '목', '금', '토'];
   const line = (arr) => arr.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
+  let totalKm = 0;
   const body = rows.map((r) => {
+    const km = dayKm(r, s); totalKm += km;
     const dow = wd[new Date(r.date + 'T00:00:00').getDay()];
-    return line([r.date, dow, '업무(출퇴근)', '자택', s.workplace, roundKm, r.teeTime || '', r.course || '', r.note || '']);
+    const photos = r.photos ? Object.keys(r.photos).length : 0;
+    return line([r.date, dow, '업무(출퇴근)', '자택', s.workplace, km, r.teeTime || '', r.course || '', photos ? `사진 ${photos}장` : '', r.note || '']);
   });
-  const totalKm = rows.length * roundKm;
-  const footer = line([`합계 ${rows.length}일`, '', '', '', '', totalKm, '', '', s.fuelEnabled ? `예상유류비 ${Math.round((totalKm / s.kmPerL) * (s.fuelPrice || 0))}원` : '']);
+  const footer = line([`합계 ${rows.length}일`, '', '', '', '', totalKm, '', '', '', s.fuelEnabled ? `예상유류비 ${Math.round((totalKm / s.kmPerL) * (s.fuelPrice || 0))}원` : '']);
   return '﻿' + [line(header), ...body, footer].join('\r\n'); // BOM(엑셀 한글깨짐 방지)
 }

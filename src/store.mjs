@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT_DIR } from './env.mjs';
 
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+export const DATA_DIR = path.join(ROOT_DIR, 'data');
 
 export function loadJSON(name, fallback) {
   try {

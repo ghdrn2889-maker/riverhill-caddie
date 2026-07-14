@@ -71,6 +71,17 @@
     .wl-row { margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .wl-row input { padding:8px; border:1px solid var(--line); border-radius:8px; width:64px; font-size:14px; }
     .wl-note { font-size:11px; color:var(--muted); margin-top:12px; line-height:1.55; }
+    .wl-photo { font-size:12px; padding:5px 9px; }
+    .wl-photos { padding:10px 0 4px; border-bottom:1px solid var(--line); }
+    .wl-slots { display:flex; gap:8px; }
+    .wl-slot { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; }
+    .wl-slot .box { width:100%; aspect-ratio:4/3; border:1.5px dashed var(--line); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--muted); background:#fafbfb; overflow:hidden; }
+    .wl-slot .box img { width:100%; height:100%; object-fit:cover; }
+    .wl-slot .box.done { border-style:solid; border-color:var(--green2); }
+    .wl-slot .lab { font-size:11px; color:var(--muted); font-weight:600; }
+    .wl-odo { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted); }
+    .wl-odo input { width:70px; padding:6px; border:1px solid var(--line); border-radius:6px; }
+    .wl-up { font-size:11px; color:var(--green2); text-align:center; margin-top:6px; min-height:14px; }
   </style>
 </head>
 <body>

@@ -87,28 +87,96 @@ async function loadWorklog() {
     const r = await (await fetch(`/api/worklog?year=${y}&month=${m}`)).json();
     const s = r.summary || {}, set = r.settings || {};
     $('wlSummary').textContent = `${y}년 ${m}월 · 근무 ${s.workedDays || 0}일 · 주행 ${(s.totalKm || 0).toLocaleString()}km` + (s.estFuel != null ? ` · 예상 유류비 ${s.estFuel.toLocaleString()}원` : '');
-    $('wlSub').textContent = (s.pendingDays ? `⚠️ 확인 대기 ${s.pendingDays}일 — 실제 근무했는지 눌러주세요` : '확인 대기 없음') + ` · 왕복 ${s.roundKm || 0}km/일`;
+    const warn = [];
+    if (s.pendingDays) warn.push(`확인 대기 ${s.pendingDays}일`);
+    if (s.blankDays) warn.push(`📷 기록 미입력 ${s.blankDays}일`);
+    $('wlSub').textContent = (warn.length ? '⚠️ ' + warn.join(' · ') : '모두 정리됨') + ` · 왕복 ${s.roundKm || 0}km/일`;
     if ($('wlKm').value === '' || document.activeElement !== $('wlKm')) $('wlKm').value = set.homeGolfKmOneway ?? 30;
 
     const days = r.days || [];
+    const LEG = [['start', '🏠 집출발'], ['work', '⛳ 직장도착'], ['home', '🏠 집복귀']];
     $('wlDays').innerHTML = days.length ? days.map((d) => {
       const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
       const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
       const tee = d.teeTime ? `티오프 ${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.source === 'manual' ? '수동입력' : '');
+      const nPhoto = d.photos ? Object.keys(d.photos).length : 0;
       let right;
       if (d.worked === true) right = `<span class="wl-chip ok">✓ 근무</span>`;
       else if (d.worked === false) right = `<span class="wl-chip x">안함</span>`;
       else right = `<button class="wl-btn wl-yes" data-d="${d.date}" data-w="1">예</button><button class="wl-btn wl-no" data-d="${d.date}" data-w="0">아니오</button>`;
-      return `<div class="wl-day"><div><span class="d">${md}</span> <span class="t">${escapeHtml(tee)}</span></div><div style="display:flex;gap:6px;">${right}</div></div>`;
+      const photoBtn = d.worked !== false ? `<button class="wl-btn wl-no wl-photo" data-toggle="${d.date}">📷 ${nPhoto}/3</button>` : '';
+      const slots = LEG.map(([leg, lab]) => {
+        const has = d.photos && d.photos[leg];
+        const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '📷';
+        return `<label class="wl-slot"><span class="lab">${lab}</span><span class="box${has ? ' done' : ''}">${inner}</span>
+          <input type="file" accept="image/*" capture="environment" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
+      }).join('');
+      const odo = d.odo || {};
+      const panel = `<div class="wl-photos" id="wp-${d.date}" style="display:none;">
+        <div class="wl-slots">${slots}</div>
+        <div class="wl-odo">계기판 km(선택):
+          <input type="number" inputmode="numeric" placeholder="출발" data-odo="${d.date}" data-leg="start" value="${odo.start ?? ''}">
+          <input type="number" inputmode="numeric" placeholder="도착" data-odo="${d.date}" data-leg="work" value="${odo.work ?? ''}">
+          <input type="number" inputmode="numeric" placeholder="복귀" data-odo="${d.date}" data-leg="home" value="${odo.home ?? ''}">
+          <button class="wl-btn wl-no" data-odosave="${d.date}">저장</button>
+        </div>
+        <div class="wl-up" id="up-${d.date}"></div></div>`;
+      return `<div class="wl-day"><div><span class="d">${md}</span> <span class="t">${escapeHtml(tee)}</span></div>
+        <div style="display:flex;gap:6px;align-items:center;">${right}${photoBtn}</div></div>${panel}`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
 
-    $('wlDays').querySelectorAll('button[data-d]').forEach((b) => {
+    // 근무 확인(예/아니오)
+    $('wlDays').querySelectorAll('button[data-w]').forEach((b) => {
       b.onclick = async () => {
         await fetch('/api/worklog/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: b.dataset.d, worked: b.dataset.w === '1' }) });
         loadWorklog();
       };
     });
+    // 사진 패널 열기/닫기
+    $('wlDays').querySelectorAll('button[data-toggle]').forEach((b) => {
+      b.onclick = () => { const p = $('wp-' + b.dataset.toggle); p.style.display = p.style.display === 'none' ? 'block' : 'none'; };
+    });
+    // 계기판 사진 업로드(압축 후 전송)
+    $('wlDays').querySelectorAll('input[type=file][data-leg]').forEach((inp) => {
+      inp.onchange = async () => {
+        if (!inp.files || !inp.files[0]) return;
+        const dt = inp.dataset.d, up = $('up-' + dt); up.textContent = '업로드 중…';
+        try {
+          const dataUrl = await compressImage(inp.files[0]);
+          await fetch('/api/worklog/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: dt, leg: inp.dataset.leg, image: dataUrl }) });
+          await loadWorklog(); if ($('wp-' + dt)) $('wp-' + dt).style.display = 'block';
+        } catch (e) { up.textContent = '업로드 실패: ' + e.message; }
+      };
+    });
+    // 계기판 숫자 저장
+    $('wlDays').querySelectorAll('button[data-odosave]').forEach((b) => {
+      b.onclick = async () => {
+        const dt = b.dataset.odosave, odo = {};
+        $('wlDays').querySelectorAll(`input[data-odo="${dt}"]`).forEach((i) => { if (i.value !== '') odo[i.dataset.leg] = Number(i.value); });
+        await fetch('/api/worklog/odo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: dt, odo }) });
+        await loadWorklog(); if ($('wp-' + dt)) $('wp-' + dt).style.display = 'block';
+      };
+    });
   } catch { $('wlSummary').textContent = '불러오기 실패'; }
+}
+
+// 사진을 캔버스로 축소 압축(계기판은 숫자만 보이면 됨) → 용량·업로드 최소화.
+function compressImage(file, maxSide = 1280, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxSide) { const r = maxSide / Math.max(w, h); w = Math.round(w * r); h = Math.round(h * r); }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    const fr = new FileReader();
+    fr.onload = () => { img.src = fr.result; };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
 }
 
 // ── 오늘 내 상황판 + heartbeat ──────────────────────────

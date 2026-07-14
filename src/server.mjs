@@ -17,7 +17,7 @@ import { loadJSON, saveJSON } from './store.mjs';
 initPush();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));         // 계기판 사진(base64) 업로드 허용
 app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
@@ -156,6 +156,26 @@ app.post('/api/worklog/add', (req, res) => {
 // 설정: { homeGolfKmOneway?, workplace?, fuelEnabled?, kmPerL?, fuelPrice? }
 app.post('/api/worklog/settings', (req, res) => {
   res.json({ ok: true, settings: worklog.setSettings(req.body || {}) });
+});
+// 계기판 사진 업로드: { date, leg:'start|work|home', image:'data:image/jpeg;base64,...' }
+app.post('/api/worklog/photo', (req, res) => {
+  const { date, leg, image } = req.body || {};
+  if (!date || !leg || !image) return res.status(400).json({ error: 'date, leg, image 필요' });
+  const day = worklog.savePhoto(date, leg, image);
+  if (!day) return res.status(400).json({ error: '잘못된 이미지 형식' });
+  res.json({ ok: true, day });
+});
+// 계기판 숫자(선택): { date, odo:{start,work,home} }
+app.post('/api/worklog/odo', (req, res) => {
+  const { date, odo } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: worklog.saveOdo(date, odo || {}) });
+});
+// 계기판 사진 보기: /api/worklog/photo/2026-07-14_start.jpg
+app.get('/api/worklog/photo/:fname', (req, res) => {
+  const fname = req.params.fname;
+  if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
+  res.sendFile(worklog.photoPath(fname), (err) => { if (err) res.status(404).end(); });
 });
 // CSV 내보내기(차량운행일지): ?year=2026 (엑셀/세무사 제출용)
 app.get('/api/worklog/export.csv', (req, res) => {
@@ -383,6 +403,21 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   console.log(`🔔 [${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
 }
+
+// 근무일 차량기록 리마인더: 저녁(기본 22시) 이후, 기록 비어있는 근무일이 있으면 상기 푸시.
+async function checkWorklogReminders() {
+  try {
+    const hour = new Date().getHours();
+    if (hour < Number(process.env.REMIND_HOUR ?? 22)) return;
+    for (const day of worklog.dueReminders()) {
+      const md = `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8, 10))}`;
+      await broadcast({ title: '🚗 근무 기록 잊지 마세요', body: `${md} 근무하셨나요? 계기판 사진(집출발·직장도착·집복귀)을 앱에 등록해주세요.`, url: '/' });
+      worklog.markReminded(day.date);
+      console.log(`[리마인더] ${day.date} 차량기록 상기 발송`);
+    }
+  } catch (e) { console.error('리마인더 오류:', e.message); }
+}
+setInterval(checkWorklogReminders, 60 * 60 * 1000); // 매시간 체크(리마인드 시각 이후에만 발송)
 
 startCrawler({
   onMatch: async (article, result) => {
