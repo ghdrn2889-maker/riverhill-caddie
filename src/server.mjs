@@ -11,6 +11,7 @@ import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { judge, commuteInfo } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
+import * as worklog from './worklog.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
 initPush();
@@ -130,6 +131,41 @@ app.get('/api/today', (req, res) => {
   if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
   const commute = t.teeTime ? commuteInfo(t.teeTime) : null;
   res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
+});
+
+// ── 근무일지/세무 증빙 ──────────────────────────────────
+// 조회: ?year=2026&month=7 (없으면 전체). { days, summary, settings }
+app.get('/api/worklog', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  res.json({ ok: true, days: worklog.listDays({ year, month }),
+    summary: worklog.summary({ year, month }), settings: worklog.getSettings() });
+});
+// 실제 근무 여부 확인: { date:'YYYY-MM-DD', worked:true|false|null }
+app.post('/api/worklog/confirm', (req, res) => {
+  const { date, worked } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: worklog.confirmWorkDay(date, worked) });
+});
+// 수동 추가: { date, teeTime?, course?, note? }
+app.post('/api/worklog/add', (req, res) => {
+  const { date, teeTime, course, note } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요 (YYYY-MM-DD)' });
+  res.json({ ok: true, day: worklog.addWorkDay(date, { teeTime, course, note }) });
+});
+// 설정: { homeGolfKmOneway?, workplace?, fuelEnabled?, kmPerL?, fuelPrice? }
+app.post('/api/worklog/settings', (req, res) => {
+  res.json({ ok: true, settings: worklog.setSettings(req.body || {}) });
+});
+// CSV 내보내기(차량운행일지): ?year=2026 (엑셀/세무사 제출용)
+app.get('/api/worklog/export.csv', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  const csv = worklog.toCSV({ year, month });
+  const name = `운행일지_${year || '전체'}${month ? '-' + month : ''}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
+  res.send(csv);
 });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -318,6 +354,12 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       body = `${change.message}\n${out.body}`;
       out.push = 'high';
     }
+  }
+
+  // 근무 확정(배정/내 차례/근무)이면 세무용 근무일지에 그날을 자동 기록(임시 → 앱에서 확인).
+  if (out.relevant && v && ['assigned', 'work', 'your_turn'].includes(out.status)) {
+    const iso = worklog.labelToISO(v.dateLabel) || new Date().toISOString().slice(0, 10);
+    worklog.recordWorkDay(iso, { teeTime: v.teeTime || '', course: v.course || '', articleId: full.id });
   }
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,

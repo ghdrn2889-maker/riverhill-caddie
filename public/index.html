@@ -55,6 +55,22 @@
     .heartbeat { font-size:12px; color:var(--muted); text-align:center; margin:2px 4px 12px; }
     .heartbeat b { color:var(--green2); }
     .heartbeat.dead b { color:#c02929; }
+    /* 근무·세무 기록 */
+    .wl-sum { font-size:14px; font-weight:700; color:var(--green2); margin-bottom:4px; }
+    .wl-sub { font-size:12px; color:var(--muted); margin-bottom:12px; }
+    .wl-day { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px; }
+    .wl-day:last-of-type { border-bottom:0; }
+    .wl-day .d { font-weight:600; }
+    .wl-day .t { font-size:12px; color:var(--muted); }
+    .wl-btn { width:auto; padding:7px 12px; font-size:13px; border-radius:8px; font-weight:700; }
+    .wl-yes { background:var(--green); color:#fff; }
+    .wl-no { background:#eef2f0; color:var(--muted); }
+    .wl-chip { font-size:12px; font-weight:700; padding:3px 10px; border-radius:12px; white-space:nowrap; }
+    .wl-chip.ok { background:#e6f5ec; color:var(--green2); }
+    .wl-chip.x { background:#f1f1f1; color:#999; }
+    .wl-row { margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .wl-row input { padding:8px; border:1px solid var(--line); border-radius:8px; width:64px; font-size:14px; }
+    .wl-note { font-size:11px; color:var(--muted); margin-top:12px; line-height:1.55; }
   </style>
 </head>
 <body>
@@ -83,6 +99,26 @@
       <button id="readAll" class="readall" style="display:none;">모두 읽음</button>
     </div>
     <div id="recent"><div class="empty">아직 감지된 소식이 없어요.</div></div>
+
+    <div class="feedhead">
+      <h2>📋 근무·세무 기록</h2>
+      <button id="wlToggle" class="readall">펼치기 ▾</button>
+    </div>
+    <div id="worklog" class="card" style="display:none;">
+      <div id="wlSummary" class="wl-sum">불러오는 중…</div>
+      <div id="wlSub" class="wl-sub"></div>
+      <div id="wlDays"></div>
+      <div class="wl-row">
+        <span style="font-size:13px;">집→골프장 편도</span>
+        <input id="wlKm" type="number" min="0" step="1" inputmode="numeric" />
+        <span style="font-size:13px;">km (왕복 자동 ×2)</span>
+        <button id="wlSave" class="wl-btn wl-no">저장</button>
+      </div>
+      <div class="wl-row">
+        <button id="wlExport" class="wl-btn wl-yes" style="flex:1;">📄 올해 운행일지 CSV 내보내기</button>
+      </div>
+      <div class="wl-note">근무 확정이 감지되면 자동으로 목록에 올라와요. "예/아니오"로 <b>실제 근무한 날만</b> 확정하면 세무 자료가 정확해집니다. CSV는 세무사·홈택스에 그대로 제출 가능해요. (실제 공제는 주유 영수증 등과 함께, 세무사 상담 권장)</div>
+    </div>
   </main>
   <script src="/app.js"></script>
 </body>

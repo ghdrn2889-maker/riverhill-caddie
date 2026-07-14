@@ -59,6 +59,56 @@ async function main() {
   loadToday();
   loadRecent();
   setInterval(() => { loadToday(); loadRecent(); }, 30000);
+
+  // 근무·세무 기록 섹션
+  $('wlToggle').onclick = () => {
+    const box = $('worklog');
+    const open = box.style.display === 'none';
+    box.style.display = open ? 'block' : 'none';
+    $('wlToggle').textContent = open ? '접기 ▴' : '펼치기 ▾';
+    if (open) loadWorklog();
+  };
+  $('wlSave').onclick = async () => {
+    const km = Number($('wlKm').value) || 0;
+    await fetch('/api/worklog/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ homeGolfKmOneway: km }) });
+    loadWorklog();
+  };
+  $('wlExport').onclick = () => {
+    const y = new Date().getFullYear();
+    window.open(`/api/worklog/export.csv?year=${y}`, '_blank');
+  };
+}
+
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+async function loadWorklog() {
+  try {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    const r = await (await fetch(`/api/worklog?year=${y}&month=${m}`)).json();
+    const s = r.summary || {}, set = r.settings || {};
+    $('wlSummary').textContent = `${y}년 ${m}월 · 근무 ${s.workedDays || 0}일 · 주행 ${(s.totalKm || 0).toLocaleString()}km` + (s.estFuel != null ? ` · 예상 유류비 ${s.estFuel.toLocaleString()}원` : '');
+    $('wlSub').textContent = (s.pendingDays ? `⚠️ 확인 대기 ${s.pendingDays}일 — 실제 근무했는지 눌러주세요` : '확인 대기 없음') + ` · 왕복 ${s.roundKm || 0}km/일`;
+    if ($('wlKm').value === '' || document.activeElement !== $('wlKm')) $('wlKm').value = set.homeGolfKmOneway ?? 30;
+
+    const days = r.days || [];
+    $('wlDays').innerHTML = days.length ? days.map((d) => {
+      const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
+      const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
+      const tee = d.teeTime ? `티오프 ${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.source === 'manual' ? '수동입력' : '');
+      let right;
+      if (d.worked === true) right = `<span class="wl-chip ok">✓ 근무</span>`;
+      else if (d.worked === false) right = `<span class="wl-chip x">안함</span>`;
+      else right = `<button class="wl-btn wl-yes" data-d="${d.date}" data-w="1">예</button><button class="wl-btn wl-no" data-d="${d.date}" data-w="0">아니오</button>`;
+      return `<div class="wl-day"><div><span class="d">${md}</span> <span class="t">${escapeHtml(tee)}</span></div><div style="display:flex;gap:6px;">${right}</div></div>`;
+    }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
+
+    $('wlDays').querySelectorAll('button[data-d]').forEach((b) => {
+      b.onclick = async () => {
+        await fetch('/api/worklog/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: b.dataset.d, worked: b.dataset.w === '1' }) });
+        loadWorklog();
+      };
+    });
+  } catch { $('wlSummary').textContent = '불러오기 실패'; }
 }
 
 // ── 오늘 내 상황판 + heartbeat ──────────────────────────
