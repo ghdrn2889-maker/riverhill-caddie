@@ -42,6 +42,33 @@ app.post('/api/test', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 외부 메시지 수신(카톡 단톡방 등) → 카페 글과 동일한 judge 파이프라인으로 처리.
+//  폰의 알림 포워더(MacroDroid/Tasker/커스텀앱)가 단톡방 메시지를 여기로 POST 한다.
+//  보안: 공개 URL이므로 INGEST_TOKEN(.env) 이 있으면 x-token 헤더/쿼리로 검사(위조 방지).
+app.post('/api/ingest', async (req, res) => {
+  const b = req.body || {};
+  const text = String(b.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'text 필요' });
+  const token = req.get('x-token') || req.query.token;
+  if (process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
+    return res.status(401).json({ error: '인증 실패' });
+  }
+  const source = b.source || '카톡';
+  const room = b.room ? ` · ${b.room}` : '';
+  const pseudo = {
+    id: `ingest-${req.query.id || Date.now()}`,
+    subject: `[${source}${room}] ${text.slice(0, 40)}`,
+    text, writer: b.sender || '', menuId: '', menuName: source,
+    images: [], writeDate: '', url: '/',
+  };
+  try {
+    const out = await notifyForArticle(pseudo, {}, {});
+    res.json({ ok: true, pushed: !!out.pushed, push: out.push, body: out.body });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 라이브 테스트용: 특정 글을 실제로 분석해서 폰으로 푸시 (?id=26231)
 app.post('/api/simulate', async (req, res) => {
   const id = req.body?.id || req.query.id;
