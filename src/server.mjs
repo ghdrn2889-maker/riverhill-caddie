@@ -10,6 +10,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { judge } from './judge.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
 initPush();
@@ -60,13 +61,24 @@ app.post('/api/judge', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'id 필요 (예: /api/judge?id=26299)' });
   try {
     const full = await fetchArticle(id);
-    const baseline = loadJSON('baseline.json', null);
-    const out = await judge(full, baseline);
+    const out = await judge(full, loadToday());
     res.json({ ok: true, subject: full.subject, writer: full.writer, menuId: full.menuId,
       push: out.push, title: out.title, body: out.body, verdict: out.rawVerdict });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
+app.get('/api/today', (req, res) => {
+  const t = loadToday();
+  if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
+  const p = [];
+  if (t.myPosition) p.push(`순번 ${t.myPosition}번`);
+  p.push(statusKo(t.status));
+  if (t.teeTime) p.push(`티오프 ${t.teeTime}${t.course ? `(${t.course})` : ''}`);
+  if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
+  res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t });
 });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -327,21 +339,33 @@ function saveBaselineFromVerdict(full, v) {
   console.log(`[기준표] ${baseline.date} ${role || '?'} pos=${baseline.myPosition ?? '-'} tee=${baseline.teeTime || '-'}`);
 }
 
-// 새 두뇌(judge)로 판단 → 피드-우선 저장 → 확신도 라우팅으로 푸시.
-//  push: 'high'(바로 알림) | 'check'(확인필요 알림) | 'low'(피드만, 무푸시)
+// 새 두뇌(judge)로 '오늘 상황판'에 비추어 판단 → 피드-우선 저장 → 상황판 갱신
+// → 번복 감지 + 확신도 라우팅으로 푸시.  push: 'high' | 'check' | 'low'
 async function notifyForArticle(full, result = {}, opts = {}) {
-  const baseline = loadJSON('baseline.json', null);
-  const out = await judge(full, baseline);
+  const today = loadToday();
+  const out = await judge(full, today);        // 오늘 상황을 맥락으로 판단
   const v = out.rawVerdict;
-  const ret = { push: out.push, title: out.title, body: out.body, status: out.status, relevant: out.relevant, category: v?.category || null };
+  let title = out.title, body = out.body;
 
   // 피드-우선: 관련 여부와 무관하게 항상 피드에 기록(놓침 구조적 불가).
   saveRecentV2(full, out);
 
-  // 배치표에서 내 상태를 읽었으면 기준표 갱신(다음 글 판단 앵커).
-  if (out.relevant && v && v.category === '배치표' && v.myStatus && v.myStatus !== 'unknown') {
-    saveBaselineFromVerdict(full, v);
+  // 관련 글이면 상황판에 병합 + 번복(변경) 감지.
+  let change = { reversal: false, material: false, message: '' };
+  if (out.relevant && v) {
+    const merged = applyVerdict(today, v, full);
+    saveToday(merged.next);
+    change = merged.change;
+    if (change.reversal) {
+      // 이전 예측이 뒤집힘 → 강조 알림으로 승격.
+      title = '⚠️ 변경됐어요!';
+      body = `${change.message}\n${out.body}`;
+      out.push = 'high';
+    }
   }
+
+  const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
+    category: v?.category || null, change: change.message || null, reversal: change.reversal };
 
   // 라우팅: 무관/가배치 → 피드에만, 푸시 안 함.
   if (out.push === 'low') {
@@ -349,16 +373,16 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     return { pushed: false, ...ret };
   }
 
-  // 중복 푸시 방지(글번호 기반 → 서로 다른 글은 항상 통과). opts.force 면 건너뜀.
-  if (!opts.force) {
+  // 중복 푸시 방지(글번호+상태 기반, 번복이면 항상 통과). opts.force 면 건너뜀.
+  if (!opts.force && !change.reversal) {
     const sig = `${full.id}|${out.status}|${v?.teeTime || ''}`;
     const last = loadJSON('laststate.json', {});
     if (last.sig === sig) { console.log(`·  (직전과 동일 → 무푸시) ${full.subject}`); return { pushed: false, ...ret }; }
     saveJSON('laststate.json', { sig, at: Date.now(), subject: full.subject });
   }
 
-  await broadcast({ title: out.title, body: out.body, url: full.url });
-  console.log(`🔔 [${out.push}] ${out.title} | ${String(out.body).replace(/\n/g, ' ')}`);
+  await broadcast({ title, body, url: full.url });
+  console.log(`🔔 [${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
 }
 

@@ -3,6 +3,7 @@
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON } from './gemini.mjs';
+import { todayContext } from './today.mjs';
 
 function profile() {
   return {
@@ -30,11 +31,9 @@ function commuteLine(teeTime, course) {
 }
 
 // ── Gemini 판정 프롬프트 ─────────────────────────────────
-function buildPrompt(article, baseline) {
+function buildPrompt(article, today) {
   const { name, part } = profile();
-  const anchor = baseline && (baseline.role || baseline.part)
-    ? `\n[오늘 기준표 참고] "${name}"은 ${baseline.part || part + '부'} 소속, 오늘 상태 "${baseline.role || '미상'}"(${baseline.date || ''}). 이 글에서도 "${name}"을 찾아 판단하세요.`
-    : '';
+  const anchor = todayContext(today);
   const hasImg = !!article.images?.length;
   return `당신은 골프장 캐디 "${name}"(${part}부)의 개인 비서입니다.
 아래 네이버 카페 글이 "${name}"님에게 어떤 의미인지 판단하세요.${anchor}
@@ -154,9 +153,9 @@ export function decide(article, verdict) {
   return { relevant: true, push, status, verdict, title, body };
 }
 
-// 글 → Gemini 판정 → 최종 결정. { relevant, push, title, body, status, verdict }
-export async function judge(article, baseline = null) {
+// 글 → (오늘 상황판 맥락으로) Gemini 판정 → 최종 결정. { relevant, push, title, body, status, rawVerdict }
+export async function judge(article, today = null) {
   const img = article.images?.[0] || null;
-  const verdict = await callGeminiJSON(buildPrompt(article, baseline), img);
+  const verdict = await callGeminiJSON(buildPrompt(article, today), img);
   return { ...decide(article, verdict), rawVerdict: verdict };
 }
