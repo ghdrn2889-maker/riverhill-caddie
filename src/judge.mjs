@@ -134,6 +134,11 @@ export function decide(article, verdict) {
       if (remaining < 0) { status = 'assigned'; body = `${name}님, 오늘 근무 배정됐어요!${cut}`; }
       else if (remaining === 0) { status = 'your_turn'; body = `${name}님, 지금 출근하실 차례예요!${cut}`; }
       else { status = remaining <= 2 ? 'near' : 'waiting'; body = `${name}님, 앞으로 ${remaining}명 남았어요${cut}`; }
+    } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
+      // 커트라인 이름은 명시됐지만 위치를 몰라(텍스트만) 정확한 N명 계산 불가 → 공지는 전달.
+      status = 'spare';
+      const pos = Number.isFinite(mp) ? ` (내 순번 ${mp}번)` : '';
+      body = `${verdict.cutoffName}님까지 근무 확정 소식이에요${pos}. 내 차례 근접 여부 확인해보세요`;
     } else {
       // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게 알림.
       status = 'spare';

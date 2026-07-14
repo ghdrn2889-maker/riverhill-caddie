@@ -316,6 +316,28 @@ startCrawler({
       await broadcast({ title, body: article.subject, url: article.url });
     }
   },
+  onComment: async (article, prevCount, newCount) => {
+    // 일정글에 달린 새 댓글을 '텍스트 글'처럼 판단(변동이 댓글로도 오므로).
+    try {
+      const full = await fetchArticle(article.id);
+      const added = Math.max(1, newCount - prevCount);
+      const newComments = (full.comments || []).slice(-added);
+      for (let i = 0; i < newComments.length; i++) {
+        const c = newComments[i];
+        if (!c.content || !c.content.trim()) continue;
+        const pseudo = {
+          id: `${full.id}#c${newCount - added + i + 1}`,
+          subject: `[댓글] ${full.subject}`,
+          text: c.content, writer: c.nick || full.writer,
+          menuId: full.menuId, menuName: full.menuName,
+          images: [], writeDate: full.writeDate, url: full.url,
+        };
+        await notifyForArticle(pseudo, {}, {});
+      }
+    } catch (e) {
+      console.error('댓글 분석 실패:', e.message);
+    }
+  },
   onCafeError: async () => {
     await broadcast({
       title: '⚠️ 네이버 쿠키 만료',

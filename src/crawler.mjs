@@ -7,8 +7,12 @@ import { loadJSON, saveJSON } from './store.mjs';
 const SEEN_FILE = 'seen.json';
 const MAX_SEEN = 800;
 
-export function startCrawler({ onMatch, onCafeError }) {
+export function startCrawler({ onMatch, onComment, onCafeError }) {
   const seen = new Set(loadJSON(SEEN_FILE, []));
+  const commentCounts = loadJSON('commentcounts.json', {}); // 글별 최근 댓글 수(댓글 변동 감지용)
+  const CH = process.env.CHANGE_MENU_ID || '13';
+  const SC = process.env.SCHEDULE_MENU_ID || '2';
+  const isSched = (a) => String(a.menuId) === CH || String(a.menuId) === SC;
   let baseline = seen.size === 0; // 첫 실행이면 기존 글은 기준선으로만 삼고 알림 X
   let failStreak = 0;
   let notifiedError = false;
@@ -55,6 +59,21 @@ export function startCrawler({ onMatch, onCafeError }) {
         console.log(`·  (무관) ${a.subject}  — ${who}`);
       }
     }
+
+    // 댓글 감시: 일정 게시판(번호표/배치표) 글에 새 댓글이 달리면(변동이 댓글로도 옴) 처리.
+    for (const a of articles) {
+      const prev = commentCounts[a.id];
+      const now = a.commentCount || 0;
+      if (isSched(a) && prev != null && now > prev) {
+        console.log(`💬 새 댓글 ${now - prev}개: ${a.subject}`);
+        try { await onComment?.(a, prev, now); } catch (e) { console.error('onComment 오류:', e.message); }
+      }
+      commentCounts[a.id] = now;
+    }
+    // 오래된 항목 정리(목록 밖 글은 제거).
+    const live = new Set(articles.map((a) => a.id));
+    for (const k of Object.keys(commentCounts)) if (!live.has(k)) delete commentCounts[k];
+    saveJSON('commentcounts.json', commentCounts);
   }
 
   // 적응형 폴링: 3부 활성 시간대(기본 12~24시)엔 자주, 그 외엔 뜸하게.
