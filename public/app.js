@@ -56,8 +56,68 @@ async function main() {
     loadRecent();
   };
 
+  loadToday();
   loadRecent();
-  setInterval(loadRecent, 30000);
+  setInterval(() => { loadToday(); loadRecent(); }, 30000);
+}
+
+// ── 오늘 내 상황판 + heartbeat ──────────────────────────
+async function loadToday() {
+  try {
+    const [t, h] = await Promise.all([
+      fetch('/api/today').then((r) => r.json()).catch(() => null),
+      fetch('/api/health').then((r) => r.json()).catch(() => null),
+    ]);
+    renderToday(t);
+    renderHeartbeat(h);
+  } catch {}
+}
+
+function renderToday(t) {
+  const card = $('todayCard');
+  if (!t || t.empty || !t.state) { card.style.display = 'none'; return; }
+  const s = t.state, st = s.status;
+  const work = (st === 'assigned' || st === 'work' || st === 'your_turn');
+  const cls = st === 'your_turn' ? 'turn' : work ? 'work' : st === 'off' ? 'off'
+    : (st === 'spare' || st === 'waiting' || st === 'near') ? 'spare' : '';
+  card.className = 'card today ' + cls;
+
+  const label = st === 'your_turn' ? '🚨 지금 출근 순번!' : work ? '✅ 오늘 근무' : st === 'off' ? '😴 오늘 휴무'
+    : (st === 'spare' || st === 'waiting' || st === 'near') ? '🏌️ 스페어 대기' : '🏌️ 대기 중';
+  $('tStatus').textContent = label;
+
+  const detail = [];
+  if (s.myPosition) detail.push(`순번 ${s.myPosition}번`);
+  if (work && s.teeTime) detail.push(`티오프 ${s.teeTime}${s.course ? ` (${s.course}코스)` : ''}`);
+  if (!work && st !== 'off') {
+    if (s.cutoffName && s.cutoffPosition != null && s.myPosition != null) {
+      const rem = s.myPosition - s.cutoffPosition - 1;
+      detail.push(rem <= 0 ? '곧 차례!' : `${s.cutoffName}님까지 확정 · 앞으로 ${rem}명`);
+    } else detail.push('아직 근무 확정 전');
+  }
+  $('tDetail').textContent = detail.join(' · ');
+
+  const go = $('tGo');
+  if (work && t.commute) {
+    go.style.display = 'inline-block';
+    go.textContent = `🏠 집에서 ${t.commute.leave} 출발 · ${t.commute.arrive} 도착`;
+  } else go.style.display = 'none';
+
+  $('tWhen').textContent = `${s.date || ''}${s.updatedAt ? ` · ${timeAgo(s.updatedAt)} 갱신` : ''}`;
+  card.style.display = 'block';
+}
+
+function renderHeartbeat(h) {
+  const el = $('heartbeat');
+  if (!h) { el.textContent = ''; return; }
+  if (h.alive) {
+    el.className = 'heartbeat';
+    el.innerHTML = `<b>🟢 감시 중</b> · ${h.ageSec != null ? (h.ageSec < 60 ? '방금' : Math.floor(h.ageSec / 60) + '분 전') : ''} 확인`;
+  } else {
+    el.className = 'heartbeat dead';
+    const why = h.failStreak >= 2 ? '카페 접속 오류(쿠키 확인)' : (h.ageSec != null ? `${Math.floor(h.ageSec / 60)}분째 응답 없음` : '상태 불명');
+    el.innerHTML = `<b>🔴 감시 멈춤</b> · ${why}`;
+  }
 }
 
 const LAST_READ_KEY = 'riverhill_lastReadTs';
@@ -110,21 +170,24 @@ async function loadRecent() {
       const badge = a.status === 'your_turn' ? '<span class="badge">지금 차례</span>'
         : a.status === 'near' ? '<span class="badge">곧 차례</span>'
         : a.status === 'assigned' || a.status === 'work' ? '<span class="badge med">근무</span>'
-        : a.status === 'spare' ? '<span class="badge">스페어</span>'
+        : a.status === 'spare' ? '<span class="badge med">스페어</span>'
         : a.status === 'off' ? '<span class="badge med">근무없음</span>'
-        : a.priority === 'high' ? '<span class="badge med">일정</span>' : '';
+        : (a.relevant && a.priority === 'high') ? '<span class="badge med">일정</span>' : '';
+      // 무관(피드에만 남긴) 글은 흐리게 + 분류 태그.
+      const dim = a.relevant === false ? ' dim' : '';
+      const cat = a.category ? `<span class="cat">${escapeHtml(a.category)}</span>` : '';
       const headline = a.aiMessage || a.subject;
       const sub = a.aiMessage ? a.subject : '';
       const when = timeAgo(ts) || a.writeDate || '';
 
       const parts = [];
       if (when) parts.push(`<span class="time">${escapeHtml(when)}</span>`);
-      const rest = [sub, a.writer, a.menuName, a.writeDate].filter(Boolean).join(' · ');
+      const rest = [sub, a.writer, a.menuName].filter(Boolean).join(' · ');
       if (rest) parts.push(escapeHtml(rest));
       const metaLine = parts.join(' · ');
 
-      return `<a class="item${isNew ? ' new' : ''}" href="${a.url}" target="_blank" rel="noopener">
-        <div class="subj">${badge}${escapeHtml(headline)}</div>
+      return `<a class="item${isNew ? ' new' : ''}${dim}" href="${a.url}" target="_blank" rel="noopener">
+        <div class="subj">${cat}${badge}${escapeHtml(headline)}</div>
         ${metaLine ? `<div class="meta">${metaLine}</div>` : ''}</a>`;
     }).join('');
 

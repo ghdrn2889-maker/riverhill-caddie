@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge } from './judge.mjs';
+import { judge, commuteInfo } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
@@ -69,6 +69,17 @@ app.post('/api/judge', async (req, res) => {
   }
 });
 
+// heartbeat: 감시가 살아있는지 (앱 상단에 "마지막 감시 N초 전" 표시용).
+app.get('/api/health', (req, res) => {
+  const h = loadJSON('health.json', {});
+  const now = Date.now();
+  const ageMs = h.lastPollAt ? now - h.lastPollAt : null;
+  // 최근 5분 안에 폴링했고 쿠키에러 아니면 정상.
+  const alive = ageMs != null && ageMs < 5 * 60 * 1000 && (h.failStreak || 0) < 2;
+  res.json({ ok: true, alive, lastPollAt: h.lastPollAt || null, ageSec: ageMs != null ? Math.round(ageMs / 1000) : null,
+    failStreak: h.failStreak || 0, lastError: h.lastError || null });
+});
+
 // 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
 app.get('/api/today', (req, res) => {
   const t = loadToday();
@@ -78,7 +89,8 @@ app.get('/api/today', (req, res) => {
   p.push(statusKo(t.status));
   if (t.teeTime) p.push(`티오프 ${t.teeTime}${t.course ? `(${t.course})` : ''}`);
   if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
-  res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t });
+  const commute = t.teeTime ? commuteInfo(t.teeTime) : null;
+  res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
 });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -180,106 +192,10 @@ function saveBaseline(full, ai) {
   console.log(`[기준점 저장] ${baseline.date} ${baseline.role} (스페어 ${baseline.myIndex ?? '-'}/${baseline.spareList.length}명)`);
 }
 
-// 티오프 시간(HH:MM) → 골프장 도착시간 + 집 출발시간 계산.
-//  도착(출근) = 티오프 - 준비시간(기본 60분),  집출발 = 도착 - 이동시간(기본 60분).
-function commuteInfo(teeTime) {
-  const m = String(teeTime || '').match(/(\d{1,2}):(\d{2})/);
-  if (!m) return null;
-  const prep = Number(process.env.PREP_MIN ?? 60);       // 골프장 도착 후 근무 준비
-  const commute = Number(process.env.COMMUTE_MIN ?? 60); // 집 → 골프장 이동
-  const tot = Number(m[1]) * 60 + Number(m[2]);
-  const fmt = (mins) => {
-    const x = ((mins % 1440) + 1440) % 1440;
-    return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
-  };
-  return { tee: fmt(tot), arrive: fmt(tot - prep), leave: fmt(tot - prep - commute) };
-}
+// (구) 순번/티오프 계산 헬퍼(turnResult/computeTurnFromRoster/refineTurn)는 judge.mjs 로 대체되어 제거함.
+//     이전 버전은 git tag backup-pre-redesign-2026-07-14 에 보존.
 
-// 출근 확정 시 메시지에 붙일 '티오프/도착/집출발' 안내 한 줄.
-function commuteLine(teeTime, course) {
-  const c = commuteInfo(teeTime);
-  if (!c) return '';
-  const crs = course ? ` (${String(course).toUpperCase()}코스)` : '';
-  return `\n⛳ 티오프 ${c.tee}${crs} · ${c.arrive} 도착 · 집에서 ${c.leave} 출발`;
-}
-
-// 남은 인원(remaining) → 상태/메시지 (계산은 항상 코드가; Gemini 산수 안 씀).
-function turnResult(name, cutoff, remaining, extra = {}) {
-  let status, message;
-  // 티오프가 이미 잡혀 있으면 그 자체가 확정 증거 → 커트라인 꼬리표(지어냈을 수 있음)는 생략.
-  const tail = (cutoff && !extra.teeTime) ? ` (${cutoff}님까지 근무)` : '';
-  if (remaining < 0) {
-    status = 'assigned';
-    message = `${name}님, 오늘 근무 배정됐어요!${tail}`;
-  } else if (remaining === 0) {
-    status = 'your_turn';
-    message = `${name}님, 지금 출근하실 차례예요!${tail}`;
-  } else {
-    status = remaining <= 2 ? 'near' : 'waiting';
-    const before = extra.before ? ` (바로 앞 ${extra.before}님)` : '';
-    message = `${name}님, 앞으로 ${remaining}명 남았어요${before}${tail}`;
-  }
-  // 출근 확정(배정/내 차례)이고 티오프 시간을 읽었으면 출근·출발 시간을 덧붙임.
-  if ((status === 'assigned' || status === 'your_turn') && extra.teeTime) {
-    message += commuteLine(extra.teeTime, extra.course);
-  }
-  // 제목/본문에서 뽑은 주의사항(시간 변동 가능/취소 등)이 있으면 경고로 덧붙임.
-  if (extra.note && String(extra.note).trim()) {
-    message += `\n⚠️ ${String(extra.note).trim()}`;
-  }
-  return { found: true, cutoffName: cutoff, remaining, status, message, ...extra };
-}
-
-// 저장된 3부 스페어 명단 + 변동글의 "○○님까지" 로 남은 인원을 코드로 계산 (이미지 불필요).
-function computeTurnFromRoster(full, baseline) {
-  const list = baseline?.spareList;
-  if (!Array.isArray(list) || list.length === 0) return null;
-  // 명단이 하루 지났으면(어제 것) 신뢰 안 함 → null 반환해 오늘 이미지로 다시 읽게 함
-  const age = baseline.rosterAt ? Date.now() - baseline.rosterAt : Infinity;
-  if (age > 18 * 3600 * 1000) return null;
-  const name = baseline.name || (process.env.MY_NAME || '').trim();
-  const blob = `${full.subject}\n${full.text || ''}`;
-  const m = blob.match(/([가-힣]{2,4})\s*님?\s*까지/); // "○○님까지"
-  if (!m) return null;
-  const cutoff = m[1].replace(/님$/, ''); // 이름에 딸려온 "님" 제거
-  const norm = (s) => String(s).replace(/\(.*?\)/g, '').trim();       // 괄호 밖(주 이름)
-  const paren = (s) => (String(s).match(/\(([^)]*)\)/) || [])[1] || ''; // 괄호 안
-  const isPerson = (p) => /[가-힣]{2,4}/.test(p) && !/54|2\s*,\s*3/.test(p);
-  // 순번 교환 반영: 'X(대상)'처럼 괄호 안에 대상이 있으면 그 자리가 진짜 순번(우선).
-  const findEff = (target) => {
-    let i = list.findIndex((n) => paren(n).includes(target)); // 괄호 안에 target
-    if (i < 0) i = list.findIndex((n) => norm(n) === target && !isPerson(paren(n))); // 주 이름 target (교환 아님)
-    if (i < 0) i = list.findIndex((n) => { const a = norm(n); return a.includes(target) || target.includes(a); });
-    return i;
-  };
-  const ci = findEff(cutoff);
-  const mi = findEff(name);
-  if (ci < 0 || mi < 0) return null;
-  const before = mi > 0 ? norm(list[mi - 1]) : '';
-  return turnResult(name, cutoff, mi - ci - 1, { source: 'roster', before });
-}
-
-// Gemini가 읽은 '위치'(myPosition/cutoffPosition)로 remaining 을 코드가 다시 계산.
-// (Gemini는 위치는 잘 읽지만 뺄셈을 자주 틀림 → 산수는 코드가 담당)
-function refineTurn(ai, name) {
-  if (!ai || ai.found === false) return ai;
-  // 티오프가 배정돼 있으면 = 출근 확정. 커트라인 산수와 무관하게 assigned + 출근/출발시간.
-  if (ai.teeTime && /\d{1,2}:\d{2}/.test(ai.teeTime)) {
-    return turnResult(name, '', -1, {
-      source: 'vision', teeTime: ai.teeTime, course: ai.course || '',
-      myPosition: Number(ai.myPosition) || null, note: ai.note || '',
-    });
-  }
-  const mp = Number(ai.myPosition), cp = Number(ai.cutoffPosition);
-  if (!Number.isFinite(mp) || !Number.isFinite(cp)) return ai;
-  return turnResult(name, ai.cutoffName || '', mp - cp - 1, {
-    source: 'vision', myPosition: mp, cutoffPosition: cp, note: ai.note || '',
-  });
-}
-
-// AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
-// 중복 알림 방지 시그니처. 글번호(full.id)를 포함해 '서로 다른 글'은 절대 안 막는다.
-//  → 삭제 후 재게시/수정본(새 글번호)도 항상 알림. 같은 글 반복 처리는 크롤러 seen.json이 이미 차단.
+// (미사용) AI 결과 시그니처 — 현재 dedup 은 notifyForArticle 이 글번호 기반으로 직접 처리.
 function stateSig(full, ai) {
   if (!ai || ai.found === false) return null;
   const d = ai.dateLabel || full.writeDate || '';
