@@ -78,7 +78,7 @@ function buildPrompt(article, baseline) {
   "cutoffPosition": 정수 또는 null,
   "teeTime": "HH:MM 또는 null",
   "course": "OUT 또는 IN 또는 빈칸",
-  "note": "시간 변동 가능/취소/조정 등 주의사항 한 문장, 없으면 빈칸",
+  "note": "오직 '시간 변동 가능/취소/캔슬/시간조정' 같은 실제 주의사항만 한 문장. 스페어/근무/대기 등 상태 재언급은 금지. 해당 없으면 반드시 빈칸",
   "confidence": 0.0~1.0 실수,
   "summary": "${name}님 기준 한국어 한 문장 (커트라인이 명시 안 됐으면 남은 인원 언급 금지)"
 }`;
