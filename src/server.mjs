@@ -224,7 +224,8 @@ function titleForStatus(status) {
 // 피드에 저장할 항목 (관련·무관 모두 — 데이터는 절대 안 버린다).
 function saveRecentV2(full, out) {
   const v = out.rawVerdict || {};
-  const recent = loadJSON('recent.json', []);
+  // 같은 글(id)이 재처리되면 중복 행을 만들지 않고 최신 것으로 교체(맨 위로).
+  const recent = loadJSON('recent.json', []).filter((x) => x.id !== full.id);
   recent.unshift({
     id: full.id, subject: full.subject, writer: full.writer, url: full.url,
     menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate,

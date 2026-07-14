@@ -49,7 +49,13 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
       return;
     }
 
+    const staleMs = Number(process.env.STALE_HOURS ?? 24) * 3600 * 1000;
     for (const a of fresh.reverse()) { // 오래된 것부터
+      // 하루 지난 글은 알림 제외(어제 소식이 되살아나지 않게). seen 처리는 이미 됨.
+      if (a.ts && Date.now() - a.ts > staleMs) {
+        console.log(`·  (오래된 글, 알림 제외) ${a.subject}`);
+        continue;
+      }
       const result = analyze(a);
       const who = [a.writer, a.writeDate].filter(Boolean).join(' · ');
       if (result.relevant) {
