@@ -250,11 +250,13 @@ function refineTurn(ai, name) {
 }
 
 // AI 결과를 '내 상태' 시그니처로 요약 → 직전과 같으면 변동 없음(중복 알림 방지).
+// 중복 알림 방지 시그니처. 글번호(full.id)를 포함해 '서로 다른 글'은 절대 안 막는다.
+//  → 삭제 후 재게시/수정본(새 글번호)도 항상 알림. 같은 글 반복 처리는 크롤러 seen.json이 이미 차단.
 function stateSig(full, ai) {
   if (!ai || ai.found === false) return null;
   const d = ai.dateLabel || full.writeDate || '';
-  if (ai.role) return `sch|${d}|${ai.role}|${ai.team || ''}|${ai.teeTime || ''}|${ai.spareOrder ?? ''}`;
-  if (ai.status) return `turn|${d}|${ai.status}|${ai.remaining ?? ''}|${ai.cutoffName || ''}|${ai.teeTime || ''}`;
+  if (ai.role) return `${full.id}|sch|${d}|${ai.role}|${ai.teeTime || ''}`;
+  if (ai.status) return `${full.id}|turn|${d}|${ai.status}|${ai.remaining ?? ''}|${ai.cutoffName || ''}|${ai.teeTime || ''}`;
   return null;
 }
 

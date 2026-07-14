@@ -31,19 +31,25 @@ export function analyze(article) {
 
   const aboutMe = !!(name && subject.includes(name));
   const fromWriter = isScheduleWriter(writer);
+  // 일정 게시판(번호표=당일변동 / 배치표=배치시간표)은 작성자가 누구든 일단 통과시켜
+  // notifyForArticle 에서 부·이름·이미지로 정밀 판단하게 한다. (작성자 명단 밖 담당자가 올려도 안 놓침)
+  const menuId = String(article.menuId || '');
+  const scheduleBoard = menuId === (process.env.CHANGE_MENU_ID || '13')
+    || menuId === (process.env.SCHEDULE_MENU_ID || '2');
 
   if (fromWriter) hits.push(`번호표작성자:${writer}`);
   if (aboutMe) hits.push(`이름:${name}`);
+  if (scheduleBoard) hits.push('일정게시판');
   if (part && subject.includes(`${part}부`)) hits.push(`${part}부`);
   for (const k of keywords) if (subject.includes(k)) hits.push(k);
 
-  // 신뢰 작성자도 아니고 내 이름도 없는 개인 근태글 → 확실히 제외
-  if (!fromWriter && !aboutMe && PERSONAL_REQUEST_RE.test(subject)) {
+  // 신뢰 작성자도 아니고 내 이름도 없는 개인 근태글 → 확실히 제외 (단, 일정 게시판은 예외)
+  if (!scheduleBoard && !fromWriter && !aboutMe && PERSONAL_REQUEST_RE.test(subject)) {
     return { relevant: notifyAll, hits: [...hits, '개인근태(제외)'], priority: 'info' };
   }
 
-  // 알림 후보: 신뢰 작성자 글 또는 내 이름이 들어간 글.
-  const relevant = notifyAll || fromWriter || aboutMe;
-  const priority = (fromWriter || aboutMe) ? 'high' : 'info';
+  // 알림 후보: 일정 게시판 글 / 신뢰 작성자 글 / 내 이름이 들어간 글.
+  const relevant = notifyAll || fromWriter || aboutMe || scheduleBoard;
+  const priority = (fromWriter || aboutMe || scheduleBoard) ? 'high' : 'info';
   return { relevant, hits, priority };
 }
