@@ -50,8 +50,9 @@ app.post('/api/ingest', async (req, res) => {
   const b = req.body || {};
   const q = req.query || {};
   const text = String(b.text || q.text || '').trim();
-  if (!text) return res.status(400).json({ error: 'text 필요' });
   const token = req.get('x-token') || q.token || b.token;
+  console.log(`💬 [ingest] 수신됨: text="${text.slice(0, 30)}"(${text.length}자) token=${token ? '있음' : '없음'} room=${b.room || q.room || '-'}`);
+  if (!text) return res.status(400).json({ error: 'text 필요 (알림 내용이 비어있음)' });
   if (process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
     return res.status(401).json({ error: '인증 실패' });
   }
