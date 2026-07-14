@@ -153,11 +153,20 @@ export function summary({ year, month } = {}) {
   return { workedDays: worked.length, pendingDays: pending.length, blankDays: blank.length, roundKm, totalKm, estFuel };
 }
 
-// 리마인더 대상: 최근 3일 내 (근무확정 or 확인대기)인데 기록이 비어있고, 하루 안에 재알림 안 한 날.
+// 로컬(KST) 기준 오늘 날짜 'YYYY-MM-DD'.
+function localISO(ts = Date.now()) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 리마인더 대상: '이미 지난(오늘 포함) 근무일' 중 최근 3일 내인데 기록이 비어있고, 하루 안에 재알림 안 한 날.
+// ★미래 근무일(내일 배치표 등)은 아직 출퇴근 전이므로 제외 — 계기판 사진은 당일 이동 중에 찍는 것.
 export function dueReminders(now = Date.now()) {
+  const todayISO = localISO(now);
   const cutoff = now - 3 * 86400 * 1000;
   return Object.values(load().days).filter((day) => {
     if (day.worked === false || !isBlank(day)) return false;
+    if (day.date > todayISO) return false; // 아직 오지 않은 날은 리마인드 안 함
     const t = new Date(day.date + 'T00:00:00').getTime();
     if (isNaN(t) || t < cutoff) return false;
     if (day.remindedAt && now - day.remindedAt < 20 * 3600 * 1000) return false;
