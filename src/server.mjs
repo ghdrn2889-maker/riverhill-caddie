@@ -17,6 +17,7 @@ initPush();
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
 // PWA 가 구독할 때 필요한 공개키
@@ -47,18 +48,21 @@ app.post('/api/test', async (req, res) => {
 //  보안: 공개 URL이므로 INGEST_TOKEN(.env) 이 있으면 x-token 헤더/쿼리로 검사(위조 방지).
 app.post('/api/ingest', async (req, res) => {
   const b = req.body || {};
-  const text = String(b.text || '').trim();
+  const q = req.query || {};
+  const text = String(b.text || q.text || '').trim();
   if (!text) return res.status(400).json({ error: 'text 필요' });
-  const token = req.get('x-token') || req.query.token;
+  const token = req.get('x-token') || q.token || b.token;
   if (process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
     return res.status(401).json({ error: '인증 실패' });
   }
-  const source = b.source || '카톡';
-  const room = b.room ? ` · ${b.room}` : '';
+  const source = b.source || q.source || '카톡';
+  const roomName = b.room || q.room || '';
+  const room = roomName ? ` · ${roomName}` : '';
+  const sender = b.sender || q.sender || '';
   const pseudo = {
     id: `ingest-${req.query.id || Date.now()}`,
     subject: `[${source}${room}] ${text.slice(0, 40)}`,
-    text, writer: b.sender || '', menuId: '', menuName: source,
+    text, writer: sender, menuId: '', menuName: source,
     images: [], writeDate: '', url: '/',
   };
   try {
