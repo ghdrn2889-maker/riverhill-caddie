@@ -9,6 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
+import { judge } from './judge.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
 initPush();
@@ -48,6 +49,21 @@ app.post('/api/simulate', async (req, res) => {
     const full = await fetchArticle(id);
     const out = await notifyForArticle(full, { hits: [], priority: 'high' }, { force: true });
     res.json({ ok: true, writer: full.writer, menuId: full.menuId, menuName: full.menuName, ...out });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 새 두뇌(judge) 검증용: 글을 통합 판단기로만 돌려 결과 확인 (푸시 안 함, 라이브 흐름 무관).
+app.post('/api/judge', async (req, res) => {
+  const id = req.body?.id || req.query.id;
+  if (!id) return res.status(400).json({ error: 'id 필요 (예: /api/judge?id=26299)' });
+  try {
+    const full = await fetchArticle(id);
+    const baseline = loadJSON('baseline.json', null);
+    const out = await judge(full, baseline);
+    res.json({ ok: true, subject: full.subject, writer: full.writer, menuId: full.menuId,
+      push: out.push, title: out.title, body: out.body, verdict: out.rawVerdict });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

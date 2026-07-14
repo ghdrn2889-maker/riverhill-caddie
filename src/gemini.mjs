@@ -37,29 +37,29 @@ async function fetchImageBase64(url) {
   return { data: buf.toString('base64'), mime };
 }
 
-// 프롬프트 + 이미지 → Gemini 호출 → JSON 파싱 (2회 재시도). 실패 시 null.
-async function callGeminiJSON(promptText, imageUrl) {
+// 프롬프트(+선택 이미지) → Gemini 호출 → JSON 파싱 (2회 재시도). 실패 시 null.
+// imageUrl 이 없으면 텍스트-only 로 호출한다(제목/본문만 있는 글도 판단 가능).
+export async function callGeminiJSON(promptText, imageUrl = null) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  if (!imageUrl) return null;
 
   const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
-  let img;
-  try {
-    img = await fetchImageBase64(imageUrl);
-  } catch (e) {
-    console.error('[gemini] 이미지 로드 실패:', e.message);
-    return null;
+  let img = null;
+  if (imageUrl) {
+    try {
+      img = await fetchImageBase64(imageUrl);
+    } catch (e) {
+      console.error('[gemini] 이미지 로드 실패(텍스트로 계속):', e.message);
+      img = null;
+    }
   }
 
+  const parts = [{ text: promptText }];
+  if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.data } });
+
   const body = {
-    contents: [{
-      parts: [
-        { text: promptText },
-        { inline_data: { mime_type: img.mime, data: img.data } },
-      ],
-    }],
+    contents: [{ parts }],
     generationConfig: { responseMimeType: 'application/json', temperature: 0 },
   };
 
