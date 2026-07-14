@@ -46,6 +46,7 @@ function buildPrompt(article) {
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
+- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=오전 늦게~낮, ${part}부=오후~저녁(대략 15시 이후). 예) "아웃 7시33분"은 오전 7시대라 1부이며 ${part}부 아님.
 - 배치표/번호표: 각 부 "순번·이름" 목록과 "OUT n부 IN" 티오프표(가운데=티오프 시간, OUT/IN=코스). 순번이 티오프 칸에 등록되면 그 사람 근무 확정.
 - 배경색: 회색=스페어(대기), 흰색/녹색(54)/하늘색(2,3)=근무 확정.
 - "○○님까지 일됩니다/근무/나갑니다" = 그 사람까지(포함) 순번 근무 확정. 표현은 작성자마다 불규칙("나가요","콜","다근무","까지만" 등)해도 '뜻'으로 파악.
@@ -58,6 +59,11 @@ function buildPrompt(article) {
 - "${name}"이 근무 확정(흰색이거나 티오프 배정)이면 "${name}"의 티오프 시간(HH:MM)과 코스(OUT/IN)를 읽으세요(교환됐으면 바뀐 자리 기준).
 - "${name}"의 순번(myPosition)은 항상 읽으세요(이미지의 그 사람 번호).
 
+★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
+- part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
+- **절대 기본값으로 ${part}부라고 가정하지 마세요.** ${part}부라는 근거(명시된 "${part}부" / "${name}" 이름·순번 / ${part}부 배치표 / ${part}부 시간대(오후·저녁) 티오프)가 하나도 없으면 part는 실제 부 숫자 또는 "unknown"으로.
+- part 가 ${part}가 아닌 다른 부로 확인되면 relevant=false (다른 부는 "${name}"과 무관).
+
 ★★ 커트라인 규칙 (매우 중요 — 지어내기 금지):
 - cutoffName/cutoffPosition 은 **제목이나 본문 텍스트에 "○○님까지 일됩니다/근무/나갑니다" 처럼 명시적으로 적혀 있을 때만** 채우고, cutoffAnnounced=true 로 하세요.
 - 그런 명시 문구가 **없으면**(예: 그냥 "현재 배치표"·"3부 시간표" 스냅샷) cutoffName="", cutoffPosition=null, cutoffAnnounced=false. **이미지의 색깔만 보고 커트라인을 절대 추측하지 마세요.**
@@ -67,6 +73,7 @@ function buildPrompt(article) {
 반드시 JSON "하나만" 출력(설명·코드펜스 금지):
 {
   "relevant": true 또는 false,
+  "part": "1|2|3|unknown (이 글이 몇 부인지, 모르면 unknown — ${part}부라 함부로 단정 금지)",
   "category": "배치표|번호표|변동|추가|취소|시간조정|공지|개인근태|가배치|기타",
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
   "dateLabel": "예: 7월 14일 화요일 (모르면 빈칸)",
@@ -99,7 +106,7 @@ function titleFor(status) {
 // verdict(raw) → { relevant, push, title, body, status, verdict, computed }
 //  push: 'high'(바로 알림) | 'low'(피드만) | 'check'(확인필요 알림)
 export function decide(article, verdict) {
-  const { name } = profile();
+  const { name, part: myPart } = profile();
   if (!verdict) {
     // Gemini 실패 → 일정글이면 '확인필요' 알림(놓침 방지), 아니면 피드만.
     return { relevant: true, push: 'check', status: 'unknown', verdict: null,
@@ -108,8 +115,22 @@ export function decide(article, verdict) {
   if (verdict.category === '가배치') {
     return { relevant: false, push: 'low', status: 'unknown', verdict, title: '', body: article.subject || '' };
   }
+  // 다른 부로 판명 → 내 일과 무관, 피드에만(푸시 금지).
+  const vpart = (String(verdict.part || '').match(/[123]/) || [])[0] || 'unknown';
+  if (vpart !== 'unknown' && vpart !== myPart) {
+    return { relevant: false, push: 'low', status: 'unknown', verdict,
+      title: '', body: verdict.summary || article.subject || '' };
+  }
   if (!verdict.relevant) {
     // 나와 무관 → 피드에만 남김(데이터는 안 버림), 푸시 안 함.
+    return { relevant: false, push: 'low', status: verdict.myStatus || 'unknown', verdict,
+      title: '', body: verdict.summary || article.subject || '' };
+  }
+  // ★내 부(部)라는 '긍정적 근거'가 하나도 없으면 3부로 단정하지 않고 피드에만.
+  //  (부 미표시 + 내 순번X + 내 이름X 인 3자 공지가 "3부 소식"으로 오발송되던 버그 차단)
+  const nameHit = `${article.subject || ''} ${article.text || ''}`.includes(name);
+  const hasAnchor = vpart === myPart || Number.isFinite(Number(verdict.myPosition)) || nameHit;
+  if (!hasAnchor) {
     return { relevant: false, push: 'low', status: verdict.myStatus || 'unknown', verdict,
       title: '', body: verdict.summary || article.subject || '' };
   }
