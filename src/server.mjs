@@ -394,7 +394,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // 라우팅: 무관/가배치 → 피드에만, 푸시 안 함.
   if (out.push === 'low') {
-    console.log(`·  (피드만) ${full.subject} — ${v?.category || ''} (relevant=${out.relevant})`);
+    const why = v?._rosterDrop ? ` [명단필터: ${v._rosterDrop}]` : '';
+    console.log(`·  (피드만) ${full.subject} — ${v?.category || ''} (relevant=${out.relevant})${why}`);
     return { pushed: false, ...ret };
   }
 

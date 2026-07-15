@@ -52,9 +52,9 @@ ${postedLine}
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
-- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=오전 늦게~낮, ${part}부=오후~저녁(대략 15시 이후). 예) "아웃 7시33분"은 오전 7시대라 1부이며 ${part}부 아님.
+- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=오전 늦게~낮, ${part}부=오후~저녁(대략 14시 이후). 예) "아웃 7시33분"은 오전 7시대라 1부이며 ${part}부 아님.
 - 배치표/번호표: 각 부 "순번·이름" 목록과 "OUT n부 IN" 티오프표(가운데=티오프 시간, OUT/IN=코스). 순번이 티오프 칸에 등록되면 그 사람 근무 확정.
-- 배경색: 회색=스페어(대기), 흰색/녹색(54)/하늘색(2,3)=근무 확정.
+- 배경색: 회색=스페어(대기), 흰색/색칠됨=근무 확정. 이름 옆 "(2,3)"·"(54)" 같은 숫자표기는 그 사람이 여러 부에 걸쳐 일한다는 표시(부 중복)라, 이름만으론 어느 부 소식인지 모호합니다(→ 시간대로 판단).
 - "○○님까지 일됩니다/근무/나갑니다" = 그 사람까지(포함) 순번 근무 확정. 표현은 작성자마다 불규칙("나가요","콜","다근무","까지만" 등)해도 '뜻'으로 파악.
 - 순번 교환: 이름 옆에 (54)/(2,3)이 아닌 '다른 사람 이름'이 붙으면 두 사람이 자리를 맞바꾼 것. 그 자리의 진짜 대기자는 '바뀐 사람'. "${name}"의 진짜 순번은 "${name}"이 실제 들어간 자리로 판단.
 - 스페어 = 대기(당일 근무로 바뀔 수 있음, 휴무 아님). "가배치/임시배치"는 참고용이니 relevant=false 로.
@@ -72,6 +72,12 @@ ${postedLine}
 - ⏰게시 시각 참고: ${part}부 추가·변동 소식은 보통 정오(12시) 이후 올라옵니다. 정오 이전엔 헷갈리지 않게 글에 "${part}부"라고 명시하는 편입니다. 따라서 **부 표시가 없고 정오 이후에 올라온 일정 변동/추가 글은 ${part}부일 가능성이 높습니다.** (단, 티오프 시간대가 다른 부를 가리키면 그 부가 우선 — 예: 정오 이후 올라와도 '아웃 7시대' 티오프는 1부.)
 - 우선순위: 명시된 "N부" > 티오프 시간대 > 게시 시각.
 
+★ 본배치표 ${part}부 명단 추출 (이 글이 '그날 전체 배치표/번호표'라서 ${part}부 명단이 통째로 보일 때만):
+- part3Roster: 이미지의 ${part}부 칸에 있는 모든 캐디 이름(스페어 포함)을 배열로. ${part}부 명단이 안 보이면 반드시 빈 배열 [].
+- crossPartNames: 그 명단 중 이름 옆에 "(2,3)"·"(54)" 등 여러 부 표기가 붙은 사람(부 중복)만 배열로.
+- 짧은 변동/추가/노쇼 글처럼 전체 명단이 아니면 part3Roster=[], crossPartNames=[] 로 두세요(추측 금지).
+- subjectNames: 이 글이 '누구'에 관한 것인지 핵심 인물 이름 배열(예: "○○님까지"의 ○○, 노쇼·취소·추가 대상자). 특정 인물이 없으면 [].
+
 ★★ 커트라인 규칙 (매우 중요 — 지어내기 금지):
 - cutoffName/cutoffPosition 은 **제목이나 본문 텍스트에 "○○님까지 일됩니다/근무/나갑니다" 처럼 명시적으로 적혀 있을 때만** 채우고, cutoffAnnounced=true 로 하세요.
 - 그런 명시 문구가 **없으면**(예: 그냥 "현재 배치표"·"3부 시간표" 스냅샷) cutoffName="", cutoffPosition=null, cutoffAnnounced=false. **이미지의 색깔만 보고 커트라인을 절대 추측하지 마세요.**
@@ -82,6 +88,9 @@ ${postedLine}
 {
   "relevant": true 또는 false,
   "part": "1|2|3|unknown (이 글이 몇 부인지, 모르면 unknown — ${part}부라 함부로 단정 금지)",
+  "part3Roster": ["${part}부 전체 명단 이름들 — 전체 배치표일 때만, 아니면 []"],
+  "crossPartNames": ["명단 중 여러 부 중복 표기((2,3)/(54)) 붙은 이름들, 없으면 []"],
+  "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
   "category": "배치표|번호표|변동|추가|취소|시간조정|공지|개인근태|가배치|기타",
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
   "dateLabel": "예: 7월 14일 화요일 (모르면 빈칸)",
@@ -186,6 +195,46 @@ export function decide(article, verdict) {
   return { relevant: true, push, status, verdict, title, body };
 }
 
+// ── 오늘 3부 명단(화이트리스트) 기반 정밀 필터 ──────────────
+//  본배치표에서 뽑아둔 today.roster3(3부 이름들)로, 이후 짧은 소식을 이름으로 거른다.
+//  · 부가 이미 판정된 글(part 1/2/3 명시·시간대)엔 개입하지 않음(모호할 때만 작동).
+//  · 대상 인물이 3부 명단에 없으면 → 내 부 아님(피드만).
+//  · 명단에 있으나 '부 중복'인 사람뿐이면 → 시간대(14시~ or 티오프 14시~)로 판정.
+export function applyRoster(verdict, today, article) {
+  if (!verdict || !verdict.relevant) return;
+  const vpart = (String(verdict.part || '').match(/[123]/) || [])[0] || 'unknown';
+  if (vpart !== 'unknown') return;                       // 부가 이미 판정됨 → 그 판정 신뢰
+  if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length) return; // 이 글이 본배치표면 제외
+  const roster = today?.roster3;
+  if (!Array.isArray(roster) || !roster.length) return;  // 명단 없음 → 시간/부 로직에 위임
+  if (today?.date && verdict.dateLabel && today.date !== verdict.dateLabel) return; // 다른 날 명단이면 미적용
+  const names = (verdict.subjectNames || []).filter(Boolean);
+  if (!names.length) return;                             // 특정 인물 없는 공지는 통과
+
+  const set = new Set(roster);
+  const cross = new Set(today?.crossPart3 || []);
+  const inRoster = names.filter((n) => set.has(n));
+  if (!inRoster.length) {
+    verdict.relevant = false;
+    verdict._rosterDrop = `대상(${names.join(',')})이 ${(process.env.MY_PART || '3').trim()}부 명단에 없음`;
+    return;
+  }
+  if (inRoster.every((n) => cross.has(n))) {             // 전원 부-중복 → 시간으로 판정
+    const ts = Number(article.writeDate);
+    const hour = Number.isFinite(ts) && ts > 1e12 ? new Date(ts).getHours() : null;
+    const tm = String(verdict.teeTime || '').match(/(\d{1,2}):(\d{2})/);
+    const teeH = tm ? Number(tm[1]) : null;
+    const timeSays3 = (teeH != null && teeH >= 14) || (teeH == null && hour != null && hour >= 14);
+    if (!timeSays3) {
+      verdict.relevant = false;
+      verdict._rosterDrop = '부-중복 인물 + 3부 시간대(14시~) 아님';
+      return;
+    }
+  }
+  verdict.part = (process.env.MY_PART || '3').trim();    // 명단 확인 → 내 부로 확정
+  verdict.rosterConfirmed = true;
+}
+
 // 글 → Gemini가 '편견 없이' 판정(stateless) → 최종 결정. { relevant, push, title, body, status, rawVerdict }
 //  today 는 프롬프트에 넣지 않는다(이전 상태가 판독을 오염시키지 않게).
 //  단, 텍스트만 있어 순번을 못 읽었으면 '같은 날 잠긴 순번'으로만 코드가 채운다(안전한 보완).
@@ -197,5 +246,6 @@ export async function judge(article, today = null) {
       && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
     verdict.myPosition = today.myPosition; // 잠긴 순번 보완(텍스트-only '○○까지' 계산용)
   }
+  applyRoster(verdict, today, article);    // 3부 명단 화이트리스트 정밀 필터
   return { ...decide(article, verdict), rawVerdict: verdict };
 }

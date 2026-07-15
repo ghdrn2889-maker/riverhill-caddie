@@ -96,6 +96,14 @@ export function applyVerdict(prev, verdict, article) {
     if (Number.isFinite(Number(verdict.cutoffPosition))) next.cutoffPosition = Number(verdict.cutoffPosition);
   }
 
+  // ── 3부 명단(화이트리스트): 본배치표에서 통째로 읽혔을 때만 저장/갱신 ──
+  //  (짧은 소식은 part3Roster=[] 이므로 기존 명단을 그대로 유지) — 이후 이름 기반 필터의 근거.
+  if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length) {
+    next.roster3 = verdict.part3Roster.filter(Boolean);
+    next.crossPart3 = (verdict.crossPartNames || []).filter(Boolean);
+    next.rosterAt = Date.now();
+  }
+
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });
   if (next.timeline.length > 40) next.timeline = next.timeline.slice(-40);
   next.updatedAt = Date.now();
