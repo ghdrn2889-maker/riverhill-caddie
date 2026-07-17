@@ -73,11 +73,13 @@ ${postedLine}
 - ★★teeTime엔 오직 "${name}" 본인이 배정된 티오프만 넣으세요. 취소·추가·변동·노쇼 글에서 언급된 '남'의 시간(예: "인 13시35분 취소 박진수님까지"의 13:35는 박진수 관련 시간)은 "${name}"의 티오프가 절대 아니므로 teeTime=null. "${name}" 자리의 시간이 확실할 때만 채우세요.
 - ★★${part}부 티오프는 16시 이후입니다. 16시 이전 시간(예: 13:35)만 있는 글은 ${part}부가 아니라 다른 부이므로 "${name}"과 무관(relevant=false, part=해당 부/1·2).
 
-★★★ 배치표에서 "${name}"의 근무/스페어 판정 (이번 오류의 핵심 — 반드시 이 순서로 추론):
-1) 티오프는 오직 "OUT n부 IN" 시간표에서 "${name}"의 순번이 실제로 그 시간 칸에 배정돼 있을 때만 인정합니다.
-2) "${name}"이 배치표에 있지만 티오프 시간표에 그의 순번이 없으면(=배정된 팀 없음) → **"${name}"은 스페어(대기)입니다.** 이때 반드시: myStatus="spare", teeTime=null, myPosition="${name}"의 대기 순번.
-3) 오른쪽 "조(組)" 목록(1조/2조/3조)이나 대기 명단에 "${name}"이 있고 그 근처 줄에 시간이 보여도, 그건 "${name}"의 티오프가 절대 아닙니다(줄 맞춤일 뿐). 남의 시간을 "${name}"에게 붙이지 마세요.
-4) 요약 규칙: **배정된 티오프 없음 + 대기 순번 있음 = 반드시 스페어(대기).** 티오프를 '찾아내려' 애쓰지 말고, 없으면 없는 겁니다.
+★★★ "${name}"의 근무/스페어 판정 — **이름칸 '배경색'이 최우선 근거입니다** (이번 오류의 핵심):
+1) 먼저 배치표에서 "${name}" 이름칸의 **배경색**을 확인해 myCellColor 에 넣으세요: **흰색/녹색/하늘색 등 색칠됨 = 근무 확정**, **회색 = 스페어(대기)**.
+2) **색칠됨(특히 흰색) = 근무 확정.** 티오프 시간표에 "${name}" 순번이 아직 안 보여도 **근무 확정은 그대로 유지**하세요(팀·티오프는 나중에 매칭될 수 있음). → myStatus="assigned"(티오프도 보이면) 또는 "work"(색은 근무인데 티오프 아직 미매칭). **티오프가 없다는 이유로 절대 스페어로 강등하지 마세요.**
+3) **회색 = 스페어(대기)** → myStatus="spare", teeTime=null.
+4) 티오프(teeTime)는 오직 "OUT n부 IN" 시간표에서 "${name}" 순번이 그 시간 칸에 있을 때만 인정. 없으면 teeTime=null (단, 이름칸이 흰색이면 myStatus는 여전히 근무 확정).
+5) 오른쪽 "조(組)" 목록이나 대기 명단에서 근처 줄에 보이는 시간을 "${name}"에게 붙이지 마세요(줄 맞춤일 뿐).
+6) 배경색을 도저히 알 수 없을 때만(myCellColor="unknown") 티오프 유무로 판단(있으면 근무, 없으면 스페어).
 
 ★ 3부 티오프 표 통째 추출(teeGrid) — 시간을 눈대중하지 말고 표를 그대로 옮기세요:
 - "OUT 3부 IN" 시간표의 모든 행을 {"pos":순번(정수), "time":"HH:MM", "course":"OUT" 또는 "IN"} 배열로 빠짐없이 옮기세요. (OUT 칸 순번은 course=OUT, IN 칸 순번은 course=IN)
@@ -112,6 +114,7 @@ ${postedLine}
   "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
   "teeGrid": [{ "pos": 정수, "time": "HH:MM", "course": "OUT 또는 IN" }],
   "category": "배치표|번호표|변동|추가|취소|시간조정|공지|개인근태|가배치|기타",
+  "myCellColor": "white|colored|gray|unknown (${name} 이름칸 배경색 — 근무/스페어 판정 최우선 근거)",
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
   "dateLabel": "예: 7월 14일 화요일 (모르면 빈칸)",
   "myPosition": 정수 또는 null,
@@ -286,17 +289,35 @@ function resolveTeeByGrid(verdict) {
   const mp = Number(verdict.myPosition);
   if (!(mp > 0) || grid.length < 3) return; // 표를 제대로 못 옮겼으면 기존 판독 유지
   const hit = grid.find((g) => Number(g?.pos) === mp && /\d{1,2}:\d{2}/.test(String(g?.time || '')));
+  const color = String(verdict.myCellColor || '').toLowerCase();
+  const isWorkColor = /white|흰|colored|색칠|녹|하늘|green|blue/.test(color);
   if (hit) {
     verdict.teeTime = String(hit.time).match(/\d{1,2}:\d{2}/)[0];
     if (hit.course) verdict.course = /IN/i.test(String(hit.course)) ? 'IN' : 'OUT';
     if (!['work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'assigned';
     verdict._teeSource = 'grid';
   } else {
-    if (verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime)) {
-      verdict._uncertain = verdict._uncertain || `표에 순번 ${mp}이 없는데 모델이 티오프 ${verdict.teeTime} 제시(충돌)`;
+    // 순번이 표에 없음. ★배경색이 근무(흰색/색칠)면 스페어로 강등하지 않는다(티오프 매칭 대기 or 표 누락).
+    const modelTee = (String(verdict.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
+    const teeHour = modelTee ? Number(modelTee.split(':')[0]) : null;
+    const plausible = modelTee && teeHour != null && teeHour >= Number(process.env.TEE_MIN_HOUR ?? 16);
+    if (isWorkColor) {
+      // 근무 확정. 모델이 본인 티오프를 직접 읽었고(≥16시) 그럴듯하면 유지하되 '확인 필요' 표시(표 누락 가능).
+      if (plausible) {
+        verdict.teeTime = modelTee;
+        verdict.myStatus = ['your_turn'].includes(verdict.myStatus) ? 'your_turn' : 'assigned';
+        verdict._uncertain = verdict._uncertain || `순번 ${mp} 티오프를 표에서 못 찾아 모델 판독(${modelTee}) 사용 — 확인 권장`;
+        verdict._teeSource = 'model';
+      } else {
+        verdict.teeTime = null;
+        if (!['work', 'your_turn', 'assigned'].includes(verdict.myStatus)) verdict.myStatus = 'work';
+      }
+    } else {
+      // 회색(스페어) 또는 색 불명 → 티오프 지어내기 차단, 스페어.
+      if (modelTee) verdict._uncertain = verdict._uncertain || `표에 순번 ${mp}이 없는데 모델이 티오프 ${modelTee} 제시(충돌)`;
+      verdict.teeTime = null;
+      if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
     }
-    verdict.teeTime = null;
-    if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
   }
 }
 
