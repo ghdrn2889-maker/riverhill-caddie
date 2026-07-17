@@ -39,11 +39,11 @@ async function fetchImageBase64(url) {
 
 // 프롬프트(+선택 이미지) → Gemini 호출 → JSON 파싱 (2회 재시도). 실패 시 null.
 // imageUrl 이 없으면 텍스트-only 로 호출한다(제목/본문만 있는 글도 판단 가능).
-export async function callGeminiJSON(promptText, imageUrl = null) {
+export async function callGeminiJSON(promptText, imageUrl = null, modelOverride = null) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
-  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const model = modelOverride || process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
   let img = null;
   if (imageUrl) {

@@ -349,11 +349,14 @@ function resolveTeeByGrid(verdict) {
 export async function judge(article, today = null) {
   const img = article.images?.[0] || null;
   const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
-  let verdict = await callGeminiJSON(buildPrompt(article), img);
+  // ★배치표(이미지) 판독만 강한 모델(GEMINI_BOARD_MODEL) 사용 — 조밀한 티오프 표 정확도↑, 비용은 소액.
+  //  텍스트/카톡/일반 글은 기본 모델(flash-lite) 유지.
+  const boardModel = isBoard ? (process.env.GEMINI_BOARD_MODEL || null) : null;
+  let verdict = await callGeminiJSON(buildPrompt(article), img, boardModel);
   // ★배치표 판독이 부실하면(순번·티오프 실패) 최대 2회 재시도 — 비전 불안정으로
   //  최신 배치표를 놓치거나 pos=0 같은 실패값이 나오던 문제 완화.
   for (let tries = 0; isBoard && weakBoardRead(verdict) && tries < 2; tries++) {
-    const retry = await callGeminiJSON(buildPrompt(article), img);
+    const retry = await callGeminiJSON(buildPrompt(article), img, boardModel);
     if (retry) verdict = retry;
     if (retry && !weakBoardRead(retry)) break;
   }
@@ -363,7 +366,7 @@ export async function judge(article, today = null) {
   //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
   const teeOf = (v) => (String(v?.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
   if (isBoard && teeOf(verdict)) {
-    const v2 = await callGeminiJSON(buildPrompt(article), img);
+    const v2 = await callGeminiJSON(buildPrompt(article), img, boardModel);
     if (v2) {
       resolveTeeByGrid(v2);
       const posOf = (v) => (Number(v?.myPosition) > 0 ? Number(v.myPosition) : '');
