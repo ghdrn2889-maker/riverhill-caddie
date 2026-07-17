@@ -20,7 +20,7 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
   async function tick() {
     let articles;
     try {
-      articles = await fetchLatestArticles(20);
+      articles = await fetchLatestArticles(Number(process.env.FETCH_PER_PAGE ?? 40)); // 근태 신청 폭주 시 배치표가 밀려나지 않게 넉넉히
     } catch (e) {
       // 쿠키 만료/차단 가능성 — 2회 연속 실패 시 1번만 알림
       failStreak += 1;
