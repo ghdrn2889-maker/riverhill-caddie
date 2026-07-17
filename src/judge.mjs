@@ -39,8 +39,14 @@ function buildPrompt(article) {
   const postedLine = postedHour != null
     ? `- 게시 시각: ${postedHour}시 (${postedHour >= 12 ? '정오 이후' : '정오 이전'})`
     : '';
+  const isKakao = /카톡|카카오/.test(article.menuName || '');
+  const kakaoNote = isKakao ? `
+
+★출처=캐디 단톡방 메시지입니다 (매우 중요):
+- "${name}"(${part}부)이 속한 단톡방이라, 부(部) 표시가 없어도 근무 커트라인("○○까지 나갑니다/근무/입니다/콜"), 배치·추가·시간 변동 메시지는 **${part}부 관련으로 간주**하세요(relevant=true, part=${part}). 단톡방에선 후속·정정 메시지에 "${part}부"를 다시 안 붙이는 게 보통입니다.
+- 예외: 메시지가 명시적으로 "1부"/"2부"로만 한정되면 그 부로(다른 부는 무관). 순수 잡담·인사·"사진을 보냈습니다"·개인 근태신청은 relevant=false.` : '';
   return `당신은 골프장 캐디 "${name}"(${part}부)의 개인 비서입니다.
-아래 네이버 카페 글이 "${name}"님에게 어떤 의미인지 판단하세요.${anchor}
+아래 ${isKakao ? '캐디 단톡방 메시지' : '네이버 카페 글'}가 "${name}"님에게 어떤 의미인지 판단하세요.${anchor}
 
 [글]
 - 제목: ${article.subject || ''}
@@ -48,7 +54,7 @@ function buildPrompt(article) {
 - 작성자: ${article.writer || ''}
 ${postedLine}
 - 본문: ${(article.text || '').slice(0, 600)}
-- 첨부 이미지: ${hasImg ? '있음 — 배치표/번호표(순번·이름 목록 + 티오프 시간표)일 수 있으니 반드시 읽으세요.' : '없음 — 제목/본문 텍스트로만 판단.'}
+- 첨부 이미지: ${hasImg ? '있음 — 배치표/번호표(순번·이름 목록 + 티오프 시간표)일 수 있으니 반드시 읽으세요.' : '없음 — 제목/본문 텍스트로만 판단.'}${kakaoNote}
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
