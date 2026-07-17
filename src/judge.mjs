@@ -206,8 +206,9 @@ export function decide(article, verdict) {
 
   if (verdict.note && String(verdict.note).trim()) body += `\n⚠️ ${String(verdict.note).trim()}`;
 
-  // 확신도 낮으면 '확인필요'로 낮춤(틀린 단정 방지, 그래도 알림은 감).
-  const push = (Number(verdict.confidence) || 0) < 0.4 ? 'check' : 'high';
+  // 확신도 낮거나 교차검증 불일치면 '확인필요'로 낮춤(틀린 단정 방지, 그래도 알림은 감).
+  let push = (Number(verdict.confidence) || 0) < 0.4 ? 'check' : 'high';
+  if (verdict._uncertain) { push = 'check'; body = `⚠️ 판독이 불확실합니다 — 원문을 꼭 확인하세요.\n${body}`; }
   const title = push === 'check' ? '🏌️ 3부 소식 — 확인' : titleFor(status);
   return { relevant: true, push, status, verdict, title, body };
 }
@@ -274,6 +275,18 @@ export async function judge(article, today = null) {
     const retry = await callGeminiJSON(buildPrompt(article), img);
     if (retry) verdict = retry;
     if (retry && !weakBoardRead(retry)) break;
+  }
+  // ★티오프(근무 배정)가 읽힌 배치표는 교차검증: 한 번 더 읽어 티오프·순번이 다르면 '확인 필요'.
+  //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
+  const teeOf = (v) => (String(v?.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
+  if (isBoard && teeOf(verdict)) {
+    const v2 = await callGeminiJSON(buildPrompt(article), img);
+    if (v2) {
+      const posOf = (v) => (Number(v?.myPosition) > 0 ? Number(v.myPosition) : '');
+      if (teeOf(v2) !== teeOf(verdict) || posOf(v2) !== posOf(verdict)) {
+        verdict._uncertain = `판독 불일치(1차 순번${posOf(verdict) || '-'}/티오프${teeOf(verdict) || '-'} ↔ 2차 순번${posOf(v2) || '-'}/티오프${teeOf(v2) || '-'})`;
+      }
+    }
   }
   if (verdict && !(Number(verdict.myPosition) > 0)
       && today && today.myPosition
