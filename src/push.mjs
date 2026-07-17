@@ -34,18 +34,25 @@ export async function broadcast({ title, body, url }) {
   if (!subs.length) { console.log('(구독 기기 없음 — 폰에서 알림 켜기 필요)'); return; }
   const payload = JSON.stringify({ title, body, url });
   const alive = [];
+  let ok = 0, dead = 0, fail = 0;
   for (const s of subs) {
+    const tag = String(s.endpoint || '').slice(-12);
     try {
-      await webpush.sendNotification(s, payload);
+      const r = await webpush.sendNotification(s, payload);
       alive.push(s);
+      ok++;
+      console.log(`  ↳ 푸시 OK [${r.statusCode}] …${tag}`);
     } catch (e) {
       if (e.statusCode === 404 || e.statusCode === 410) {
-        console.log('만료된 구독 제거');       // 기기가 구독 해지됨
+        dead++;
+        console.log(`  ↳ 만료된 구독 제거 [${e.statusCode}] …${tag}`);
       } else {
         alive.push(s);
-        console.error('푸시 실패:', e.statusCode || e.message);
+        fail++;
+        console.error(`  ↳ 푸시 실패 [${e.statusCode || e.message}] …${tag}`);
       }
     }
   }
+  console.log(`📤 발송결과: 성공 ${ok} / 실패 ${fail} / 만료제거 ${dead} (총 ${subs.length})`);
   if (alive.length !== subs.length) saveJSON(SUBS_FILE, alive);
 }
