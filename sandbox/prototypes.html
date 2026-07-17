@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>리버힐 캐디 앱 — UI 샘플 3안</title>
+  <style>
+    *{box-sizing:border-box} button{font:inherit} body{margin:0;background:#e9eeeb;color:#17221c;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
+    .intro{max-width:1180px;margin:auto;padding:46px 24px 24px}.eyebrow{color:#0b5d34;font-weight:800;font-size:12px;letter-spacing:.14em}.intro h1{font-size:clamp(28px,5vw,48px);letter-spacing:-.05em;margin:10px 0 12px}.intro p{color:#607068;max-width:680px;line-height:1.65;margin:0}.switcher{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}.switcher button{border:1px solid #cbd5cf;background:#fff;color:#33433b;border-radius:99px;padding:10px 16px;font-weight:750;cursor:pointer}.switcher button.on{background:#0b5d34;color:#fff;border-color:#0b5d34}
+    .stage{max-width:1180px;margin:0 auto;padding:20px 24px 70px;display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:28px;align-items:start}.concept{min-width:0}.concept-head{min-height:104px}.concept-no{font-size:12px;color:#6e7a74;font-weight:800;letter-spacing:.1em}.concept h2{margin:5px 0 6px;font-size:22px;letter-spacing:-.03em}.concept-desc{font-size:13px;color:#65726b;line-height:1.5;margin:0}.phone{margin-top:14px;background:#101512;border-radius:34px;padding:10px;box-shadow:0 18px 45px rgba(21,45,31,.2)}.screen{height:680px;border-radius:26px;overflow:hidden;position:relative}.scroll{height:100%;overflow-y:auto;scrollbar-width:none}.scroll::-webkit-scrollbar{display:none}.bar{width:90px;height:5px;border-radius:5px;background:rgba(255,255,255,.35);position:absolute;top:7px;left:50%;transform:translateX(-50%);z-index:5}.demo-btn{border:0;cursor:pointer}.hidden{display:none!important}
+    /* A */
+    .a .screen{background:#f7f4ec;color:#17231c}.a-top{background:#124c31;color:#fff;padding:24px 18px 16px}.a-topline{display:flex;justify-content:space-between;align-items:center}.a-brand{font-size:12px;font-weight:800;letter-spacing:.08em}.a-date{font-size:11px;opacity:.75}.a-main{padding:16px}.a-status{background:#fff;border:1px solid #dde4dd;border-radius:18px;padding:18px;box-shadow:0 5px 18px rgba(26,56,38,.06)}.label{font-size:10px;font-weight:800;letter-spacing:.12em;color:#78857e}.a-status h3{font-size:28px;line-height:1.05;margin:8px 0 9px;letter-spacing:-.05em}.a-status p{font-size:13px;color:#5e6d65;margin:0}.a-time{display:flex;align-items:end;justify-content:space-between;margin-top:19px;padding-top:15px;border-top:1px solid #e5e9e5}.a-time strong{font-size:34px;letter-spacing:-.05em}.a-time span{font-size:11px;color:#6d7a73;margin-bottom:5px}.health{margin:12px 0;background:#e8f4ec;color:#1c633e;padding:10px 12px;border-radius:11px;font-size:11px;font-weight:700;display:flex;justify-content:space-between}.a h4{font-size:13px;margin:18px 3px 9px}.news{background:#fff;border:1px solid #e1e5e1;border-radius:13px;padding:12px;margin-bottom:8px}.news b{font-size:12px;display:block}.news small{color:#748078;font-size:10px}.newdot{color:#b72d29}.a-nav{position:sticky;bottom:0;background:rgba(255,255,255,.95);border-top:1px solid #dde3df;display:flex;justify-content:space-around;padding:11px 4px 15px;font-size:10px;color:#748078}.a-nav b{color:#0b5d34}
+    /* B */
+    .b .screen{background:#f4f0e7;color:#263229}.b-head{padding:25px 18px 12px}.hello{font-size:11px;color:#68756d}.b-head h3{font-size:22px;margin:4px 0}.b-hero{margin:5px 15px 14px;padding:19px;border-radius:22px;background:#dcebdc}.b-hero .count{font:800 39px/1 Georgia,serif;color:#174f32;margin:7px 0 6px}.b-hero p{font-size:12px;color:#526359;margin:0}.timeline{margin:0 17px;background:#fffaf2;border-radius:20px;padding:17px 17px 8px}.timeline-title{font-size:11px;font-weight:800;color:#768078;margin-bottom:14px}.step{display:grid;grid-template-columns:20px 1fr auto;gap:9px;min-height:68px;position:relative}.step:not(:last-child):before{content:"";position:absolute;left:7px;top:15px;bottom:-3px;width:2px;background:#d5ded6}.dot{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #89a391;z-index:1}.step.done .dot{background:#2c7148;border-color:#2c7148}.step.now .dot{background:#e2a13a;border-color:#f3d69a;box-shadow:0 0 0 4px #f8e8c8}.step b{font-size:12px}.step p{font-size:10px;color:#7c877f;margin:3px 0}.step time{font-size:11px;font-weight:700}.b-record{margin:12px 15px;background:#243d31;color:#fff;border-radius:17px;padding:15px}.b-record b{font-size:13px}.b-record p{font-size:10px;opacity:.7;margin:4px 0 11px}.b-record button{width:100%;border:0;border-radius:10px;background:#f3efe4;color:#244232;padding:9px;font-size:11px;font-weight:800}.b-health{padding:2px 18px 18px;font-size:10px;color:#68766e;text-align:center}
+    /* C */
+    .c .screen{background:#0c1913;color:#f4f0e6}.c-head{padding:27px 20px 8px;display:flex;justify-content:space-between}.monogram{width:29px;height:29px;border:1px solid #9b8b61;border-radius:50%;display:grid;place-items:center;color:#cbb985;font:700 12px Georgia}.c-menu{color:#a3aea7}.c-content{padding:16px 21px}.c-over{font-size:10px;color:#b9a66f;letter-spacing:.16em;font-weight:700}.c h3{font:500 31px/1.2 Georgia,"Malgun Gothic",serif;letter-spacing:-.04em;margin:11px 0 22px}.c h3 em{color:#cbb985;font-style:normal}.c-focus{border-top:1px solid #314038;border-bottom:1px solid #314038;padding:18px 0}.c-focus small{color:#839188;font-size:10px}.c-focus strong{display:block;font:500 42px/1.05 Georgia;margin:7px 0}.c-focus p{margin:4px 0;color:#aab5ae;font-size:11px}.capsule{margin:17px 0;display:flex;gap:7px}.cap{border:1px solid #33483d;border-radius:99px;padding:8px 10px;font-size:9px;color:#aab6ae}.cap i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#5cc281;margin-right:5px}.c-section{margin-top:24px;display:flex;justify-content:space-between;align-items:center}.c-section b{font-size:11px;letter-spacing:.08em}.c-section span{color:#b8a66e;font-size:10px}.c-story{padding:15px 0;border-bottom:1px solid #26372e}.c-story b{font:500 15px/1.4 Georgia,"Malgun Gothic",serif}.c-story p{font-size:10px;color:#7f8d84;margin:5px 0}.c-foot{margin-top:18px;background:#14271d;border-radius:15px;padding:14px;display:flex;justify-content:space-between}.c-foot span{font-size:10px;color:#9fac9f}.c-foot strong{font-size:12px;color:#d4c18a}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(30px);background:#15251d;color:#fff;padding:11px 17px;border-radius:99px;font-size:12px;opacity:0;transition:.25s;z-index:20}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    @media(max-width:930px){.stage{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-left:max(24px,calc((100vw - 360px)/2));padding-right:max(24px,calc((100vw - 360px)/2))}.concept{flex:0 0 340px;scroll-snap-align:center}.intro{text-align:center}.intro p{margin:auto}.switcher{justify-content:center}}
+    @media(max-width:390px){.concept{flex-basis:calc(100vw - 34px)}.stage{padding-left:17px;padding-right:17px}.screen{height:660px}}
+  </style>
+</head>
+<body>
+  <header class="intro">
+    <div class="eyebrow">RIVERHILL · DESIGN EXPLORATION</div>
+    <h1>오늘을 놓치지 않는 세 가지 방법</h1>
+    <p>같은 일정과 상태를 서로 다른 UX 관점으로 설계했습니다. 모바일에서는 좌우로 넘겨 비교할 수 있습니다.</p>
+    <div class="switcher"><button class="on" data-filter="all">3안 모두</button><button data-filter="a">A · 보드</button><button data-filter="b">B · 타임라인</button><button data-filter="c">C · 컨시어지</button><button onclick="location.href='./hybrid-prototypes.html'">A+B 발전안 →</button></div>
+  </header>
+  <main class="stage">
+    <article class="concept a" data-concept="a">
+      <div class="concept-head"><div class="concept-no">SAMPLE A</div><h2>클럽하우스 보드</h2><p class="concept-desc">야외에서 3초 안에 상태와 출발 시간을 읽는 실용 중심 화면</p></div>
+      <div class="phone"><div class="screen"><div class="bar"></div><div class="scroll">
+        <header class="a-top"><div class="a-topline"><span class="a-brand">RIVERHILL CADDIE</span><span class="a-date">7월 17일 금요일</span></div></header>
+        <div class="a-main"><section class="a-status"><div class="label">오늘 내 상황</div><h3>3부 스페어<br>대기 중</h3><p>현재 2번째 순서예요. 연락을 놓치지 않도록 알림을 유지해주세요.</p><div class="a-time"><div><span>골프장 도착 권장</span><strong>14:20</strong></div><span>약 1시간 18분 후</span></div></section>
+        <div class="health"><span>● 일정 감시 정상</span><span>● 이 폰 알림 정상</span></div>
+        <h4>최근 일정 소식</h4><div class="news"><b><span class="newdot">●</span> 7/18 토요일 3부 스페어 모집</b><small>10분 전 · 캐디 일정 게시판</small></div><div class="news"><b>7/20 월요일 휴장 안내</b><small>어제 · 운영 공지</small></div><div class="news"><b>우천 시 출근 시간 변경</b><small>2일 전 · 긴급 안내</small></div></div>
+        <nav class="a-nav"><b>오늘</b><span>소식</span><span>근무 기록</span></nav>
+      </div></div></div>
+    </article>
+    <article class="concept b" data-concept="b">
+      <div class="concept-head"><div class="concept-no">SAMPLE B</div><h2>캐디 데이 타임라인</h2><p class="concept-desc">하루의 흐름과 다음 행동을 순서대로 안내하는 현장 보조 화면</p></div>
+      <div class="phone"><div class="screen"><div class="bar"></div><div class="scroll">
+        <header class="b-head"><div class="hello">안녕하세요, 홍구님</div><h3>오늘의 흐름</h3></header>
+        <section class="b-hero"><div class="label">다음 행동까지</div><div class="count">1:18</div><p>오후 2시 20분까지 골프장에 도착해주세요.</p></section>
+        <section class="timeline"><div class="timeline-title">7월 17일 · 3부 스페어</div><div class="step done"><i class="dot"></i><div><b>일정 확인</b><p>스페어 대기 등록 완료</p></div><time>12:42</time></div><div class="step now"><i class="dot"></i><div><b>집에서 출발</b><p>교통 상황 기준 약 38분</p></div><time>13:42</time></div><div class="step"><i class="dot"></i><div><b>골프장 도착</b><p>캐디 대기실로 이동</p></div><time>14:20</time></div><div class="step"><i class="dot"></i><div><b>예상 티오프</b><p>배정 시 정확한 시간 알림</p></div><time>15:30</time></div></section>
+        <section class="b-record"><b>근무가 끝나면 기록해드릴게요</b><p>출발·도착·복귀 사진 3장으로 세무 기록이 완성됩니다.</p><button class="demo-btn" data-toast="기록 화면은 근무 확정 후 활성화됩니다">기록 흐름 미리보기</button></section><div class="b-health">● 게시판 확인 정상 &nbsp; ● 알림 전달 정상</div>
+      </div></div></div>
+    </article>
+    <article class="concept c" data-concept="c">
+      <div class="concept-head"><div class="concept-no">SAMPLE C</div><h2>포켓 컨시어지</h2><p class="concept-desc">개인 매니저처럼 핵심 한 가지에 집중하는 프리미엄 미니멀 화면</p></div>
+      <div class="phone"><div class="screen"><div class="bar"></div><div class="scroll">
+        <header class="c-head"><div class="monogram">RH</div><div class="c-menu">•••</div></header><div class="c-content"><div class="c-over">FRIDAY · JULY 17</div><h3>홍구님, 오늘은<br><em>두 번째 순서</em>로<br>기다리고 있습니다.</h3>
+        <section class="c-focus"><small>NEXT</small><strong>14:20</strong><p>리버힐 골프장 도착 권장 · 출발까지 40분</p></section><div class="capsule"><div class="cap"><i></i>감시 정상</div><div class="cap"><i></i>알림 정상</div></div>
+        <div class="c-section"><b>새로운 소식</b><span>모두 보기 →</span></div><div class="c-story"><b>내일 3부 스페어 캐디를 모집합니다.</b><p>10분 전 · 일정 게시판에서 감지</p></div><div class="c-story"><b>월요일은 코스 정비로 휴장합니다.</b><p>어제 · 운영 공지</p></div><div class="c-foot"><span>7월 근무 기록</span><strong>8일 · 480km →</strong></div></div>
+      </div></div></div>
+    </article>
+  </main>
+  <div class="toast" role="status"></div>
+  <script>
+    const buttons=[...document.querySelectorAll('[data-filter]')], concepts=[...document.querySelectorAll('[data-concept]')];
+    buttons.forEach(btn=>btn.addEventListener('click',()=>{buttons.forEach(x=>x.classList.toggle('on',x===btn));const f=btn.dataset.filter;concepts.forEach(x=>x.classList.toggle('hidden',f!=='all'&&x.dataset.concept!==f));}));
+    const toast=document.querySelector('.toast');document.querySelectorAll('[data-toast]').forEach(btn=>btn.addEventListener('click',()=>{toast.textContent=btn.dataset.toast;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}));
+  </script>
+</body>
+</html>

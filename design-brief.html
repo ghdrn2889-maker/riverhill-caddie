@@ -1,0 +1,555 @@
+<style>
+  /* ============================================================
+     리버힐 캐디 앱 — 디자인 브리프
+     팔레트: 페어웨이 그린 + 그린편향 중성색. 시스템 한글 폰트 스택
+     (한글 웹폰트 data URI는 수 MB라 비현실적 → 위계는 굵기·크기·자간으로).
+     ============================================================ */
+  :root {
+    --paper:#e9ede9; --surface:#ffffff; --surface-2:#f4f7f4; --surface-3:#eef2ee;
+    --ink:#16211c; --ink-soft:#54625b; --ink-faint:#8a968f;
+    --line:#dbe1dd; --line-strong:#c7d0ca;
+    --accent:#0b5d34; --accent-2:#0f7a44; --accent-ink:#0b5d34;
+    --amber:#a8701a; --amber-bg:#f7edd8; --red:#bd2828; --red-bg:#fbe3e3;
+    --blue:#2a6b8f; --blue-bg:#e2eef4;
+    --shadow: 0 1px 2px rgba(20,40,30,.04), 0 8px 28px rgba(20,40,30,.07);
+    --shadow-lift: 0 10px 40px rgba(11,60,52,.16);
+    --maxw: 780px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0d1310; --surface:#141c18; --surface-2:#1a2420; --surface-3:#202b26;
+      --ink:#e9efea; --ink-soft:#98a49d; --ink-faint:#6c786f;
+      --line:#26322c; --line-strong:#34423b;
+      --accent:#41b076; --accent-2:#5bcb8e; --accent-ink:#7ad6a2;
+      --amber:#d59a3f; --amber-bg:#2c2415; --red:#e77070; --red-bg:#2e1a1a;
+      --blue:#7bb8d6; --blue-bg:#15242c;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+      --shadow-lift: 0 12px 44px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#e9ede9; --surface:#ffffff; --surface-2:#f4f7f4; --surface-3:#eef2ee;
+    --ink:#16211c; --ink-soft:#54625b; --ink-faint:#8a968f;
+    --line:#dbe1dd; --line-strong:#c7d0ca;
+    --accent:#0b5d34; --accent-2:#0f7a44; --accent-ink:#0b5d34;
+    --amber:#a8701a; --amber-bg:#f7edd8; --red:#bd2828; --red-bg:#fbe3e3;
+    --blue:#2a6b8f; --blue-bg:#e2eef4;
+    --shadow: 0 1px 2px rgba(20,40,30,.04), 0 8px 28px rgba(20,40,30,.07);
+    --shadow-lift: 0 10px 40px rgba(11,60,52,.16);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0d1310; --surface:#141c18; --surface-2:#1a2420; --surface-3:#202b26;
+    --ink:#e9efea; --ink-soft:#98a49d; --ink-faint:#6c786f;
+    --line:#26322c; --line-strong:#34423b;
+    --accent:#41b076; --accent-2:#5bcb8e; --accent-ink:#7ad6a2;
+    --amber:#d59a3f; --amber-bg:#2c2415; --red:#e77070; --red-bg:#2e1a1a;
+    --blue:#7bb8d6; --blue-bg:#15242c;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --shadow-lift: 0 12px 44px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",
+      "Malgun Gothic","Noto Sans KR",Roboto,sans-serif;
+    line-height:1.65; -webkit-font-smoothing:antialiased; letter-spacing:-.01em;
+  }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:0 22px; }
+  .num { font-variant-numeric:tabular-nums; }
+
+  /* ---------- 헤더 ---------- */
+  .masthead { padding:64px 0 40px; border-bottom:1px solid var(--line); }
+  .kicker {
+    display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent-ink);
+    padding:6px 12px; border:1px solid var(--line-strong); border-radius:100px;
+    background:var(--surface);
+  }
+  .masthead h1 {
+    font-size:clamp(30px,6.5vw,46px); line-height:1.1; margin:22px 0 0;
+    font-weight:800; letter-spacing:-.03em; text-wrap:balance;
+  }
+  .masthead .lede {
+    margin:18px 0 0; font-size:clamp(16px,2.4vw,18px); color:var(--ink-soft);
+    max-width:56ch; text-wrap:pretty;
+  }
+  .meta-row {
+    display:flex; flex-wrap:wrap; gap:8px 10px; margin-top:26px;
+  }
+  .tag {
+    font-size:12.5px; font-weight:600; color:var(--ink-soft);
+    background:var(--surface); border:1px solid var(--line);
+    padding:5px 11px; border-radius:8px;
+  }
+  .tag b { color:var(--ink); font-weight:700; }
+
+  /* ---------- 섹션 ---------- */
+  section { padding:52px 0; border-bottom:1px solid var(--line); }
+  .eyebrow {
+    display:flex; align-items:baseline; gap:12px; margin:0 0 6px;
+  }
+  .eyebrow .no {
+    font-size:12px; font-weight:800; letter-spacing:.12em; color:var(--accent-ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .eyebrow .line { flex:1; height:1px; background:var(--line-strong); }
+  h2 { font-size:clamp(22px,4vw,30px); line-height:1.18; margin:6px 0 14px; font-weight:800; letter-spacing:-.025em; text-wrap:balance; }
+  h3 { font-size:17px; margin:0 0 6px; font-weight:750; letter-spacing:-.02em; }
+  p { margin:0 0 14px; }
+  .muted { color:var(--ink-soft); }
+  .sec-intro { color:var(--ink-soft); max-width:62ch; margin-bottom:26px; }
+
+  /* ---------- 개요 그리드 ---------- */
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
+  .fact {
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:18px; box-shadow:var(--shadow);
+  }
+  .fact .k { font-size:11.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); }
+  .fact .v { font-size:15px; margin-top:6px; font-weight:600; line-height:1.5; }
+  .fact .v small { display:block; font-weight:500; color:var(--ink-soft); font-size:13px; margin-top:3px; }
+
+  /* ---------- 목업 showcase ---------- */
+  .showcase {
+    display:flex; gap:34px; align-items:flex-start; flex-wrap:wrap; justify-content:center;
+    padding:14px 0 4px;
+  }
+  .phone-wrap { text-align:center; }
+  .phone-cap { font-size:12.5px; color:var(--ink-soft); margin-top:14px; font-weight:600; }
+  .phone {
+    width:296px; border-radius:34px; background:#0a0f0c;
+    padding:11px; box-shadow:var(--shadow-lift); flex:0 0 auto;
+  }
+  .screen {
+    border-radius:24px; overflow:hidden; background:#f4f6f5; color:#1a201d;
+    font-family:inherit; position:relative;
+  }
+  /* 앱 자체 토큰(라이트 고정 — 실제 앱 현재 모습) */
+  .app-head { background:#0b5d34; color:#fff; padding:16px 15px; }
+  .app-head h4 { margin:0; font-size:15px; font-weight:700; }
+  .app-head p { margin:4px 0 0; font-size:11px; opacity:.85; }
+  .app-body { padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .a-card { background:#fff; border:1px solid #e5e9e7; border-radius:12px; padding:12px; }
+  .today-c { color:#fff; border:0; padding:15px; }
+  .today-c.spare { background:linear-gradient(135deg,#c98a1e,#9c6710); }
+  .today-c.work  { background:linear-gradient(135deg,#0f7a44,#0b5d34); }
+  .today-c.turn  { background:linear-gradient(135deg,#d13b3b,#a52121); }
+  .today-c .tl { font-size:10px; opacity:.85; font-weight:700; letter-spacing:.5px; }
+  .today-c .ts { font-size:21px; font-weight:800; margin:3px 0 2px; }
+  .today-c .td { font-size:13px; font-weight:600; margin-top:5px; opacity:.96; }
+  .today-c .tg { font-size:12px; font-weight:800; margin-top:9px; background:rgba(255,255,255,.16); padding:6px 10px; border-radius:9px; display:inline-block; }
+  .today-c .tw { font-size:10px; opacity:.72; margin-top:9px; }
+  .hb { font-size:11px; color:#6b7772; text-align:center; }
+  .hb b { color:#0f7a44; }
+  .a-btn { background:#0b5d34; color:#fff; border-radius:10px; padding:12px; text-align:center; font-weight:700; font-size:14px; }
+  .a-note { font-size:11px; color:#6b7772; text-align:center; margin-top:7px; }
+  .feed-h { font-size:12px; color:#6b7772; font-weight:700; margin:2px 2px; }
+  .a-item { background:#fff; border:1px solid #e5e9e7; border-radius:10px; padding:10px 11px; }
+  .a-item.new { border-color:#0f7a44; background:#f2fbf6; }
+  .a-item.dim { opacity:.6; }
+  .a-item .subj { font-size:12.5px; font-weight:650; line-height:1.35; }
+  .a-item .mline { font-size:10.5px; color:#6b7772; margin-top:4px; }
+  .a-badge { display:inline-block; font-size:9px; font-weight:700; padding:1px 6px; border-radius:20px; margin-right:4px; vertical-align:middle; }
+  .bg-red { background:#ffe1e1; color:#c02929; }
+  .bg-amb { background:#fff0d6; color:#a86400; }
+  .bg-cat { background:#eef2f0; color:#6b7772; font-size:8.5px; }
+  .a-time { color:#0f7a44; font-weight:600; }
+
+  /* 상태 변주 스트립 */
+  .variants { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; margin-top:8px; }
+  .variant .today-c { border-radius:14px; box-shadow:var(--shadow); }
+  .variant .today-c.off { background:linear-gradient(135deg,#5b6b64,#404b46); }
+  .variant .cap { font-size:12px; color:var(--ink-soft); margin-top:9px; font-weight:600; text-align:center; }
+  .variant .cap b { color:var(--ink); }
+
+  /* ---------- 상태 명세 테이블 ---------- */
+  .tbl-scroll { overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; min-width:520px; }
+  th, td { text-align:left; padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+  thead th { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); font-weight:700; background:var(--surface-2); }
+  tbody tr:last-child td { border-bottom:0; }
+  td code, .mono { font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; background:var(--surface-3); padding:1.5px 6px; border-radius:5px; color:var(--accent-ink); }
+  .pill { display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:100px; white-space:nowrap; }
+  .pill.work { background:var(--surface-3); color:var(--accent-2); border:1px solid var(--line-strong); }
+  .pill.turn { background:var(--red-bg); color:var(--red); }
+  .pill.spare { background:var(--amber-bg); color:var(--amber); }
+  .pill.off { background:var(--surface-3); color:var(--ink-soft); }
+
+  /* ---------- gap 분석 ---------- */
+  .gaps { display:flex; flex-direction:column; gap:14px; }
+  .gap {
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:18px 18px 18px 20px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+  }
+  .gap::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--prio,var(--line-strong)); }
+  .gap.p0 { --prio:var(--red); } .gap.p1 { --prio:var(--amber); } .gap.p2 { --prio:var(--accent-2); } .gap.p3 { --prio:var(--line-strong); }
+  .gap-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .prio-tag { font-size:10.5px; font-weight:800; letter-spacing:.06em; padding:3px 9px; border-radius:6px; color:#fff; background:var(--prio); }
+  .gap.p3 .prio-tag { color:var(--ink); }
+  .gap-top h3 { margin:0; }
+  .gap ul { margin:6px 0 0; padding-left:18px; color:var(--ink-soft); }
+  .gap li { margin:4px 0; }
+  .gap li b { color:var(--ink); font-weight:650; }
+
+  /* ---------- 디자인 과제 ---------- */
+  .asks { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .ask {
+    background:linear-gradient(160deg,var(--surface),var(--surface-2));
+    border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow);
+  }
+  .ask .q-no { font-size:12px; font-weight:800; color:var(--accent-ink); letter-spacing:.08em; }
+  .ask h3 { margin:8px 0 8px; font-size:16px; }
+  .ask p { font-size:13.5px; color:var(--ink-soft); margin:0; }
+
+  /* ---------- 제약 리스트 ---------- */
+  .constraints { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
+  .con { display:flex; gap:11px; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:var(--shadow); }
+  .con .dot { flex:0 0 auto; width:8px; height:8px; border-radius:50%; background:var(--accent-2); margin-top:7px; }
+  .con .txt { font-size:13.5px; }
+  .con .txt b { display:block; margin-bottom:2px; }
+  .con .txt span { color:var(--ink-soft); }
+
+  /* ---------- 스택/API ---------- */
+  .stack-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:560px){ .stack-grid { grid-template-columns:1fr; } }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); }
+  .panel h3 { margin-bottom:12px; }
+  .kv { display:flex; justify-content:space-between; gap:12px; padding:7px 0; border-bottom:1px dashed var(--line); font-size:13px; }
+  .kv:last-child { border-bottom:0; }
+  .kv .kk { color:var(--ink-soft); }
+  .kv .vv { font-weight:600; text-align:right; }
+  .api-list { display:flex; flex-direction:column; gap:6px; }
+  .api { display:flex; gap:10px; align-items:baseline; font-size:12.5px; }
+  .api .m { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; font-weight:700; color:#fff; background:var(--accent); padding:1px 6px; border-radius:4px; flex:0 0 auto; }
+  .api .m.post { background:var(--amber); }
+  .api .p { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:var(--accent-ink); }
+  .api .d { color:var(--ink-soft); margin-left:auto; text-align:right; }
+
+  /* 색 스와치 */
+  .swatches { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+  .sw { border:1px solid var(--line); border-radius:11px; overflow:hidden; background:var(--surface); box-shadow:var(--shadow); }
+  .sw .chip { height:52px; }
+  .sw .lab { padding:8px 10px; font-size:11px; }
+  .sw .lab b { display:block; font-size:12px; }
+  .sw .lab .hex { color:var(--ink-soft); font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; }
+
+  footer { padding:40px 0 70px; color:var(--ink-faint); font-size:12.5px; }
+  footer b { color:var(--ink-soft); }
+
+  a.inline { color:var(--accent-ink); text-decoration:underline; text-underline-offset:2px; }
+
+  @media (prefers-reduced-motion:no-preference) {
+    .reveal { opacity:0; transform:translateY(10px); animation:rise .6s cubic-bezier(.2,.7,.3,1) forwards; }
+    @keyframes rise { to { opacity:1; transform:none; } }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead reveal">
+    <span class="kicker">🏌️ 디자인 브리프 · v1</span>
+    <h1>리버힐 캐디 일정 앱 — 다음은 UI·경험 설계</h1>
+    <p class="lede">기능은 안정화 단계에 들어섰다. 이 문서는 앱의 현재 모습·데이터·제약을 한눈에 펼쳐, 다른 AI나 디자이너가 곧바로 개선 설계에 참여할 수 있게 만든 공용 브리프다.</p>
+    <div class="meta-row">
+      <span class="tag">사용자 <b>김홍구 · 3부 스페어 캐디</b></span>
+      <span class="tag">플랫폼 <b>PWA · 안드로이드 크롬</b></span>
+      <span class="tag">화면 <b>폰 세로 전용</b></span>
+      <span class="tag">언어 <b>한국어</b></span>
+      <span class="tag">상태 <b>기능 안정화 · 디자인 착수 전</b></span>
+    </div>
+  </header>
+
+  <!-- 1. 앱은 무엇을 하는가 -->
+  <section>
+    <div class="eyebrow"><span class="no">01</span><span class="line"></span></div>
+    <h2>이 앱이 하는 일</h2>
+    <p class="sec-intro">골프장 캐디의 하루는 <b>대기의 불확실성</b>으로 채워진다. "오늘 내가 나가나? 몇 시에? 언제 집에서 출발하지?" — 이 질문에 스스로 답하려고 네이버 카페와 카톡 단톡방을 끝없이 새로고침한다. 앱의 단 하나의 임무는 <b>그 불확실성을 대신 감시해, 내 차례·내 시간이 정해지는 순간 폰으로 먼저 알려주는 것</b>이다.</p>
+    <div class="facts">
+      <div class="fact"><div class="k">감시원</div><div class="v">네이버 카페 + 카톡<small>3부 배치표·당일 추가·커트라인 소식을 자동 수집</small></div></div>
+      <div class="fact"><div class="k">두뇌</div><div class="v">이미지·텍스트 판독<small>배치표 사진에서 내 순번·티오프를 읽고, "○○님까지" 소식으로 내 차례 계산</small></div></div>
+      <div class="fact"><div class="k">알림</div><div class="v">웹푸시(FCM)<small>근무 확정·차례 임박·변경(번복)을 폰으로 즉시</small></div></div>
+      <div class="fact"><div class="k">덤</div><div class="v">근무·세무 기록<small>근무 확정일 자동 기록 → 차량 운행일지·계기판 사진 증빙 문서</small></div></div>
+    </div>
+  </section>
+
+  <!-- 2. 현재 화면 -->
+  <section>
+    <div class="eyebrow"><span class="no">02</span><span class="line"></span></div>
+    <h2>지금의 화면 — 개선의 출발점</h2>
+    <p class="sec-intro">현재 앱은 하나의 세로 스크롤에 <b>오늘 상황판 → 감시 상태 → 알림 켜기 → 소식 피드 → 근무·세무 기록</b>이 순서대로 쌓인 구조다. 아래는 실제 화면을 그대로 재현한 목업(왼쪽)과, 상황판 카드가 상태에 따라 바뀌는 모습(오른쪽)이다.</p>
+
+    <div class="showcase">
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="screen">
+            <div class="app-head">
+              <h4>🏌️ 리버힐 캐디 일정 알림</h4>
+              <p>새 일정 소식이 뜨면 폰으로 바로 알려드려요</p>
+            </div>
+            <div class="app-body">
+              <div class="a-card today-c spare">
+                <div class="tl">오늘 내 상황</div>
+                <div class="ts">🏌️ 스페어 대기</div>
+                <div class="td num">순번 30번 · 아직 근무 확정 전</div>
+                <div class="tw num">2026-07-17 · 6분 전 갱신</div>
+              </div>
+              <div class="hb"><b>🟢 감시 중</b> · 방금 확인</div>
+              <div class="a-card" style="padding:11px;">
+                <div class="a-btn">알림 켜짐</div>
+                <div class="a-note">✅ 소식이 오면 폰으로 알려드립니다</div>
+              </div>
+              <div class="feed-h">최근 감지된 소식</div>
+              <div class="a-item new">
+                <div class="subj"><span class="a-badge bg-amb">스페어</span>김홍구님, 오늘 3부 스페어 대기 (순번 30번)</div>
+                <div class="mline num"><span class="a-time">방금 전</span> · 전호성 · 일정게시판</div>
+              </div>
+              <div class="a-item">
+                <div class="subj"><span class="a-badge bg-amb">근무</span>3부 인턴캐디 배치로 22번 박준서님까지 근무</div>
+                <div class="mline num"><span class="a-time">14분 전</span> · 전호성</div>
+              </div>
+              <div class="a-item dim">
+                <div class="subj"><span class="a-badge bg-cat">개인근태</span>8월1일 정용만 프리휴무 신청합니다</div>
+                <div class="mline num"><span class="a-time">1시간 전</span> · 정용만</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-cap">현재 홈 — 한 스크롤에 모든 것</div>
+      </div>
+
+      <div style="flex:1; min-width:250px; max-width:340px;">
+        <h3 style="margin-bottom:12px;">상황판 카드의 상태 변주</h3>
+        <div class="variants">
+          <div class="variant">
+            <div class="today-c work">
+              <div class="tl">오늘 내 상황</div>
+              <div class="ts">✅ 오늘 근무</div>
+              <div class="td num">순번 24번 · 티오프 16:46 (OUT코스)</div>
+              <div class="tg num">🏠 집에서 14:46 출발 · 15:46 도착</div>
+            </div>
+            <div class="cap"><b>근무 확정</b> — 티오프·출발 시각</div>
+          </div>
+          <div class="variant">
+            <div class="today-c turn">
+              <div class="tl">오늘 내 상황</div>
+              <div class="ts">🚨 지금 출근 순번!</div>
+              <div class="td">앞 순번 모두 확정 · 곧 차례</div>
+            </div>
+            <div class="cap"><b>내 차례</b> — 최고 강조</div>
+          </div>
+          <div class="variant">
+            <div class="today-c spare">
+              <div class="tl">오늘 내 상황</div>
+              <div class="ts">🏌️ 스페어 대기</div>
+              <div class="td num">순번 30번 · 아직 근무 확정 전</div>
+            </div>
+            <div class="cap"><b>스페어</b> — 대기(≠휴무)</div>
+          </div>
+          <div class="variant">
+            <div class="today-c off">
+              <div class="tl">오늘 내 상황</div>
+              <div class="ts">😴 오늘 휴무</div>
+              <div class="td">오늘은 근무가 없어요</div>
+            </div>
+            <div class="cap"><b>휴무</b> — 확정 쉼</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. UI가 다뤄야 하는 상태 -->
+  <section>
+    <div class="eyebrow"><span class="no">03</span><span class="line"></span></div>
+    <h2>UI가 반드시 표현해야 하는 상태들</h2>
+    <p class="sec-intro">디자인은 예쁜 한 화면이 아니라 <b>이 상태들 전부</b>가 각각 또렷하게 읽히도록 만드는 일이다. 상황판·피드·감시 상태 각각이 아래 값을 가진다.</p>
+
+    <h3 style="margin-bottom:10px;">① 오늘 내 상황 (상황판 히어로)</h3>
+    <div class="tbl-scroll" style="margin-bottom:22px;">
+      <table>
+        <thead><tr><th>상태값 <code>status</code></th><th>화면</th><th>함께 보여줄 것</th></tr></thead>
+        <tbody>
+          <tr><td><code>your_turn</code></td><td><span class="pill turn">지금 차례</span></td><td>최고 강조. "지금 출근 순번" + (있으면) 티오프·출발 시각</td></tr>
+          <tr><td><code>assigned</code> / <code>work</code></td><td><span class="pill work">근무</span></td><td>순번, 티오프 HH:MM + 코스(OUT/IN), <b>집 출발·도착 시각</b></td></tr>
+          <tr><td><code>spare</code> / <code>waiting</code></td><td><span class="pill spare">스페어 대기</span></td><td>순번(예 30번), "확정 전". 앞에 몇 명 남았는지(발표됐을 때만)</td></tr>
+          <tr><td><code>off</code></td><td><span class="pill off">휴무</span></td><td>"오늘 근무 없음". 조용한 톤</td></tr>
+          <tr><td>없음/미상</td><td><span class="pill off">숨김</span></td><td>상황판 카드 자체를 감춤 (아직 오늘 정보 없음)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-bottom:10px;">② 감시·전달 건강 (신뢰 지표)</h3>
+    <div class="tbl-scroll" style="margin-bottom:22px;">
+      <table>
+        <thead><tr><th>지표</th><th>현재</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>감시(heartbeat)</td><td>🟢 감시 중 · N분 전 확인 / 🔴 감시 멈춤</td><td>서버가 카페를 마지막으로 확인한 시각. <b>이미 구현됨</b></td></tr>
+          <tr><td>전달(구독)</td><td class="muted">— 없음 —</td><td>이 폰이 <b>실제로 알림을 받을 수 있는지</b>. 최근 "죽은 구독" 사고의 핵심 → 신설 필요</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-bottom:10px;">③ 소식 피드 아이템</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>속성</th><th>값</th><th>UI 쓰임</th></tr></thead>
+        <tbody>
+          <tr><td><code>relevant</code></td><td>true / false</td><td>false는 흐리게 + "무관한 소식 N개" 토글로 접기</td></tr>
+          <tr><td><code>status</code></td><td>your_turn·near·assigned·spare·off</td><td>배지 색(빨강/주황/초록)</td></tr>
+          <tr><td><code>category</code></td><td>추가·변동·취소·개인근태·배치표…</td><td>작은 회색 태그</td></tr>
+          <tr><td><code>aiMessage</code> / <code>subject</code></td><td>판독 요약 / 원제목</td><td>요약을 헤드라인, 원제목을 보조줄</td></tr>
+          <tr><td><code>detectedAt</code></td><td>타임스탬프</td><td>상대시간("14분 전") + 안읽음(●) 하이라이트</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 4. UX 부족점 분석 -->
+  <section>
+    <div class="eyebrow"><span class="no">04</span><span class="line"></span></div>
+    <h2>지금 부족한 것 — UX 진단</h2>
+    <p class="sec-intro">우선순위 순. <span class="pill turn" style="font-size:10px;">P0</span> 신뢰가 최우선인 이유는, 방금 <b>죽은 구독으로 알림이 몇 건이나 조용히 새어나간 사고</b>를 겪었기 때문이다. 알림 앱은 "안 오는 것"이 최악의 실패다.</p>
+
+    <div class="gaps">
+      <div class="gap p0">
+        <div class="gap-top"><span class="prio-tag">P0 · 신뢰</span><h3>알림이 실제 도착하는지 앱이 안 보여준다</h3></div>
+        <ul>
+          <li>감시(서버가 카페를 보는지)는 표시하지만, <b>전달(이 폰이 푸시를 받을 수 있는지)</b>은 어디에도 없다.</li>
+          <li>구독이 만료돼 끊겨도 사용자는 <b>알 방법이 없다</b> — 그냥 조용해질 뿐. 실제로 그렇게 여러 건을 놓쳤다.</li>
+          <li>필요: "이 기기 알림 정상/끊김" 지표 + 끊기면 <b>원터치 재등록</b> 유도 + (선택) 마지막 도착 확인 시각.</li>
+        </ul>
+      </div>
+
+      <div class="gap p1">
+        <div class="gap-top"><span class="prio-tag">P1 · 한눈</span><h3>상황판이 히어로인데 텍스트로만 말한다</h3></div>
+        <ul>
+          <li>가장 중요한 질문 "<b>언제 집에서 나가야 하나</b>"가 한 줄 텍스트에 묻힌다.</li>
+          <li>없는 것: <b>카운트다운</b>("집 출발까지 2시간 15분"), <b>타임라인 스트립</b>(지금 → 집출발 → 도착 → 티오프), 스페어 <b>큐 시각화</b>("30번 중 앞에 N명").</li>
+          <li>대기의 불확실성을 없애는 게 앱의 존재 이유 → 이 카드가 감정적으로도 "안심"을 줘야 한다.</li>
+        </ul>
+      </div>
+
+      <div class="gap p1">
+        <div class="gap-top"><span class="prio-tag">P1 · 구조</span><h3>기능이 늘었는데 내비게이션이 없다</h3></div>
+        <ul>
+          <li>상황판·피드·근무기록·세무증빙이 <b>한 스크롤에 전부</b> 섞여 길다.</li>
+          <li>하단 탭(예: <b>홈 · 소식 · 기록</b>) 또는 명확한 구획으로 분리 필요.</li>
+          <li>매일 보는 건 상황판·피드, 가끔 쓰는 건 세무 — 사용 빈도로 위계를 나눠야 한다.</li>
+        </ul>
+      </div>
+
+      <div class="gap p2">
+        <div class="gap-top"><span class="prio-tag">P2 · 첫인상</span><h3>온보딩·빈 상태가 빈약하다</h3></div>
+        <ul>
+          <li>첫 사용자는 맥락 없이 "알림 켜기" 버튼만 본다 — 왜 켜야 하는지 설득이 없다.</li>
+          <li>빈 피드는 "아직 감지된 소식이 없어요" 한 줄. 감시가 살아있다는 안심을 함께 줘야.</li>
+        </ul>
+      </div>
+
+      <div class="gap p2">
+        <div class="gap-top"><span class="prio-tag">P2 · 환경</span><h3>다크모드가 없다</h3></div>
+        <ul>
+          <li>캐디는 <b>이른 새벽·늦은 저녁</b>에 폰을 본다(3부 티오프는 16시 이후). 밝은 화면만 있다.</li>
+          <li>야외·역광 가독성, 눈부심 모두 다크모드가 해결한다.</li>
+        </ul>
+      </div>
+
+      <div class="gap p3">
+        <div class="gap-top"><span class="prio-tag">P3 · 밀도</span><h3>근무·세무 섹션이 강력하지만 빽빽하다</h3></div>
+        <ul>
+          <li>작은 입력칸, 사진 3슬롯, 계기판 숫자칸이 인라인으로 촘촘 — 별도 화면으로 숨 쉴 공간 필요.</li>
+          <li>피드 배지 종류가 많고 규칙이 눈에 안 들어온다. 시간 그룹핑(오늘/어제)도 없다.</li>
+        </ul>
+      </div>
+
+      <div class="gap p3">
+        <div class="gap-top"><span class="prio-tag">P3 · 마감</span><h3>접근성·피드백 디테일</h3></div>
+        <ul>
+          <li>키보드 포커스 상태 없음, 일부 muted 텍스트 대비 약함, 로딩 스켈레톤 없음, 저장 성공 피드백이 약하다.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 디자인 과제 -->
+  <section>
+    <div class="eyebrow"><span class="no">05</span><span class="line"></span></div>
+    <h2>참여하는 이에게 — 디자인 과제</h2>
+    <p class="sec-intro">개선 제안은 이 질문들에 답하는 형태면 좋다. 정답은 하나가 아니다.</p>
+    <div class="asks">
+      <div class="ask"><div class="q-no">Q1</div><h3>상황판 히어로 재설계</h3><p>대기의 불확실성을 없애는 "한눈" 화면. 카운트다운·타임라인·큐 위치를 어떻게 담을까? 4가지 상태 모두 우아하게.</p></div>
+      <div class="ask"><div class="q-no">Q2</div><h3>정보 구조</h3><p>한 스크롤을 유지할까, 하단 탭으로 나눌까? 매일/가끔 쓰는 기능의 위계는?</p></div>
+      <div class="ask"><div class="q-no">Q3</div><h3>신뢰 레이어</h3><p>감시(서버)와 전달(구독) 건강을, 불안하지 않고 안심되게 보여주는 방법. 끊겼을 때의 복구 흐름.</p></div>
+      <div class="ask"><div class="q-no">Q4</div><h3>다크모드 + 야외 가독성</h3><p>새벽·야간·역광에서 읽히는 이중 테마. 상태 색(초록/주황/빨강)이 두 테마에서 다 살아있게.</p></div>
+      <div class="ask"><div class="q-no">Q5</div><h3>세무 기록 간소화</h3><p>사진 3장·계기판 입력을 부담 없이 만드는 흐름. 별도 화면? 촬영 유도?</p></div>
+      <div class="ask"><div class="q-no">Q6</div><h3>정체성</h3><p>지금은 이모지 위주. 골프장 캐디의 세계에 맞는 고유한 톤·타이포·컬러가 있다면?</p></div>
+    </div>
+  </section>
+
+  <!-- 6. 제약 & 기술 -->
+  <section>
+    <div class="eyebrow"><span class="no">06</span><span class="line"></span></div>
+    <h2>지켜야 할 제약</h2>
+    <p class="sec-intro">디자인은 이 경계 안에서 자유롭게. 경계를 넘는 제안(예: 네이티브 앱, 로그인 시스템)은 별도 논의가 필요하다.</p>
+    <div class="constraints">
+      <div class="con"><span class="dot"></span><div class="txt"><b>PWA · 안드로이드 크롬</b><span>홈 화면 설치형 웹앱. iOS는 후순위.</span></div></div>
+      <div class="con"><span class="dot"></span><div class="txt"><b>폰 세로 전용</b><span>본문 최대폭 640px. 데스크톱 고려 불필요.</span></div></div>
+      <div class="con"><span class="dot"></span><div class="txt"><b>한국어 · 시스템 폰트</b><span>한글 웹폰트는 수 MB라 비현실적. 위계는 굵기·크기로.</span></div></div>
+      <div class="con"><span class="dot"></span><div class="txt"><b>단일 사용자</b><span>김홍구 1인용. 로그인·다중계정 없음.</span></div></div>
+      <div class="con"><span class="dot"></span><div class="txt"><b>정적 자체완결</b><span>public/의 index.html·app.js·sw.js. 외부 CDN 불가.</span></div></div>
+      <div class="con"><span class="dot"></span><div class="txt"><b>실시간 아님</b><span>30초 폴링으로 상황판·피드 갱신. 웹푸시는 즉시.</span></div></div>
+    </div>
+
+    <div class="stack-grid" style="margin-top:22px;">
+      <div class="panel">
+        <h3>기술 스택</h3>
+        <div class="kv"><span class="kk">프론트</span><span class="vv">순수 HTML/CSS/JS (프레임워크 없음)</span></div>
+        <div class="kv"><span class="kk">서버</span><span class="vv">Node.js · Express · pm2</span></div>
+        <div class="kv"><span class="kk">판독</span><span class="vv">Gemini 비전 (flash-lite)</span></div>
+        <div class="kv"><span class="kk">알림</span><span class="vv">Web Push · VAPID · FCM</span></div>
+        <div class="kv"><span class="kk">호스팅</span><span class="vv">가정용 리눅스 PC · Tailscale Funnel</span></div>
+        <div class="kv"><span class="kk">저장</span><span class="vv">JSON 파일 (DB 없음)</span></div>
+      </div>
+      <div class="panel">
+        <h3>프론트가 쓰는 API</h3>
+        <div class="api-list">
+          <div class="api"><span class="m">GET</span><span class="p">/api/today</span><span class="d">오늘 상황판</span></div>
+          <div class="api"><span class="m">GET</span><span class="p">/api/health</span><span class="d">감시 heartbeat</span></div>
+          <div class="api"><span class="m">GET</span><span class="p">/api/recent</span><span class="d">소식 피드</span></div>
+          <div class="api"><span class="m">GET</span><span class="p">/api/config</span><span class="d">VAPID 공개키</span></div>
+          <div class="api"><span class="m post">POST</span><span class="p">/api/subscribe</span><span class="d">푸시 구독 등록</span></div>
+          <div class="api"><span class="m post">POST</span><span class="p">/api/test</span><span class="d">테스트 알림</span></div>
+          <div class="api"><span class="m">GET</span><span class="p">/api/worklog</span><span class="d">근무·세무 기록</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. 현재 디자인 토큰 -->
+  <section>
+    <div class="eyebrow"><span class="no">07</span><span class="line"></span></div>
+    <h2>현재 디자인 시스템 — 존중하되 진화시켜도 좋다</h2>
+    <p class="sec-intro">기존 앱은 <b>페어웨이 그린</b>을 브랜드색으로 쓴다. 상태 색(근무=초록, 스페어=주황, 차례=빨강, 휴무=회색)은 의미가 굳어 있으니 <b>의미는 유지</b>하되 색조·명도는 다듬어도 된다.</p>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#0b5d34;"></div><div class="lab"><b>페어웨이 그린</b><span class="hex">#0b5d34</span><span class="hex" style="color:var(--ink-faint)">브랜드 · 헤더</span></div></div>
+      <div class="sw"><div class="chip" style="background:#0f7a44;"></div><div class="lab"><b>그래스 그린</b><span class="hex">#0f7a44</span><span class="hex" style="color:var(--ink-faint)">근무 · 강조</span></div></div>
+      <div class="sw"><div class="chip" style="background:linear-gradient(135deg,#c98a1e,#9c6710);"></div><div class="lab"><b>스페어 앰버</b><span class="hex">#c98a1e</span><span class="hex" style="color:var(--ink-faint)">대기</span></div></div>
+      <div class="sw"><div class="chip" style="background:linear-gradient(135deg,#d13b3b,#a52121);"></div><div class="lab"><b>차례 레드</b><span class="hex">#d13b3b</span><span class="hex" style="color:var(--ink-faint)">지금 출근</span></div></div>
+      <div class="sw"><div class="chip" style="background:#f4f6f5;"></div><div class="lab"><b>페이퍼</b><span class="hex">#f4f6f5</span><span class="hex" style="color:var(--ink-faint)">배경</span></div></div>
+      <div class="sw"><div class="chip" style="background:#6b7772;"></div><div class="lab"><b>뮤트</b><span class="hex">#6b7772</span><span class="hex" style="color:var(--ink-faint)">보조 텍스트</span></div></div>
+    </div>
+  </section>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0;">
+    리버힐 캐디 일정 앱 · 디자인 브리프 v1 · 2026-07-17 &nbsp;·&nbsp; <b>이 문서를 다른 AI/디자이너에게 공유해 개선안을 받으세요.</b> 현재 화면은 <b>출발점</b>일 뿐, 다시 그려도 좋습니다.
+  </footer>
+</div>
+
+<script>
+  // 로드 시 부드러운 등장(모션 선호 존중은 CSS @media에서 처리)
+  document.querySelectorAll('section, .masthead').forEach((el, i) => {
+    el.classList.add('reveal');
+    el.style.animationDelay = (i * 40) + 'ms';
+  });
+</script>

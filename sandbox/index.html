@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>리버힐 UI·UX 샘플 3안</title>
+  <meta http-equiv="refresh" content="0; url=./prototypes.html">
+  <style>
+    :root { color-scheme: light dark; --bg:#edf1ee; --paper:#fff; --ink:#17211c; --muted:#617068; --line:#dce4df; --green:#0b5d34; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#0e1411; --paper:#151d19; --ink:#edf3ef; --muted:#9aa8a0; --line:#2a3730; --green:#61c68d; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif; line-height:1.75; }
+    main { width:min(820px,calc(100% - 32px)); margin:32px auto; padding:clamp(24px,6vw,64px); background:var(--paper); border:1px solid var(--line); border-radius:20px; box-shadow:0 16px 50px rgba(15,35,24,.08); }
+    #content { white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:15px; }
+    .loading { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <main><div id="content" class="loading">제안서를 불러오는 중…</div></main>
+  <script>
+    fetch('./ui-design-directions.md')
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
+      .then((text) => {
+        const content = document.querySelector('#content');
+        content.className = '';
+        content.textContent = text;
+      })
+      .catch((error) => {
+        document.querySelector('#content').textContent = `문서를 불러오지 못했습니다: ${error.message}`;
+      });
+  </script>
+</body>
+</html>
