@@ -81,10 +81,12 @@ ${postedLine}
 5) 오른쪽 "조(組)" 목록이나 대기 명단에서 근처 줄에 보이는 시간을 "${name}"에게 붙이지 마세요(줄 맞춤일 뿐).
 6) 배경색을 도저히 알 수 없을 때만(myCellColor="unknown") 티오프 유무로 판단(있으면 근무, 없으면 스페어).
 
-★ 3부 티오프 표 통째 추출(teeGrid) — 시간을 눈대중하지 말고 표를 그대로 옮기세요:
-- "OUT 3부 IN" 시간표의 모든 행을 {"pos":순번(정수), "time":"HH:MM", "course":"OUT" 또는 "IN"} 배열로 빠짐없이 옮기세요. (OUT 칸 순번은 course=OUT, IN 칸 순번은 course=IN)
-- 시간은 위에서 아래로 보통 몇 분 간격으로 증가합니다(예: 16:39, 16:46, 16:53…). 그 규칙에 맞게 정확히 읽으세요.
-- ${name}의 티오프는 여기서 코드가 순번으로 찾습니다 — 당신은 표만 정확히 옮기고 ${name} 순번(myPosition)만 정확히 읽으면 됩니다.
+★ ${part}부 티오프 표(teeGrid) 정확 추출 — ★★행에 순서대로 번호를 매기는 실수를 절대 하지 마세요:
+- 표는 [OUT 순번칸 | 시간칸 | IN 순번칸] 3열 구조입니다. **대부분의 시간 행은 순번칸이 비어 있습니다**(시간만 있고 아무 숫자 없음).
+- 각 시간 행에서 OUT칸에 **눈으로 실제 인쇄된 숫자**가 보이면 {"pos":그 숫자,"time":그 행 시간,"course":"OUT"}, IN칸에 숫자가 보이면 {"pos":그 숫자,"time":그 행 시간,"course":"IN"}. OUT·IN 둘 다 비어 있으면 그 행은 teeGrid에 넣지 마세요.
+- ★절대 맨 위 행부터 1,2,3,4…로 순번을 지어내지 마세요. OUT 순번과 IN 순번은 **각각 별개의 띄엄띄엄한 수열**입니다(예: OUT=1,3,6,10,13 … / IN=2,7,9,11 …). 대부분 행은 순번이 없습니다.
+- 시간은 위→아래로 일정 간격 증가(예: 16:32,16:39,16:46,16:53,17:00,17:07,17:14,17:21,17:28…). 순번이 인쇄된 행을 찾아 그 행의 시간과 정확히 짝지으세요.
+- ${name}의 티오프는 코드가 이 표에서 ${name} 순번(myPosition)으로 찾습니다 — 표만 정확히 옮기고 myPosition만 정확히 읽으면 됩니다.
 
 ★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
 - part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
@@ -283,11 +285,34 @@ function weakBoardRead(v) {
 // ★코드가 3부 티오프 표(teeGrid)에서 김홍구 순번으로 티오프를 확정(모델의 눈대중 대신).
 //  · 순번이 표에 있으면 → 그 시간이 김홍구 티오프(근무 배정).
 //  · 순번이 표에 없으면 → 스페어(모델이 붙인 티오프 제거). 모델이 근무라 우겼으면 '확인 필요'.
+// 표 판독이 '행 순서대로 번호 매기기' 실패인지 감지: 순번이 1,2,3,4…로 완전 순차이거나 코스가 전부 동일하면 의심.
+function gridLooksRownumbered(grid) {
+  if (!Array.isArray(grid) || grid.length < 4) return false;
+  const pos = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
+  if (pos.length < 4) return false;
+  const courses = new Set(grid.map((g) => /IN/i.test(String(g?.course)) ? 'IN' : 'OUT'));
+  const allSameCourse = courses.size === 1;                 // 실제 표는 OUT·IN 섞임
+  let sequential = 0;
+  for (let i = 1; i < pos.length; i++) if (pos[i] === pos[i - 1] + 1) sequential++;
+  const mostlySequential = sequential >= pos.length - 2;    // 거의 1,2,3,4…
+  return allSameCourse && mostlySequential;
+}
+
 function resolveTeeByGrid(verdict) {
   if (!verdict) return;
   const grid = Array.isArray(verdict.teeGrid) ? verdict.teeGrid : [];
   const mp = Number(verdict.myPosition);
   if (!(mp > 0) || grid.length < 3) return; // 표를 제대로 못 옮겼으면 기존 판독 유지
+  // ★표를 순서대로 번호 매긴 오독이면 티오프를 신뢰하지 않음(근무확정 색은 유지, 시간만 '확인 필요').
+  if (gridLooksRownumbered(grid)) {
+    const color0 = String(verdict.myCellColor || '').toLowerCase();
+    const work0 = /white|흰|colored|색칠|녹|하늘|green|blue/.test(color0);
+    verdict.teeTime = null;
+    verdict.myStatus = work0 ? 'work' : (verdict.myStatus === 'spare' ? 'spare' : verdict.myStatus);
+    verdict._uncertain = verdict._uncertain || `티오프 표 판독 불안정(행 번호매기기 의심) — 시각은 배치표에서 확인 필요`;
+    verdict._teeSource = 'unreliable-grid';
+    return;
+  }
   const hit = grid.find((g) => Number(g?.pos) === mp && /\d{1,2}:\d{2}/.test(String(g?.time || '')));
   const color = String(verdict.myCellColor || '').toLowerCase();
   const isWorkColor = /white|흰|colored|색칠|녹|하늘|green|blue/.test(color);
