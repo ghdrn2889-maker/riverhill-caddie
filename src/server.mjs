@@ -47,7 +47,7 @@ app.post('/api/test', async (req, res) => {
 // 외부 메시지 수신(카톡 단톡방 등) → 카페 글과 동일한 judge 파이프라인으로 처리.
 //  폰의 알림 포워더(MacroDroid/Tasker/커스텀앱)가 단톡방 메시지를 여기로 POST 한다.
 //  보안: 공개 URL이므로 INGEST_TOKEN(.env) 이 있으면 x-token 헤더/쿼리로 검사(위조 방지).
-app.post('/api/ingest', async (req, res) => {
+async function handleIngest(req, res) {
   const b = req.body || {};
   const q = req.query || {};
   const text = String(b.text || q.text || '').trim();
@@ -80,7 +80,9 @@ app.post('/api/ingest', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+}
+app.post('/api/ingest', handleIngest);
+app.get('/api/ingest', handleIngest); // 폰 브라우저·간단 포워더용(쿼리 파라미터로도 수신)
 
 // 라이브 테스트용: 특정 글을 실제로 분석해서 폰으로 푸시 (?id=26231)
 app.post('/api/simulate', async (req, res) => {
