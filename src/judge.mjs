@@ -353,6 +353,11 @@ export async function judge(article, today = null) {
   //  텍스트/카톡/일반 글은 기본 모델(flash-lite) 유지.
   const boardModel = isBoard ? (process.env.GEMINI_BOARD_MODEL || null) : null;
   let verdict = await callGeminiJSON(buildPrompt(article), img, boardModel);
+  // 안전망: 배치표 전용 모델(무료 등급)이 429 등으로 실패(null)하면 기본 모델(flash-lite)로 강등 재시도.
+  if (isBoard && boardModel && !verdict) {
+    console.log('[judge] 배치표 모델 실패 → 기본 모델로 강등 재시도');
+    verdict = await callGeminiJSON(buildPrompt(article), img, null);
+  }
   // ★배치표 판독이 부실하면(순번·티오프 실패) 최대 2회 재시도 — 비전 불안정으로
   //  최신 배치표를 놓치거나 pos=0 같은 실패값이 나오던 문제 완화.
   for (let tries = 0; isBoard && weakBoardRead(verdict) && tries < 2; tries++) {
