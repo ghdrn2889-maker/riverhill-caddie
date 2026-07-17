@@ -282,18 +282,18 @@ function setEnabled() {
 
 async function loadRecent() {
   try {
-    const list = await (await fetch('/api/recent')).json();
+    const all = await (await fetch('/api/recent')).json();
     const box = $('recent');
-    if (!list.length) { box.innerHTML = '<div class="empty">아직 감지된 소식이 없어요.</div>'; updateUnread(0, 0); return; }
+    if (!all.length) { box.innerHTML = '<div class="empty">아직 감지된 소식이 없어요.</div>'; updateUnread(0, 0); return; }
 
     const lastRead = getLastRead();
     let unread = 0, newest = 0;
 
-    box.innerHTML = list.map((a) => {
+    const renderItem = (a) => {
       const ts = a.detectedAt || 0;
       if (ts > newest) newest = ts;
       const isNew = ts > lastRead;
-      if (isNew) unread++;
+      if (isNew && a.relevant !== false) unread++; // 안읽음은 '관련 소식'만 카운트
 
       const badge = a.status === 'your_turn' ? '<span class="badge">지금 차례</span>'
         : a.status === 'near' ? '<span class="badge">곧 차례</span>'
@@ -301,7 +301,6 @@ async function loadRecent() {
         : a.status === 'spare' ? '<span class="badge med">스페어</span>'
         : a.status === 'off' ? '<span class="badge med">근무없음</span>'
         : (a.relevant && a.priority === 'high') ? '<span class="badge med">일정</span>' : '';
-      // 무관(피드에만 남긴) 글은 흐리게 + 분류 태그.
       const dim = a.relevant === false ? ' dim' : '';
       const cat = a.category ? `<span class="cat">${escapeHtml(a.category)}</span>` : '';
       const headline = a.aiMessage || a.subject;
@@ -317,7 +316,27 @@ async function loadRecent() {
       return `<a class="item${isNew ? ' new' : ''}${dim}" href="${a.url}" target="_blank" rel="noopener">
         <div class="subj">${cat}${badge}${escapeHtml(headline)}</div>
         ${metaLine ? `<div class="meta">${metaLine}</div>` : ''}</a>`;
-    }).join('');
+    };
+
+    // 관련 소식만 기본 표시. 무관한 소식은 접어두고(놓침 대비) 토글로 열람 가능.
+    const relevant = all.filter((a) => a.relevant !== false);
+    const hidden = all.filter((a) => a.relevant === false);
+
+    let html = relevant.length ? relevant.map(renderItem).join('') : '<div class="empty">관련 소식이 아직 없어요.</div>';
+    if (hidden.length) {
+      const hiddenHtml = hidden.map(renderItem).join('');
+      html += `<button id="hiddenToggle" class="readall" style="margin:12px auto 0; display:block;">무관한 소식 ${hidden.length}개 보기 ▾</button>
+        <div id="hiddenList" style="display:none; margin-top:8px;">${hiddenHtml}</div>`;
+    }
+    box.innerHTML = html;
+
+    const t = document.getElementById('hiddenToggle');
+    if (t) t.onclick = () => {
+      const hl = document.getElementById('hiddenList');
+      const open = hl.style.display === 'none';
+      hl.style.display = open ? 'block' : 'none';
+      t.textContent = open ? `무관한 소식 ${hidden.length}개 숨기기 ▴` : `무관한 소식 ${hidden.length}개 보기 ▾`;
+    };
 
     updateUnread(unread, newest);
   } catch {}
