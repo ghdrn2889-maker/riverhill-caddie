@@ -60,12 +60,13 @@ async function handleIngest(req, res) {
   const source = b.source || q.source || '카톡';
   const roomName = b.room || q.room || '';
   const sender = b.sender || q.sender || '';
-  // 허용된 단톡방만 처리(개인 카톡은 서버로 안 옴). ALLOWED_ROOMS 미설정이면 전체 허용.
-  //  방 이름이 넘어왔는데 허용 목록에 없으면 즉시 무시(저장·판단·푸시 안 함).
-  const allowed = (process.env.ALLOWED_ROOMS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (allowed.length && roomName && !allowed.some((a) => roomName.includes(a) || a.includes(roomName))) {
-    console.log(`💬 [ingest] 방 '${roomName}' 미허용 → 무시`);
-    return res.json({ ok: true, skipped: true, reason: 'room_not_allowed' });
+  // 카톡 그룹 알림은 제목({not_title})에 '방 이름'이 아니라 '보낸 사람'이 담겨 오므로
+  // 방 이름으로 거를 수 없다 → 내용 기반 판독기(judge)가 3부 관련성으로 거른다(무관 메시지는 피드에만·숨김).
+  // (선택) ALLOWED_SENDERS 를 설정하면 그 발신자만 통과시키는 화이트리스트로 동작(사생활 강화).
+  const allowSenders = (process.env.ALLOWED_SENDERS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (allowSenders.length && !allowSenders.some((a) => `${roomName} ${sender}`.includes(a))) {
+    console.log(`💬 [ingest] 발신자 '${roomName || sender}' 화이트리스트 밖 → 무시`);
+    return res.json({ ok: true, skipped: true, reason: 'sender_not_allowed' });
   }
   const room = roomName ? ` · ${roomName}` : '';
   const pseudo = {
