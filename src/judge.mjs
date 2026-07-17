@@ -73,6 +73,11 @@ ${postedLine}
 3) 오른쪽 "조(組)" 목록(1조/2조/3조)이나 대기 명단에 "${name}"이 있고 그 근처 줄에 시간이 보여도, 그건 "${name}"의 티오프가 절대 아닙니다(줄 맞춤일 뿐). 남의 시간을 "${name}"에게 붙이지 마세요.
 4) 요약 규칙: **배정된 티오프 없음 + 대기 순번 있음 = 반드시 스페어(대기).** 티오프를 '찾아내려' 애쓰지 말고, 없으면 없는 겁니다.
 
+★ 3부 티오프 표 통째 추출(teeGrid) — 시간을 눈대중하지 말고 표를 그대로 옮기세요:
+- "OUT 3부 IN" 시간표의 모든 행을 {"pos":순번(정수), "time":"HH:MM", "course":"OUT" 또는 "IN"} 배열로 빠짐없이 옮기세요. (OUT 칸 순번은 course=OUT, IN 칸 순번은 course=IN)
+- 시간은 위에서 아래로 보통 몇 분 간격으로 증가합니다(예: 16:39, 16:46, 16:53…). 그 규칙에 맞게 정확히 읽으세요.
+- ${name}의 티오프는 여기서 코드가 순번으로 찾습니다 — 당신은 표만 정확히 옮기고 ${name} 순번(myPosition)만 정확히 읽으면 됩니다.
+
 ★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
 - part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
 - **절대 기본값으로 ${part}부라고 가정하지 마세요.** ${part}부라는 근거(명시된 "${part}부" / "${name}" 이름·순번 / ${part}부 배치표 / ${part}부 시간대(오후·저녁) 티오프)가 하나도 없으면 part는 실제 부 숫자 또는 "unknown"으로.
@@ -99,6 +104,7 @@ ${postedLine}
   "part3Roster": ["${part}부 전체 명단 이름들 — 전체 배치표일 때만, 아니면 []"],
   "crossPartNames": ["명단 중 여러 부 중복 표기((2,3)/(54)) 붙은 이름들, 없으면 []"],
   "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
+  "teeGrid": [{ "pos": 정수, "time": "HH:MM", "course": "OUT 또는 IN" }],
   "category": "배치표|번호표|변동|추가|취소|시간조정|공지|개인근태|가배치|기타",
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
   "dateLabel": "예: 7월 14일 화요일 (모르면 빈칸)",
@@ -265,6 +271,29 @@ function weakBoardRead(v) {
   return !posOk && !teeOk;
 }
 
+// ★코드가 3부 티오프 표(teeGrid)에서 김홍구 순번으로 티오프를 확정(모델의 눈대중 대신).
+//  · 순번이 표에 있으면 → 그 시간이 김홍구 티오프(근무 배정).
+//  · 순번이 표에 없으면 → 스페어(모델이 붙인 티오프 제거). 모델이 근무라 우겼으면 '확인 필요'.
+function resolveTeeByGrid(verdict) {
+  if (!verdict) return;
+  const grid = Array.isArray(verdict.teeGrid) ? verdict.teeGrid : [];
+  const mp = Number(verdict.myPosition);
+  if (!(mp > 0) || grid.length < 3) return; // 표를 제대로 못 옮겼으면 기존 판독 유지
+  const hit = grid.find((g) => Number(g?.pos) === mp && /\d{1,2}:\d{2}/.test(String(g?.time || '')));
+  if (hit) {
+    verdict.teeTime = String(hit.time).match(/\d{1,2}:\d{2}/)[0];
+    if (hit.course) verdict.course = /IN/i.test(String(hit.course)) ? 'IN' : 'OUT';
+    if (!['work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'assigned';
+    verdict._teeSource = 'grid';
+  } else {
+    if (verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime)) {
+      verdict._uncertain = verdict._uncertain || `표에 순번 ${mp}이 없는데 모델이 티오프 ${verdict.teeTime} 제시(충돌)`;
+    }
+    verdict.teeTime = null;
+    if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
+  }
+}
+
 export async function judge(article, today = null) {
   const img = article.images?.[0] || null;
   const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
@@ -276,12 +305,15 @@ export async function judge(article, today = null) {
     if (retry) verdict = retry;
     if (retry && !weakBoardRead(retry)) break;
   }
-  // ★티오프(근무 배정)가 읽힌 배치표는 교차검증: 한 번 더 읽어 티오프·순번이 다르면 '확인 필요'.
+  resolveTeeByGrid(verdict); // 코드가 순번→티오프 확정(눈대중 오독 차단)
+
+  // ★티오프(근무 배정)가 읽힌 배치표는 교차검증: 한 번 더 읽어(표 기준) 티오프·순번이 다르면 '확인 필요'.
   //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
   const teeOf = (v) => (String(v?.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
   if (isBoard && teeOf(verdict)) {
     const v2 = await callGeminiJSON(buildPrompt(article), img);
     if (v2) {
+      resolveTeeByGrid(v2);
       const posOf = (v) => (Number(v?.myPosition) > 0 ? Number(v.myPosition) : '');
       if (teeOf(v2) !== teeOf(verdict) || posOf(v2) !== posOf(verdict)) {
         verdict._uncertain = `판독 불일치(1차 순번${posOf(verdict) || '-'}/티오프${teeOf(verdict) || '-'} ↔ 2차 순번${posOf(v2) || '-'}/티오프${teeOf(v2) || '-'})`;

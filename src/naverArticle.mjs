@@ -13,8 +13,11 @@ function extractImages(html) {
   let m;
   while ((m = re.exec(html)) !== null) {
     const u = m[1];
-    // 캐디 프로필/기본이미지 제외, 실제 첨부(cafeptthumb/phinf)만
-    if (u.includes('cafeptthumb') || u.includes('phinf')) urls.add(u);
+    // 캐디 프로필/기본이미지 제외, 실제 첨부(cafeptthumb/phinf)만.
+    // 배치표 숫자 판독 정확도를 위해 축소본(type=wNNN)을 더 큰 해상도로 요청.
+    if (u.includes('cafeptthumb') || u.includes('phinf')) {
+      urls.add(/[?&]type=w\d+/.test(u) ? u.replace(/type=w\d+/, 'type=w2000') : u);
+    }
   }
   return [...urls];
 }
