@@ -250,13 +250,29 @@ export function applyRoster(verdict, today, article) {
 // 글 → Gemini가 '편견 없이' 판정(stateless) → 최종 결정. { relevant, push, title, body, status, rawVerdict }
 //  today 는 프롬프트에 넣지 않는다(이전 상태가 판독을 오염시키지 않게).
 //  단, 텍스트만 있어 순번을 못 읽었으면 '같은 날 잠긴 순번'으로만 코드가 채운다(안전한 보완).
+// 배치표 이미지인데 순번도 티오프도 못 읽으면 '부실 판독'(비전 불안정) → 재시도 대상.
+function weakBoardRead(v) {
+  if (!v) return true;
+  const posOk = Number(v.myPosition) > 0;
+  const teeOk = v.teeTime && /\d{1,2}:\d{2}/.test(v.teeTime);
+  return !posOk && !teeOk;
+}
+
 export async function judge(article, today = null) {
   const img = article.images?.[0] || null;
-  const verdict = await callGeminiJSON(buildPrompt(article), img);
-  if (verdict && !Number.isFinite(Number(verdict.myPosition))
+  const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
+  let verdict = await callGeminiJSON(buildPrompt(article), img);
+  // ★배치표 판독이 부실하면(순번·티오프 실패) 최대 2회 재시도 — 비전 불안정으로
+  //  최신 배치표를 놓치거나 pos=0 같은 실패값이 나오던 문제 완화.
+  for (let tries = 0; isBoard && weakBoardRead(verdict) && tries < 2; tries++) {
+    const retry = await callGeminiJSON(buildPrompt(article), img);
+    if (retry) verdict = retry;
+    if (retry && !weakBoardRead(retry)) break;
+  }
+  if (verdict && !(Number(verdict.myPosition) > 0)
       && today && today.myPosition
       && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
-    verdict.myPosition = today.myPosition; // 잠긴 순번 보완(텍스트-only '○○까지' 계산용)
+    verdict.myPosition = today.myPosition; // 잠긴 순번 보완(0·실패값이면 오늘 순번으로)
   }
   applyRoster(verdict, today, article);    // 3부 명단 화이트리스트 정밀 필터
   return { ...decide(article, verdict), rawVerdict: verdict };

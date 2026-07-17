@@ -60,8 +60,9 @@ export function applyVerdict(prev, verdict, article) {
   const changes = [];
 
   // ── 순번(lock): 새로 확실히 읽었으면 갱신(교환 등), 아니면 유지 ──
+  //  0·음수는 판독 실패값이므로 무시(상황판 오염 방지).
   const mp = Number(verdict.myPosition);
-  if (Number.isFinite(mp)) {
+  if (Number.isFinite(mp) && mp > 0) {
     if (cur.myPosition != null && Number(cur.myPosition) !== mp)
       changes.push({ field: 'position', from: cur.myPosition, to: mp, reversal: false, msg: `순번 ${cur.myPosition}→${mp}번` });
     next.myPosition = mp;
@@ -79,16 +80,18 @@ export function applyVerdict(prev, verdict, article) {
   }
 
   // ── 상태: 스페어↔근무확정 등 번복 감지 ──
+  //  ★unknown(판독 실패)은 기존 확정 상태를 절대 덮어쓰지 않음(상황판 오염 방지).
   let ns = verdict.myStatus || cur.status;
   if (tee) ns = ns === 'your_turn' ? 'your_turn' : 'assigned'; // 티오프 있으면 확정
-  if (ns && ns !== 'unknown' && ns !== cur.status) {
-    const reversal = (isWait(cur.status) && isWork(ns)) // 대기→근무
-      || (isWork(cur.status) && (ns === 'off' || isWait(ns))); // 근무→취소/대기
-    changes.push({ field: 'status', from: cur.status, to: ns, reversal, msg: `${statusKo(cur.status)} → ${statusKo(ns)}` });
-    next.status = ns;
-  } else if (ns) {
+  if (ns && ns !== 'unknown') {
+    if (ns !== cur.status) {
+      const reversal = (isWait(cur.status) && isWork(ns)) // 대기→근무
+        || (isWork(cur.status) && (ns === 'off' || isWait(ns))); // 근무→취소/대기
+      changes.push({ field: 'status', from: cur.status, to: ns, reversal, msg: `${statusKo(cur.status)} → ${statusKo(ns)}` });
+    }
     next.status = ns;
   }
+  // ns가 unknown이면 next.status는 기존값(cur) 유지 — 확정 상태 보존.
 
   // ── 커트라인: 명시된(cutoffAnnounced) 것만 반영 ──
   if (verdict.cutoffAnnounced && verdict.cutoffName) {
