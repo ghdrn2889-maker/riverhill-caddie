@@ -52,7 +52,7 @@ ${postedLine}
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
-- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=오전 늦게~낮, ${part}부=오후~저녁(대략 14시 이후). 예) "아웃 7시33분"은 오전 7시대라 1부이며 ${part}부 아님.
+- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=낮(대략 10~15시), ${part}부=티오프 **16시 이후**(저녁까지). 예) "아웃 7시33분"(오전)은 1부, "인 13시35분"(오후 1시대)은 2부이며 ${part}부 아님. **16시 이전 티오프는 절대 ${part}부가 아닙니다.**
 - 배치표/번호표: 각 부 "순번·이름" 목록과 "OUT n부 IN" 티오프표(가운데=티오프 시간, OUT/IN=코스). 순번이 티오프 칸에 등록되면 그 사람 근무 확정.
 - 배경색: 회색=스페어(대기), 흰색/색칠됨=근무 확정. 이름 옆 "(2,3)"·"(54)" 같은 숫자표기는 그 사람이 여러 부에 걸쳐 일한다는 표시(부 중복)라, 이름만으론 어느 부 소식인지 모호합니다(→ 시간대로 판단).
 - "○○님까지 일됩니다/근무/나갑니다" = 그 사람까지(포함) 순번 근무 확정. 표현은 작성자마다 불규칙("나가요","콜","다근무","까지만" 등)해도 '뜻'으로 파악.
@@ -64,6 +64,8 @@ ${postedLine}
 - 다른 부만의 내용, 남의 개인 근태신청(내 이름 없음)은 relevant=false.
 - "${name}"이 근무 확정(흰색이거나 티오프 배정)이면 "${name}"의 티오프 시간(HH:MM)과 코스(OUT/IN)를 읽으세요(교환됐으면 바뀐 자리 기준).
 - "${name}"의 순번(myPosition)은 항상 읽으세요(이미지의 그 사람 번호).
+- ★★teeTime엔 오직 "${name}" 본인이 배정된 티오프만 넣으세요. 취소·추가·변동·노쇼 글에서 언급된 '남'의 시간(예: "인 13시35분 취소 박진수님까지"의 13:35는 박진수 관련 시간)은 "${name}"의 티오프가 절대 아니므로 teeTime=null. "${name}" 자리의 시간이 확실할 때만 채우세요.
+- ★★${part}부 티오프는 16시 이후입니다. 16시 이전 시간(예: 13:35)만 있는 글은 ${part}부가 아니라 다른 부이므로 "${name}"과 무관(relevant=false, part=해당 부/1·2).
 
 ★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
 - part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
@@ -98,7 +100,7 @@ ${postedLine}
   "cutoffAnnounced": true 또는 false (텍스트에 '○○까지' 명시 여부),
   "cutoffName": "명시된 커트라인 이름, 없으면 빈칸",
   "cutoffPosition": 정수 또는 null,
-  "teeTime": "HH:MM 또는 null",
+  "teeTime": "김홍구 본인 배정 티오프 HH:MM(16시 이후·본인 자리일 때만). 남의 시간이거나 16시 이전이면 null",
   "course": "OUT 또는 IN 또는 빈칸",
   "note": "오직 '시간 변동 가능/취소/캔슬/시간조정' 같은 실제 주의사항만 한 문장. 스페어/근무/대기 등 상태 재언급은 금지. 해당 없으면 반드시 빈칸",
   "confidence": 0.0~1.0 실수,
@@ -155,7 +157,16 @@ export function decide(article, verdict) {
   // 관련 있음 → 상태별 문구 구성 (산수는 코드).
   let status = verdict.myStatus || 'unknown';
   let body = verdict.summary || article.subject || '';
-  const tee = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : null;
+  const teeRaw = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : null;
+  const teeHour = teeRaw ? Number(teeRaw.match(/(\d{1,2}):/)[1]) : null;
+  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16); // 3부 티오프 하한(그 이전 시간은 3부 아님)
+  // ★방어벽: 16시 이전 티오프만 있는 글은 남의 부(취소·변동 등)를 잘못 읽은 것 → 내 근무 아님 → 피드만.
+  //  ("인 13시35분 취소 박진수님까지"를 김홍구 티오프로 오판하던 버그 차단)
+  if (teeRaw && teeHour != null && teeHour < TEE_MIN) {
+    return { relevant: false, push: 'low', status: 'unknown', verdict,
+      title: '', body: verdict.summary || article.subject || '' };
+  }
+  const tee = teeRaw; // 여기 도달하면 16시 이후(또는 티오프 없음)
 
   if (tee) {
     // 티오프 배정 = 근무 확정. 산수(남은인원) 무시, 출근/출발 안내.
@@ -224,7 +235,8 @@ export function applyRoster(verdict, today, article) {
     const hour = Number.isFinite(ts) && ts > 1e12 ? new Date(ts).getHours() : null;
     const tm = String(verdict.teeTime || '').match(/(\d{1,2}):(\d{2})/);
     const teeH = tm ? Number(tm[1]) : null;
-    const timeSays3 = (teeH != null && teeH >= 14) || (teeH == null && hour != null && hour >= 14);
+    const teeMin = Number(process.env.TEE_MIN_HOUR ?? 16);
+    const timeSays3 = (teeH != null && teeH >= teeMin) || (teeH == null && hour != null && hour >= 14);
     if (!timeSays3) {
       verdict.relevant = false;
       verdict._rosterDrop = '부-중복 인물 + 3부 시간대(14시~) 아님';
