@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, commuteInfo } from './judge.mjs';
+import { judge, commuteInfo, scheduleHint } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
@@ -82,6 +82,14 @@ async function handleIngest(req, res) {
     text, writer: sender, menuId: '', menuName: source,
     images: [], writeDate: '', url: '/',
   };
+  // ★잡담/사진/광고 사전 필터: 일정 단서가 전혀 없으면 Gemini 호출 없이 피드에만.
+  //  (카톡방 잡담마다 Gemini를 부르면 429 폭주 + 판독 실패 시 광고까지 알림 스팸 → 사전 차단)
+  if (!scheduleHint(text)) {
+    saveRecentV2(pseudo, { relevant: false, push: 'low', status: 'unknown', body: text,
+      rawVerdict: { category: '기타', summary: text } });
+    console.log(`💬 [ingest] 일정 단서 없음 → Gemini 생략, 피드만: "${text.slice(0, 25)}"`);
+    return res.json({ ok: true, skipped: true, reason: 'no_schedule_hint' });
+  }
   try {
     const out = await notifyForArticle(pseudo, {}, {});
     res.json({ ok: true, pushed: !!out.pushed, push: out.push, body: out.body });

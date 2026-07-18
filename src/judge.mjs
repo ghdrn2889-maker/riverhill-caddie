@@ -11,6 +11,15 @@ function profile() {
   };
 }
 
+// 일정 관련 '단서'가 있는 텍스트인가 (잡담/사진/광고 걸러내기 + Gemini 실패 시 스팸 방지용).
+//  단서: 부/근무/티오프/순번/스페어/대기/추가/취소/변동/조정/모집/조출·후출/휴무/배치/커트라인 표현,
+//        "○○명", "HH시"/"HH:MM", "○○님까지".
+export function scheduleHint(text) {
+  const t = String(text || '');
+  if (/사진을 보냈습니다|이모티콘|삭제된 메시지|송금|채팅방에 들어왔|나갔습니다/.test(t)) return false; // 명백한 시스템/잡담
+  return /부|근무|티오프|티업|순번|스페어|대기|추가|취소|변동|조정|모집|조출|후출|휴무|배치|당번|커트|까지|\d+\s*명|\d{1,2}\s*시|\d{1,2}:\d{2}|님/.test(t);
+}
+
 // ── 티오프(HH:MM) → 도착(−준비)·집출발(−이동) ─────────────
 export function commuteInfo(teeTime) {
   const m = String(teeTime || '').match(/(\d{1,2}):(\d{2})/);
@@ -150,9 +159,16 @@ function titleFor(status) {
 export function decide(article, verdict) {
   const { name, part: myPart } = profile();
   if (!verdict) {
-    // Gemini 실패 → 일정글이면 '확인필요' 알림(놓침 방지), 아니면 피드만.
-    return { relevant: true, push: 'check', status: 'unknown', verdict: null,
-      title: '🏌️ 새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
+    // Gemini 실패(429/타임아웃 등) → 놓침 방지로 '확인필요' 알림. 단 잡담/광고/사진까지
+    //  알림 보내면 스팸이므로, 일정 단서(부·근무·시간·순번·"○○까지" 등)가 있을 때만 푸시.
+    const blob = `${article.subject || ''} ${article.text || ''}`;
+    if (scheduleHint(blob)) {
+      return { relevant: true, push: 'check', status: 'unknown', verdict: null,
+        title: '🏌️ 새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
+    }
+    // 일정 단서 없음(사진/광고/잡담) → 피드에만, 푸시 안 함.
+    return { relevant: false, push: 'low', status: 'unknown', verdict: null,
+      title: '', body: article.subject || '' };
   }
   if (verdict.category === '가배치') {
     return { relevant: false, push: 'low', status: 'unknown', verdict, title: '', body: article.subject || '' };
