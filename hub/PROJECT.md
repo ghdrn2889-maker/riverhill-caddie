@@ -105,6 +105,8 @@
 - [데이터 계약 (API·스키마)](CONTRACTS.md) — 디자인 AI·구현 AI 인터페이스
 - [결정 로그 (무엇을·왜)](DECISIONS.md)
 - [프론트엔드 계약 (화면 소유·상태·요소 ID)](FRONTEND-CONTRACT.md)
+- [🏌️ 근무 시스템 브리핑 (부·순번·커트라인·스페어)](WORK-SYSTEM.md) — 도메인 이해용, 특히 대기 화면 설계 필독
+- [🎨 디자인 AI 인계서](DESIGN-TASK.md)
 - 디자인 브리프(웹): claude.ai 아트팩트 — UI 분석·현재 화면 목업
 - `sandbox/implementation-handoff.md` — Phase 1~4 상세 인계서
 - `sandbox/hybrid-prototypes.html` — 확정 UI 시안(HYBRID 02)
