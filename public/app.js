@@ -34,7 +34,7 @@ function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-  if (name === 'worklog') loadWorklog();
+  if (name === 'worklog') { loadJournal(); loadWorklog(); }
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
 }
@@ -203,6 +203,26 @@ async function loadRecent() {
   $('recent').innerHTML = all.length ? all.map(newsHTML).join('') : '<div class="empty">아직 감지된 소식이 없어요.</div>';
 }
 function markAllRead() { setLastRead(Number($('readAll').dataset.newest) || Date.now()); loadRecent(); }
+
+/* ── 일일 근무 일지(근무/스페어/휴무 하루하루) ── */
+async function loadJournal() {
+  try {
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+    const r = await (await fetch(`/api/journal?year=${y}&month=${m}`)).json();
+    const s = r.summary || {}, days = r.days || [];
+    $('jSummary').textContent = `${y}년 ${m}월`;
+    $('jSub').textContent = `근무 ${s.work || 0}일 · 스페어 ${s.spare || 0}일 · 휴무 ${s.off || 0}일`;
+    const KIND = { work: ['work', '근무'], spare: ['spare', '스페어'], off: ['off', '휴무'] };
+    $('jDays').innerHTML = days.length ? days.map((d) => {
+      const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
+      const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
+      const [cls, label] = KIND[d.kind] || ['off', '기타'];
+      const detail = d.kind === 'work' && d.teeTime ? `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`
+        : d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
+      return `<div class="jday"><div><span class="jd">${md}</span>${detail}</div><span class="jk ${cls}">${label}</span></div>`;
+    }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
+  } catch { $('jSummary').textContent = '불러오기 실패'; }
+}
 
 /* ── 근무·세무 기록(기존 기능 보존) ── */
 async function loadWorklog() {

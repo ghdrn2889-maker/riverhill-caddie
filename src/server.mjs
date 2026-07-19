@@ -12,7 +12,12 @@ import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { judge, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
+import * as journal from './journal.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
+
+// 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
+const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
+const freshFeed = (arr) => (arr || []).filter((x) => (Date.now() - (x.detectedAt || 0)) < FEED_KEEP_MS);
 
 initPush();
 
@@ -40,9 +45,16 @@ app.post('/api/subscribe', (req, res) => {
   res.json({ ok: true });
 });
 
-// 앱 화면에 보여줄 최근 감지 목록
+// 앱 화면에 보여줄 최근 감지 목록 (오래된 소식은 자동 제외 — 항상 최근만 깔끔하게).
 app.get('/api/recent', (req, res) => {
-  res.json(loadJSON('recent.json', []));
+  res.json(freshFeed(loadJSON('recent.json', [])));
+});
+
+// 일일 근무 일지 (근무/스페어/휴무 하루하루 기록): ?year=2026&month=7
+app.get('/api/journal', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  res.json({ ok: true, days: journal.listJournal({ year, month }), summary: journal.summary({ year, month }) });
 });
 
 // 테스트용: 지금 바로 내 폰으로 알림 한 번 쏴보기
@@ -345,7 +357,7 @@ function titleForStatus(status) {
 function saveRecentV2(full, out) {
   const v = out.rawVerdict || {};
   // 같은 글(id)이 재처리되면 중복 행을 만들지 않고 최신 것으로 교체(맨 위로).
-  const recent = loadJSON('recent.json', []).filter((x) => x.id !== full.id);
+  const recent = freshFeed(loadJSON('recent.json', [])).filter((x) => x.id !== full.id);
   recent.unshift({
     id: full.id, subject: full.subject, writer: full.writer, url: full.url,
     menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate,
@@ -404,6 +416,10 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const merged = applyVerdict(today, v, full);
     saveToday(merged.next);
     change = merged.change;
+    // 일일 근무 일지에 그날 '최종 상태'(근무/스페어/휴무) 기록 — 마지막 갱신이 그날 확정.
+    const jIso = worklog.labelToISO(v.dateLabel);
+    if (jIso) journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
+      course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName });
     if (change.reversal) {
       // 이전 예측이 뒤집힘 → 강조 알림으로 승격.
       title = '⚠️ 변경됐어요!';

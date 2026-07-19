@@ -105,6 +105,15 @@
     .wl-odo input { width:62px; padding:7px; border:1px solid #dfe5e0; border-radius:6px; }
     .wl-up { font-size:9px; color:#1d6740; text-align:center; margin-top:6px; min-height:11px; }
     .settings-h { font-size:11px; font-weight:800; margin:14px 3px 6px; color:#647168; }
+    /* 일일 근무 일지 */
+    .jday { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #eef1ec; font-size:12px; }
+    .jday:last-child { border-bottom:0; }
+    .jday .jd { font-weight:700; }
+    .jday .jt { font-size:10px; color:#79847d; margin-left:6px; }
+    .jk { font-size:10px; font-weight:800; padding:3px 10px; border-radius:99px; white-space:nowrap; }
+    .jk.work { background:#e8f3eb; color:#1d6740; }
+    .jk.spare { background:#fdf3df; color:#8a5d14; }
+    .jk.off { background:#eef1ec; color:#79847d; }
 
     /* 하단 내비 (확정 시안 .nav 그대로, 실제 탭으로만 전환) */
     nav.nav { position:fixed; left:0; right:0; bottom:0; z-index:20; max-width:600px; margin:0 auto;
@@ -153,7 +162,14 @@
 
     <!-- 근무 기록 -->
     <section class="view body" id="view-worklog" role="tabpanel" aria-labelledby="tab-worklog" hidden>
-      <div class="sect"><span>📋 근무·세무 기록</span></div>
+      <div class="sect"><span>🗓️ 일일 근무 일지</span></div>
+      <section class="hero">
+        <div id="jSummary" class="wl-sum">불러오는 중…</div>
+        <div id="jSub" class="wl-sub"></div>
+        <div id="jDays"></div>
+      </section>
+
+      <div class="sect"><span>📋 세무·차량 기록</span></div>
       <section class="hero">
         <div id="wlSummary" class="wl-sum">불러오는 중…</div>
         <div id="wlSub" class="wl-sub"></div>
