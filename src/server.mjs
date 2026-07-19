@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, commuteInfo, scheduleHint } from './judge.mjs';
+import { judge, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
@@ -380,6 +380,17 @@ function saveBaselineFromVerdict(full, v) {
 // → 번복 감지 + 확신도 라우팅으로 푸시.  push: 'high' | 'check' | 'low'
 async function notifyForArticle(full, result = {}, opts = {}) {
   const today = loadToday();
+
+  // ★값싼 사전 필터: 명백히 남의 부/개인근태/비3부 시간이면 Gemini 호출 없이 피드에만.
+  //  (429 할당량 절약 + 판독 실패 시 남의 부·휴무신청까지 알림 나가던 스팸 차단.)
+  //  내 이름/3부 언급이 있으면 'other'가 아니므로 절대 여기서 안 버려짐(놓침 방지).
+  if (!opts.force && cheapRelevance(`${full.subject || ''} ${full.text || ''}`) === 'other') {
+    saveRecentV2(full, { relevant: false, push: 'low', status: 'unknown',
+      body: full.subject || '', rawVerdict: { category: '기타', summary: full.subject || '' } });
+    console.log(`·  (사전필터: 남의 부/개인근태 → 피드만·Gemini 생략) ${full.subject}`);
+    return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+  }
+
   const out = await judge(full, today);        // 오늘 상황을 맥락으로 판단
   const v = out.rawVerdict;
   let title = out.title, body = out.body;

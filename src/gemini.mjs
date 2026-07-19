@@ -75,6 +75,8 @@ export async function callGeminiJSON(promptText, imageUrl = null, modelOverride 
       });
       if (!res.ok) {
         console.error(`[gemini] HTTP ${res.status} (시도 ${attempt})`, (await res.text()).slice(0, 200));
+        // 429(할당량)·403(권한)은 즉시 재시도해도 또 실패 → 재시도 말고 종료(할당량 추가 소모 방지).
+        if (res.status === 429 || res.status === 403) return null;
         continue;
       }
       const data = await res.json();

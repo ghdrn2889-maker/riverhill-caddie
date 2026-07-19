@@ -20,6 +20,25 @@ export function scheduleHint(text) {
   return /부|근무|티오프|티업|순번|스페어|대기|추가|취소|변동|조정|모집|조출|후출|휴무|배치|당번|커트|까지|\d+\s*명|\d{1,2}\s*시|\d{1,2}:\d{2}|님/.test(t);
 }
 
+// 값싼 사전 판정: 명백히 '남의 일'이면 'other'(Gemini 생략·푸시 안 함), 아니면 'unknown'(Gemini/폴백에 맡김).
+//  Gemini 할당량(429) 절약 + 판독 실패 시 남의 부·개인근태까지 알림 나가는 스팸 방지.
+//  ★보수적으로: 내 이름/3부 언급이 있으면 절대 'other'로 버리지 않는다(놓침 방지).
+export function cheapRelevance(text) {
+  const t = String(text || '');
+  const { name, part } = profile();
+  if (name && t.includes(name)) return 'unknown';         // 내 이름 → 보류
+  if (new RegExp(`${part}\\s*부`).test(t)) return 'unknown'; // 내 부(3부) 언급 → 보류
+  // 명시적 다른 부(1·2부 등, 내 부 아님)
+  if (/[124-9]\s*부/.test(t)) return 'other';
+  // 개인 근태 신청 (내 이름 없음)
+  if (/(휴무|조출|후출|연차|반차|월차|병가|휴가|조퇴).{0,6}(신청|올립니다|재신청|합니다|취소)/.test(t)) return 'other';
+  // 티오프/시각이 있는데 전부 내 부 시간대(기본 16시) 이전 → 다른 부(오전·낮)
+  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
+  const hours = [...t.matchAll(/(\d{1,2})\s*(?::\d{2}|시)/g)].map((m) => Number(m[1]));
+  if (hours.length && hours.every((h) => h < TEE_MIN)) return 'other';
+  return 'unknown';
+}
+
 // ── 티오프(HH:MM) → 도착(−준비)·집출발(−이동) ─────────────
 export function commuteInfo(teeTime) {
   const m = String(teeTime || '').match(/(\d{1,2}):(\d{2})/);
@@ -162,7 +181,7 @@ export function decide(article, verdict) {
     // Gemini 실패(429/타임아웃 등) → 놓침 방지로 '확인필요' 알림. 단 잡담/광고/사진까지
     //  알림 보내면 스팸이므로, 일정 단서(부·근무·시간·순번·"○○까지" 등)가 있을 때만 푸시.
     const blob = `${article.subject || ''} ${article.text || ''}`;
-    if (scheduleHint(blob)) {
+    if (cheapRelevance(blob) !== 'other' && scheduleHint(blob)) {
       return { relevant: true, push: 'check', status: 'unknown', verdict: null,
         title: '🏌️ 새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
     }
