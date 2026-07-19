@@ -41,7 +41,11 @@
     .point.p1 { left:0; background:#2e7149; border-color:#2e7149; }
     .point.p2 { border-color:#d99a31; box-shadow:0 0 0 4px rgba(217,154,49,.2); }
     .point.p3 { right:0; }
-    .railtext { display:flex; justify-content:space-between; font-size:8px; color:#68776e; }
+    /* 라벨을 3등분 그리드로 — 가운데 '출발'을 정확히 50%에 두어 동그라미(50%)와 x정렬. */
+    .railtext { display:grid; grid-template-columns:1fr 1fr 1fr; font-size:8px; color:#68776e; }
+    .railtext > :nth-child(1) { text-align:left; }
+    .railtext > :nth-child(2) { text-align:center; }
+    .railtext > :nth-child(3) { text-align:right; }
     .railtext b { color:#9b6819; }
     .alert { margin-top:11px; background:#fff8e8; border:1px solid #efdfb8; color:#78561c; border-radius:9px; padding:8px 9px; font-size:9px; display:flex; justify-content:space-between; }
     .minirow { display:flex; gap:7px; margin-top:10px; }
