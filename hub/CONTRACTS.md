@@ -50,7 +50,7 @@
   "menuName": "배치 시간표", "writeDate": "...",
   "aiMessage": "판독 요약(관련일 때)", "status": "assigned",
   "category": "배치표|변동|추가|취소|개인근태|공지|기타",
-  "relevant": true,              // false면 흐리게+"무관한 소식" 토글로 접기
+  "relevant": true,              // 관련 소식만 피드에 저장(무관=false는 앱에 안 남김, 서버 로그로만 흔적)
   "priority": "high|info",
   "detectedAt": 1784299250308
 }]
