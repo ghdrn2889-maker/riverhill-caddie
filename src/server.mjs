@@ -385,9 +385,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //  (429 할당량 절약 + 판독 실패 시 남의 부·휴무신청까지 알림 나가던 스팸 차단.)
   //  내 이름/3부 언급이 있으면 'other'가 아니므로 절대 여기서 안 버려짐(놓침 방지).
   if (!opts.force && cheapRelevance(`${full.subject || ''} ${full.text || ''}`) === 'other') {
-    saveRecentV2(full, { relevant: false, push: 'low', status: 'unknown',
-      body: full.subject || '', rawVerdict: { category: '기타', summary: full.subject || '' } });
-    console.log(`·  (사전필터: 남의 부/개인근태 → 피드만·Gemini 생략) ${full.subject}`);
+    // 명백히 남의 일 → 앱에 아예 안 남김(피드 저장·푸시 없음). 서버 로그에만 흔적(오분류 시 복구용).
+    console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
     return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
   }
 
@@ -395,8 +394,9 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   const v = out.rawVerdict;
   let title = out.title, body = out.body;
 
-  // 피드-우선: 관련 여부와 무관하게 항상 피드에 기록(놓침 구조적 불가).
-  saveRecentV2(full, out);
+  // 관련 있는 소식만 피드에 기록(무관한 건 앱에 안 남김 — 사용자 요청). 무관은 로그로만 흔적.
+  if (out.relevant) saveRecentV2(full, out);
+  else console.log(`·  (무관 → 앱에 안 남김) ${full.subject} — ${v?.category || ''}`);
 
   // 관련 글이면 상황판에 병합 + 번복(변경) 감지.
   let change = { reversal: false, material: false, message: '' };

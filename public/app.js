@@ -140,17 +140,19 @@ function renderBoard(t) {
     const big = before ? c.leave : (now < tee ? c.arrive : c.tee);
     const rem = before ? gap(leave - now) : (now < arrive ? gap(arrive - now) : (now < tee ? gap(tee - now) : ''));
     const ci = before ? 1 : 2;                     // 0 일정확인 / 1 출발 / 2 도착
-    const fill = ci === 1 ? 34 : 100;
+    const fill = ci === 1 ? 50 : 100;              // '출발'(가운데 50%)까지 / '도착'(100%)까지
     const preAlarm = hhmm(leave - 10);
-    // 레일 3정거장(확정 시안 그대로): 일정확인 → 출발 → 도착
-    const p2 = ci >= 2 ? 'style="background:#2e7149;border-color:#2e7149"' : '';
-    const p3 = ci >= 2 ? 'style="border-color:#d99a31;box-shadow:0 0 0 4px rgba(217,154,49,.2)"' : '';
+    // 레일 3정거장: 일정확인(왼쪽) → 출발(가운데) → 도착(오른쪽). 동그라미를 라벨 위치에 정확히 맞춤.
+    //  ★출발 점은 라벨과 동일하게 가운데(50%)에 두고 translateX로 중심 정렬(예전엔 34%라 라벨과 어긋남).
+    const p2base = 'left:50%;transform:translateX(-50%)';
+    const p2 = ci >= 2 ? `${p2base};background:#2e7149;border-color:#2e7149` : p2base;
+    const p3 = ci >= 2 ? 'border-color:#d99a31;box-shadow:0 0 0 4px rgba(217,154,49,.2)' : '';
     const lab = ['일정 확인', '출발', '도착'];
     slot.innerHTML = `<div class="actionboard">
       <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(now)}</span></div>
       <div class="nextline"><strong>${esc(big)}</strong><span>${rem}</span></div>
       <div class="rail"><i class="track"></i><i class="fill" style="width:${fill}%"></i>
-        <i class="point p1"></i><i class="point p2" style="left:34%" ${p2}></i><i class="point p3" ${p3}></i></div>
+        <i class="point p1"></i><i class="point p2" style="${p2}"></i><i class="point p3" style="${p3}"></i></div>
       <div class="railtext"><span>${lab[0]}</span>${ci === 1 ? `<b>${lab[1]}</b>` : `<span>${lab[1]}</span>`}${ci >= 2 ? `<b>${lab[2]}</b>` : `<span>${lab[2]}</span>`}</div>
       <div class="alert"><span>${preAlarm}에 다시 알려드릴게요</span><b>10분 전</b></div>
       <div class="minirow">
@@ -188,24 +190,17 @@ function newsHTML(a) {
     <b>${dot}${cat}${tag}${esc(head)}</b><small>${[when, rest].filter(Boolean).map(esc).join(' · ')}</small></a>`;
 }
 async function loadRecent() {
-  let all; try { all = await (await fetch('/api/recent')).json(); } catch { return; }
+  let raw; try { raw = await (await fetch('/api/recent')).json(); } catch { return; }
+  // 관련 있는 소식만 표시(무관한 건 서버가 애초에 안 남김 — 사용자 요청). 옛 무관 항목 대비 방어 필터.
+  const all = (raw || []).filter((a) => a.relevant !== false);
   const lastRead = getLastRead(); let unread = 0, newest = 0;
-  all.forEach((a) => { const ts = a.detectedAt || 0; if (ts > newest) newest = ts; if (ts > lastRead && a.relevant !== false) unread++; });
+  all.forEach((a) => { const ts = a.detectedAt || 0; if (ts > newest) newest = ts; if (ts > lastRead) unread++; });
   const u = $('unread'), r = $('readAll');
   if (unread > 0) { u.textContent = unread; u.hidden = false; r.hidden = false; } else { u.hidden = true; r.hidden = true; }
   r.dataset.newest = String(newest);
 
-  const relevant = all.filter((a) => a.relevant !== false);
-  $('todayNews').innerHTML = relevant.length ? relevant.slice(0, 3).map(newsHTML).join('') : '<div class="empty">관련 소식이 아직 없어요.</div>';
-
-  const box = $('recent');
-  if (!all.length) { box.innerHTML = '<div class="empty">아직 감지된 소식이 없어요.</div>'; return; }
-  const hidden = all.filter((a) => a.relevant === false);
-  let html = relevant.length ? relevant.map(newsHTML).join('') : '<div class="empty">관련 소식이 아직 없어요.</div>';
-  if (hidden.length) html += `<button id="hiddenToggle" class="more" style="display:block;margin:12px auto 0;">무관한 소식 ${hidden.length}개 보기 ▾</button><div id="hiddenList" hidden style="margin-top:8px;">${hidden.map(newsHTML).join('')}</div>`;
-  box.innerHTML = html;
-  const tg = $('hiddenToggle');
-  if (tg) tg.onclick = () => { const hl = $('hiddenList'); const open = hl.hidden; hl.hidden = !open; tg.textContent = open ? `무관한 소식 ${hidden.length}개 숨기기 ▴` : `무관한 소식 ${hidden.length}개 보기 ▾`; };
+  $('todayNews').innerHTML = all.length ? all.slice(0, 3).map(newsHTML).join('') : '<div class="empty">관련 소식이 아직 없어요.</div>';
+  $('recent').innerHTML = all.length ? all.map(newsHTML).join('') : '<div class="empty">아직 감지된 소식이 없어요.</div>';
 }
 function markAllRead() { setLastRead(Number($('readAll').dataset.newest) || Date.now()); loadRecent(); }
 
