@@ -150,10 +150,31 @@ app.get('/api/health', (req, res) => {
     failStreak: h.failStreak || 0, lastError: h.lastError || null });
 });
 
+// 한국시각(Asia/Seoul) 기준 오늘 'YYYY-MM-DD'. 서버 TZ와 무관하게 안전.
+function todayISOKST() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return parts; // en-CA → 'YYYY-MM-DD'
+}
+
 // 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
 app.get('/api/today', (req, res) => {
   const t = loadToday();
   if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
+
+  // ── 낡은 상태 가드 ──
+  //  today.json의 날짜(=근무 대상일)가 '오늘'보다 과거면, 새 배치표를 아직 못 읽어
+  //  어제(그제)의 확정값이 남아 있는 것. 이 낡은 티오프를 오늘 것처럼 보이면 안 됨.
+  //  (다음날 배치표는 전날 올라오므로 date가 미래인 건 정상 → 그건 그대로 표시.)
+  const tISO = worklog.labelToISO(t.date);
+  if (tISO && tISO < todayISOKST()) {
+    return res.json({
+      ok: true, empty: true, stale: true, staleDate: t.date,
+      message: '오늘 배치표를 아직 확보하지 못했어요. (마지막 확인: ' + t.date + ')',
+    });
+  }
+
   const p = [];
   if (t.myPosition) p.push(`순번 ${t.myPosition}번`);
   p.push(statusKo(t.status));

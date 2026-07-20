@@ -107,8 +107,13 @@ async function loadToday() {
 }
 function renderToday(t) {
   if (!t || t.empty || !t.state) {
-    $('heroTitle').textContent = '아직 오늘 정보가 없어요';
-    $('heroSub').textContent = '배치표나 3부 소식이 올라오면 여기에 표시됩니다.';
+    if (t && t.stale) {
+      $('heroTitle').textContent = '오늘 배치표 확인 중';
+      $('heroSub').textContent = t.message || '아직 오늘 배치표를 확보하지 못했어요. 확인되면 바로 갱신됩니다.';
+    } else {
+      $('heroTitle').textContent = '아직 오늘 정보가 없어요';
+      $('heroSub').textContent = '배치표나 3부 소식이 올라오면 여기에 표시됩니다.';
+    }
     $('boardSlot').innerHTML = ''; return;
   }
   const s = t.state, st = s.status;
