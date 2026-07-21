@@ -151,6 +151,7 @@ ${postedLine}
   "cutoffAnnounced": true 또는 false (텍스트에 '○○까지' 명시 여부),
   "cutoffName": "명시된 커트라인 이름, 없으면 빈칸",
   "cutoffPosition": 정수 또는 null,
+  "teamCount": "현재 ${part}부 예약 팀 수 정수 (예: '현재 3부 16팀'·'3부 16팀 운영' → 16). = 순번 그 번호까지 근무 확정을 뜻함. 다른 부 수치이거나 팀 수 언급 없으면 null",
   "teeTime": "김홍구 본인 배정 티오프 HH:MM(16시 이후·본인 자리일 때만). 남의 시간이거나 16시 이전이면 null",
   "course": "OUT 또는 IN 또는 빈칸",
   "note": "오직 '시간 변동 가능/취소/캔슬/시간조정' 같은 실제 주의사항만 한 문장. 스페어/근무/대기 등 상태 재언급은 금지. 해당 없으면 반드시 빈칸",
@@ -321,6 +322,20 @@ function weakBoardRead(v) {
 //  · 순번이 표에 있으면 → 그 시간이 김홍구 티오프(근무 배정).
 //  · 순번이 표에 없으면 → 스페어(모델이 붙인 티오프 제거). 모델이 근무라 우겼으면 '확인 필요'.
 // 표 판독이 '행 순서대로 번호 매기기' 실패인지 감지: 순번이 1,2,3,4…로 완전 순차이거나 코스가 전부 동일하면 의심.
+// "현재 3부 N팀" → N 추출(내 부 한정). N = 순번 N번까지 근무 확정(실시간 확정선).
+export function extractTeamCount(text) {
+  const t = String(text || '');
+  const { part } = profile();
+  const p = String(part || '').replace(/[^0-9]/g, '');
+  if (!p) return null;
+  const re1 = new RegExp(`${p}\\s*부[^0-9]{0,8}(\\d{1,2})\\s*팀`);   // 3부 16팀
+  const re2 = new RegExp(`(\\d{1,2})\\s*팀[^0-9]{0,8}${p}\\s*부`);   // 16팀 3부
+  const m = t.match(re1) || t.match(re2);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return (n >= 1 && n <= 40) ? n : null;
+}
+
 function gridLooksRownumbered(grid) {
   if (!Array.isArray(grid) || grid.length < 4) return false;
   const pos = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
@@ -432,6 +447,11 @@ export async function judge(article, today = null) {
       && today && today.myPosition
       && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
     verdict.myPosition = today.myPosition; // 잠긴 순번 보완(0·실패값이면 오늘 순번으로)
+  }
+  // ★"현재 3부 N팀" 팀 수 보정: Gemini가 놓쳤으면 정규식으로 추출(내 부 한정). = 실시간 확정선.
+  if (verdict && !(Number(verdict.teamCount) > 0)) {
+    const tc = extractTeamCount(`${article.subject || ''}\n${article.contentText || article.content || ''}`);
+    if (tc) { verdict.teamCount = tc; if (!verdict.relevant) verdict.relevant = true; }
   }
   applyRoster(verdict, today, article);    // 3부 명단 화이트리스트 정밀 필터
   return { ...decide(article, verdict), rawVerdict: verdict };

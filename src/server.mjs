@@ -510,6 +510,16 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       title = '⚠️ 변경됐어요!';
       body = `${change.message}\n${out.body}`;
       out.push = 'high';
+    } else if (Number(v.teamCount) > 0) {
+      // 팀 수 소식인데 상태 전환은 없음(여전히 스페어) → 접근 현황만 가볍게(먼 건 피드만).
+      const myp = Number(merged.next.myPosition) || 0;
+      const tc = Number(v.teamCount);
+      if (myp && myp > tc) {
+        const ahead = Math.max(0, myp - tc - 1);
+        title = '🏌️ 3부 대기 현황';
+        body = `현재 ${merged.next.part || '3부'} ${tc}팀 · 내 순번 ${myp}번 — 내 앞 ${ahead}명 남았어요.`;
+        out.push = ahead <= 2 ? 'check' : 'low';
+      }
     }
   }
 

@@ -115,6 +115,26 @@ export function applyVerdict(prev, verdict, article) {
     next.rosterAt = Date.now();
   }
 
+  // ── ★"현재 3부 N팀" → 확정선 즉시 갱신 + 내 순번과 비교해 근무↔스페어 재계산 ──
+  //  N팀 = 순번 N번까지 근무 (거의) 확정. 내 순번이 N 안에 들면 근무 준비, 벗어나면 스페어.
+  //  예약이 늘면(스페어→근무 "준비 시작"), 취소로 줄면(근무→스페어 "대기 전환") 양방향 반영.
+  const tc = Number(verdict.teamCount);
+  const myp = Number(next.myPosition);
+  if (Number.isFinite(tc) && tc > 0 && myp > 0) {
+    next.cutLine = tc; // 팀 수는 가장 권위 있는 실시간 확정선 → 티오프표 스냅샷보다 우선
+    const nowWork = myp <= tc;
+    const newStatus = nowWork ? (next.teeTime ? 'assigned' : 'work') : 'spare';
+    if (newStatus !== next.status) {
+      const reversal = (isWait(next.status) && isWork(newStatus)) || (isWork(next.status) && isWait(newStatus));
+      changes.push({ field: 'teamcount', from: next.status, to: newStatus, reversal,
+        msg: nowWork
+          ? `현재 ${cur.part || '3부'} ${tc}팀 — 순번 ${myp}번 근무 거의 확정(준비 시작)`
+          : `현재 ${cur.part || '3부'} ${tc}팀 — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - tc - 1)}명)` });
+      next.status = newStatus;
+      if (!nowWork) { next.teeTime = ''; next.course = ''; } // 스페어로 내려가면 임시 티오프 해제
+    }
+  }
+
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });
   if (next.timeline.length > 40) next.timeline = next.timeline.slice(-40);
   next.updatedAt = Date.now();
