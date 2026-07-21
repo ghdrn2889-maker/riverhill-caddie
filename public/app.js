@@ -21,6 +21,7 @@ function timeAgo(ts) {
   return Math.floor(s / 86400) + '일 전';
 }
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const postJSON = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
 
 /* ── 헤더 날짜·시각 ── */
 function tickDate() {
@@ -29,12 +30,13 @@ function tickDate() {
 }
 
 /* ── 하단 내비 / 뷰 전환 ── */
-const VIEWS = ['today', 'news', 'worklog'];
+const VIEWS = ['today', 'news', 'cart', 'worklog'];
 function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'worklog') { loadJournal(); loadWorklog(); }
+  if (name === 'cart') loadCartCheck();
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
 }
@@ -303,9 +305,80 @@ function initWorklogButtons() {
   $('wlReport').onclick = () => window.open(`/api/worklog/report.html?year=${new Date().getFullYear()}`, '_blank');
 }
 
+/* ── 카트 점검 ── */
+let ccDate = null;
+function ccSetPhoto(leg, fname) {
+  const lbl = $(leg === 'intake' ? 'ccIntakeLbl' : 'ccExitLbl');
+  const thumb = $(leg === 'intake' ? 'ccIntakeThumb' : 'ccExitThumb');
+  if (fname) { thumb.src = `/api/cartcheck/photo/${fname}?t=${Date.now()}`; thumb.hidden = false; lbl.classList.add('has'); }
+  else { thumb.hidden = true; lbl.classList.remove('has'); }
+}
+function ccRenderFound(found) {
+  if (!found || !found.length) { $('ccFoundList').innerHTML = ''; return; }
+  $('ccFoundList').innerHTML = found.map((f) => {
+    const t = new Date(f.at);
+    const hm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    const thumb = f.photo ? `<img class="cc-thumb" src="/api/cartcheck/photo/${f.photo}" alt="발견물">` : '';
+    return `<div class="cc-found">${thumb}<span class="cf-note">${esc(f.note || '(메모 없음)')} · <span style="color:#79847d">${hm}</span></span>` +
+      `<button class="cf-rep ${f.reported ? 'on' : ''}" data-fid="${f.id}">${f.reported ? '경기과 전달됨' : '전달 표시'}</button></div>`;
+  }).join('');
+  $('ccFoundList').querySelectorAll('button[data-fid]').forEach((b) => {
+    b.onclick = async () => { const on = b.classList.contains('on'); await postJSON('/api/cartcheck/found/reported', { date: ccDate, id: b.dataset.fid, reported: !on }); loadCartCheck(); };
+  });
+}
+async function loadCartCheck() {
+  try {
+    const r = await (await fetch('/api/cartcheck')).json();
+    ccDate = r.date;
+    const day = r.day || {}, work = r.work || {}, items = r.items || [];
+    const md = `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`;
+    if (work.isWorkToday) {
+      $('ccHead').textContent = `오늘(${md}) 근무 · 카트 정리 점검`;
+      $('ccSub').textContent = work.teeTime ? `티오프 ${work.teeTime}${work.course ? `(${work.course})` : ''} · 반납 전 아래를 하나씩 훑으세요.` : '반납 전 아래를 하나씩 훑으세요.';
+    } else {
+      $('ccHead').textContent = `${md} 카트 점검`;
+      $('ccSub').textContent = '오늘 근무일이 아니어도 기록할 수 있어요.';
+    }
+    $('ccCart').value = day.cartNo || work.cartNo || '';
+    ccSetPhoto('intake', day.photos && day.photos.intake);
+    ccSetPhoto('exit', day.photos && day.photos.exit);
+    const cl = day.checklist || {};
+    $('ccList').innerHTML = items.map((it) => {
+      const on = !!cl[it.key];
+      return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? '✓' : ''}</span><span>${esc(it.label)}</span></div>`;
+    }).join('');
+    $('ccList').querySelectorAll('.cc-item').forEach((el) => {
+      el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(); };
+    });
+    const p = day.progress || { checked: 0, total: items.length, done: false };
+    const prog = $('ccProg'); prog.textContent = `${p.checked}/${p.total}${p.done ? ' ✓ 완료' : ''}`; prog.classList.toggle('done', !!p.done);
+    ccRenderFound(day.found || []);
+  } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
+}
+async function ccUpload(leg, inp) {
+  if (!inp.files || !inp.files[0]) return;
+  try { const image = await compressImage(inp.files[0]); await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image }); }
+  finally { inp.value = ''; loadCartCheck(); }
+}
+function initCartButtons() {
+  $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
+  $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
+  $('ccExit').onchange = (e) => ccUpload('exit', e.target);
+  $('ccFound').onchange = () => $('ccFoundLbl').classList.toggle('has', $('ccFound').files.length > 0);
+  $('ccFoundSave').onclick = async () => {
+    const note = $('ccFoundNote').value.trim();
+    const f = $('ccFound').files[0];
+    if (!note && !f) return;
+    const image = f ? await compressImage(f) : '';
+    await postJSON('/api/cartcheck/found', { date: ccDate, note, image });
+    $('ccFoundNote').value = ''; $('ccFound').value = ''; $('ccFoundLbl').classList.remove('has');
+    loadCartCheck();
+  };
+}
+
 /* ── 부팅 ── */
 async function main() {
-  tickDate(); initNav(); initWorklogButtons();
+  tickDate(); initNav(); initWorklogButtons(); initCartButtons();
   $('enableBtn').onclick = enableNotifications;
   $('readAll').onclick = markAllRead;
   await registerSW();

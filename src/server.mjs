@@ -12,6 +12,7 @@ import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
 import { judge, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
+import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
 
@@ -244,6 +245,50 @@ app.get('/api/worklog/report.html', (req, res) => {
   const month = req.query.month ? Number(req.query.month) : undefined;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(worklog.reportHTML({ year, month }));
+});
+
+// ── 카트 점검 ─────────────────────────────────────────
+//  근무일마다 카트 정리 증거(시작사진·종료체크·빈카트사진·발견물)를 남긴다.
+//  date 미지정이면 KST 오늘.
+app.get('/api/cartcheck', (req, res) => {
+  const date = req.query.date && cartcheck.getDay(req.query.date) ? req.query.date : todayISOKST();
+  const t = loadToday();
+  const tISO = t && worklog.labelToISO(t.date);
+  const isWorkToday = !!(t && tISO === date && ['assigned', 'work', 'your_turn'].includes(t.status));
+  res.json({ ok: true, date, items: cartcheck.CHECK_ITEMS, day: cartcheck.getDay(date),
+    work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
+});
+app.post('/api/cartcheck/cart', (req, res) => {
+  const { date, cartNo } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.setCartNo(date, cartNo) });
+});
+app.post('/api/cartcheck/check', (req, res) => {
+  const { date, key, done } = req.body || {};
+  if (!date || !key) return res.status(400).json({ error: 'date, key 필요' });
+  res.json({ ok: true, day: cartcheck.toggleCheck(date, key, !!done) });
+});
+app.post('/api/cartcheck/photo', (req, res) => {
+  const { date, leg, image } = req.body || {};
+  if (!date || !leg || !image) return res.status(400).json({ error: 'date, leg, image 필요' });
+  const day = cartcheck.savePhoto(date, leg, image);
+  if (!day) return res.status(400).json({ error: '잘못된 이미지/구분' });
+  res.json({ ok: true, day });
+});
+app.post('/api/cartcheck/found', (req, res) => {
+  const { date, note, image } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.addFound(date, { note, dataUrl: image }) });
+});
+app.post('/api/cartcheck/found/reported', (req, res) => {
+  const { date, id, reported } = req.body || {};
+  if (!date || !id) return res.status(400).json({ error: 'date, id 필요' });
+  res.json({ ok: true, day: cartcheck.setFoundReported(date, id, !!reported) });
+});
+app.get('/api/cartcheck/photo/:fname', (req, res) => {
+  const fname = req.params.fname;
+  if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
+  res.sendFile(cartcheck.photoPath(fname), (err) => { if (err) res.status(404).end(); });
 });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -492,6 +537,31 @@ async function checkWorklogReminders() {
   } catch (e) { console.error('리마인더 오류:', e.message); }
 }
 setInterval(checkWorklogReminders, 60 * 60 * 1000); // 매시간 체크(리마인드 시각 이후에만 발송)
+
+// 카트 점검 리마인더: 오늘 근무일이고, 라운드가 끝날 무렵(티오프+라운드시간)인데
+//  종료 점검(체크리스트)이 아직 미완이면 1회 상기. 고객 소지품 두고 오는 사고 방지.
+async function checkCartReminders() {
+  try {
+    const t = loadToday();
+    if (!t || !['assigned', 'work', 'your_turn'].includes(t.status)) return;
+    const tISO = worklog.labelToISO(t.date);
+    if (!tISO || tISO !== todayISOKST()) return; // 오늘 근무만
+    const m = String(t.teeTime || '').match(/(\d{1,2}):(\d{2})/);
+    if (!m) return;
+    const teeMin = Number(m[1]) * 60 + Number(m[2]);
+    const roundMin = Number(process.env.CART_ROUND_HOURS ?? 2.5) * 60;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    if (nowMin < teeMin + roundMin) return;          // 아직 라운드 중 → 나중에
+    if (!cartcheck.needsExitCheck(tISO)) return;      // 이미 점검 완료 → 조용
+    const rec = cartcheck.getDay(tISO);
+    if (rec.remindedAt && Date.now() - rec.remindedAt < 6 * 3600 * 1000) return; // 6h내 재알림 억제
+    await broadcast({ title: '🛒 카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' });
+    cartcheck.markReminded(tISO);
+    console.log(`[카트리마인더] ${tISO} 종료 점검 상기 발송`);
+  } catch (e) { console.error('카트 리마인더 오류:', e.message); }
+}
+setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
 
 startCrawler({
   onMatch: async (article, result) => {
