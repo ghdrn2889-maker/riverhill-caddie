@@ -373,7 +373,7 @@ function ccRenderList(items, checklist, progress) {
     list.innerHTML =
       items.map((it) => `<div class="cc-edit-item"><input value="${esc(it.label)}" data-key="${it.key}" aria-label="항목 이름"><button class="cc-del" data-del="${it.key}" title="삭제">✕</button></div>`).join('') +
       `<div class="cc-add-row"><input id="ccNewItem" placeholder="새 점검 항목 입력" aria-label="새 항목"><button id="ccAddItem" class="wl-btn wl-yes">추가</button></div>` +
-      `<div class="cc-edit-foot"><button id="ccResetItems" class="wl-btn wl-no">기본 예시로 복원</button><span class="cc-hint">이름을 바꿔도 기존 체크는 유지돼요.</span></div>`;
+      `<div class="cc-edit-foot"><button id="ccResetItems" class="wl-btn wl-no">항목 추천 받기</button><span class="cc-hint">추천 항목을 목록에 더해줘요(기존 항목은 그대로).</span></div>`;
     list.querySelectorAll('.cc-edit-item input').forEach((inp) => {
       inp.onchange = async () => { const v = inp.value.trim(); if (v) await postJSON('/api/cartcheck/items/rename', { key: inp.dataset.key, label: v }); };
     });
@@ -382,7 +382,7 @@ function ccRenderList(items, checklist, progress) {
     });
     $('ccAddItem').onclick = async () => { const v = $('ccNewItem').value.trim(); if (!v) return; await postJSON('/api/cartcheck/items/add', { label: v }); loadCartCheck(); };
     $('ccNewItem').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('ccAddItem').click(); } };
-    $('ccResetItems').onclick = async () => { if (confirm('체크리스트를 기본 예시로 되돌릴까요? 직접 추가·변경한 항목은 사라집니다.')) { await postJSON('/api/cartcheck/items/reset', {}); loadCartCheck(); } };
+    $('ccResetItems').onclick = async () => { await postJSON('/api/cartcheck/items/recommend', {}); loadCartCheck(); };
   } else {
     editBtn.textContent = '✎ 항목 편집';
     list.innerHTML = items.length
@@ -394,19 +394,6 @@ function ccRenderList(items, checklist, progress) {
     prog.textContent = `${progress.checked}/${progress.total}${progress.done ? ' ✓ 완료' : ''}`;
     prog.classList.toggle('done', !!progress.done);
   }
-}
-function ccRenderFound(found) {
-  if (!found || !found.length) { $('ccFoundList').innerHTML = ''; return; }
-  $('ccFoundList').innerHTML = found.map((f) => {
-    const t = new Date(f.at);
-    const hm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-    const thumb = f.photo ? `<img class="cc-thumb" src="/api/cartcheck/photo/${f.photo}" alt="발견물">` : '';
-    return `<div class="cc-found">${thumb}<span class="cf-note">${esc(f.note || '(메모 없음)')} · <span style="color:#79847d">${hm}</span></span>` +
-      `<button class="cf-rep ${f.reported ? 'on' : ''}" data-fid="${f.id}">${f.reported ? '경기과 전달됨' : '전달 표시'}</button></div>`;
-  }).join('');
-  $('ccFoundList').querySelectorAll('button[data-fid]').forEach((b) => {
-    b.onclick = async () => { const on = b.classList.contains('on'); await postJSON('/api/cartcheck/found/reported', { date: ccDate, id: b.dataset.fid, reported: !on }); loadCartCheck(); };
-  });
 }
 async function loadCartCheck() {
   try {
@@ -425,7 +412,6 @@ async function loadCartCheck() {
     ccSetPhoto('intake', day.photos && day.photos.intake);
     ccSetPhoto('exit', day.photos && day.photos.exit);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
-    ccRenderFound(day.found || []);
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
 }
 async function ccUpload(leg, inp) {
@@ -438,16 +424,6 @@ function initCartButtons() {
   $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
-  $('ccFound').onchange = () => $('ccFoundLbl').classList.toggle('has', $('ccFound').files.length > 0);
-  $('ccFoundSave').onclick = async () => {
-    const note = $('ccFoundNote').value.trim();
-    const f = $('ccFound').files[0];
-    if (!note && !f) return;
-    const image = f ? await compressImage(f) : '';
-    await postJSON('/api/cartcheck/found', { date: ccDate, note, image });
-    $('ccFoundNote').value = ''; $('ccFound').value = ''; $('ccFoundLbl').classList.remove('has');
-    loadCartCheck();
-  };
 }
 
 /* ── 부팅 ── */

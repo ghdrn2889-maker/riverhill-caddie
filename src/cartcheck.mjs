@@ -71,10 +71,17 @@ export function resetItems() {
   saveAll(d);
   return getItems();
 }
+// 추천 항목 받기: 기본(추천) 항목 중 아직 없는 것만 목록에 더한다(기존 항목·이름 유지, 비파괴).
+export function recommendItems() {
+  const cur = getItems();
+  const have = new Set(cur.map((i) => i.key));
+  const add = DEFAULT_ITEMS.filter((i) => !have.has(i.key));
+  return add.length ? saveItems([...cur, ...add]) : cur;
+}
 
 function blank(dateISO) {
   return { date: dateISO, cartNo: '', photos: {}, checklist: {}, checklistDoneAt: null,
-    found: [], remindedAt: null, updatedAt: null };
+    remindedAt: null, updatedAt: null };
 }
 
 // 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률도 같이 계산(현재 항목 기준).
@@ -123,28 +130,6 @@ export function savePhoto(dateISO, leg, dataUrl) {
   const fname = `cart_${dateISO}_${leg}.${ext}`;
   fs.writeFileSync(path.join(PHOTO_DIR, fname), Buffer.from(m[2], 'base64'));
   return mutate(dateISO, (r) => { r.photos = { ...r.photos, [leg]: fname }; });
-}
-
-// 발견물 신고: 사진(선택)+메모. 애매한 물건을 즉시 기록해 책임을 넘긴다.
-export function addFound(dateISO, { note = '', dataUrl = '' } = {}) {
-  if (!isISO(dateISO)) return null;
-  let photo = '';
-  const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
-  if (m) {
-    const ext = m[1] === 'image/png' ? 'png' : 'jpg';
-    fs.mkdirSync(PHOTO_DIR, { recursive: true });
-    photo = `cart_${dateISO}_found_${Date.now()}.${ext}`;
-    fs.writeFileSync(path.join(PHOTO_DIR, photo), Buffer.from(m[2], 'base64'));
-  }
-  return mutate(dateISO, (r) => {
-    r.found = [...(r.found || []), { id: `f${Date.now()}`, note: String(note || '').slice(0, 200), photo, at: Date.now(), reported: false }];
-  });
-}
-
-export function setFoundReported(dateISO, foundId, reported) {
-  return mutate(dateISO, (r) => {
-    r.found = (r.found || []).map((f) => (f.id === foundId ? { ...f, reported: !!reported } : f));
-  });
 }
 
 export function photoPath(fname) { return path.join(PHOTO_DIR, fname); }

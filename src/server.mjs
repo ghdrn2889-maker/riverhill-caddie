@@ -277,6 +277,9 @@ app.post('/api/cartcheck/items/remove', (req, res) => {
 app.post('/api/cartcheck/items/reset', (req, res) => {
   res.json({ ok: true, items: cartcheck.resetItems() });
 });
+app.post('/api/cartcheck/items/recommend', (req, res) => {
+  res.json({ ok: true, items: cartcheck.recommendItems() });
+});
 app.post('/api/cartcheck/cart', (req, res) => {
   const { date, cartNo } = req.body || {};
   if (!date) return res.status(400).json({ error: 'date 필요' });
@@ -293,16 +296,6 @@ app.post('/api/cartcheck/photo', (req, res) => {
   const day = cartcheck.savePhoto(date, leg, image);
   if (!day) return res.status(400).json({ error: '잘못된 이미지/구분' });
   res.json({ ok: true, day });
-});
-app.post('/api/cartcheck/found', (req, res) => {
-  const { date, note, image } = req.body || {};
-  if (!date) return res.status(400).json({ error: 'date 필요' });
-  res.json({ ok: true, day: cartcheck.addFound(date, { note, dataUrl: image }) });
-});
-app.post('/api/cartcheck/found/reported', (req, res) => {
-  const { date, id, reported } = req.body || {};
-  if (!date || !id) return res.status(400).json({ error: 'date, id 필요' });
-  res.json({ ok: true, day: cartcheck.setFoundReported(date, id, !!reported) });
 });
 app.get('/api/cartcheck/photo/:fname', (req, res) => {
   const fname = req.params.fname;
