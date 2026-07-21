@@ -307,11 +307,42 @@ function initWorklogButtons() {
 
 /* ── 카트 점검 ── */
 let ccDate = null;
+let ccEditMode = false;
 function ccSetPhoto(leg, fname) {
   const lbl = $(leg === 'intake' ? 'ccIntakeLbl' : 'ccExitLbl');
   const thumb = $(leg === 'intake' ? 'ccIntakeThumb' : 'ccExitThumb');
   if (fname) { thumb.src = `/api/cartcheck/photo/${fname}?t=${Date.now()}`; thumb.hidden = false; lbl.classList.add('has'); }
   else { thumb.hidden = true; lbl.classList.remove('has'); }
+}
+function ccRenderList(items, checklist, progress) {
+  const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
+  if (ccEditMode) {
+    editBtn.textContent = '✓ 편집 완료';
+    prog.textContent = '항목 편집 중'; prog.classList.remove('done');
+    list.innerHTML =
+      items.map((it) => `<div class="cc-edit-item"><input value="${esc(it.label)}" data-key="${it.key}" aria-label="항목 이름"><button class="cc-del" data-del="${it.key}" title="삭제">✕</button></div>`).join('') +
+      `<div class="cc-add-row"><input id="ccNewItem" placeholder="새 점검 항목 입력" aria-label="새 항목"><button id="ccAddItem" class="wl-btn wl-yes">추가</button></div>` +
+      `<div class="cc-edit-foot"><button id="ccResetItems" class="wl-btn wl-no">기본 예시로 복원</button><span class="cc-hint">이름을 바꿔도 기존 체크는 유지돼요.</span></div>`;
+    list.querySelectorAll('.cc-edit-item input').forEach((inp) => {
+      inp.onchange = async () => { const v = inp.value.trim(); if (v) await postJSON('/api/cartcheck/items/rename', { key: inp.dataset.key, label: v }); };
+    });
+    list.querySelectorAll('button[data-del]').forEach((b) => {
+      b.onclick = async () => { await postJSON('/api/cartcheck/items/remove', { key: b.dataset.del }); loadCartCheck(); };
+    });
+    $('ccAddItem').onclick = async () => { const v = $('ccNewItem').value.trim(); if (!v) return; await postJSON('/api/cartcheck/items/add', { label: v }); loadCartCheck(); };
+    $('ccNewItem').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('ccAddItem').click(); } };
+    $('ccResetItems').onclick = async () => { if (confirm('체크리스트를 기본 예시로 되돌릴까요? 직접 추가·변경한 항목은 사라집니다.')) { await postJSON('/api/cartcheck/items/reset', {}); loadCartCheck(); } };
+  } else {
+    editBtn.textContent = '✎ 항목 편집';
+    list.innerHTML = items.length
+      ? items.map((it) => { const on = !!checklist[it.key]; return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? '✓' : ''}</span><span>${esc(it.label)}</span></div>`; }).join('')
+      : `<div class="wl-sub">항목이 없어요. ‘✎ 항목 편집’에서 추가하세요.</div>`;
+    list.querySelectorAll('.cc-item').forEach((el) => {
+      el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(); };
+    });
+    prog.textContent = `${progress.checked}/${progress.total}${progress.done ? ' ✓ 완료' : ''}`;
+    prog.classList.toggle('done', !!progress.done);
+  }
 }
 function ccRenderFound(found) {
   if (!found || !found.length) { $('ccFoundList').innerHTML = ''; return; }
@@ -342,16 +373,7 @@ async function loadCartCheck() {
     $('ccCart').value = day.cartNo || work.cartNo || '';
     ccSetPhoto('intake', day.photos && day.photos.intake);
     ccSetPhoto('exit', day.photos && day.photos.exit);
-    const cl = day.checklist || {};
-    $('ccList').innerHTML = items.map((it) => {
-      const on = !!cl[it.key];
-      return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? '✓' : ''}</span><span>${esc(it.label)}</span></div>`;
-    }).join('');
-    $('ccList').querySelectorAll('.cc-item').forEach((el) => {
-      el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(); };
-    });
-    const p = day.progress || { checked: 0, total: items.length, done: false };
-    const prog = $('ccProg'); prog.textContent = `${p.checked}/${p.total}${p.done ? ' ✓ 완료' : ''}`; prog.classList.toggle('done', !!p.done);
+    ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
     ccRenderFound(day.found || []);
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
 }
@@ -361,6 +383,7 @@ async function ccUpload(leg, inp) {
   finally { inp.value = ''; loadCartCheck(); }
 }
 function initCartButtons() {
+  $('ccEdit').onclick = () => { ccEditMode = !ccEditMode; loadCartCheck(); };
   $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);

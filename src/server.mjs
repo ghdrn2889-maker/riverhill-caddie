@@ -255,8 +255,27 @@ app.get('/api/cartcheck', (req, res) => {
   const t = loadToday();
   const tISO = t && worklog.labelToISO(t.date);
   const isWorkToday = !!(t && tISO === date && ['assigned', 'work', 'your_turn'].includes(t.status));
-  res.json({ ok: true, date, items: cartcheck.CHECK_ITEMS, day: cartcheck.getDay(date),
+  res.json({ ok: true, date, items: cartcheck.getItems(), day: cartcheck.getDay(date),
     work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
+});
+// 체크리스트 항목 편집(추가/이름변경/삭제/복원) — 개인 목록으로 저장.
+app.post('/api/cartcheck/items/add', (req, res) => {
+  const label = (req.body || {}).label;
+  if (!label) return res.status(400).json({ error: 'label 필요' });
+  res.json({ ok: true, items: cartcheck.addItem(label) });
+});
+app.post('/api/cartcheck/items/rename', (req, res) => {
+  const { key, label } = req.body || {};
+  if (!key || !label) return res.status(400).json({ error: 'key, label 필요' });
+  res.json({ ok: true, items: cartcheck.renameItem(key, label) });
+});
+app.post('/api/cartcheck/items/remove', (req, res) => {
+  const key = (req.body || {}).key;
+  if (!key) return res.status(400).json({ error: 'key 필요' });
+  res.json({ ok: true, items: cartcheck.removeItem(key) });
+});
+app.post('/api/cartcheck/items/reset', (req, res) => {
+  res.json({ ok: true, items: cartcheck.resetItems() });
 });
 app.post('/api/cartcheck/cart', (req, res) => {
   const { date, cartNo } = req.body || {};

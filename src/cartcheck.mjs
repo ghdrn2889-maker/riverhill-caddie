@@ -10,9 +10,10 @@ import { loadJSON, saveJSON, DATA_DIR } from './store.mjs';
 const FILE = 'cartcheck.json';
 const PHOTO_DIR = path.join(DATA_DIR, 'photos');
 
-// 종료 점검 표준 체크리스트(김홍구님이 실제 카트에 맞춰 조정 가능).
-//  key = 저장 식별자, label = 화면 문구.
-export const CHECK_ITEMS = [
+// 종료 점검 기본(예시) 체크리스트 — 편집 전까지의 '씨앗'.
+//  김홍구님이 항목을 추가/삭제/이름변경하면 개인 목록으로 대체된다.
+//  key = 저장 식별자(체크 상태가 여기에 묶임 — 이름 바꿔도 key 유지 → 기존 체크 보존).
+export const DEFAULT_ITEMS = [
   { key: 'front_basket', label: '앞 수납바구니(볼·티·장갑)' },
   { key: 'cupholder', label: '컵홀더 좌·우(음료·소지품)' },
   { key: 'storage', label: '보관대·서랍(지갑·폰·귀중품)' },
@@ -23,25 +24,67 @@ export const CHECK_ITEMS = [
   { key: 'cooler', label: '쿨러·아이스박스' },
   { key: 'golfbag', label: '골프백 주머니(고객 확인 요청)' },
 ];
-const ITEM_KEYS = new Set(CHECK_ITEMS.map((i) => i.key));
 export const PHOTO_LEGS = ['intake', 'exit']; // 시작 기준 / 빈 카트
+const SETTINGS_KEY = '__settings'; // 날짜 키와 안 겹치는 예약 키
 
 function loadAll() { return loadJSON(FILE, {}); }
 function saveAll(d) { saveJSON(FILE, d); }
 const isISO = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+
+// 현재 체크리스트 항목(편집됐으면 개인목록, 아니면 기본 예시).
+export function getItems() {
+  const s = loadAll()[SETTINGS_KEY];
+  if (s && s.customized && Array.isArray(s.items)) return s.items;
+  return DEFAULT_ITEMS.slice();
+}
+function itemKeySet() { return new Set(getItems().map((i) => i.key)); }
+function saveItems(items) {
+  const d = loadAll();
+  d[SETTINGS_KEY] = { ...(d[SETTINGS_KEY] || {}), items, customized: true };
+  saveAll(d);
+  return getItems();
+}
+let addSeq = 0;
+export function addItem(label) {
+  const l = String(label || '').trim().slice(0, 40);
+  if (!l) return getItems();
+  const items = getItems();
+  const key = `u${Date.now().toString(36)}${addSeq++}`;
+  return saveItems([...items, { key, label: l }]);
+}
+export function renameItem(key, label) {
+  const l = String(label || '').trim().slice(0, 40);
+  if (!l) return getItems();
+  return saveItems(getItems().map((i) => (i.key === key ? { ...i, label: l } : i)));
+}
+export function removeItem(key) {
+  return saveItems(getItems().filter((i) => i.key !== key));
+}
+export function reorderItems(keys) {
+  const map = new Map(getItems().map((i) => [i.key, i]));
+  const items = (keys || []).map((k) => map.get(k)).filter(Boolean);
+  return items.length ? saveItems(items) : getItems();
+}
+export function resetItems() {
+  const d = loadAll();
+  d[SETTINGS_KEY] = { customized: false, items: DEFAULT_ITEMS.slice() };
+  saveAll(d);
+  return getItems();
+}
 
 function blank(dateISO) {
   return { date: dateISO, cartNo: '', photos: {}, checklist: {}, checklistDoneAt: null,
     found: [], remindedAt: null, updatedAt: null };
 }
 
-// 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률도 같이 계산.
+// 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률도 같이 계산(현재 항목 기준).
 export function getDay(dateISO) {
   if (!isISO(dateISO)) return null;
   const d = loadAll();
   const rec = d[dateISO] || blank(dateISO);
-  const checked = ITEM_KEYS.size ? CHECK_ITEMS.filter((i) => rec.checklist[i.key]).length : 0;
-  return { ...rec, progress: { checked, total: CHECK_ITEMS.length, done: checked === CHECK_ITEMS.length } };
+  const items = getItems();
+  const checked = items.filter((i) => rec.checklist[i.key]).length;
+  return { ...rec, progress: { checked, total: items.length, done: items.length > 0 && checked === items.length } };
 }
 
 function mutate(dateISO, fn) {
@@ -61,11 +104,12 @@ export function setCartNo(dateISO, cartNo) {
 
 // 체크리스트 항목 토글. 전부 체크되면 완료시각 기록(=증거 타임스탬프).
 export function toggleCheck(dateISO, key, done) {
-  if (!ITEM_KEYS.has(key)) return getDay(dateISO);
+  const items = getItems();
+  if (!itemKeySet().has(key)) return getDay(dateISO);
   return mutate(dateISO, (r) => {
     r.checklist = { ...r.checklist };
     if (done) r.checklist[key] = true; else delete r.checklist[key];
-    const allDone = CHECK_ITEMS.every((i) => r.checklist[i.key]);
+    const allDone = items.length > 0 && items.every((i) => r.checklist[i.key]);
     r.checklistDoneAt = allDone ? (r.checklistDoneAt || Date.now()) : null;
   });
 }

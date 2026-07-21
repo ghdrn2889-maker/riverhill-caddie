@@ -135,6 +135,14 @@
     .cc-found .cf-rep { font-size:9px; font-weight:800; padding:4px 9px; border-radius:99px; border:0; cursor:pointer; background:#fdf3df; color:#8a5d14; }
     .cc-found .cf-rep.on { background:#e8f3eb; color:#1d6740; }
     .cc-warn { font-size:10px; font-weight:800; color:#8a5d14; background:#fdf3df; padding:9px 11px; border-radius:9px; margin-top:11px; line-height:1.5; }
+    .cc-editbtn { margin-left:auto; font-size:10px; font-weight:800; color:#0b5d34; background:transparent; border:0; cursor:pointer; padding:2px 4px; }
+    .cc-edit-item { display:flex; align-items:center; gap:8px; padding:5px 0; }
+    .cc-edit-item input { flex:1; padding:8px 9px; border:1px solid #dfe5e0; border-radius:8px; font-size:12.5px; width:auto; }
+    .cc-del { background:#fbeaea; color:#b3453b; border:0; width:32px; height:32px; border-radius:8px; font-weight:800; font-size:13px; cursor:pointer; flex:none; }
+    .cc-add-row { display:flex; gap:7px; margin-top:10px; }
+    .cc-add-row input { flex:1; padding:9px; border:1px solid #dfe5e0; border-radius:8px; font-size:12.5px; width:auto; }
+    .cc-edit-foot { display:flex; gap:7px; margin-top:10px; align-items:center; }
+    .cc-hint { font-size:9px; color:#79847d; margin-top:8px; line-height:1.5; }
 
     /* 하단 내비 (확정 시안 .nav 그대로, 실제 탭으로만 전환) */
     nav.nav { position:fixed; left:0; right:0; bottom:0; z-index:20; max-width:600px; margin:0 auto;
@@ -221,7 +229,7 @@
         </div>
 
         <div class="cc-step">
-          <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span></div>
+          <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">✎ 항목 편집</button></div>
           <div id="ccList"></div>
           <div class="wl-row">
             <label class="cc-photo" id="ccExitLbl">📷 '비운 카트' 사진<input id="ccExit" type="file" accept="image/*" capture="environment" hidden></label>
