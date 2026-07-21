@@ -357,10 +357,23 @@ function resolveTeeByGrid(verdict) {
     if (!['work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'assigned';
     verdict._teeSource = 'grid';
   } else {
-    // 순번이 표에 없음. ★배경색이 근무(흰색/색칠)면 스페어로 강등하지 않는다(티오프 매칭 대기 or 표 누락).
+    // 순번이 표에 없음.
+    const posList = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
+    const maxTeePos = posList.length ? Math.max(...posList) : 0;
     const modelTee = (String(verdict.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
     const teeHour = modelTee ? Number(modelTee.split(':')[0]) : null;
     const plausible = modelTee && teeHour != null && teeHour >= Number(process.env.TEE_MIN_HOUR ?? 16);
+    // ★배정된 티오프 최대 순번보다 확실히 뒤면(=아직 팀 안 참) 스페어(대기).
+    //  이 경우 색 판독(흰/회색)이 어긋나도 구조적으로 대기가 맞다 — 회색을 흰색으로 오독해도 방어.
+    //  (근무 확정은 김홍구 정의상 "임시라도 티오프 매칭된 상태"이므로, 티오프 없고 컷 밖이면 대기.)
+    if (maxTeePos > 0 && mp > maxTeePos && !plausible) {
+      verdict.teeTime = null;
+      verdict.myStatus = 'spare';
+      verdict._teeSource = 'beyond-cut';
+      if (isWorkColor) verdict._uncertain = verdict._uncertain
+        || `순번 ${mp}이 배정 티오프(최대 ${maxTeePos}번) 밖 → 스페어(대기)로 판단(색 판독보다 우선)`;
+      return;
+    }
     if (isWorkColor) {
       // 근무 확정. 모델이 본인 티오프를 직접 읽었고(≥16시) 그럴듯하면 유지하되 '확인 필요' 표시(표 누락 가능).
       if (plausible) {
