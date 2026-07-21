@@ -55,6 +55,33 @@
     .board-plain { margin-top:14px; border-radius:16px; background:#e1ebdf; padding:14px; font-size:11px; line-height:1.55; color:#3f5148; }
     .board-plain b { color:#153e2a; }
 
+    /* 스페어(대기) 순번 리스트 — '깔끔 리스트' 확정안(라이트 전용) */
+    .sp-board { margin-top:14px; border:1px solid #e6ebe6; border-radius:16px; overflow:hidden; background:#fdfefc; }
+    .sp-head { padding:13px 15px 11px; border-bottom:1px solid #eef1ec; display:flex; align-items:flex-end; justify-content:space-between; }
+    .sp-head .lbl { font-size:9px; font-weight:850; letter-spacing:.12em; color:#77837c; }
+    .sp-cutinfo { font-size:13px; font-weight:800; color:#153e2a; margin-top:5px; letter-spacing:-.02em; }
+    .sp-ahead { text-align:center; background:#fff8e8; border:1px solid #efdfb8; border-radius:12px; padding:6px 14px; }
+    .sp-ahead b { font-size:22px; letter-spacing:-.04em; color:#9b6819; font-variant-numeric:tabular-nums; line-height:1; display:block; }
+    .sp-ahead span { font-size:8px; color:#9b6819; font-weight:800; }
+    .sp-list { padding:5px 0; }
+    .sp-row { display:flex; align-items:center; gap:12px; padding:8px 15px; font-size:12px; }
+    .sp-row .no { width:26px; text-align:right; font-weight:850; font-variant-numeric:tabular-nums; color:#7a857f; }
+    .sp-row .st { flex:1; color:#647168; }
+    .sp-row.done .no { color:#2e7149; }
+    .sp-row.me { background:linear-gradient(90deg,#fff8e8,#fffdf6); border-left:3px solid #d99a31; }
+    .sp-row.me .no { color:#9b6819; font-size:14px; }
+    .sp-row.me .st { color:#5e410f; font-weight:850; }
+    .sp-badge { font-size:9px; font-weight:800; padding:3px 9px; border-radius:99px; white-space:nowrap; }
+    .sp-b-work { background:#e8f3eb; color:#1d6740; }
+    .sp-b-wait { background:#f2f4f0; color:#8a938b; }
+    .sp-b-me { background:#d99a31; color:#3d2a06; }
+    .sp-cut { display:flex; align-items:center; gap:8px; padding:5px 15px; }
+    .sp-cut i { flex:1; height:0; border-top:1.5px dashed #4f8a66; }
+    .sp-cut b { font-size:8.5px; font-weight:850; color:#2e6a44; letter-spacing:.03em; white-space:nowrap; }
+    .sp-foot { padding:11px 15px; border-top:1px solid #eef1ec; font-size:9.5px; color:#647168; line-height:1.5; display:flex; gap:8px; }
+    .sp-foot b { color:#5e410f; }
+    .sp-note { padding:0 15px 12px; font-size:8.5px; color:#7a857f; line-height:1.5; }
+
     /* 알림 신뢰 상태 (감시 / 전달) */
     .health { display:flex; justify-content:space-between; background:#e8f3eb; color:#1d6740; border-radius:10px; padding:9px 11px; margin:10px 0; font-size:9px; font-weight:750; }
     .health span.bad { color:#bd312d; }

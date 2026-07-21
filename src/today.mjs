@@ -99,6 +99,14 @@ export function applyVerdict(prev, verdict, article) {
     if (Number.isFinite(Number(verdict.cutoffPosition))) next.cutoffPosition = Number(verdict.cutoffPosition);
   }
 
+  // ── 확정선(현재 근무 확정된 마지막 순번) 추적 — 스페어 대시보드 '내 앞 N명' 계산용 ──
+  //  배치표: 티오프표에 배정된 최대 순번. 텍스트 커트라인: cutoffPosition. 그 외엔 기존값 유지.
+  const gridMax = Array.isArray(verdict.teeGrid) && verdict.teeGrid.length
+    ? verdict.teeGrid.reduce((m, g) => Math.max(m, Number(g?.pos) || 0), 0) : 0;
+  const annCut = (verdict.cutoffAnnounced && Number.isFinite(Number(verdict.cutoffPosition))) ? Number(verdict.cutoffPosition) : 0;
+  if (gridMax > 0) next.cutLine = Math.max(gridMax, annCut);                     // 배치표 기준(이번 표)
+  else if (annCut > 0) next.cutLine = Math.max(annCut, Number(cur.cutLine) || 0); // 텍스트 커트라인
+
   // ── 3부 명단(화이트리스트): 본배치표에서 통째로 읽혔을 때만 저장/갱신 ──
   //  (짧은 소식은 part3Roster=[] 이므로 기존 명단을 그대로 유지) — 이후 이름 기반 필터의 근거.
   if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length) {

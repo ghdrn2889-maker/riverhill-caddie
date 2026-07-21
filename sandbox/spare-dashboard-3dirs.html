@@ -1,0 +1,160 @@
+<title>스페어 대시보드 3방향 샘플</title>
+<style>
+  :root{
+    --bg:#f7f6f0; --ink:#17231d; --card:#fff; --cardln:#dfe5e0;
+    --green:#104d31; --green2:#2e7149; --greenText:#153e2a; --greenSoft:#e1ebdf;
+    --amber:#d99a31; --amberInk:#9b6819; --amberSoft:#fff8e8; --amberLn:#efdfb8;
+    --muted:#647168; --muted2:#7a857f; --label:#77837c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  .page{
+    max-width:440px;margin:0 auto;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    min-height:100vh;padding:0 0 40px;
+  }
+  .intro{padding:24px 20px 6px;}
+  .intro h1{font-size:17px;letter-spacing:-.03em;margin:0 0 4px;color:var(--greenText);}
+  .intro p{font-size:11px;color:var(--muted);margin:0;line-height:1.5;}
+  .dirwrap{padding:16px;}
+  .dirtag{display:flex;align-items:center;gap:8px;margin:22px 4px 10px;}
+  .dirtag .k{font-size:11px;font-weight:900;letter-spacing:.02em;color:#fff;background:var(--green);border-radius:7px;padding:3px 8px;}
+  .dirtag .t{font-size:12px;font-weight:850;color:var(--greenText);}
+  .dirtag .d{font-size:9.5px;color:var(--muted2);margin-left:auto;text-align:right;line-height:1.3;max-width:150px;}
+  .honest{font-size:9px;color:var(--muted2);line-height:1.5;margin:9px 4px 0;padding-left:14px;text-indent:-14px;}
+
+  /* ===== 공통 미니 헤더(각 카드 위 상태 표시) ===== */
+  .minihead{display:flex;justify-content:space-between;font-size:9px;color:var(--muted2);font-weight:700;margin:0 2px 7px;}
+
+  /* ============ 방향 A · 번호표 ============ */
+  .ticket{background:var(--card);border:1px solid var(--cardln);border-radius:18px;overflow:hidden;box-shadow:0 6px 20px rgba(24,54,35,.07);}
+  .ticket .thead{background:var(--green);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;}
+  .ticket .thead b{font-size:12px;letter-spacing:.02em;}
+  .ticket .thead span{font-size:9px;opacity:.75;}
+  .ticket .tbody{display:flex;position:relative;}
+  .ticket .tcell{flex:1;text-align:center;padding:20px 10px 22px;}
+  .ticket .tcell .cap{font-size:9px;font-weight:850;letter-spacing:.12em;color:var(--muted2);}
+  .ticket .tcell .big{font-size:56px;line-height:.95;letter-spacing:-.06em;font-variant-numeric:tabular-nums;margin-top:6px;}
+  .ticket .tcell.now .big{color:var(--green2);}
+  .ticket .tcell.me .big{color:var(--amberInk);}
+  .ticket .tcell.me{background:linear-gradient(180deg,#fffdf6,#fff8e8);}
+  .ticket .perf{width:0;border-left:2px dashed #d5ddd5;position:relative;}
+  .ticket .perf::before,.ticket .perf::after{content:"";position:absolute;left:-9px;width:18px;height:18px;border-radius:50%;background:var(--bg);}
+  .ticket .perf::before{top:-9px;} .ticket .perf::after{bottom:-9px;}
+  .ticket .tfoot{border-top:1px solid var(--cardln);padding:12px 16px;display:flex;align-items:center;gap:9px;}
+  .ticket .tfoot .wait{font-size:13px;font-weight:850;color:var(--amberInk);}
+  .ticket .tfoot .wait b{font-size:20px;letter-spacing:-.03em;}
+  .ticket .tfoot .msg{font-size:9.5px;color:var(--muted);line-height:1.45;margin-left:auto;text-align:right;max-width:180px;}
+
+  /* ============ 방향 B · 대기 순번 리스트 ============ */
+  .queueC{background:var(--card);border:1px solid var(--cardln);border-radius:18px;box-shadow:0 6px 20px rgba(24,54,35,.07);overflow:hidden;}
+  .queueC .qh{padding:14px 16px 12px;border-bottom:1px solid var(--cardln);}
+  .queueC .qh .lbl{font-size:9px;font-weight:850;letter-spacing:.12em;color:var(--label);}
+  .queueC .qh h3{margin:6px 0 0;font-size:18px;letter-spacing:-.03em;color:var(--greenText);}
+  .queueC .qh h3 b{color:var(--amberInk);}
+  .qlist{padding:6px 0;}
+  .qrow{display:flex;align-items:center;gap:12px;padding:8px 16px;font-size:12px;}
+  .qrow .no{width:26px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--muted2);text-align:right;}
+  .qrow .st{flex:1;color:var(--muted);}
+  .qrow .badge{font-size:9px;font-weight:800;padding:3px 9px;border-radius:99px;}
+  .qrow.done .no{color:var(--green2);} .qrow.done .badge{background:#e8f3eb;color:#1d6740;}
+  .qrow.wait .badge{background:#f2f4f0;color:#8a938b;}
+  .qrow.me{background:linear-gradient(90deg,#fff8e8,#fffdf6);}
+  .qrow.me .no{color:var(--amberInk);font-size:14px;} .qrow.me .st{color:#5e410f;font-weight:850;}
+  .qrow.me .badge{background:var(--amber);color:#3d2a06;}
+  .cutline{display:flex;align-items:center;gap:8px;padding:3px 16px;margin:2px 0;}
+  .cutline i{flex:1;height:0;border-top:1.5px dashed #4f8a66;}
+  .cutline b{font-size:8.5px;font-weight:850;color:#2e6a44;letter-spacing:.04em;white-space:nowrap;}
+  .queueC .qf{padding:11px 16px;border-top:1px solid var(--cardln);font-size:9.5px;color:var(--muted);line-height:1.5;display:flex;gap:8px;align-items:flex-start;}
+
+  /* ============ 방향 C · 미니멀 링 ============ */
+  .calm{background:var(--card);border:1px solid var(--cardln);border-radius:22px;box-shadow:0 8px 26px rgba(24,54,35,.07);padding:26px 22px 24px;text-align:center;}
+  .calm .cpill{display:inline-block;font-size:9px;font-weight:850;letter-spacing:.1em;color:var(--amberInk);background:var(--amberSoft);border:1px solid var(--amberLn);border-radius:99px;padding:4px 12px;}
+  .ring{width:186px;height:186px;border-radius:50%;margin:20px auto 6px;
+        background:conic-gradient(var(--green2) 0deg 234deg, #e7ede7 234deg 360deg);
+        display:flex;align-items:center;justify-content:center;position:relative;}
+  .ring::before{content:"";position:absolute;inset:14px;border-radius:50%;background:var(--card);}
+  .ring .inner{position:relative;z-index:1;}
+  .ring .inner .n{font-size:52px;line-height:.9;letter-spacing:-.05em;color:var(--greenText);font-variant-numeric:tabular-nums;}
+  .ring .inner .u{font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;}
+  .calm h3{font-size:19px;letter-spacing:-.035em;margin:12px 0 6px;color:var(--greenText);}
+  .calm p{font-size:11px;color:var(--muted);line-height:1.6;margin:0 auto;max-width:260px;}
+  .calm .meta{display:flex;justify-content:center;gap:22px;margin-top:18px;padding-top:16px;border-top:1px solid #eef1ec;}
+  .calm .meta div{text-align:center;}
+  .calm .meta span{font-size:8.5px;color:var(--muted2);font-weight:700;letter-spacing:.05em;}
+  .calm .meta b{display:block;font-size:16px;color:var(--greenText);letter-spacing:-.03em;margin-top:3px;font-variant-numeric:tabular-nums;}
+
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#12180f;--ink:#e7ede2;--card:#1b2419;--cardln:#2c3a29;--greenSoft:#1e2c1d;
+      --greenText:#dfeede;--muted:#9aa89d;--muted2:#859388;--label:#8fa08f;}
+    .ticket .tcell.me{background:linear-gradient(180deg,#241f10,#2a2410);}
+    .qrow.me,.calm .cpill{background:#2a2410;}
+    .qrow.wait .badge{background:#232d20;color:#9aa89d;}
+    .ring::before{background:var(--card);}
+    .ring{background:conic-gradient(#5fa878 0deg 234deg,#2c3a29 234deg 360deg);}
+    .perf::before,.perf::after{background:var(--bg)!important;}
+  }
+</style>
+
+<div class="page">
+  <div class="intro">
+    <h1>스페어(대기) 대시보드 · 3가지 방향</h1>
+    <p>같은 상황(3부 순번 20번 · 확정선 13번 · 내 앞 6명)을 세 가지로 풀었어요. 마음에 드는 방향을 고르시면 실데이터로 앱에 이식합니다.</p>
+  </div>
+
+  <div class="dirwrap">
+
+    <!-- ===================== A · 번호표 ===================== -->
+    <div class="dirtag"><span class="k">A</span><span class="t">번호표</span><span class="d">병원·베이커리 번호표 감각. 고대비 숫자.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="ticket">
+      <div class="thead"><b>3부 대기 번호표</b><span>순번은 고정 · 확정선만 올라가요</span></div>
+      <div class="tbody">
+        <div class="tcell now"><div class="cap">지금 확정</div><div class="big">13</div></div>
+        <div class="perf"></div>
+        <div class="tcell me"><div class="cap">내 번호</div><div class="big">20</div></div>
+      </div>
+      <div class="tfoot">
+        <div class="wait">앞에 <b>6</b>명</div>
+        <div class="msg">내 번호가 불리면 <b style="color:#5e410f">지금 차례</b> 알림이 즉시 갑니다.</div>
+      </div>
+    </div>
+    <p class="honest">※ 티오프 시간은 당일 예약이 차면 앞으로 계속 당겨져, 확정 전엔 미리 알려드리지 않아요.</p>
+
+    <!-- ===================== B · 대기 순번 리스트 ===================== -->
+    <div class="dirtag"><span class="k">B</span><span class="t">대기 순번 리스트</span><span class="d">줄 어디에 있는지 투명하게. 신뢰형.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="queueC">
+      <div class="qh"><div class="lbl">3부 대기 순번</div><h3>내 순번 <b>20번</b> · 앞에 6명</h3></div>
+      <div class="qlist">
+        <div class="qrow done"><span class="no">11</span><span class="st">확정</span><span class="badge">근무</span></div>
+        <div class="qrow done"><span class="no">12</span><span class="st">확정</span><span class="badge">근무</span></div>
+        <div class="qrow done"><span class="no">13</span><span class="st">확정</span><span class="badge">근무</span></div>
+        <div class="cutline"><i></i><b>확정선 — 여기까지 근무 확정</b><i></i></div>
+        <div class="qrow wait"><span class="no">14</span><span class="st">대기</span><span class="badge">스페어</span></div>
+        <div class="qrow wait"><span class="no">15</span><span class="st">대기</span><span class="badge">스페어</span></div>
+        <div class="qrow wait"><span class="no">…</span><span class="st">대기</span><span class="badge">스페어</span></div>
+        <div class="qrow wait"><span class="no">19</span><span class="st">대기</span><span class="badge">스페어</span></div>
+        <div class="qrow me"><span class="no">20</span><span class="st">나 — 대기 중</span><span class="badge">나</span></div>
+        <div class="qrow wait"><span class="no">21</span><span class="st">대기</span><span class="badge">스페어</span></div>
+      </div>
+      <div class="qf"><span>🔔</span><span>확정선이 <b>20번</b>에 닿으면 “지금 차례” 알림이 가요. 티오프는 예약이 차며 계속 당겨져 확정 전엔 예측하지 않습니다.</span></div>
+    </div>
+
+    <!-- ===================== C · 미니멀 링 ===================== -->
+    <div class="dirtag"><span class="k">C</span><span class="t">미니멀 링</span><span class="d">여백 가득. 쉬어도 된다는 안심 중심.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="calm">
+      <span class="cpill">3부 스페어 · 대기 중</span>
+      <div class="ring"><div class="inner"><div class="n">6</div><div class="u">명 남음</div></div></div>
+      <h3>순번 20번 · 대기 중이에요</h3>
+      <p>확정선이 내 순번에 닿으면 <b style="color:#5e410f">바로 알려드릴게요.</b> 지금은 편히 쉬셔도 됩니다.</p>
+      <div class="meta">
+        <div><span>내 순번</span><b>20번</b></div>
+        <div><span>현재 확정선</span><b>13번</b></div>
+        <div><span>내 앞</span><b>6명</b></div>
+      </div>
+    </div>
+    <p class="honest">※ 티오프 시간은 예약이 차면 계속 앞당겨져, 확정 전엔 표시하지 않아요.</p>
+
+  </div>
+</div>

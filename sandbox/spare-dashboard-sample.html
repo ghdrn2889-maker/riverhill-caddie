@@ -1,0 +1,184 @@
+<title>스페어 대시보드 샘플</title>
+<style>
+  :root{
+    --bg:#f7f6f0; --ink:#17231d; --card:#fff; --cardln:#dfe5e0;
+    --green:#104d31; --green2:#2e7149; --greenText:#153e2a; --greenSoft:#e1ebdf;
+    --amber:#d99a31; --amberInk:#9b6819; --amberSoft:#fff8e8; --amberLn:#efdfb8;
+    --muted:#647168; --muted2:#7a857f; --label:#77837c;
+    --track:#c4d2c6; --tickWait:#f0dcae;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  .wrap{
+    max-width:430px;margin:0 auto;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    min-height:100vh;padding-bottom:26px;
+  }
+  /* 헤더 */
+  .top{background:var(--green);color:#fff;padding:26px 18px 15px;}
+  .toprow{display:flex;justify-content:space-between;align-items:center;}
+  .brand{font-size:11px;font-weight:850;letter-spacing:.09em;}
+  .date{font-size:10px;opacity:.72;margin-top:2px;}
+  .body{padding:14px;}
+  .health{display:flex;justify-content:space-between;background:#e8f3eb;color:#1d6740;border-radius:10px;padding:9px 11px;margin-bottom:12px;font-size:9px;font-weight:750;}
+
+  /* 히어로 */
+  .hero{background:var(--card);border:1px solid var(--cardln);border-radius:19px;box-shadow:0 6px 20px rgba(24,54,35,.06);padding:17px;}
+  .label{font-size:9px;color:var(--label);font-weight:850;letter-spacing:.13em;}
+  .hpill{display:inline-block;font-size:9px;font-weight:850;letter-spacing:.06em;color:var(--amberInk);background:var(--amberSoft);border:1px solid var(--amberLn);border-radius:99px;padding:3px 9px;vertical-align:middle;margin-left:7px;}
+  .hero h3{font-size:25px;line-height:1.1;letter-spacing:-.045em;margin:9px 0 6px;color:var(--greenText);}
+  .hero h3 .num{color:var(--amberInk);}
+  .sub{font-size:11px;line-height:1.55;color:var(--muted);margin:0;}
+
+  /* 대기 진행 게이지 보드 */
+  .gaugeboard{margin-top:14px;border-radius:16px;background:var(--greenSoft);padding:15px 14px 14px;}
+  .gtop{display:flex;align-items:center;justify-content:space-between;}
+  .gtop b{font-size:11px;color:#23583a;}
+  .gtop .now{font-size:9px;color:#637369;}
+  .gbig{display:flex;align-items:flex-end;gap:8px;margin:9px 0 3px;}
+  .gbig strong{font-size:38px;line-height:.9;letter-spacing:-.055em;color:var(--greenText);font-variant-numeric:tabular-nums;}
+  .gbig em{font-style:normal;font-size:15px;font-weight:800;color:var(--greenText);padding-bottom:5px;letter-spacing:-.03em;}
+  .gbig span{font-size:9px;color:#5f6f66;padding-bottom:6px;margin-left:auto;text-align:right;line-height:1.4;}
+
+  /* 사람 단위 큐 (순번 1..20) */
+  .queue{display:flex;gap:3px;align-items:flex-end;margin:12px 2px 6px;}
+  .tick{flex:1;height:16px;border-radius:3px;background:var(--green2);position:relative;}
+  .tick.wait{height:16px;background:var(--tickWait);}
+  .tick.me{height:26px;background:var(--amber);box-shadow:0 0 0 3px rgba(217,154,49,.22);}
+  .qmark{position:relative;height:18px;margin:0 2px;}
+  .qmark i{position:absolute;top:0;width:1px;height:8px;background:#a9bcae;}
+  .qmark b{position:absolute;top:8px;transform:translateX(-50%);font-size:8px;font-weight:800;white-space:nowrap;}
+  .qmark .cut{left:65%;} .qmark .cut i{background:#3f7a55;} .qmark .cut b{color:#2e6a44;}
+  .qmark .meL{left:100%;} .qmark .meL i{background:var(--amber);left:auto;right:0;} .qmark .meL b{color:var(--amberInk);left:auto;right:0;transform:none;}
+  .qlegend{display:flex;gap:12px;font-size:8.5px;color:#5f6f66;margin-top:10px;}
+  .qlegend i{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:4px;}
+  .qlegend .lg{background:var(--green2);} .qlegend .lw{background:var(--tickWait);} .qlegend .lm{background:var(--amber);}
+
+  /* 예상 정보 미니 카드 */
+  .minirow{display:flex;gap:7px;margin-top:11px;}
+  .mini{flex:1;background:#fff;border:1px solid #e1e5e2;border-radius:10px;padding:9px 10px;}
+  .mini span{font-size:8px;color:var(--muted2);font-weight:700;}
+  .mini b{font-size:12px;display:block;margin-top:3px;font-variant-numeric:tabular-nums;color:var(--greenText);letter-spacing:-.02em;}
+  .mini b small{font-size:8.5px;color:var(--muted2);font-weight:600;}
+
+  /* 다음 안내 */
+  .next{margin-top:11px;background:var(--amberSoft);border:1px solid var(--amberLn);border-radius:12px;padding:11px 12px;display:flex;gap:10px;align-items:flex-start;}
+  .next .ic{font-size:15px;line-height:1.2;}
+  .next p{margin:0;font-size:10.5px;line-height:1.55;color:#78561c;}
+  .next p b{color:#5e410f;}
+
+  /* 진행 미리보기 */
+  .fore{margin-top:16px;}
+  .foretitle{font-size:9px;color:var(--label);font-weight:850;letter-spacing:.13em;margin:0 3px 8px;}
+  .steps{display:flex;gap:8px;}
+  .step{flex:1;background:#fff;border:1px solid var(--cardln);border-radius:13px;padding:10px 9px;text-align:center;}
+  .step.on{border-color:var(--amber);box-shadow:0 4px 12px rgba(217,154,49,.14);}
+  .stepbar{display:flex;gap:2px;justify-content:center;margin-bottom:8px;height:14px;align-items:flex-end;}
+  .stepbar i{width:4px;border-radius:2px;background:var(--green2);height:9px;}
+  .stepbar i.w{background:var(--tickWait);}
+  .stepbar i.m{background:var(--amber);height:14px;}
+  .stepbar i.r{background:#d0453f;height:14px;}
+  .step .st{font-size:11px;font-weight:850;letter-spacing:-.02em;}
+  .step .sd{font-size:8.5px;color:var(--muted2);margin-top:2px;line-height:1.4;}
+  .step.on .st{color:var(--amberInk);}
+  .step .rd{color:#c0342f;}
+
+  .foot{font-size:9px;color:var(--muted2);text-align:center;margin-top:16px;line-height:1.5;}
+
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#12180f;--ink:#e7ede2;--card:#1b2419;--cardln:#2c3a29;--greenSoft:#1e2c1d;
+      --greenText:#dfeede;--muted:#9aa89d;--muted2:#8593888;--label:#8fa08f;--tickWait:#4a3f22;--track:#33422f;}
+    .health{background:#1e3325;color:#8fd8a8;}
+    .mini{background:#141c12;border-color:#2c3a29;}
+    .next{background:#2a2410;border-color:#4a3f1e;}.next p{color:#e6cf8f;}.next p b{color:#f3e2ad;}
+    .step{background:#141c12;}
+    .hpill,.hero h3 .num,.gbig strong,.gbig em{}
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="toprow">
+      <div>
+        <div class="brand">리버힐 캐디</div>
+        <div class="date">7월 21일 화요일 · 15:12</div>
+      </div>
+      <div style="font-size:9px;opacity:.8;text-align:right;">🟢 감시 중<br><span style="opacity:.6;">1분 전 확인</span></div>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="health"><span>🟢 일정 감시 정상</span><span>🔔 이 폰 알림 연결됨</span></div>
+
+    <!-- 히어로 -->
+    <section class="hero">
+      <div class="label">오늘 내 상황<span class="hpill">스페어 · 대기</span></div>
+      <h3>3부 <span class="num">순번 20번</span>으로<br>대기 중이에요</h3>
+      <p class="sub">아직 근무 확정은 아니에요. 앞 순번이 차면 위에서부터 확정되고, <b style="color:#5e410f">내 차례가 오는 즉시 집에서 나갈 시각을 계산해 알려드릴게요.</b> 지금은 편히 대기하셔도 됩니다.</p>
+
+      <!-- 대기 진행 게이지 -->
+      <div class="gaugeboard">
+        <div class="gtop"><b>확정까지 남은 거리</b><span class="now">현재 확정선 13번</span></div>
+        <div class="gbig">
+          <strong>6</strong><em>명</em>
+          <span>내 앞 대기 인원<br>(13 → 20번)</span>
+        </div>
+
+        <div class="queue">
+          <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+          <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+          <div class="tick"></div><div class="tick"></div><div class="tick"></div><div class="tick"></div>
+          <div class="tick"></div>
+          <div class="tick wait"></div><div class="tick wait"></div><div class="tick wait"></div>
+          <div class="tick wait"></div><div class="tick wait"></div><div class="tick wait"></div>
+          <div class="tick me"></div>
+        </div>
+        <div class="qmark">
+          <div class="cut"><i></i><b>확정선 13번</b></div>
+          <div class="meL"><i></i><b>나 20번</b></div>
+        </div>
+
+        <div class="qlegend">
+          <span><i class="lg"></i>확정 13명</span>
+          <span><i class="lw"></i>내 앞 대기 6명</span>
+          <span><i class="lm"></i>나</span>
+        </div>
+      </div>
+
+      <!-- 예상 정보 -->
+      <div class="minirow">
+        <div class="mini"><span>현재 배정 티오프</span><b>16:46 ~ 18:31 <small>13팀</small></b></div>
+        <div class="mini"><span>내 예상 티오프</span><b>18:31 이후 <small>확정 시</small></b></div>
+      </div>
+
+      <!-- 다음 안내 -->
+      <div class="next">
+        <div class="ic">🔔</div>
+        <p>“<b>○○님까지 근무</b>” 소식이 20번에 닿으면 <b>지금 차례 알림</b>이 갑니다. 그 전에 티오프가 배정되면 <b>집에서 나갈 시각</b>부터 카운트다운으로 바뀌어요.</p>
+      </div>
+    </section>
+
+    <!-- 진행 미리보기 -->
+    <section class="fore">
+      <div class="foretitle">순번이 차오르면 이렇게 바뀌어요</div>
+      <div class="steps">
+        <div class="step on">
+          <div class="stepbar"><i></i><i></i><i></i><i class="w"></i><i class="w"></i><i class="m"></i></div>
+          <div class="st">대기</div>
+          <div class="sd">지금 · 앞 6명<br>여유 있게 대기</div>
+        </div>
+        <div class="step">
+          <div class="stepbar"><i></i><i></i><i></i><i></i><i></i><i class="m"></i></div>
+          <div class="st">임박</div>
+          <div class="sd">앞 1~2명<br>준비 챙기기</div>
+        </div>
+        <div class="step">
+          <div class="stepbar"><i></i><i></i><i></i><i></i><i></i><i class="r"></i></div>
+          <div class="st rd">지금 차례</div>
+          <div class="sd">바로 출근 준비<br>티오프 안내</div>
+        </div>
+      </div>
+    </section>
+
+    <p class="foot">스페어 대시보드 샘플 · 리버힐 캐디 앱 디자인 언어 기반<br>실데이터(순번·확정선·티오프) 연동 예정</p>
+  </div>
+</div>

@@ -1,0 +1,182 @@
+<title>대기 순번 리스트 · 3변형</title>
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#f7f6f0; --ink:#17231d; --card:#fff; --cardln:#dfe5e0;
+    --green:#104d31; --green2:#2e7149; --green3:#1d6740; --greenText:#153e2a;
+    --greenSoft:#e8f3eb; --greenSoft2:#e1ebdf;
+    --amber:#d99a31; --amberInk:#9b6819; --amberDeep:#5e410f; --amberSoft:#fff8e8; --amberLn:#efdfb8;
+    --muted:#647168; --muted2:#7a857f; --label:#77837c;
+    --waitBg:#f2f4f0; --waitInk:#8a938b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  .page{
+    max-width:440px;margin:0 auto;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    min-height:100vh;padding:0 0 40px;
+  }
+  .intro{padding:24px 20px 6px;}
+  .intro h1{font-size:17px;letter-spacing:-.03em;margin:0 0 4px;color:var(--greenText);}
+  .intro p{font-size:11px;color:var(--muted);margin:0;line-height:1.5;}
+  .dirwrap{padding:16px;}
+  .dirtag{display:flex;align-items:center;gap:8px;margin:22px 4px 10px;}
+  .dirtag .k{font-size:11px;font-weight:900;color:#fff;background:var(--green);border-radius:7px;padding:3px 9px;}
+  .dirtag .t{font-size:12px;font-weight:850;color:var(--greenText);}
+  .dirtag .d{font-size:9.5px;color:var(--muted2);margin-left:auto;text-align:right;line-height:1.3;max-width:150px;}
+  .minihead{display:flex;justify-content:space-between;font-size:9px;color:var(--muted2);font-weight:700;margin:0 2px 7px;}
+  .honest{font-size:9px;color:var(--muted2);line-height:1.5;margin:9px 4px 0;padding-left:14px;text-indent:-14px;}
+  .card{background:var(--card);border:1px solid var(--cardln);border-radius:18px;box-shadow:0 6px 20px rgba(24,54,35,.07);overflow:hidden;}
+
+  /* 공통 리스트 요소 */
+  .lbl{font-size:9px;font-weight:850;letter-spacing:.12em;color:var(--label);}
+  .badge{font-size:9px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap;}
+  .b-work{background:var(--greenSoft);color:var(--green3);}
+  .b-wait{background:var(--waitBg);color:var(--waitInk);}
+  .b-me{background:var(--amber);color:#3d2a06;}
+
+  /* ============ 변형 1 · 깔끔 리스트 ============ */
+  .v1 .head{padding:15px 16px 13px;border-bottom:1px solid var(--cardln);display:flex;align-items:flex-end;justify-content:space-between;}
+  .v1 .head h3{margin:6px 0 0;font-size:21px;letter-spacing:-.035em;color:var(--greenText);}
+  .v1 .head h3 b{color:var(--amberInk);}
+  .v1 .head .aheadbox{text-align:center;background:var(--amberSoft);border:1px solid var(--amberLn);border-radius:12px;padding:6px 13px;}
+  .v1 .head .aheadbox b{font-size:22px;letter-spacing:-.04em;color:var(--amberInk);font-variant-numeric:tabular-nums;line-height:1;}
+  .v1 .head .aheadbox span{font-size:8px;color:var(--amberInk);font-weight:800;display:block;margin-top:2px;}
+  .v1 .list{padding:6px 0;}
+  .v1 .row{display:flex;align-items:center;gap:12px;padding:9px 16px;font-size:12px;}
+  .v1 .row .no{width:26px;text-align:right;font-weight:850;font-variant-numeric:tabular-nums;color:var(--muted2);}
+  .v1 .row .st{flex:1;color:var(--muted);}
+  .v1 .row.done .no{color:var(--green2);}
+  .v1 .row.me{background:linear-gradient(90deg,#fff8e8,#fffdf6);border-left:3px solid var(--amber);}
+  .v1 .row.me .no{color:var(--amberInk);font-size:14px;} .v1 .row.me .st{color:var(--amberDeep);font-weight:850;}
+  .v1 .cut{display:flex;align-items:center;gap:8px;padding:5px 16px;}
+  .v1 .cut i{flex:1;height:0;border-top:1.5px dashed #4f8a66;}
+  .v1 .cut b{font-size:8.5px;font-weight:850;color:#2e6a44;letter-spacing:.03em;white-space:nowrap;}
+  .v1 .foot{padding:11px 16px;border-top:1px solid var(--cardln);font-size:9.5px;color:var(--muted);line-height:1.5;display:flex;gap:8px;}
+
+  /* ============ 변형 2 · 타임라인 스파인 ============ */
+  .v2{padding:16px 16px 8px;}
+  .v2 .top{margin-bottom:4px;}
+  .v2 .top h3{margin:5px 0 0;font-size:20px;letter-spacing:-.035em;color:var(--greenText);}
+  .v2 .top h3 b{color:var(--amberInk);}
+  .spine{position:relative;margin:14px 0 2px;padding-left:34px;}
+  .spine::before{content:"";position:absolute;left:11px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--green2) 0 42%,var(--amber) 58% 100%);border-radius:2px;}
+  .node{position:relative;padding:7px 0;font-size:12px;display:flex;align-items:center;gap:10px;}
+  .node .dot{position:absolute;left:-27px;width:16px;height:16px;border-radius:50%;background:var(--card);border:2px solid #b9c9bd;}
+  .node.done .dot{background:var(--green2);border-color:var(--green2);}
+  .node.done .dot::after{content:"✓";position:absolute;inset:0;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;}
+  .node .no{font-weight:850;font-variant-numeric:tabular-nums;color:var(--muted2);width:22px;}
+  .node.done .no{color:var(--green2);}
+  .node .st{color:var(--muted);}
+  .node.me{margin:2px 0;}
+  .node.me .dot{left:-30px;width:22px;height:22px;background:var(--amber);border-color:var(--amber);box-shadow:0 0 0 4px rgba(217,154,49,.2);}
+  .node.me .dot::after{content:"★";position:absolute;inset:0;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;}
+  .node.me .no{color:var(--amberInk);font-size:15px;} .node.me .st{color:var(--amberDeep);font-weight:850;}
+  .cutmark{position:relative;padding:4px 0 4px 0;}
+  .cutmark span{display:inline-block;font-size:8.5px;font-weight:850;color:#2e6a44;background:var(--greenSoft);border:1px solid #c7e0cf;border-radius:99px;padding:2px 9px;}
+  .cutmark::before{content:"";position:absolute;left:-23px;top:50%;width:14px;height:0;border-top:1.5px dashed #4f8a66;}
+  .v2 .foot{margin-top:10px;padding:11px 2px 4px;font-size:9.5px;color:var(--muted);line-height:1.5;display:flex;gap:8px;}
+
+  /* ============ 변형 3 · 요약 우선 + 컴팩트 ============ */
+  .v3 .stats{display:flex;gap:8px;padding:15px 15px 13px;}
+  .v3 .stat{flex:1;text-align:center;background:var(--greenSoft2);border-radius:12px;padding:10px 6px;}
+  .v3 .stat.hl{background:var(--amberSoft);border:1px solid var(--amberLn);}
+  .v3 .stat span{font-size:8px;font-weight:800;letter-spacing:.05em;color:var(--muted2);}
+  .v3 .stat b{display:block;font-size:24px;letter-spacing:-.045em;color:var(--greenText);font-variant-numeric:tabular-nums;margin-top:2px;line-height:1;}
+  .v3 .stat.hl b{color:var(--amberInk);}
+  .v3 .stat b small{font-size:10px;font-weight:700;}
+  .segwrap{padding:0 16px 4px;}
+  .seg{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden;}
+  .seg i{flex:1;background:var(--green2);}
+  .seg i.w{background:#dfe7e0;} .seg i.m{background:var(--amber);flex:1.2;}
+  .seglab{display:flex;justify-content:space-between;font-size:8px;color:var(--muted2);font-weight:700;margin-top:5px;}
+  .v3 .clist{padding:8px 0 4px;margin-top:6px;border-top:1px solid var(--cardln);}
+  .v3 .crow{display:flex;align-items:center;gap:10px;padding:6px 16px;font-size:11.5px;}
+  .v3 .crow .no{width:22px;text-align:right;font-weight:850;font-variant-numeric:tabular-nums;color:var(--muted2);}
+  .v3 .crow .st{flex:1;color:var(--muted);}
+  .v3 .crow.done .no{color:var(--green2);}
+  .v3 .crow.me{background:linear-gradient(90deg,#fff8e8,#fffdf6);border-left:3px solid var(--amber);}
+  .v3 .crow.me .no{color:var(--amberInk);font-size:13px;} .v3 .crow.me .st{color:var(--amberDeep);font-weight:850;}
+  .v3 .ccut{display:flex;align-items:center;gap:8px;padding:4px 16px;}
+  .v3 .ccut i{flex:1;height:0;border-top:1.5px dashed #4f8a66;}
+  .v3 .ccut b{font-size:8px;font-weight:850;color:#2e6a44;white-space:nowrap;}
+  .v3 .foot{padding:10px 16px;border-top:1px solid var(--cardln);font-size:9.5px;color:var(--muted);line-height:1.5;display:flex;gap:8px;}
+</style>
+
+<div class="page">
+  <div class="intro">
+    <h1>대기 순번 리스트 · 3가지 보완안</h1>
+    <p>같은 상황(3부 순번 20번 · 확정선 13번 · 내 앞 6명)을 리스트 방식으로 세 가지로 다듬었어요. 전부 밝은 톤 고정입니다.</p>
+  </div>
+
+  <div class="dirwrap">
+
+    <!-- ============ 1 · 깔끔 리스트 ============ -->
+    <div class="dirtag"><span class="k">1</span><span class="t">깔끔 리스트</span><span class="d">상단 요약 + 확정선 강조. 안정형.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="card v1">
+      <div class="head">
+        <div><div class="lbl">3부 대기 순번</div><h3>내 순번 <b>20번</b></h3></div>
+        <div class="aheadbox"><b>6</b><span>내 앞</span></div>
+      </div>
+      <div class="list">
+        <div class="row done"><span class="no">12</span><span class="st">확정</span><span class="badge b-work">근무</span></div>
+        <div class="row done"><span class="no">13</span><span class="st">확정</span><span class="badge b-work">근무</span></div>
+        <div class="cut"><i></i><b>확정선 · 여기까지 근무</b><i></i></div>
+        <div class="row"><span class="no">14</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="row"><span class="no">15</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="row"><span class="no">⋯</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="row"><span class="no">19</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="row me"><span class="no">20</span><span class="st">나 — 대기 중</span><span class="badge b-me">나</span></div>
+        <div class="row"><span class="no">21</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+      </div>
+      <div class="foot"><span>🔔</span><span>확정선이 <b style="color:var(--amberDeep)">20번</b>에 닿으면 “지금 차례” 알림이 갑니다.</span></div>
+    </div>
+    <p class="honest">※ 티오프 시간은 당일 예약이 차면 앞으로 계속 당겨져, 확정 전엔 표시하지 않아요.</p>
+
+    <!-- ============ 2 · 타임라인 스파인 ============ -->
+    <div class="dirtag"><span class="k">2</span><span class="t">타임라인 스파인</span><span class="d">선으로 잇는 세로 타임라인. 다가오는 느낌.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="card"><div class="v2">
+      <div class="top"><div class="lbl">3부 대기 순번</div><h3>내 순번 <b>20번</b> · 앞에 6명</h3></div>
+      <div class="spine">
+        <div class="node done"><span class="dot"></span><span class="no">12</span><span class="st">확정 · 근무</span></div>
+        <div class="node done"><span class="dot"></span><span class="no">13</span><span class="st">확정 · 근무</span></div>
+        <div class="cutmark"><span>확정선 — 여기까지 확정</span></div>
+        <div class="node"><span class="dot"></span><span class="no">14</span><span class="st">대기</span></div>
+        <div class="node"><span class="dot"></span><span class="no">⋯</span><span class="st">대기</span></div>
+        <div class="node"><span class="dot"></span><span class="no">19</span><span class="st">대기</span></div>
+        <div class="node me"><span class="dot"></span><span class="no">20</span><span class="st">나 — 대기 중</span></div>
+      </div>
+      <div class="foot"><span>🔔</span><span>확정선이 내려와 <b style="color:var(--amberDeep)">20번</b>에 닿으면 즉시 알림이 갑니다.</span></div>
+    </div></div>
+    <p class="honest">※ 티오프 시간은 예약이 차면 계속 앞당겨져, 확정 전엔 표시하지 않아요.</p>
+
+    <!-- ============ 3 · 요약 우선 + 컴팩트 ============ -->
+    <div class="dirtag"><span class="k">3</span><span class="t">요약 우선 + 컴팩트</span><span class="d">한눈 요약 + 진행 바 + 압축 리스트.</span></div>
+    <div class="minihead"><span>🟢 감시 중 · 1분 전</span><span>7월 21일 화요일</span></div>
+    <div class="card v3">
+      <div class="stats">
+        <div class="stat"><span>내 순번</span><b>20<small>번</small></b></div>
+        <div class="stat"><span>확정선</span><b>13<small>번</small></b></div>
+        <div class="stat hl"><span>내 앞</span><b>6<small>명</small></b></div>
+      </div>
+      <div class="segwrap">
+        <div class="seg">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="w"></i><i class="m"></i>
+        </div>
+        <div class="seglab"><span>확정 13</span><span>대기 · 나 20번 ▸</span></div>
+      </div>
+      <div class="clist">
+        <div class="crow done"><span class="no">13</span><span class="st">확정 · 근무</span><span class="badge b-work">근무</span></div>
+        <div class="ccut"><i></i><b>확정선</b><i></i></div>
+        <div class="crow"><span class="no">14</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="crow"><span class="no">⋯</span><span class="st">대기</span><span class="badge b-wait">스페어</span></div>
+        <div class="crow me"><span class="no">20</span><span class="st">나 — 대기 중</span><span class="badge b-me">나</span></div>
+      </div>
+      <div class="foot"><span>🔔</span><span>내 앞 6명이 확정되면 “지금 차례” 알림이 갑니다.</span></div>
+    </div>
+    <p class="honest">※ 티오프 시간은 예약이 차면 계속 앞당겨져, 확정 전엔 표시하지 않아요.</p>
+
+  </div>
+</div>

@@ -171,9 +171,60 @@ function renderBoard(t) {
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.
   if (st === 'off') slot.innerHTML = `<div class="board-plain"><b>오늘은 예정된 근무가 없어요.</b> 편히 쉬세요. 새 소식이 오면 알려드릴게요.</div>`;
-  else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = `<div class="board-plain">아직 <b>근무 확정 전</b>이에요. 티오프가 배정되면 <b>집에서 나갈 시각</b>을 계산해 바로 알려드립니다.${s.cutoffName ? `<br>최근 확정: ${esc(s.cutoffName)}님까지` : ''}</div>`;
+  else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s);
   else if (st === 'your_turn') slot.innerHTML = `<div class="board-plain"><b style="color:#bd312d">지금 바로 출근 준비하세요.</b> 티오프가 올라오면 시간 안내로 바뀝니다.</div>`;
   else slot.innerHTML = '';
+}
+
+// 스페어(대기) 대시보드 — '대기 순번 리스트'(깔끔 리스트 확정안). 실데이터로 그림.
+function renderSpareBoard(s) {
+  const myPos = Number(s.myPosition) || 0;
+  const cut = Number(s.cutLine) || 0;
+  const roster = Array.isArray(s.roster3) ? s.roster3 : [];
+  const nameAt = (p) => (typeof p === 'number' && p >= 1 && roster[p - 1]) ? roster[p - 1] : '';
+  const note = `<div class="sp-note">※ 티오프 시간은 당일 예약이 차면 앞으로 계속 당겨져, 확정 전엔 표시하지 않아요.</div>`;
+
+  // 확정선 정보가 없으면(텍스트-only 등) 간단 안내로 폴백.
+  if (!myPos || !cut || myPos <= cut) {
+    return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span>` +
+      `<span>아직 <b>근무 확정 전</b>이에요${myPos ? ` · 순번 ${myPos}번` : ''}. 확정선 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div>${note}</div>`;
+  }
+
+  const ahead = Math.max(0, myPos - cut - 1);
+  const rows = [];
+  const rowHTML = (p, kind) => {
+    const nm = nameAt(p);
+    let st, badge;
+    if (kind === 'done') { st = nm || '확정'; badge = '<span class="sp-badge sp-b-work">근무</span>'; }
+    else if (kind === 'me') { st = '나 — 대기 중'; badge = '<span class="sp-badge sp-b-me">나</span>'; }
+    else { st = nm || '대기'; badge = '<span class="sp-badge sp-b-wait">스페어</span>'; }
+    return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${badge}</div>`;
+  };
+  // 확정 구간(커트라인 직전 2행)
+  if (cut - 1 >= 1) rows.push(rowHTML(cut - 1, 'done'));
+  rows.push(rowHTML(cut, 'done'));
+  rows.push(`<div class="sp-cut"><i></i><b>확정선 · 여기까지 근무</b><i></i></div>`);
+  // 대기 구간(길면 가운데 ⋯로 접기)
+  const waitStart = cut + 1;
+  if (myPos - 1 - waitStart <= 2) {
+    for (let p = waitStart; p <= myPos - 1; p++) rows.push(rowHTML(p, 'wait'));
+  } else {
+    rows.push(rowHTML(waitStart, 'wait'));
+    rows.push(`<div class="sp-row"><span class="no">⋯</span><span class="st">대기</span><span class="sp-badge sp-b-wait">스페어</span></div>`);
+    rows.push(rowHTML(myPos - 1, 'wait'));
+  }
+  rows.push(rowHTML(myPos, 'me'));
+  rows.push(rowHTML(myPos + 1, 'wait'));
+
+  return `<div class="sp-board">
+    <div class="sp-head">
+      <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+      <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
+    </div>
+    <div class="sp-list">${rows.join('')}</div>
+    <div class="sp-foot"><span>🔔</span><span>확정선이 <b>${myPos}번</b>에 닿으면 “지금 차례” 알림이 갑니다.</span></div>
+    ${note}
+  </div>`;
 }
 
 /* ── 소식 피드 ── */
