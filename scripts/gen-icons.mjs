@@ -21,13 +21,14 @@ function chunk(type, data) {
   return Buffer.concat([len, t, data, crc]);
 }
 
-// ── 디자인 파라미터 (512 공간) ──
+// ── 디자인 파라미터 (512 공간) — 반전: 딥그린 배경 + 크림 오브젝트 ──
 const CREAM = [241, 235, 221];
-const CREAM_EDGE = [214, 203, 176];
-const GREEN = [14, 74, 45];
+const GREEN_CTR = [23, 102, 63];   // 배경 중심(살짝 밝은 그린)
+const GREEN_EDGE = [9, 55, 33];    // 배경 가장자리(어둡게 — 비네트)
+const DIMPLE = [12, 64, 40];       // 크림 공 위의 그린 딤플
 const CX = 256, CY = 256;
 const BALL_R = 84;
-const RINGS = [ { r: 128, s: 20, op: 0.42 }, { r: 180, s: 20, op: 0.20 } ]; // 안쪽 진하게 / 바깥 옅게
+const RINGS = [ { r: 128, s: 20, op: 0.46 }, { r: 180, s: 20, op: 0.22 } ]; // 안쪽 진하게 / 바깥 옅게 (크림)
 // 골프공 딤플(공 중심 기준 오프셋, 반지름) — 승인된 '핑' 시안 패턴을 키움
 const DIMPLES = [ [-30, -30, 11], [18, -40, 11], [35, 10, 11], [-20, 25, 11], [3, -5, 9] ];
 
@@ -42,19 +43,19 @@ const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
 function colorAt(u, v) {
   const dx = u - CX, dy = v - CY;
   const d = Math.sqrt(dx * dx + dy * dy);
-  // 1) 크림 배경 + 은은한 비네트
-  let col = mix(CREAM, CREAM_EDGE, clamp01((d - 150) / 150) * 0.9);
-  // 2) 동심원(공 뒤) — 반투명 그린
+  // 1) 딥그린 배경 + 은은한 비네트(중심 밝고 가장자리 어둡게)
+  let col = mix(GREEN_CTR, GREEN_EDGE, clamp01((d - 30) / 260));
+  // 2) 동심원(공 뒤) — 반투명 크림
   for (const ring of RINGS) {
-    if (Math.abs(d - ring.r) <= ring.s / 2) col = mix(col, GREEN, ring.op);
+    if (Math.abs(d - ring.r) <= ring.s / 2) col = mix(col, CREAM, ring.op);
   }
-  // 3) 골프공(불투명 그린)
+  // 3) 골프공(불투명 크림)
   if (d <= BALL_R) {
-    col = GREEN;
-    // 4) 딤플(크림 하이라이트)
+    col = CREAM;
+    // 4) 딤플(그린)
     for (const [ox, oy, dr] of DIMPLES) {
       const ex = u - (CX + ox), ey = v - (CY + oy);
-      if (ex * ex + ey * ey <= dr * dr) { col = CREAM; break; }
+      if (ex * ex + ey * ey <= dr * dr) { col = DIMPLE; break; }
     }
   }
   return col;
