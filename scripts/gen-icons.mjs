@@ -1,5 +1,6 @@
-// PWA 아이콘(초록 배경 + 흰 원)을 PNG 로 생성한다. (외부 라이브러리 없이)
-// 나중에 원하는 로고 이미지로 교체하면 됩니다.
+// PWA 아이콘 생성 — '핑' 디자인(라이트 크림 배경 + 딥그린 골프공 발신기 + 동심원 2개).
+//  외부 라이브러리 없이 픽셀을 직접 계산해 PNG로 인코딩. 3배 슈퍼샘플링으로 안티에일리어싱.
+//  기준 좌표는 512 공간, 마크는 중앙(256,256)에 크게 배치(마스커블 안전영역 내).
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -13,7 +14,6 @@ function crc32(buf) {
   }
   return (~c) >>> 0;
 }
-
 function chunk(type, data) {
   const t = Buffer.from(type, 'ascii');
   const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
@@ -21,38 +21,81 @@ function chunk(type, data) {
   return Buffer.concat([len, t, data, crc]);
 }
 
+// ── 디자인 파라미터 (512 공간) ──
+const CREAM = [241, 235, 221];
+const CREAM_EDGE = [214, 203, 176];
+const GREEN = [14, 74, 45];
+const CX = 256, CY = 256;
+const BALL_R = 84;
+const RINGS = [ { r: 128, s: 20, op: 0.42 }, { r: 180, s: 20, op: 0.20 } ]; // 안쪽 진하게 / 바깥 옅게
+// 골프공 딤플(공 중심 기준 오프셋, 반지름) — 승인된 '핑' 시안 패턴을 키움
+const DIMPLES = [ [-30, -30, 11], [18, -40, 11], [35, 10, 11], [-20, 25, 11], [3, -5, 9] ];
+
+const mix = (a, b, t) => [
+  Math.round(a[0] + (b[0] - a[0]) * t),
+  Math.round(a[1] + (b[1] - a[1]) * t),
+  Math.round(a[2] + (b[2] - a[2]) * t),
+];
+const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+
+// 512 공간의 한 점 (u,v) 색상 (하드 엣지 — AA는 슈퍼샘플 다운스케일이 담당)
+function colorAt(u, v) {
+  const dx = u - CX, dy = v - CY;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  // 1) 크림 배경 + 은은한 비네트
+  let col = mix(CREAM, CREAM_EDGE, clamp01((d - 150) / 150) * 0.9);
+  // 2) 동심원(공 뒤) — 반투명 그린
+  for (const ring of RINGS) {
+    if (Math.abs(d - ring.r) <= ring.s / 2) col = mix(col, GREEN, ring.op);
+  }
+  // 3) 골프공(불투명 그린)
+  if (d <= BALL_R) {
+    col = GREEN;
+    // 4) 딤플(크림 하이라이트)
+    for (const [ox, oy, dr] of DIMPLES) {
+      const ex = u - (CX + ox), ey = v - (CY + oy);
+      if (ex * ex + ey * ey <= dr * dr) { col = CREAM; break; }
+    }
+  }
+  return col;
+}
+
 function makePng(size) {
-  const w = size, h = size;
-  const stride = w * 4 + 1;
-  const raw = Buffer.alloc(stride * h);
-  const cx = w / 2, cy = h / 2, r = w * 0.28;
-  for (let y = 0; y < h; y++) {
-    raw[y * stride] = 0; // filter: none
-    for (let x = 0; x < w; x++) {
-      const o = y * stride + 1 + x * 4;
-      const dx = x - cx, dy = y - cy;
-      if (dx * dx + dy * dy <= r * r) {
-        raw[o] = 255; raw[o + 1] = 255; raw[o + 2] = 255; raw[o + 3] = 255; // 흰 골프공
-      } else {
-        raw[o] = 11; raw[o + 1] = 93; raw[o + 2] = 52; raw[o + 3] = 255;    // 초록 배경
+  const SS = 3;                 // 슈퍼샘플 배율
+  const W = size * SS;
+  const scale = W / 512;        // 512 → 하이레스 픽셀
+  const stride = size * 4 + 1;
+  const raw = Buffer.alloc(stride * size);
+  const inv = 1 / (SS * SS);
+  for (let py = 0; py < size; py++) {
+    raw[py * stride] = 0;       // filter: none
+    for (let px = 0; px < size; px++) {
+      let r = 0, g = 0, b = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const u = (px * SS + sx + 0.5) / scale;
+          const v = (py * SS + sy + 0.5) / scale;
+          const c = colorAt(u, v);
+          r += c[0]; g += c[1]; b += c[2];
+        }
       }
+      const o = py * stride + 1 + px * 4;
+      raw[o] = Math.round(r * inv);
+      raw[o + 1] = Math.round(g * inv);
+      raw[o + 2] = Math.round(b * inv);
+      raw[o + 3] = 255;
     }
   }
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 6; // 8bit, RGBA
+  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; ihdr[9] = 6;     // 8bit, RGBA
   const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  return Buffer.concat([
-    sig,
-    chunk('IHDR', ihdr),
-    chunk('IDAT', zlib.deflateSync(raw)),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
 const publicDir = path.join(ROOT_DIR, 'public');
 fs.mkdirSync(publicDir, { recursive: true });
 for (const size of [192, 512]) {
   fs.writeFileSync(path.join(publicDir, `icon-${size}.png`), makePng(size));
-  console.log(`✅ public/icon-${size}.png 생성`);
+  console.log(`✅ public/icon-${size}.png 생성 (핑 디자인)`);
 }

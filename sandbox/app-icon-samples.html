@@ -1,0 +1,163 @@
+<title>앱 아이콘 샘플 5종</title>
+<style>
+  :root{ color-scheme:light;
+    --bg:#f4f5f1; --ink:#1a2620; --card:#fff; --ln:#e2e7e0; --muted:#6b776f; --green:#104d31; }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{max-width:760px;margin:0 auto;background:var(--bg);color:var(--ink);min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;padding:0 0 48px;}
+  .head{padding:30px 22px 8px;}
+  .head h1{font-size:20px;letter-spacing:-.03em;margin:0 0 5px;}
+  .head p{font-size:12px;color:var(--muted);margin:0;line-height:1.5;}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px;padding:18px;}
+  @media(min-width:620px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--card);border:1px solid var(--ln);border-radius:18px;padding:18px;display:flex;gap:16px;align-items:center;}
+  .big{width:112px;height:112px;flex:none;border-radius:26px;overflow:hidden;box-shadow:0 8px 22px rgba(16,58,42,.18);}
+  .big svg{display:block;width:100%;height:100%;}
+  .meta{min-width:0;}
+  .krow{display:flex;align-items:center;gap:8px;}
+  .k{font-size:10px;font-weight:900;color:#fff;background:var(--green);border-radius:6px;padding:2px 7px;}
+  .name{font-size:14px;font-weight:850;letter-spacing:-.02em;}
+  .desc{font-size:10.5px;color:var(--muted);margin:5px 0 10px;line-height:1.45;}
+  .sizes{display:flex;align-items:flex-end;gap:10px;}
+  .sz{border-radius:22%;overflow:hidden;box-shadow:0 2px 6px rgba(16,58,42,.15);}
+  .sz svg{display:block;width:100%;height:100%;}
+  .s48{width:48px;height:48px;} .s32{width:32px;height:32px;} .s20{width:20px;height:20px;}
+  .szlab{font-size:8px;color:#9aa69d;text-align:center;margin-top:3px;}
+  .foot{padding:6px 22px;font-size:11px;color:var(--muted);line-height:1.6;}
+  .foot b{color:var(--ink);}
+</style>
+
+<!-- ===== 아이콘 심볼 정의 ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a6b43"/><stop offset="1" stop-color="#0b3d26"/></linearGradient>
+    <radialGradient id="ball" cx="38%" cy="34%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dfe4dd"/></radialGradient>
+  </defs>
+
+  <!-- 1) 깃발 그린 -->
+  <symbol id="ic1" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#gg)"/>
+    <ellipse cx="256" cy="392" rx="176" ry="52" fill="#2f8253"/>
+    <ellipse cx="256" cy="376" rx="132" ry="38" fill="#37945f"/>
+    <ellipse cx="312" cy="372" rx="21" ry="8.5" fill="#083a23"/>
+    <circle cx="196" cy="366" r="17" fill="url(#ball)"/>
+    <rect x="300" y="118" width="10" height="262" rx="5" fill="#f3efe2"/>
+    <path d="M310 126 L436 160 L310 194 Z" fill="#e9c15a"/>
+    <path d="M310 126 L436 160 L310 160 Z" fill="#f2d078"/>
+  </symbol>
+
+  <!-- 2) 티 위의 공 -->
+  <symbol id="ic2" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#gg)"/>
+    <rect x="247" y="300" width="18" height="70" rx="7" fill="#e9c15a"/>
+    <path d="M223 300 h66 l-13 22 h-40 z" fill="#f2d078"/>
+    <circle cx="256" cy="228" r="96" fill="url(#ball)"/>
+    <g fill="#c9d2c8">
+      <circle cx="230" cy="200" r="8"/><circle cx="262" cy="192" r="8"/><circle cx="290" cy="212" r="8"/>
+      <circle cx="216" cy="234" r="8"/><circle cx="248" cy="228" r="8"/><circle cx="280" cy="246" r="8"/>
+      <circle cx="234" cy="266" r="8"/><circle cx="266" cy="262" r="8"/>
+    </g>
+  </symbol>
+
+  <!-- 3) 3부 번호표 -->
+  <symbol id="ic3" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#gg)"/>
+    <rect x="118" y="150" width="276" height="212" rx="30" fill="#f5f2e9"/>
+    <circle cx="118" cy="256" r="17" fill="url(#gg)"/><circle cx="394" cy="256" r="17" fill="url(#gg)"/>
+    <rect x="150" y="150" width="212" height="40" rx="0" fill="#e9c15a"/>
+    <path d="M362 150 v40 l-14 -8 l-14 8 v-40 z" fill="#e9c15a"/>
+    <text x="256" y="316" font-family="-apple-system,'Malgun Gothic',sans-serif" font-size="150" font-weight="900" fill="#0f5030" text-anchor="middle" letter-spacing="-6">3부</text>
+    <text x="256" y="182" font-family="-apple-system,'Malgun Gothic',sans-serif" font-size="24" font-weight="800" fill="#7a5a12" text-anchor="middle" letter-spacing="4">순번</text>
+  </symbol>
+
+  <!-- 4) 알림 벨 -->
+  <symbol id="ic4" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#gg)"/>
+    <g stroke="#8fd8a8" stroke-width="12" fill="none" stroke-linecap="round" opacity=".55">
+      <path d="M150 176 q-34 80 0 160"/><path d="M362 176 q34 80 0 160"/>
+    </g>
+    <path d="M256 118 c-62 0 -104 44 -104 118 c0 66 -24 84 -40 108 c-6 9 0 22 12 22 h264 c12 0 18 -13 12 -22 c-16 -24 -40 -42 -40 -108 c0 -74 -42 -118 -104 -118 z" fill="#eccb62"/>
+    <path d="M256 118 c-62 0 -104 44 -104 118 c0 20 -2 36 -7 50 h222 c-5 -14 -7 -30 -7 -50 c0 -74 -42 -118 -104 -118 z" fill="#f2d97f"/>
+    <circle cx="256" cy="104" r="20" fill="#f3efe2"/>
+    <path d="M224 392 a32 30 0 0 0 64 0 z" fill="#eccb62"/>
+  </symbol>
+
+  <!-- 5) 리 모노그램 -->
+  <symbol id="ic5" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#gg)"/>
+    <circle cx="372" cy="150" r="15" fill="#e9c15a"/>
+    <text x="256" y="358" font-family="-apple-system,'Malgun Gothic',sans-serif" font-size="270" font-weight="900" fill="#f5f2e9" text-anchor="middle">리</text>
+  </symbol>
+</svg>
+
+<div class="page">
+  <div class="head">
+    <h1>리버힐 캐디 · 앱 아이콘 샘플 5종</h1>
+    <p>초록 골프 정체성을 5가지 방향으로. 실제 앱 아이콘처럼 둥근 사각형 + 작은 크기(48·32·20px)에서 얼마나 또렷한지도 같이 확인하세요.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="big"><svg><use href="#ic1"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">1</span><span class="name">깃발 그린</span></div>
+        <div class="desc">정통 골프 핀 깃발 + 퍼팅 그린·홀·공. 골프장 앱임이 즉시 읽힘.</div>
+        <div class="sizes">
+          <div><div class="sz s48"><svg><use href="#ic1"/></svg></div><div class="szlab">48</div></div>
+          <div><div class="sz s32"><svg><use href="#ic1"/></svg></div><div class="szlab">32</div></div>
+          <div><div class="sz s20"><svg><use href="#ic1"/></svg></div><div class="szlab">20</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#ic2"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">2</span><span class="name">티 위의 공</span></div>
+        <div class="desc">티에 올린 골프공. 가장 미니멀·현대적. 작은 크기에서도 형태가 단단함.</div>
+        <div class="sizes">
+          <div><div class="sz s48"><svg><use href="#ic2"/></svg></div><div class="szlab">48</div></div>
+          <div><div class="sz s32"><svg><use href="#ic2"/></svg></div><div class="szlab">32</div></div>
+          <div><div class="sz s20"><svg><use href="#ic2"/></svg></div><div class="szlab">20</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#ic3"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">3</span><span class="name">3부 번호표</span></div>
+        <div class="desc">순번·번호표 시스템이 이 앱의 정체성. "3부" 번호표로 다른 골프앱과 차별화.</div>
+        <div class="sizes">
+          <div><div class="sz s48"><svg><use href="#ic3"/></svg></div><div class="szlab">48</div></div>
+          <div><div class="sz s32"><svg><use href="#ic3"/></svg></div><div class="szlab">32</div></div>
+          <div><div class="sz s20"><svg><use href="#ic3"/></svg></div><div class="szlab">20</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#ic4"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">4</span><span class="name">알림 벨</span></div>
+        <div class="desc">이 앱의 본질은 '제때 알림'. 울리는 벨로 기능을 직관적으로 표현.</div>
+        <div class="sizes">
+          <div><div class="sz s48"><svg><use href="#ic4"/></svg></div><div class="szlab">48</div></div>
+          <div><div class="sz s32"><svg><use href="#ic4"/></svg></div><div class="szlab">32</div></div>
+          <div><div class="sz s20"><svg><use href="#ic4"/></svg></div><div class="szlab">20</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#ic5"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">5</span><span class="name">리 모노그램</span></div>
+        <div class="desc">'리버힐'의 리 한 글자 + 금색 홀 포인트. 브랜드형·가장 심플하고 또렷.</div>
+        <div class="sizes">
+          <div><div class="sz s48"><svg><use href="#ic5"/></svg></div><div class="szlab">48</div></div>
+          <div><div class="sz s32"><svg><use href="#ic5"/></svg></div><div class="szlab">32</div></div>
+          <div><div class="sz s20"><svg><use href="#ic5"/></svg></div><div class="szlab">20</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">마음에 드는 번호를 알려주시면 <b>실제 PWA 아이콘(192·512px + 마스커블)으로 내보내</b> 앱에 적용합니다. 색·모양 조정도 가능해요.</div>
+</div>

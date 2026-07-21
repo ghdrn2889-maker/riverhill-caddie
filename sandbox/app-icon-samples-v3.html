@@ -1,0 +1,134 @@
+<title>앱 아이콘 샘플 v3 — 다른 세계 5</title>
+<style>
+  :root{ color-scheme:light; --bg:#eeece6; --ink:#20261f; --card:#fbfaf6; --ln:#e3e2d9; --muted:#767c6f; }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  .page{max-width:840px;margin:0 auto;background:var(--bg);color:var(--ink);min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;padding:0 0 56px;}
+  .head{padding:38px 26px 4px;}
+  .head h1{font-size:21px;letter-spacing:-.035em;margin:0 0 6px;font-weight:850;}
+  .head p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.55;max-width:600px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px;padding:22px;}
+  @media(min-width:640px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--card);border:1px solid var(--ln);border-radius:20px;padding:22px;display:flex;gap:20px;align-items:center;}
+  .big{width:128px;height:128px;flex:none;border-radius:29px;overflow:hidden;box-shadow:0 12px 30px rgba(20,30,22,.20),0 2px 6px rgba(20,30,22,.12);}
+  .big svg{display:block;width:100%;height:100%;}
+  .meta{min-width:0;}
+  .krow{display:flex;align-items:baseline;gap:9px;}
+  .k{font-size:11px;font-weight:900;color:#0d3f27;}
+  .name{font-size:15px;font-weight:850;letter-spacing:-.02em;}
+  .world{font-size:9px;font-weight:800;color:#9a8a5a;letter-spacing:.06em;text-transform:uppercase;margin-left:2px;}
+  .desc{font-size:11px;color:var(--muted);margin:7px 0 13px;line-height:1.5;}
+  .sizes{display:flex;align-items:flex-end;gap:12px;}
+  .sz{border-radius:23%;overflow:hidden;box-shadow:0 2px 7px rgba(20,30,22,.16);}
+  .sz svg{display:block;width:100%;height:100%;}
+  .s44{width:44px;height:44px;} .s28{width:28px;height:28px;} .s18{width:18px;height:18px;}
+  .szlab{font-size:8px;color:#a2a89b;text-align:center;margin-top:4px;}
+  .foot{padding:8px 26px;font-size:11.5px;color:var(--muted);line-height:1.6;}
+  .foot b{color:var(--ink);}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#2f2557"/><stop offset="0.52" stop-color="#c1502e"/><stop offset="1" stop-color="#f4ab3e"/>
+    </linearGradient>
+    <radialGradient id="mono" cx="34%" cy="26%" r="95%"><stop offset="0" stop-color="#15653e"/><stop offset="1" stop-color="#0a3a22"/></radialGradient>
+    <radialGradient id="creamVig" cx="50%" cy="42%" r="75%"><stop offset="0.6" stop-color="#f2ecde" stop-opacity="0"/><stop offset="1" stop-color="#d8cdb0" stop-opacity="0.5"/></radialGradient>
+  </defs>
+
+  <!-- 1) 라이트 크림 (밝은 에디토리얼) -->
+  <symbol id="w1" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#f1ebdd"/>
+    <rect width="512" height="512" fill="url(#creamVig)"/>
+    <ellipse cx="256" cy="366" rx="54" ry="15" fill="none" stroke="#0e4a2d" stroke-width="11"/>
+    <rect x="250" y="150" width="12" height="212" rx="6" fill="#0e4a2d"/>
+    <path d="M262 156 L360 185 L262 214 Z" fill="#0e4a2d"/>
+  </symbol>
+
+  <!-- 2) 더스크 (저녁 티오프 · 따뜻한 그라데이션) -->
+  <symbol id="w2" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#dusk)"/>
+    <circle cx="196" cy="330" r="70" fill="#f9e7a8" opacity="0.92"/>
+    <rect x="58" y="352" width="396" height="7" rx="3.5" fill="#22143a" opacity="0.42"/>
+    <rect x="326" y="192" width="9" height="162" rx="4.5" fill="#22143a"/>
+    <path d="M326 198 L400 221 L326 244 Z" fill="#22143a"/>
+  </symbol>
+
+  <!-- 3) 투톤 대각 (그래픽 컬러블록) -->
+  <symbol id="w3" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#e9ddc2"/>
+    <path d="M0 0 L512 0 L0 512 Z" fill="#165c38"/>
+    <circle cx="166" cy="150" r="46" fill="#f5efe2"/>
+    <rect x="332" y="252" width="11" height="150" rx="5.5" fill="#165c38"/>
+    <path d="M343 258 L414 279 L343 300 Z" fill="#165c38"/>
+  </symbol>
+
+  <!-- 4) 모노 엠보스 (톤온톤 · 조용한 세련) -->
+  <symbol id="w4" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#mono)"/>
+    <rect x="253" y="153" width="11" height="208" rx="5.5" fill="#082f1c"/>
+    <rect x="250" y="150" width="11" height="208" rx="5.5" fill="#25794c"/>
+    <path d="M263 158 L358 186 L263 214 Z" fill="#082f1c"/>
+    <path d="M260 155 L355 183 L260 211 Z" fill="#1c6c43"/>
+  </symbol>
+
+  <!-- 5) 비비드 팝 (밝은 플랫 + 코랄) -->
+  <symbol id="w5" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#17a355"/>
+    <rect x="250" y="150" width="12" height="208" rx="6" fill="#ffffff"/>
+    <path d="M262 156 L362 185 L262 214 Z" fill="#ffffff"/>
+    <circle cx="256" cy="366" r="16" fill="#ff6a45"/>
+  </symbol>
+</svg>
+
+<div class="page">
+  <div class="head">
+    <h1>앱 아이콘 · 다른 세계 5</h1>
+    <p>이번엔 "초록 사각형 + 심볼" 틀을 버렸습니다. 배경색·구도·전체 톤이 <b>다섯 개 다 다릅니다</b> — 밝은 크림, 저녁 그라데이션, 대각 투톤, 톤온톤, 비비드까지. 크롬에서 크게 보고 작은 크기도 확인하세요.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="big"><svg><use href="#w1"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">1</span><span class="name">라이트 크림</span><span class="world">밝은 에디토리얼</span></div>
+        <div class="desc">어두운 배경을 아예 버림. 따뜻한 종이색 위 딥그린 라인. 차분·고급, 홈 화면에서 밝게 튐.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#w1"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#w1"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#w1"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#w2"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">2</span><span class="name">더스크</span><span class="world">저녁 티오프</span></div>
+        <div class="desc">3부는 오후·저녁 근무. 해질녘 하늘 그라데이션 + 지는 해 + 깃발 실루엣. 초록 아닌 따뜻한 색으로 확 다름.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#w2"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#w2"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#w2"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#w3"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">3</span><span class="name">투톤 대각</span><span class="world">그래픽 컬러블록</span></div>
+        <div class="desc">화면을 대각으로 갈라 초록·모래 두 색. 공은 초록에, 깃발은 모래에 — 색 반전. 대담한 그래픽 디자인 감각.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#w3"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#w3"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#w3"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#w4"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">4</span><span class="name">모노 엠보스</span><span class="world">톤온톤</span></div>
+        <div class="desc">같은 초록 계열만으로 음영을 줘 새긴 듯한 효과. 크림·금색 없이 조용하고 묵직한 세련됨. 정반대 톤.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#w4"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#w4"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#w4"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#w5"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">5</span><span class="name">비비드 팝</span><span class="world">밝은 플랫</span></div>
+        <div class="desc">밝고 선명한 그린 + 코랄 포인트. 무겁지 않고 경쾌·플랫. 홈 화면에서 눈에 확 들어옴.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#w5"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#w5"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#w5"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">방향(밝음/따뜻함/그래픽/톤온톤/비비드) 중 끌리는 <b>세계</b>를 골라주세요. 모티프(깃발 말고 공·시계·번호 등)도 바꿀 수 있어요. 고르면 그 세계로 더 파고들어 다듬은 뒤 <b>실제 PWA 아이콘</b>으로 적용합니다. 다 아니면 또 다른 5개 세계로 갑니다.</div>
+</div>

@@ -1,0 +1,127 @@
+<title>앱 아이콘 · 크림 발신기</title>
+<style>
+  :root{ color-scheme:light; --bg:#eeece6; --ink:#20261f; --card:#fbfaf6; --ln:#e3e2d9; --muted:#767c6f; }
+  *{box-sizing:border-box;} body{margin:0;}
+  .page{max-width:840px;margin:0 auto;background:var(--bg);color:var(--ink);min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;padding:0 0 56px;}
+  .head{padding:38px 26px 4px;}
+  .head h1{font-size:21px;letter-spacing:-.035em;margin:0 0 6px;font-weight:850;}
+  .head p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.55;max-width:600px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px;padding:22px;}
+  @media(min-width:640px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{background:var(--card);border:1px solid var(--ln);border-radius:20px;padding:22px;display:flex;gap:20px;align-items:center;}
+  .big{width:128px;height:128px;flex:none;border-radius:29px;overflow:hidden;box-shadow:0 12px 30px rgba(20,30,22,.18),0 2px 6px rgba(20,30,22,.10);}
+  .big svg{display:block;width:100%;height:100%;}
+  .meta{min-width:0;}
+  .krow{display:flex;align-items:baseline;gap:9px;}
+  .k{font-size:11px;font-weight:900;color:#0d3f27;}
+  .name{font-size:15px;font-weight:850;letter-spacing:-.02em;}
+  .desc{font-size:11px;color:var(--muted);margin:7px 0 13px;line-height:1.5;}
+  .sizes{display:flex;align-items:flex-end;gap:12px;}
+  .sz{border-radius:23%;overflow:hidden;box-shadow:0 2px 7px rgba(20,30,22,.14);}
+  .sz svg{display:block;width:100%;height:100%;}
+  .s44{width:44px;height:44px;} .s28{width:28px;height:28px;} .s18{width:18px;height:18px;}
+  .szlab{font-size:8px;color:#a2a89b;text-align:center;margin-top:4px;}
+  .foot{padding:8px 26px;font-size:11.5px;color:var(--muted);line-height:1.6;}
+  .foot b{color:var(--ink);}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="cvig" cx="50%" cy="40%" r="76%"><stop offset="0.58" stop-color="#f2ecde" stop-opacity="0"/><stop offset="1" stop-color="#d9ceb1" stop-opacity="0.55"/></radialGradient>
+  </defs>
+
+  <!-- 1) 핑 (동심원 레이더) -->
+  <symbol id="b1" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#f1ebdd"/><rect width="512" height="512" fill="url(#cvig)"/>
+    <g fill="none" stroke="#0e4a2d" stroke-width="12" stroke-linecap="round">
+      <circle cx="256" cy="276" r="152" opacity="0.20"/>
+      <circle cx="256" cy="276" r="106" opacity="0.42"/>
+    </g>
+    <circle cx="256" cy="276" r="50" fill="#0e4a2d"/>
+    <g fill="#f1ebdd"><circle cx="238" cy="258" r="6.5"/><circle cx="267" cy="252" r="6.5"/><circle cx="277" cy="282" r="6.5"/><circle cx="244" cy="291" r="6.5"/><circle cx="258" cy="273" r="5.5"/></g>
+  </symbol>
+
+  <!-- 2) 브로드캐스트 (티 위에서 위로 송출) -->
+  <symbol id="b2" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#f1ebdd"/><rect width="512" height="512" fill="url(#cvig)"/>
+    <g fill="none" stroke="#0e4a2d" stroke-width="12" stroke-linecap="round">
+      <path d="M206 340 Q256 282 306 340" opacity="0.62"/>
+      <path d="M174 346 Q256 250 338 346" opacity="0.36"/>
+      <path d="M142 352 Q256 214 370 352" opacity="0.20"/>
+    </g>
+    <rect x="251" y="392" width="10" height="26" rx="4" fill="#0e4a2d"/>
+    <path d="M231 416 h50 l-11 16 h-28 z" fill="#0e4a2d"/>
+    <circle cx="256" cy="356" r="42" fill="#0e4a2d"/>
+    <g fill="#f1ebdd"><circle cx="240" cy="340" r="6"/><circle cx="267" cy="336" r="6"/><circle cx="274" cy="362" r="6"/><circle cx="244" cy="370" r="6"/></g>
+  </symbol>
+
+  <!-- 3) 미니멀 시그널 (오른쪽 신호) -->
+  <symbol id="b3" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#f1ebdd"/><rect width="512" height="512" fill="url(#cvig)"/>
+    <circle cx="228" cy="256" r="50" fill="#0e4a2d"/>
+    <g fill="#f1ebdd"><circle cx="210" cy="238" r="6.5"/><circle cx="239" cy="232" r="6.5"/><circle cx="249" cy="262" r="6.5"/><circle cx="216" cy="271" r="6.5"/><circle cx="230" cy="253" r="5.5"/></g>
+    <g fill="none" stroke="#0e4a2d" stroke-width="13" stroke-linecap="round">
+      <path d="M300 214 Q340 256 300 298" opacity="0.62"/>
+      <path d="M334 190 Q388 256 334 322" opacity="0.32"/>
+    </g>
+  </symbol>
+
+  <!-- 4) 비컨 타워 (공-안테나 끝에서 송출) -->
+  <symbol id="b4" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="#f1ebdd"/><rect width="512" height="512" fill="url(#cvig)"/>
+    <rect x="252" y="256" width="10" height="150" rx="5" fill="#0e4a2d"/>
+    <path d="M232 404 h48 l-11 16 h-26 z" fill="#0e4a2d"/>
+    <g fill="none" stroke="#0e4a2d" stroke-width="12" stroke-linecap="round">
+      <path d="M296 224 Q320 250 296 276" opacity="0.6"/>
+      <path d="M218 224 Q194 250 218 276" opacity="0.6"/>
+      <path d="M316 206 Q352 250 316 294" opacity="0.3"/>
+      <path d="M198 206 Q162 250 198 294" opacity="0.3"/>
+    </g>
+    <circle cx="257" cy="250" r="33" fill="#0e4a2d"/>
+    <g fill="#f1ebdd"><circle cx="245" cy="240" r="5"/><circle cx="266" cy="238" r="5"/><circle cx="269" cy="258" r="5"/><circle cx="248" cy="261" r="5"/></g>
+  </symbol>
+</svg>
+
+<div class="page">
+  <div class="head">
+    <h1>크림 · 골프공 발신기</h1>
+    <p>라이트 크림 배경에 <b>골프공이 신호를 송출하는 발신기</b>. "앱이 지켜보다 제때 신호를 보낸다"는 본질과 맞닿아요. 신호 표현만 4가지로 달리했습니다. 크롬에서 크게 + 작은 크기로 보세요.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="big"><svg><use href="#b1"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">1</span><span class="name">핑</span></div>
+        <div class="desc">공을 중심으로 퍼지는 동심원(레이더 핑). 대칭적·차분하고 "감시 중" 느낌.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#b1"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#b1"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#b1"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#b2"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">2</span><span class="name">브로드캐스트</span></div>
+        <div class="desc">티 위의 공에서 위로 부챗살처럼 송출. 골프공 정체성(티)과 신호가 같이 살아있음.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#b2"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#b2"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#b2"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#b3"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">3</span><span class="name">미니멀 시그널</span></div>
+        <div class="desc">공 옆으로 두 줄 신호만. 여백 가득, 가장 절제된 로고형. 작은 크기에서 제일 또렷.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#b3"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#b3"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#b3"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big"><svg><use href="#b4"/></svg></div>
+      <div class="meta"><div class="krow"><span class="k">4</span><span class="name">비컨 타워</span></div>
+        <div class="desc">공이 안테나 끝에 올라 양옆으로 송출하는 전파탑. 수직 구도라 다른 것과 실루엣이 확실히 다름.</div>
+        <div class="sizes"><div><div class="sz s44"><svg><use href="#b4"/></svg></div><div class="szlab">44</div></div><div><div class="sz s28"><svg><use href="#b4"/></svg></div><div class="szlab">28</div></div><div><div class="sz s18"><svg><use href="#b4"/></svg></div><div class="szlab">18</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">끌리는 번호를 알려주시면 그걸 기준으로 색·신호 세기·공 크기 등 미세 조정한 뒤 <b>실제 PWA 아이콘(192·512 + 마스커블)</b>으로 내보내 적용합니다. 신호선을 더 굵게/얇게, 색을 조금 바꾸는 것도 가능해요.</div>
+</div>
