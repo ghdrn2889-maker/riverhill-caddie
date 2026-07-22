@@ -3,10 +3,38 @@
 //  - analyzeSchedule: '배치표'        → 오늘/내일 내가 근무인지 스페어인지
 // 키(GEMINI_API_KEY)가 없거나 실패하면 null 을 돌려주고, 서버는 제목 알림으로 폴백한다.
 
+// 문자열 리터럴 안의 '이스케이프 안 된 제어문자'(생 줄바꿈·탭 등)를 정식 이스케이프로 바꾼다.
+//  Gemini가 "summary":"1줄<생줄바꿈>2줄" 처럼 내놓으면 JSON.parse가 "Bad control character"로 실패 → 이걸 교정.
+function escapeControlChars(s) {
+  let out = '', inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) { out += c; esc = false; continue; }
+      if (c === '\\') { out += c; esc = true; continue; }
+      if (c === '"') { out += c; inStr = false; continue; }
+      const code = c.charCodeAt(0);
+      if (code < 0x20) { // 생 제어문자 → 이스케이프
+        out += c === '\n' ? '\\n' : c === '\t' ? '\\t' : c === '\r' ? '\\r'
+          : '\\u' + code.toString(16).padStart(4, '0');
+        continue;
+      }
+      out += c;
+    } else {
+      out += c;
+      if (c === '"') inStr = true;
+    }
+  }
+  return out;
+}
+
 // Gemini가 JSON 앞뒤에 코드펜스나 잡텍스트를 붙여도 첫 번째 완전한 {…} 만 뽑아 파싱.
+//  ★깨끗한 파싱을 먼저 시도하고(무변화), 실패 시에만 제어문자 교정본으로 재시도(관용).
 function parseJSONLoose(txt) {
   let s = String(txt).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  try { return JSON.parse(s); } catch {}
+  const tryParse = (str) => { try { return { v: JSON.parse(str) }; } catch { return null; } };
+  let r = tryParse(s) || tryParse(escapeControlChars(s));
+  if (r) return r.v;
   const start = s.indexOf('{');
   if (start === -1) throw new Error('JSON 객체를 찾지 못함');
   let depth = 0, inStr = false, esc = false;
@@ -18,7 +46,12 @@ function parseJSONLoose(txt) {
       else if (c === '"') inStr = false;
     } else if (c === '"') inStr = true;
     else if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) return JSON.parse(s.slice(start, i + 1));
+    else if (c === '}' && --depth === 0) {
+      const slice = s.slice(start, i + 1);
+      const p = tryParse(slice) || tryParse(escapeControlChars(slice));
+      if (p) return p.v;
+      break;
+    }
   }
   throw new Error('JSON 괄호가 안 맞음');
 }
