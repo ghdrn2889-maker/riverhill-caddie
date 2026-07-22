@@ -596,13 +596,78 @@ function initCartButtons() {
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
 }
 
+/* ── 계정 · 가입(온보딩) ── */
+let meState = null;
+async function loadMe() {
+  try { meState = await (await fetch('/api/me')).json(); } catch { meState = null; }
+  renderAccount();
+  if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
+}
+function renderAccount() {
+  const btn = $('acctBtn');
+  if (!meState || !meState.authed) { btn.hidden = true; return; }
+  btn.hidden = false;
+  $('acctName').textContent = (meState.profile && meState.profile.boardName) || '회원';
+}
+function fillProfileForm() {
+  const p = (meState && meState.profile) || {};
+  $('obName').value = p.boardName || '';
+  $('obPart').value = p.part || '3';
+  $('obKm').value = p.homeKm != null && p.homeKm !== 0 ? p.homeKm : '';
+  $('obCar').value = p.carNo || '';
+}
+function openOnboarding() {
+  $('ovTitle').textContent = '가입을 완성해주세요';
+  $('ovDesc').innerHTML = '근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.';
+  $('obSubmit').textContent = '가입 완료';
+  fillProfileForm();
+  $('ovActions').hidden = true;      // 신규 가입은 닫기 불가
+  $('obTestSignup').hidden = true;
+  $('ovErr').textContent = '';
+  $('ov').hidden = false;
+}
+function openAccount() {
+  $('ovTitle').textContent = '내 계정 · 프로필';
+  const p = (meState && meState.profile) || {};
+  const who = p.boardName ? `${p.boardName} · ${p.part}부` : '회원';
+  $('ovDesc').innerHTML = `현재 <b>${esc(who)}</b>로 로그인됨. 정보를 수정할 수 있어요.`;
+  $('obSubmit').textContent = '저장';
+  fillProfileForm();
+  $('ovActions').hidden = false;
+  $('obTestSignup').hidden = !(meState && meState.testLogin);
+  $('ovErr').textContent = '';
+  $('ov').hidden = false;
+}
+async function submitProfile() {
+  const boardName = $('obName').value.trim();
+  if (!boardName) { $('ovErr').textContent = '배치표에 뜨는 실명을 입력해주세요.'; return; }
+  const body = { boardName, part: $('obPart').value, homeKm: Number($('obKm').value) || 0, carNo: $('obCar').value.trim() };
+  $('obSubmit').disabled = true;
+  try {
+    const r = await postJSON('/api/profile', body);
+    if (!r || !r.ok) throw new Error((r && r.error) || '저장 실패');
+    $('ov').hidden = true;
+    await loadMe();
+    loadToday();
+  } catch (e) { $('ovErr').textContent = e.message || '저장 실패'; }
+  finally { $('obSubmit').disabled = false; }
+}
+function initAccount() {
+  $('acctBtn').onclick = openAccount;
+  $('obSubmit').onclick = submitProfile;
+  $('obClose').onclick = () => { $('ov').hidden = true; };
+  $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
+  $('obTestSignup').onclick = () => { location.href = '/api/dev/login'; };
+}
+
 /* ── 부팅 ── */
 async function main() {
-  tickDate(); initNav(); initWorklogButtons(); initCartButtons();
+  tickDate(); initNav(); initWorklogButtons(); initCartButtons(); initAccount();
   $('enableBtn').onclick = enableNotifications;
   $('readAll').onclick = markAllRead;
   await registerSW();
   await refreshPushHealth();
+  loadMe();
   loadToday(); loadWatchHealth(); loadRecent();
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
   setInterval(() => { tickDate(); if (lastToday) renderBoard(lastToday); }, 20000);

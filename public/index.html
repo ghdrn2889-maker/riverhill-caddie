@@ -256,15 +256,70 @@
     nav.nav button[aria-selected="true"] { color:#0b5d34; font-weight:850; }
     :focus-visible { outline:2px solid #2e7149; outline-offset:2px; border-radius:6px; }
     @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+
+    /* 계정 칩(헤더) */
+    .topright { display:flex; align-items:center; gap:9px; }
+    .acct { background:rgba(255,255,255,.16); border:0; color:#fff; font-size:10px; font-weight:800; padding:5px 11px;
+      border-radius:99px; cursor:pointer; display:flex; align-items:center; gap:4px; max-width:130px; }
+    .acct #acctName { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* 가입/계정 오버레이 */
+    .ov { position:fixed; inset:0; z-index:60; background:rgba(15,30,22,.58); display:flex; align-items:center;
+      justify-content:center; padding:18px; }
+    .ov[hidden] { display:none; }
+    .ov-card { background:#fff; border-radius:20px; width:100%; max-width:390px; padding:22px 20px 20px;
+      box-shadow:0 22px 55px rgba(0,0,0,.32); max-height:92vh; overflow-y:auto; }
+    .ov-badge { width:46px; height:46px; border-radius:14px; background:#e8f3eb; display:flex; align-items:center;
+      justify-content:center; font-size:24px; margin-bottom:12px; }
+    .ov-title { font-size:19px; letter-spacing:-.02em; margin:0 0 5px; color:#17231d; }
+    .ov-desc { font-size:11.5px; line-height:1.55; color:#647168; margin:0 0 16px; }
+    .ov-desc b { color:#1d6740; }
+    .ov-field { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+    .ov-field > span { font-size:11px; font-weight:800; color:#3d4c43; }
+    .ov-field .req { color:#bd312d; } .ov-field small { color:#93a099; font-weight:600; }
+    .ov-field input, .ov-field select { width:100%; padding:11px 12px; border:1px solid #dfe5e0; border-radius:10px;
+      font-size:14px; background:#fff; color:#17231d; }
+    .ov-err { font-size:11px; color:#bd312d; font-weight:700; min-height:15px; margin-bottom:4px; }
+    .ov-submit { width:100%; background:#104d31; color:#fff; border:0; border-radius:12px; padding:13px;
+      font-size:14px; font-weight:800; cursor:pointer; box-shadow:0 5px 14px rgba(16,77,49,.2); }
+    .ov-actions { display:flex; gap:8px; margin-top:10px; }
+    .ov-ghost { flex:1; background:#eef1ec; color:#647168; border:0; border-radius:11px; padding:11px;
+      font-size:12.5px; font-weight:800; cursor:pointer; }
+    .ov-test { width:100%; margin-top:14px; background:#fdf4e0; color:#8a5e18; border:1px dashed #eaddba;
+      border-radius:11px; padding:11px; font-size:11.5px; font-weight:800; cursor:pointer; }
   </style>
 </head>
 <body>
   <header class="top">
     <div class="toprow">
       <span class="brand">RIVERHILL CADDIE</span>
-      <span class="date" id="date">—</span>
+      <div class="topright">
+        <span class="date" id="date">—</span>
+        <button class="acct" id="acctBtn" hidden>👤 <span id="acctName">회원</span></button>
+      </div>
     </div>
   </header>
+
+  <!-- 가입/프로필 · 계정 오버레이 -->
+  <div class="ov" id="ov" hidden>
+    <div class="ov-card">
+      <div class="ov-badge">🏌️</div>
+      <h2 class="ov-title" id="ovTitle">가입을 완성해주세요</h2>
+      <p class="ov-desc" id="ovDesc">근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.</p>
+      <label class="ov-field"><span>실명 (배치표 이름) <b class="req">*</b></span><input id="obName" type="text" placeholder="예: 홍길동" maxlength="20"></label>
+      <label class="ov-field"><span>소속 부 <b class="req">*</b></span>
+        <select id="obPart"><option value="1">1부</option><option value="2">2부</option><option value="3" selected>3부</option></select></label>
+      <label class="ov-field"><span>집→골프장 편도 (km)</span><input id="obKm" type="number" inputmode="numeric" placeholder="30"></label>
+      <label class="ov-field"><span>차량번호 <small>(선택)</small></span><input id="obCar" type="text" placeholder="12가3456" maxlength="20"></label>
+      <div class="ov-err" id="ovErr"></div>
+      <button class="ov-submit" id="obSubmit">가입 완료</button>
+      <div class="ov-actions" id="ovActions" hidden>
+        <button class="ov-ghost" id="obLogout">로그아웃</button>
+        <button class="ov-ghost" id="obClose">닫기</button>
+      </div>
+      <button class="ov-test" id="obTestSignup" hidden>🧪 테스트: 새 회원으로 가입해보기</button>
+    </div>
+  </div>
 
   <main>
     <!-- 오늘 -->
