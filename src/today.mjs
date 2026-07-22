@@ -88,6 +88,7 @@ export function applyVerdict(prev, verdict, article) {
   //  ★unknown(판독 실패)은 기존 확정 상태를 절대 덮어쓰지 않음(상황판 오염 방지).
   let ns = verdict.myStatus || cur.status;
   if (tee) ns = ns === 'your_turn' ? 'your_turn' : 'assigned'; // 티오프 있으면 확정
+  else if (teeRaw && isWork(ns)) ns = 'spare'; // 무효 티오프(16시 미만·취소)로 붙은 가짜 근무 → 스페어 강등
   if (ns && ns !== 'unknown') {
     if (ns !== cur.status) {
       const reversal = (isWait(cur.status) && isWork(ns)) // 대기→근무
