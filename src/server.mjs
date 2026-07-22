@@ -297,6 +297,11 @@ app.post('/api/cartcheck/photo', (req, res) => {
   if (!day) return res.status(400).json({ error: '잘못된 이미지/구분' });
   res.json({ ok: true, day });
 });
+app.post('/api/cartcheck/photo/remove', (req, res) => {
+  const { date, leg, fname } = req.body || {};
+  if (!date || !leg) return res.status(400).json({ error: 'date, leg 필요' });
+  res.json({ ok: true, day: cartcheck.removePhoto(date, leg, fname) });
+});
 app.get('/api/cartcheck/photo/:fname', (req, res) => {
   const fname = req.params.fname;
   if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
@@ -380,7 +385,7 @@ function deriveScheduleRole(ai) {
   else if (new RegExp(`${part}부`).test(ds) || /2\s*[,、]\s*3/.test(ds)) role = 'spare';
   const message = role === 'off' ? `${name}님, ${d} 휴무입니다. 편히 쉬세요`
     : role === 'work' ? `${name}님, ${d} 근무입니다 (출근 확정)`
-    : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다. 근무 순번이 오면 바로 알려드릴게요`
+    : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다.`
     : (ai.message || `${name}님, ${d} 배치표 확인하세요`);
   return { ...ai, role, status: role, message };
 }
@@ -490,14 +495,19 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // 관련 글이면 상황판에 병합 + 번복(변경) 감지.
   let change = { reversal: false, material: false, message: '' };
+  let merged = null;
   if (out.relevant && v) {
-    const merged = applyVerdict(today, v, full);
+    merged = applyVerdict(today, v, full);
     saveToday(merged.next);
     change = merged.change;
-    // 일일 근무 일지에 그날 '최종 상태'(근무/스페어/휴무) 기록 — 마지막 갱신이 그날 확정.
-    const jIso = worklog.labelToISO(v.dateLabel);
-    if (jIso) journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
-      course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName });
+    // 일일 근무 일지 — '상황판(오늘) 날짜' 기준으로 기록.
+    //  ★날짜 라벨 없는 정정 메시지(예: "14팀")도 오늘 상태를 갱신하도록 merged.next.date 사용.
+    //  ★불확실 판독(_uncertain·확인필요)은 저널을 오염시키지 않으므로 제외.
+    const jIso = worklog.labelToISO(merged.next.date);
+    if (jIso && !v._uncertain && out.push !== 'check') {
+      journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
+        course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName });
+    }
     if (change.reversal) {
       // 이전 예측이 뒤집힘 → 강조 알림으로 승격.
       title = '⚠️ 변경됐어요!';
@@ -517,9 +527,10 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   }
 
   // 근무 확정(배정/내 차례/근무)이면 세무용 근무일지에 그날을 자동 기록(임시 → 앱에서 확인).
-  if (out.relevant && v && ['assigned', 'work', 'your_turn'].includes(out.status)) {
-    const iso = worklog.labelToISO(v.dateLabel) || new Date().toISOString().slice(0, 10);
-    worklog.recordWorkDay(iso, { teeTime: v.teeTime || '', course: v.course || '', articleId: full.id });
+  //  상황판(merged) 최종 상태 기준 + 불확실 판독 제외(오탐 근무일 방지).
+  if (merged && v && !v._uncertain && ['assigned', 'work', 'your_turn'].includes(merged.next.status)) {
+    const iso = worklog.labelToISO(merged.next.date) || new Date().toISOString().slice(0, 10);
+    worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id });
   }
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
@@ -532,12 +543,24 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     return { pushed: false, ...ret };
   }
 
-  // 중복 푸시 방지(글번호+상태 기반, 번복이면 항상 통과). opts.force 면 건너뜀.
+  // 중복 푸시 방지 — 글번호가 아니라 '결과 상태' 기준(같은 상황이면 재알림 안 함).
+  //  ★같은 내용의 다른 메시지(예: "14팀","15팀 노란색…")가 똑같은 스페어 알림을 연달아 보내던 문제 해결.
+  //   상태·티오프·확정선·순번이 같으면 시간창(기본 8h) 내 재알림 억제. 번복/force 는 항상 통과.
   if (!opts.force && !change.reversal) {
-    const sig = `${full.id}|${out.status}|${v?.teeTime || ''}`;
-    const last = loadJSON('laststate.json', {});
-    if (last.sig === sig) { console.log(`·  (직전과 동일 → 무푸시) ${full.subject}`); return { pushed: false, ...ret }; }
-    saveJSON('laststate.json', { sig, at: Date.now(), subject: full.subject });
+    const ns = merged ? merged.next : null;
+    const sig = ns ? `${ns.status}|${ns.teeTime || ''}|${ns.course || ''}|${ns.cutLine || ''}|${ns.myPosition || ''}`
+                   : `${out.status}|${v?.teeTime || ''}`;
+    const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
+    const now = Date.now();
+    const log = loadJSON('pushlog.json', {});
+    for (const k of Object.keys(log)) if (now - log[k] > WINDOW) delete log[k];
+    if (log[sig] != null) {
+      console.log(`·  (같은 상태 재알림 억제 → 무푸시) ${full.subject} [${sig}]`);
+      saveJSON('pushlog.json', log);
+      return { pushed: false, ...ret };
+    }
+    log[sig] = now;
+    saveJSON('pushlog.json', log);
   }
 
   await broadcast({ title, body, url: full.url });

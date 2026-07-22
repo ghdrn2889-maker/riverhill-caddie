@@ -69,7 +69,12 @@ export function applyVerdict(prev, verdict, article) {
   }
 
   // ── 티오프: 새 확정 / 변경(번복) 감지 ──
-  const tee = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : '';
+  //  ★3부 티오프 하한(TEE_MIN_HOUR, 기본 16시) 미만은 무효(남의 시간/취소·오독 방지).
+  //   예: "[당일취소] 인 13시35분 취소" 를 김홍구 배정으로 오독하던 문제 차단.
+  const teeRaw = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : '';
+  const teeHour = teeRaw ? Number(teeRaw.split(':')[0]) : null;
+  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
+  const tee = (teeRaw && teeHour != null && teeHour >= TEE_MIN) ? teeRaw : '';
   if (tee) {
     if (cur.teeTime && cur.teeTime !== tee)
       changes.push({ field: 'tee', from: cur.teeTime, to: tee, reversal: true, msg: `티오프 ${cur.teeTime}→${tee}` });
@@ -134,6 +139,9 @@ export function applyVerdict(prev, verdict, article) {
       if (!nowWork) { next.teeTime = ''; next.course = ''; } // 스페어로 내려가면 임시 티오프 해제
     }
   }
+
+  // 스페어/대기 상태엔 티오프가 없어야 함 — 잔여·오독 티오프 정리(상황판·저널 일관성).
+  if (next.status === 'spare' || next.status === 'waiting') { next.teeTime = ''; next.course = ''; }
 
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });
   if (next.timeline.length > 40) next.timeline = next.timeline.slice(-40);

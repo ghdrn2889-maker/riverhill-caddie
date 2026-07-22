@@ -121,15 +121,40 @@ export function toggleCheck(dateISO, key, done) {
   });
 }
 
+let photoSeq = 0;
 export function savePhoto(dateISO, leg, dataUrl) {
   if (!isISO(dateISO) || !PHOTO_LEGS.includes(leg)) return null;
   const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
   if (!m) return null;
   const ext = m[1] === 'image/png' ? 'png' : 'jpg';
   fs.mkdirSync(PHOTO_DIR, { recursive: true });
-  const fname = `cart_${dateISO}_${leg}.${ext}`;
+  if (leg === 'intake') { // 카트 상태 — 여러 장 누적(배열)
+    const fname = `cart_${dateISO}_intake_${Date.now()}_${photoSeq++}.${ext}`;
+    fs.writeFileSync(path.join(PHOTO_DIR, fname), Buffer.from(m[2], 'base64'));
+    return mutate(dateISO, (r) => {
+      const cur = r.photos && r.photos.intake;
+      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+      r.photos = { ...r.photos, intake: [...arr, fname] };
+    });
+  }
+  const fname = `cart_${dateISO}_${leg}.${ext}`; // exit(빈 카트) — 단일
   fs.writeFileSync(path.join(PHOTO_DIR, fname), Buffer.from(m[2], 'base64'));
   return mutate(dateISO, (r) => { r.photos = { ...r.photos, [leg]: fname }; });
+}
+
+// 사진 삭제(intake는 배열에서 해당 파일만, exit는 통째로). 파일도 지운다.
+export function removePhoto(dateISO, leg, fname) {
+  return mutate(dateISO, (r) => {
+    if (!r.photos) return;
+    if (leg === 'intake') {
+      const cur = r.photos.intake;
+      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+      r.photos = { ...r.photos, intake: arr.filter((f) => f !== fname) };
+    } else {
+      const p = { ...r.photos }; delete p[leg]; r.photos = p;
+    }
+    try { if (fname && /^[\w.-]+\.(jpg|png)$/.test(fname)) fs.unlinkSync(path.join(PHOTO_DIR, fname)); } catch { /* 이미 없음 */ }
+  });
 }
 
 export function photoPath(fname) { return path.join(PHOTO_DIR, fname); }

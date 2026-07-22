@@ -129,7 +129,7 @@ function renderToday(t) {
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
     : st === 'off' ? '오늘은 예정된 근무가 없어요. 편히 쉬세요.'
-    : isSpare ? '배정 가능성이 있어 대기 중이에요. 확정되면 바로 알려드립니다.'
+    : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 오늘 상황이 확정되지 않았어요.';
   renderBoard(t);
 }
@@ -365,6 +365,17 @@ function ccSetPhoto(leg, fname) {
   if (fname) { thumb.src = `/api/cartcheck/photo/${fname}?t=${Date.now()}`; thumb.hidden = false; lbl.classList.add('has'); }
   else { thumb.hidden = true; lbl.classList.remove('has'); }
 }
+// 카트 상태(intake) — 여러 장 썸네일 + 각 삭제 버튼. 카메라로 찍을 때마다 추가됨.
+function ccRenderIntakeThumbs(list) {
+  const box = $('ccIntakeThumbs'), lbl = $('ccIntakeLbl');
+  const arr = Array.isArray(list) ? list : (list ? [list] : []);
+  box.innerHTML = arr.map((f) => `<span class="cc-thumbwrap"><img class="cc-thumb" src="/api/cartcheck/photo/${f}?t=${Date.now()}" alt="카트 상태"><button class="cc-thumbdel" data-f="${f}" aria-label="삭제">✕</button></span>`).join('');
+  box.querySelectorAll('button[data-f]').forEach((b) => {
+    b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg: 'intake', fname: b.dataset.f }); loadCartCheck(); };
+  });
+  lbl.classList.toggle('has', arr.length > 0);
+  if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `📷 사진 추가 (${arr.length}장)` : '📷 사진 찍기';
+}
 function ccRenderList(items, checklist, progress) {
   const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
   if (ccEditMode) {
@@ -409,7 +420,7 @@ async function loadCartCheck() {
       $('ccSub').textContent = '오늘 근무일이 아니어도 기록할 수 있어요.';
     }
     $('ccCart').value = day.cartNo || work.cartNo || '';
-    ccSetPhoto('intake', day.photos && day.photos.intake);
+    ccRenderIntakeThumbs(day.photos && day.photos.intake);
     ccSetPhoto('exit', day.photos && day.photos.exit);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }

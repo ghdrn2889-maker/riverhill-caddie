@@ -251,7 +251,7 @@ export function decide(article, verdict) {
       // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게 알림.
       status = 'spare';
       const pos = Number.isFinite(mp) ? ` (순번 ${mp}번)` : '';
-      body = `${name}님, ${verdict.dateLabel || '오늘'} ${profile().part}부 스페어 대기${pos}입니다. 아직 근무 확정 전 — 확정되면 바로 알려드릴게요`;
+      body = `${name}님, ${verdict.dateLabel || '오늘'} ${profile().part}부 스페어 대기${pos}입니다.`;
     }
   } else if (status === 'off') {
     body = `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
@@ -429,6 +429,14 @@ export async function judge(article, today = null) {
     if (retry && !weakBoardRead(retry)) break;
   }
   resolveTeeByGrid(verdict); // 코드가 순번→티오프 확정(눈대중 오독 차단)
+  // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
+  if (verdict) {
+    const th = (String(verdict.teeTime || '').match(/(\d{1,2}):/) || [])[1];
+    if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) {
+      verdict.teeTime = ''; verdict.course = '';
+      if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
+    }
+  }
 
   // ★티오프(근무 배정)가 읽힌 배치표는 교차검증: 한 번 더 읽어(표 기준) 티오프·순번이 다르면 '확인 필요'.
   //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
