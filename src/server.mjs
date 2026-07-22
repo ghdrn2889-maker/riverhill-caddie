@@ -9,13 +9,13 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
-import { loadJSON, saveJSON, migratePrimaryToUserStore } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile } from './users.mjs';
+import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore } from './store.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers } from './users.mjs';
 import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, devLogin, soloMode, authConfigured, testLoginEnabled } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
@@ -91,7 +91,7 @@ app.post('/api/subscribe', (req, res) => {
 
 // 앱 화면에 보여줄 최근 감지 목록 (오래된 소식은 자동 제외 — 항상 최근만 깔끔하게).
 app.get('/api/recent', (req, res) => {
-  res.json(freshFeed(loadJSON('recent.json', [])));
+  res.json(freshFeed(loadUserJSON(req.user?.id || 1, 'recent.json', [])));
 });
 
 // 일일 근무 일지 (근무/스페어/휴무 하루하루 기록): ?year=2026&month=7
@@ -482,11 +482,11 @@ function titleForStatus(status) {
   }
 }
 
-// 피드에 저장할 항목 (관련·무관 모두 — 데이터는 절대 안 버린다).
-function saveRecentV2(full, out) {
+// 피드에 저장할 항목 (관련·무관 모두 — 데이터는 절대 안 버린다). 회원별 피드.
+function saveRecentV2(full, out, userId = 1) {
   const v = out.rawVerdict || {};
   // 같은 글(id)이 재처리되면 중복 행을 만들지 않고 최신 것으로 교체(맨 위로).
-  const recent = freshFeed(loadJSON('recent.json', [])).filter((x) => x.id !== full.id);
+  const recent = freshFeed(loadUserJSON(userId, 'recent.json', [])).filter((x) => x.id !== full.id);
   recent.unshift({
     id: full.id, subject: full.subject, writer: full.writer, url: full.url,
     menuId: full.menuId, menuName: full.menuName, writeDate: full.writeDate,
@@ -498,7 +498,7 @@ function saveRecentV2(full, out) {
     priority: out.push === 'high' ? 'high' : 'info',
     detectedAt: Date.now(),
   });
-  saveJSON('recent.json', recent.slice(0, 100));
+  saveUserJSON(userId, 'recent.json', recent.slice(0, 100));
 }
 
 // 배치표 판정에서 '오늘 내 기준(부/역할/순번/티오프)'을 뽑아 저장 → 다음 글 판단 앵커.
@@ -519,98 +519,110 @@ function saveBaselineFromVerdict(full, v) {
 
 // 새 두뇌(judge)로 '오늘 상황판'에 비추어 판단 → 피드-우선 저장 → 상황판 갱신
 // → 번복 감지 + 확신도 라우팅으로 푸시.  push: 'high' | 'check' | 'low'
-async function notifyForArticle(full, result = {}, opts = {}) {
-  const today = loadToday();
+const envMember = () => ({ name: (process.env.MY_NAME || '김홍구').trim(), part: (process.env.MY_PART || '3').trim() });
 
-  // ★값싼 사전 필터: 명백히 남의 부/개인근태/비3부 시간이면 Gemini 호출 없이 피드에만.
-  //  (429 할당량 절약 + 판독 실패 시 남의 부·휴무신청까지 알림 나가던 스팸 차단.)
-  //  내 이름/3부 언급이 있으면 'other'가 아니므로 절대 여기서 안 버려짐(놓침 방지).
-  if (!opts.force && cheapRelevance(`${full.subject || ''} ${full.text || ''}`) === 'other') {
-    // 명백히 남의 일 → 앱에 아예 안 남김(피드 저장·푸시 없음). 서버 로그에만 흔적(오분류 시 복구용).
+// 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
+async function notifyForArticle(full, result = {}, opts = {}) {
+  const primary = envMember(); // 1번 회원(김홍구)
+
+  // ★값싼 사전 필터(1번 회원 기준): 명백히 남의 부/개인근태면 Gemini 호출 없이 종료(할당량 절약).
+  //  (현재 테스터는 3부라 1번 회원의 3부 board가 곧 그들 board — 부가 늘면 '어느 회원에게든 관련' 기준으로 확장)
+  if (!opts.force && cheapRelevance(`${full.subject || ''} ${full.text || ''}`, primary) === 'other') {
     console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
     return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
   }
 
-  const out = await judge(full, today);        // 오늘 상황을 맥락으로 판단
+  // ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
+  const out = await judge(full, loadToday(1), primary);
+
+  // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
+  const primaryRet = await processForMember(1, primary, out, full, opts);
+
+  // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict를 코드로 재해석.
+  for (const m of activeMembers()) {
+    if (m.id === 1) continue;
+    try {
+      const member = { name: m.board_name, part: String(m.part || '3') };
+      const mout = interpretForMember(full, out.rawVerdict, member, loadToday(m.id));
+      await processForMember(m.id, member, mout, full, opts);
+    } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
+  }
+  return primaryRet; // 호출부 호환(1번 회원 결과 반환)
+}
+
+// 한 회원(userId)에 대해: 피드 저장 → 상황판 병합 → 저널·근무일지 → 중복차단 → 그 회원 기기로 발송.
+//  ★모든 저장·발송이 회원별(userId). 1번 회원은 기존 동작과 동일.
+async function processForMember(userId, member, out, full, opts = {}) {
+  const today = loadToday(userId);
   const v = out.rawVerdict;
   let title = out.title, body = out.body;
 
-  // 관련 있는 소식만 피드에 기록(무관한 건 앱에 안 남김 — 사용자 요청). 무관은 로그로만 흔적.
-  if (out.relevant) saveRecentV2(full, out);
-  else console.log(`·  (무관 → 앱에 안 남김) ${full.subject} — ${v?.category || ''}`);
+  if (out.relevant) saveRecentV2(full, out, userId);
+  else if (userId === 1) console.log(`·  (무관 → 앱에 안 남김) ${full.subject} — ${v?.category || ''}`);
 
-  // 관련 글이면 상황판에 병합 + 번복(변경) 감지.
   let change = { reversal: false, material: false, message: '' };
   let merged = null;
   if (out.relevant && v) {
     merged = applyVerdict(today, v, full);
-    saveToday(merged.next);
+    saveToday(merged.next, userId);
     change = merged.change;
-    // 일일 근무 일지 — '상황판(오늘) 날짜' 기준으로 기록.
-    //  ★날짜 라벨 없는 정정 메시지(예: "14팀")도 오늘 상태를 갱신하도록 merged.next.date 사용.
-    //  ★불확실 판독(_uncertain·확인필요)은 저널을 오염시키지 않으므로 제외.
     const jIso = worklog.labelToISO(merged.next.date);
     if (jIso && !v._uncertain && out.push !== 'check') {
       journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
-        course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName });
+        course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName }, userId);
     }
     if (change.reversal) {
-      // 이전 예측이 뒤집힘 → 강조 알림으로 승격.
       title = '⚠️ 변경됐어요!';
       body = `${change.message}\n${out.body}`;
       out.push = 'high';
     } else if (Number(v.teamCount) > 0) {
-      // 팀 수 소식인데 상태 전환은 없음(여전히 스페어) → 접근 현황만 가볍게(먼 건 피드만).
       const myp = Number(merged.next.myPosition) || 0;
       const tc = Number(v.teamCount);
       if (myp && myp > tc) {
         const ahead = Math.max(0, myp - tc - 1);
-        title = '🏌️ 3부 대기 현황';
-        body = `현재 ${merged.next.part || '3부'} ${tc}팀 · 내 순번 ${myp}번 — 내 앞 ${ahead}명 남았어요.`;
+        title = `🏌️ ${member.part}부 대기 현황`;
+        body = `현재 ${merged.next.part || `${member.part}부`} ${tc}팀 · 내 순번 ${myp}번 — 내 앞 ${ahead}명 남았어요.`;
         out.push = ahead <= 2 ? 'check' : 'low';
       }
     }
   }
 
-  // 근무 확정(배정/내 차례/근무)이면 세무용 근무일지에 그날을 자동 기록(임시 → 앱에서 확인).
-  //  상황판(merged) 최종 상태 기준 + 불확실 판독 제외(오탐 근무일 방지).
   if (merged && v && !v._uncertain && ['assigned', 'work', 'your_turn'].includes(merged.next.status)) {
     const iso = worklog.labelToISO(merged.next.date) || new Date().toISOString().slice(0, 10);
-    worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id });
+    worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id }, userId);
   }
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
     category: v?.category || null, change: change.message || null, reversal: change.reversal };
 
-  // 라우팅: 무관/가배치 → 피드에만, 푸시 안 함.
   if (out.push === 'low') {
-    const why = v?._rosterDrop ? ` [명단필터: ${v._rosterDrop}]` : '';
-    console.log(`·  (피드만) ${full.subject} — ${v?.category || ''} (relevant=${out.relevant})${why}`);
+    if (userId === 1) {
+      const why = v?._rosterDrop ? ` [명단필터: ${v._rosterDrop}]` : '';
+      console.log(`·  (피드만) ${full.subject} — ${v?.category || ''} (relevant=${out.relevant})${why}`);
+    }
     return { pushed: false, ...ret };
   }
 
-  // 중복 푸시 방지 — 글번호가 아니라 '결과 상태' 기준(같은 상황이면 재알림 안 함).
-  //  ★같은 내용의 다른 메시지(예: "14팀","15팀 노란색…")가 똑같은 스페어 알림을 연달아 보내던 문제 해결.
-  //   상태·티오프·확정선·순번이 같으면 시간창(기본 8h) 내 재알림 억제. 번복/force 는 항상 통과.
+  // 중복 푸시 방지 — '결과 상태' 기준, 회원별 pushlog.
   if (!opts.force && !change.reversal) {
     const ns = merged ? merged.next : null;
     const sig = ns ? `${ns.status}|${ns.teeTime || ''}|${ns.course || ''}|${ns.cutLine || ''}|${ns.myPosition || ''}`
                    : `${out.status}|${v?.teeTime || ''}`;
     const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
     const now = Date.now();
-    const log = loadJSON('pushlog.json', {});
+    const log = loadUserJSON(userId, 'pushlog.json', {});
     for (const k of Object.keys(log)) if (now - log[k] > WINDOW) delete log[k];
     if (log[sig] != null) {
-      console.log(`·  (같은 상태 재알림 억제 → 무푸시) ${full.subject} [${sig}]`);
-      saveJSON('pushlog.json', log);
+      if (userId === 1) console.log(`·  (같은 상태 재알림 억제 → 무푸시) ${full.subject} [${sig}]`);
+      saveUserJSON(userId, 'pushlog.json', log);
       return { pushed: false, ...ret };
     }
     log[sig] = now;
-    saveJSON('pushlog.json', log);
+    saveUserJSON(userId, 'pushlog.json', log);
   }
 
-  await broadcast({ title, body, url: full.url });
-  console.log(`🔔 [${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
+  await broadcast({ title, body, url: full.url }, userId);
+  console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
 }
 

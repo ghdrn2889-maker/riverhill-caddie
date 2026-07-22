@@ -113,4 +113,12 @@ function getLegacyWorklogSettings() {
   return d && d.settings ? d.settings : null;
 }
 
+// board 판독 대상 회원들(실명 등록·활성). 크롤러가 board 1회 읽고 이들 각자에게 판단·발송.
+export function activeMembers() {
+  return all(`SELECT u.id, p.board_name, p.part
+              FROM users u JOIN profiles p ON p.user_id = u.id
+              WHERE u.status = 'active' AND p.board_name != ''
+              ORDER BY u.id`);
+}
+
 export function ensureDb() { db(); } // 부팅 시 스키마 생성 트리거
