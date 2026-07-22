@@ -367,6 +367,7 @@ function initWorklogButtons() {
 /* ── 카트 점검 ── */
 let ccDate = null;
 let ccEditMode = false;
+let ccIntakeCount = 0; // 현재 저장된 '카트 상태' 사진 수 — 다중 업로드 시 10장 상한 계산용
 function ccSetPhoto(leg, fname) {
   const lbl = $(leg === 'intake' ? 'ccIntakeLbl' : 'ccExitLbl');
   const thumb = $(leg === 'intake' ? 'ccIntakeThumb' : 'ccExitThumb');
@@ -377,6 +378,7 @@ function ccSetPhoto(leg, fname) {
 function ccRenderIntakeThumbs(list) {
   const box = $('ccIntakeThumbs'), lbl = $('ccIntakeLbl');
   const arr = Array.isArray(list) ? list : (list ? [list] : []);
+  ccIntakeCount = arr.length;
   box.innerHTML = arr.map((f) => `<span class="cc-thumbwrap"><img class="cc-thumb" src="/api/cartcheck/photo/${f}?t=${Date.now()}" alt="카트 상태"><button class="cc-thumbdel" data-f="${f}" aria-label="삭제">✕</button></span>`).join('');
   box.querySelectorAll('button[data-f]').forEach((b) => {
     b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg: 'intake', fname: b.dataset.f }); loadCartCheck(); };
@@ -435,8 +437,25 @@ async function loadCartCheck() {
 }
 async function ccUpload(leg, inp) {
   if (!inp.files || !inp.files[0]) return;
-  try { const image = await compressImage(inp.files[0]); await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image }); }
-  finally { inp.value = ''; loadCartCheck(); }
+  const files = Array.from(inp.files);
+  try {
+    if (leg === 'intake') {
+      const CAP = 10;
+      const room = Math.max(0, CAP - ccIntakeCount);
+      let pick = files.filter((f) => /^image\//.test(f.type));
+      if (pick.length > room) { alert(`카트 상태 사진은 최대 ${CAP}장까지예요. 앞에서 ${room}장만 올릴게요.`); pick = pick.slice(0, room); }
+      const lbl = $('ccIntakeLbl'); const orig = lbl.textContent;
+      for (let i = 0; i < pick.length; i++) {
+        lbl.textContent = `⏳ 올리는 중 ${i + 1}/${pick.length}`;
+        const image = await compressImage(pick[i]);
+        await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image });
+      }
+      lbl.textContent = orig;
+    } else {
+      const image = await compressImage(files[0]);
+      await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image });
+    }
+  } finally { inp.value = ''; loadCartCheck(); }
 }
 function initCartButtons() {
   $('ccEdit').onclick = () => { ccEditMode = !ccEditMode; loadCartCheck(); };
