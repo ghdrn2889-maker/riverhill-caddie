@@ -88,8 +88,17 @@ async function refreshPushHealth() {
   if (Notification.permission === 'denied') { set('bad', '● 알림 권한 꺼짐'); btn.hidden = true; return; }
   let sub = null;
   try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
-  if (Notification.permission === 'granted' && sub) { set('', '● 이 폰 알림 정상'); btn.hidden = true; healSubscription(); }
+  if (Notification.permission === 'granted' && sub) { set('', ''); btn.hidden = true; healSubscription(); } // 정상이면 표시 숨김(사용자용)
   else { set('warn', '● 이 폰 알림 꺼짐'); btn.hidden = false; btn.disabled = false; }
+  syncHealthVisibility();
+}
+
+// 감시·알림 표시가 모두 '정상(빈 값)'이면 상태 바 자체를 숨김 — 문제가 있을 때만 노출.
+function syncHealthVisibility() {
+  const box = $('health'), w = $('hWatch'), p = $('hPush');
+  if (!box) return;
+  const empty = (!w || !w.textContent.trim()) && (!p || !p.textContent.trim());
+  box.style.display = empty ? 'none' : '';
 }
 
 /* ── 감시 상태 ── */
@@ -97,9 +106,10 @@ async function loadWatchHealth() {
   const el = $('hWatch');
   try {
     const h = await (await fetch('/api/health')).json();
-    if (h.alive) { el.className = ''; el.textContent = `● 일정 감시 정상${h.ageSec != null ? ` · ${h.ageSec < 60 ? '방금' : Math.floor(h.ageSec / 60) + '분 전'}` : ''}`; }
+    if (h.alive) { el.className = ''; el.textContent = ''; } // 정상이면 표시 숨김(사용자용) — 문제일 때만 노출
     else { el.className = 'bad'; el.textContent = h.failStreak >= 2 ? '● 감시 오류(쿠키 확인)' : '● 감시 지연'; }
   } catch { el.className = 'warn'; el.textContent = '● 상태 확인 실패'; }
+  syncHealthVisibility();
 }
 
 /* ── 오늘: 상황판 히어로 + 행동 보드 ── */
@@ -182,7 +192,7 @@ function renderSpareBoard(s) {
   const cut = Number(s.cutLine) || 0;
   const roster = Array.isArray(s.roster3) ? s.roster3 : [];
   const nameAt = (p) => (typeof p === 'number' && p >= 1 && roster[p - 1]) ? roster[p - 1] : '';
-  const note = `<div class="sp-note">※ 티오프 시간은 당일 예약이 차면 앞으로 계속 당겨져, 확정 전엔 표시하지 않아요.</div>`;
+  const note = ''; // (사용자 요청) 티오프 당겨짐 안내 문구 숨김
 
   // 확정선 정보가 없으면(텍스트-only 등) 간단 안내로 폴백.
   if (!myPos || !cut || myPos <= cut) {
@@ -222,8 +232,6 @@ function renderSpareBoard(s) {
       <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
     </div>
     <div class="sp-list">${rows.join('')}</div>
-    <div class="sp-foot"><span>🔔</span><span>확정선이 <b>${myPos}번</b>에 닿으면 “지금 차례” 알림이 갑니다.</span></div>
-    ${note}
   </div>`;
 }
 
