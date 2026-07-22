@@ -14,7 +14,7 @@ import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
-import { loadJSON, saveJSON } from './store.mjs';
+import { loadJSON, saveJSON, migratePrimaryToUserStore } from './store.mjs';
 import { seedPrimaryUser, getProfile } from './users.mjs';
 import { attachUser, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
 
@@ -22,8 +22,9 @@ import { attachUser, beginNaverLogin, naverCallback, logout, soloMode, authConfi
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
 const freshFeed = (arr) => (arr || []).filter((x) => (Date.now() - (x.detectedAt || 0)) < FEED_KEEP_MS);
 
-initPush();
-seedPrimaryUser(); // 1번 회원(김홍구) 보장 — 회원제 도입 전 '나'를 그대로 이관
+seedPrimaryUser();               // 1번 회원(김홍구) 보장 — 회원제 도입 전 '나'를 그대로 이관
+migratePrimaryToUserStore();     // 전역 데이터(today/worklog/cart/journal/photos) → data/users/1/ (crawler 시작 전)
+initPush();                      // VAPID + subscriptions.json → SQLite 이관
 console.log(`🔐 인증 모드: ${soloMode() ? '솔로(로그인 없이 1번 회원)' : '회원제(네이버 로그인)'}${authConfigured() ? '' : ' · 네이버 미설정'}`);
 
 const app = express();
@@ -63,7 +64,7 @@ app.get('/api/config', (req, res) => {
 // 폰에서 '알림 켜기' 누르면 이 구독 정보가 저장됨
 app.post('/api/subscribe', (req, res) => {
   if (!req.body?.endpoint) return res.status(400).json({ error: '잘못된 구독 정보' });
-  addSubscription(req.body);
+  addSubscription(req.body, req.user?.id || 1);
   res.json({ ok: true });
 });
 
@@ -76,7 +77,8 @@ app.get('/api/recent', (req, res) => {
 app.get('/api/journal', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
-  res.json({ ok: true, days: journal.listJournal({ year, month }), summary: journal.summary({ year, month }) });
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, days: journal.listJournal({ year, month }, uid), summary: journal.summary({ year, month }, uid) });
 });
 
 // 테스트용: 지금 바로 내 폰으로 알림 한 번 쏴보기
@@ -182,7 +184,7 @@ function todayISOKST() {
 
 // 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
 app.get('/api/today', (req, res) => {
-  const t = loadToday();
+  const t = loadToday(req.user?.id || 1);
   if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
 
   // ── 낡은 상태 가드 ──
@@ -211,30 +213,31 @@ app.get('/api/today', (req, res) => {
 app.get('/api/worklog', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
-  res.json({ ok: true, days: worklog.listDays({ year, month }),
-    summary: worklog.summary({ year, month }), settings: worklog.getSettings() });
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, days: worklog.listDays({ year, month }, uid),
+    summary: worklog.summary({ year, month }, uid), settings: worklog.getSettings(uid) });
 });
 // 실제 근무 여부 확인: { date:'YYYY-MM-DD', worked:true|false|null }
 app.post('/api/worklog/confirm', (req, res) => {
   const { date, worked } = req.body || {};
   if (!date) return res.status(400).json({ error: 'date 필요' });
-  res.json({ ok: true, day: worklog.confirmWorkDay(date, worked) });
+  res.json({ ok: true, day: worklog.confirmWorkDay(date, worked, req.user?.id || 1) });
 });
 // 수동 추가: { date, teeTime?, course?, note? }
 app.post('/api/worklog/add', (req, res) => {
   const { date, teeTime, course, note } = req.body || {};
   if (!date) return res.status(400).json({ error: 'date 필요 (YYYY-MM-DD)' });
-  res.json({ ok: true, day: worklog.addWorkDay(date, { teeTime, course, note }) });
+  res.json({ ok: true, day: worklog.addWorkDay(date, { teeTime, course, note }, req.user?.id || 1) });
 });
 // 설정: { homeGolfKmOneway?, workplace?, fuelEnabled?, kmPerL?, fuelPrice? }
 app.post('/api/worklog/settings', (req, res) => {
-  res.json({ ok: true, settings: worklog.setSettings(req.body || {}) });
+  res.json({ ok: true, settings: worklog.setSettings(req.body || {}, req.user?.id || 1) });
 });
 // 계기판 사진 업로드: { date, leg:'start|work|home', image:'data:image/jpeg;base64,...' }
 app.post('/api/worklog/photo', (req, res) => {
   const { date, leg, image } = req.body || {};
   if (!date || !leg || !image) return res.status(400).json({ error: 'date, leg, image 필요' });
-  const day = worklog.savePhoto(date, leg, image);
+  const day = worklog.savePhoto(date, leg, image, req.user?.id || 1);
   if (!day) return res.status(400).json({ error: '잘못된 이미지 형식' });
   res.json({ ok: true, day });
 });
@@ -242,19 +245,19 @@ app.post('/api/worklog/photo', (req, res) => {
 app.post('/api/worklog/odo', (req, res) => {
   const { date, odo } = req.body || {};
   if (!date) return res.status(400).json({ error: 'date 필요' });
-  res.json({ ok: true, day: worklog.saveOdo(date, odo || {}) });
+  res.json({ ok: true, day: worklog.saveOdo(date, odo || {}, req.user?.id || 1) });
 });
 // 계기판 사진 보기: /api/worklog/photo/2026-07-14_start.jpg
 app.get('/api/worklog/photo/:fname', (req, res) => {
   const fname = req.params.fname;
   if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
-  res.sendFile(worklog.photoPath(fname), (err) => { if (err) res.status(404).end(); });
+  res.sendFile(worklog.photoPath(fname, req.user?.id || 1), (err) => { if (err) res.status(404).end(); });
 });
 // CSV 내보내기(차량운행일지): ?year=2026 (엑셀/세무사 제출용)
 app.get('/api/worklog/export.csv', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
-  const csv = worklog.toCSV({ year, month });
+  const csv = worklog.toCSV({ year, month }, req.user?.id || 1);
   const name = `운행일지_${year || '전체'}${month ? '-' + month : ''}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
@@ -265,68 +268,69 @@ app.get('/api/worklog/report.html', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(worklog.reportHTML({ year, month }));
+  res.send(worklog.reportHTML({ year, month }, req.user?.id || 1));
 });
 
 // ── 카트 점검 ─────────────────────────────────────────
 //  근무일마다 카트 정리 증거(시작사진·종료체크·빈카트사진·발견물)를 남긴다.
 //  date 미지정이면 KST 오늘.
 app.get('/api/cartcheck', (req, res) => {
-  const date = req.query.date && cartcheck.getDay(req.query.date) ? req.query.date : todayISOKST();
-  const t = loadToday();
+  const uid = req.user?.id || 1;
+  const date = req.query.date && cartcheck.getDay(req.query.date, uid) ? req.query.date : todayISOKST();
+  const t = loadToday(uid);
   const tISO = t && worklog.labelToISO(t.date);
   const isWorkToday = !!(t && tISO === date && ['assigned', 'work', 'your_turn'].includes(t.status));
-  res.json({ ok: true, date, items: cartcheck.getItems(), day: cartcheck.getDay(date),
+  res.json({ ok: true, date, items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid),
     work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
 });
 // 체크리스트 항목 편집(추가/이름변경/삭제/복원) — 개인 목록으로 저장.
 app.post('/api/cartcheck/items/add', (req, res) => {
   const label = (req.body || {}).label;
   if (!label) return res.status(400).json({ error: 'label 필요' });
-  res.json({ ok: true, items: cartcheck.addItem(label) });
+  res.json({ ok: true, items: cartcheck.addItem(label, req.user?.id || 1) });
 });
 app.post('/api/cartcheck/items/rename', (req, res) => {
   const { key, label } = req.body || {};
   if (!key || !label) return res.status(400).json({ error: 'key, label 필요' });
-  res.json({ ok: true, items: cartcheck.renameItem(key, label) });
+  res.json({ ok: true, items: cartcheck.renameItem(key, label, req.user?.id || 1) });
 });
 app.post('/api/cartcheck/items/remove', (req, res) => {
   const key = (req.body || {}).key;
   if (!key) return res.status(400).json({ error: 'key 필요' });
-  res.json({ ok: true, items: cartcheck.removeItem(key) });
+  res.json({ ok: true, items: cartcheck.removeItem(key, req.user?.id || 1) });
 });
 app.post('/api/cartcheck/items/reset', (req, res) => {
-  res.json({ ok: true, items: cartcheck.resetItems() });
+  res.json({ ok: true, items: cartcheck.resetItems(req.user?.id || 1) });
 });
 app.post('/api/cartcheck/items/recommend', (req, res) => {
-  res.json({ ok: true, items: cartcheck.recommendItems() });
+  res.json({ ok: true, items: cartcheck.recommendItems(req.user?.id || 1) });
 });
 app.post('/api/cartcheck/cart', (req, res) => {
   const { date, cartNo } = req.body || {};
   if (!date) return res.status(400).json({ error: 'date 필요' });
-  res.json({ ok: true, day: cartcheck.setCartNo(date, cartNo) });
+  res.json({ ok: true, day: cartcheck.setCartNo(date, cartNo, req.user?.id || 1) });
 });
 app.post('/api/cartcheck/check', (req, res) => {
   const { date, key, done } = req.body || {};
   if (!date || !key) return res.status(400).json({ error: 'date, key 필요' });
-  res.json({ ok: true, day: cartcheck.toggleCheck(date, key, !!done) });
+  res.json({ ok: true, day: cartcheck.toggleCheck(date, key, !!done, req.user?.id || 1) });
 });
 app.post('/api/cartcheck/photo', (req, res) => {
   const { date, leg, image } = req.body || {};
   if (!date || !leg || !image) return res.status(400).json({ error: 'date, leg, image 필요' });
-  const day = cartcheck.savePhoto(date, leg, image);
+  const day = cartcheck.savePhoto(date, leg, image, req.user?.id || 1);
   if (!day) return res.status(400).json({ error: '잘못된 이미지/구분' });
   res.json({ ok: true, day });
 });
 app.post('/api/cartcheck/photo/remove', (req, res) => {
   const { date, leg, fname } = req.body || {};
   if (!date || !leg) return res.status(400).json({ error: 'date, leg 필요' });
-  res.json({ ok: true, day: cartcheck.removePhoto(date, leg, fname) });
+  res.json({ ok: true, day: cartcheck.removePhoto(date, leg, fname, req.user?.id || 1) });
 });
 app.get('/api/cartcheck/photo/:fname', (req, res) => {
   const fname = req.params.fname;
   if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
-  res.sendFile(cartcheck.photoPath(fname), (err) => { if (err) res.status(404).end(); });
+  res.sendFile(cartcheck.photoPath(fname, req.user?.id || 1), (err) => { if (err) res.status(404).end(); });
 });
 
 const PORT = Number(process.env.PORT || 3000);

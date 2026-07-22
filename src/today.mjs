@@ -2,12 +2,13 @@
 //  하루 동안 "김홍구"의 상황을 하나의 살아있는 그림으로 유지한다.
 //  각 새 글을 이 그림에 '비추어' 병합하고, 바뀐 점(번복)을 감지해 알린다.
 //  원칙: 원본 판독은 피드(recent.json)에 그대로 보존 → 상황판은 언제든 재생성 가능.
-import { loadJSON, saveJSON } from './store.mjs';
+import { loadUserJSON, saveUserJSON } from './store.mjs';
 
 const FILE = 'today.json';
 
-export function loadToday() { return loadJSON(FILE, null); }
-export function saveToday(s) { saveJSON(FILE, s); }
+// ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화.
+export function loadToday(userId = 1) { return loadUserJSON(userId, FILE, null); }
+export function saveToday(s, userId = 1) { saveUserJSON(userId, FILE, s); }
 
 export function statusKo(s) {
   return (s === 'assigned' || s === 'work') ? '근무 확정'

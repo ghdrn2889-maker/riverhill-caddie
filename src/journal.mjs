@@ -1,7 +1,7 @@
 // 일일 근무 일지 — 하루하루 김홍구의 '최종 상태'(근무/스페어/휴무)를 기록.
 //  피드(소식)는 흘려보내되, 남길 가치가 있는 '그날 결과'만 여기에 구조화해 보관.
 //  같은 날 여러 번 갱신되면 마지막 상태가 그날의 최종(스페어→근무 확정되면 근무로 확정).
-import { loadJSON, saveJSON } from './store.mjs';
+import { loadUserJSON, saveUserJSON } from './store.mjs';
 
 const FILE = 'journal.json';
 
@@ -13,11 +13,11 @@ export function dayKind(status) {
   return 'unknown';
 }
 
-export function recordDayStatus(dateISO, info = {}) {
+export function recordDayStatus(dateISO, info = {}, userId = 1) {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return;
   const kind = dayKind(info.status);
   if (kind === 'unknown') return; // 미상 상태는 일지에 남기지 않음(확정 상태만)
-  const j = loadJSON(FILE, {});
+  const j = loadUserJSON(userId, FILE, {});
   const prev = j[dateISO] || {};
   j[dateISO] = {
     date: dateISO,
@@ -29,11 +29,11 @@ export function recordDayStatus(dateISO, info = {}) {
     cutoffName: info.cutoffName || prev.cutoffName || '',
     updatedAt: Date.now(),
   };
-  saveJSON(FILE, j);
+  saveUserJSON(userId, FILE, j);
 }
 
-export function listJournal({ year, month } = {}) {
-  const j = loadJSON(FILE, {});
+export function listJournal({ year, month } = {}, userId = 1) {
+  const j = loadUserJSON(userId, FILE, {});
   return Object.values(j)
     .filter((d) => {
       if (!year) return true;
@@ -43,8 +43,8 @@ export function listJournal({ year, month } = {}) {
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
-export function summary({ year, month } = {}) {
-  const days = listJournal({ year, month });
+export function summary({ year, month } = {}, userId = 1) {
+  const days = listJournal({ year, month }, userId);
   return {
     work: days.filter((d) => d.kind === 'work').length,
     spare: days.filter((d) => d.kind === 'spare').length,
