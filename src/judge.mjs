@@ -4,7 +4,9 @@
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON } from './gemini.mjs';
 
-function profile() {
+// 회원 컨텍스트(이름·부). 미지정이면 .env(=1번 회원 김홍구) → 기존 동작 무변화.
+//  ★judge()가 회원을 인자로 받아 buildPrompt/decide/applyRoster 등에 전달 → "누구 기준"만 바깥에서.
+function memberFromEnv() {
   return {
     name: (process.env.MY_NAME || '김홍구').trim(),
     part: (process.env.MY_PART || '3').trim(),
@@ -23,9 +25,9 @@ export function scheduleHint(text) {
 // 값싼 사전 판정: 명백히 '남의 일'이면 'other'(Gemini 생략·푸시 안 함), 아니면 'unknown'(Gemini/폴백에 맡김).
 //  Gemini 할당량(429) 절약 + 판독 실패 시 남의 부·개인근태까지 알림 나가는 스팸 방지.
 //  ★보수적으로: 내 이름/3부 언급이 있으면 절대 'other'로 버리지 않는다(놓침 방지).
-export function cheapRelevance(text) {
+export function cheapRelevance(text, member = memberFromEnv()) {
   const t = String(text || '');
-  const { name, part } = profile();
+  const { name, part } = member;
   if (name && t.includes(name)) return 'unknown';         // 내 이름 → 보류
   if (new RegExp(`${part}\\s*부`).test(t)) return 'unknown'; // 내 부(3부) 언급 → 보류
   // 명시적 다른 부(1·2부 등, 내 부 아님)
@@ -58,8 +60,8 @@ function commuteLine(teeTime, course) {
 }
 
 // ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
-function buildPrompt(article) {
-  const { name, part } = profile();
+function buildPrompt(article, member = memberFromEnv()) {
+  const { name, part } = member;
   const anchor = '';
   const hasImg = !!article.images?.length;
   const ts = Number(article.writeDate);
@@ -176,13 +178,13 @@ function titleFor(status) {
 
 // verdict(raw) → { relevant, push, title, body, status, verdict, computed }
 //  push: 'high'(바로 알림) | 'low'(피드만) | 'check'(확인필요 알림)
-export function decide(article, verdict) {
-  const { name, part: myPart } = profile();
+export function decide(article, verdict, member = memberFromEnv()) {
+  const { name, part: myPart } = member;
   if (!verdict) {
     // Gemini 실패(429/타임아웃 등) → 놓침 방지로 '확인필요' 알림. 단 잡담/광고/사진까지
     //  알림 보내면 스팸이므로, 일정 단서(부·근무·시간·순번·"○○까지" 등)가 있을 때만 푸시.
     const blob = `${article.subject || ''} ${article.text || ''}`;
-    if (cheapRelevance(blob) !== 'other' && scheduleHint(blob)) {
+    if (cheapRelevance(blob, member) !== 'other' && scheduleHint(blob)) {
       return { relevant: true, push: 'check', status: 'unknown', verdict: null,
         title: '🏌️ 새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
     }
@@ -251,7 +253,7 @@ export function decide(article, verdict) {
       // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게 알림.
       status = 'spare';
       const pos = Number.isFinite(mp) ? ` (순번 ${mp}번)` : '';
-      body = `${name}님, ${verdict.dateLabel || '오늘'} ${profile().part}부 스페어 대기${pos}입니다.`;
+      body = `${name}님, ${verdict.dateLabel || '오늘'} ${member.part}부 스페어 대기${pos}입니다.`;
     }
   } else if (status === 'off') {
     body = `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
@@ -271,7 +273,7 @@ export function decide(article, verdict) {
 //  · 부가 이미 판정된 글(part 1/2/3 명시·시간대)엔 개입하지 않음(모호할 때만 작동).
 //  · 대상 인물이 3부 명단에 없으면 → 내 부 아님(피드만).
 //  · 명단에 있으나 '부 중복'인 사람뿐이면 → 시간대(14시~ or 티오프 14시~)로 판정.
-export function applyRoster(verdict, today, article) {
+export function applyRoster(verdict, today, article, member = memberFromEnv()) {
   if (!verdict || !verdict.relevant) return;
   const vpart = (String(verdict.part || '').match(/[123]/) || [])[0] || 'unknown';
   if (vpart !== 'unknown') return;                       // 부가 이미 판정됨 → 그 판정 신뢰
@@ -287,7 +289,7 @@ export function applyRoster(verdict, today, article) {
   const inRoster = names.filter((n) => set.has(n));
   if (!inRoster.length) {
     verdict.relevant = false;
-    verdict._rosterDrop = `대상(${names.join(',')})이 ${(process.env.MY_PART || '3').trim()}부 명단에 없음`;
+    verdict._rosterDrop = `대상(${names.join(',')})이 ${member.part}부 명단에 없음`;
     return;
   }
   if (inRoster.every((n) => cross.has(n))) {             // 전원 부-중복 → 시간으로 판정
@@ -303,7 +305,7 @@ export function applyRoster(verdict, today, article) {
       return;
     }
   }
-  verdict.part = (process.env.MY_PART || '3').trim();    // 명단 확인 → 내 부로 확정
+  verdict.part = member.part;    // 명단 확인 → 내 부로 확정
   verdict.rosterConfirmed = true;
 }
 
@@ -323,9 +325,9 @@ function weakBoardRead(v) {
 //  · 순번이 표에 없으면 → 스페어(모델이 붙인 티오프 제거). 모델이 근무라 우겼으면 '확인 필요'.
 // 표 판독이 '행 순서대로 번호 매기기' 실패인지 감지: 순번이 1,2,3,4…로 완전 순차이거나 코스가 전부 동일하면 의심.
 // "현재 3부 N팀" → N 추출(내 부 한정). N = 순번 N번까지 근무 확정(실시간 확정선).
-export function extractTeamCount(text) {
+export function extractTeamCount(text, member = memberFromEnv()) {
   const t = String(text || '');
-  const { part } = profile();
+  const { part } = member;
   const p = String(part || '').replace(/[^0-9]/g, '');
   if (!p) return null;
   const re1 = new RegExp(`${p}\\s*부[^0-9]{0,8}(\\d{1,2})\\s*팀`);   // 3부 16팀
@@ -409,22 +411,22 @@ function resolveTeeByGrid(verdict) {
   }
 }
 
-export async function judge(article, today = null) {
+export async function judge(article, today = null, member = memberFromEnv()) {
   const img = article.images?.[0] || null;
   const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
   // ★배치표(이미지) 판독만 강한 모델(GEMINI_BOARD_MODEL) 사용 — 조밀한 티오프 표 정확도↑, 비용은 소액.
   //  텍스트/카톡/일반 글은 기본 모델(flash-lite) 유지.
   const boardModel = isBoard ? (process.env.GEMINI_BOARD_MODEL || null) : null;
-  let verdict = await callGeminiJSON(buildPrompt(article), img, boardModel);
+  let verdict = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
   // 안전망: 배치표 전용 모델(무료 등급)이 429 등으로 실패(null)하면 기본 모델(flash-lite)로 강등 재시도.
   if (isBoard && boardModel && !verdict) {
     console.log('[judge] 배치표 모델 실패 → 기본 모델로 강등 재시도');
-    verdict = await callGeminiJSON(buildPrompt(article), img, null);
+    verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
   }
   // ★배치표 판독이 부실하면(순번·티오프 실패) 최대 2회 재시도 — 비전 불안정으로
   //  최신 배치표를 놓치거나 pos=0 같은 실패값이 나오던 문제 완화.
   for (let tries = 0; isBoard && weakBoardRead(verdict) && tries < 2; tries++) {
-    const retry = await callGeminiJSON(buildPrompt(article), img, boardModel);
+    const retry = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
     if (retry) verdict = retry;
     if (retry && !weakBoardRead(retry)) break;
   }
@@ -442,7 +444,7 @@ export async function judge(article, today = null) {
   //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
   const teeOf = (v) => (String(v?.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
   if (isBoard && teeOf(verdict)) {
-    const v2 = await callGeminiJSON(buildPrompt(article), img, boardModel);
+    const v2 = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
     if (v2) {
       resolveTeeByGrid(v2);
       const posOf = (v) => (Number(v?.myPosition) > 0 ? Number(v.myPosition) : '');
@@ -458,9 +460,57 @@ export async function judge(article, today = null) {
   }
   // ★"현재 3부 N팀" 팀 수 보정: Gemini가 놓쳤으면 정규식으로 추출(내 부 한정). = 실시간 확정선.
   if (verdict && !(Number(verdict.teamCount) > 0)) {
-    const tc = extractTeamCount(`${article.subject || ''}\n${article.contentText || article.content || ''}`);
+    const tc = extractTeamCount(`${article.subject || ''}\n${article.contentText || article.content || ''}`, member);
     if (tc) { verdict.teamCount = tc; if (!verdict.relevant) verdict.relevant = true; }
   }
-  applyRoster(verdict, today, article);    // 3부 명단 화이트리스트 정밀 필터
-  return { ...decide(article, verdict), rawVerdict: verdict };
+  applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
+  return { ...decide(article, verdict, member), rawVerdict: verdict };
+}
+
+// ── 회원별 재해석 (Gemini 재호출 없이) ─────────────────────────
+//  이미 읽은 board 결과(shared rawVerdict)를 다른 회원 기준으로 코드만으로 다시 판단.
+//  · 회원의 순번: 본배치표면 명단에서 이름으로 찾고(괄호 교환 반영), 아니면 그 회원의 저장된 순번.
+//  · 회원의 색은 알 수 없으므로 myCellColor='unknown' → 구조(순번 vs 확정선/티오프표)로 판단.
+//  · 커트라인·팀수·티오프표는 회원 무관(공유) → decide()가 회원 순번으로 남은인원 계산.
+function memberPositionFromShared(shared, member, today) {
+  const roster = Array.isArray(shared?.part3Roster) ? shared.part3Roster : [];
+  if (roster.length) {
+    for (let i = 0; i < roster.length; i++) {
+      const cell = String(roster[i] || '');
+      const m = cell.match(/\(([^)]+)\)/);         // "박수현(홍길동)" → 실제 점유자는 괄호 안
+      const occupant = (m ? m[1] : cell).trim();
+      if (occupant === member.name) return i + 1;   // 명단은 순번 순서 가정
+    }
+  }
+  return Number(today?.myPosition) || null;
+}
+
+export function interpretForMember(article, shared, member, today = null) {
+  if (!shared) return { ...decide(article, null, member), rawVerdict: null };
+  // 다른 부(部)로 판명된 board면 이 회원과도 무관(같은 부만 공유 대상).
+  const v = {
+    relevant: shared.relevant,
+    part: shared.part,
+    category: shared.category,
+    dateLabel: shared.dateLabel,
+    cutoffAnnounced: shared.cutoffAnnounced,
+    cutoffName: shared.cutoffName,
+    cutoffPosition: shared.cutoffPosition,
+    teamCount: shared.teamCount,
+    teeGrid: shared.teeGrid,
+    part3Roster: shared.part3Roster,
+    crossPartNames: shared.crossPartNames,
+    subjectNames: shared.subjectNames,
+    note: shared.note,
+    confidence: shared.confidence,
+    myCellColor: 'unknown',              // 회원 본인 색은 모름 → 구조로 판단
+    myStatus: 'unknown',
+    teeTime: null, course: '',
+    myPosition: memberPositionFromShared(shared, member, today),
+  };
+  resolveTeeByGrid(v);                    // 순번→티오프(구조·beyond-cut 스페어 등)
+  const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
+  if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) { v.teeTime = ''; v.course = ''; }
+  applyRoster(v, today, article, member);
+  return { ...decide(article, v, member), rawVerdict: v };
 }
