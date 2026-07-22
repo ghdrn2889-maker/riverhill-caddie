@@ -1,0 +1,337 @@
+<title>세무·차량 기록 — 다듬은 시안</title>
+<style>
+  :root{
+    --bg:#f7f6f0; --card:#fff; --line:#e6ebe6; --line2:#eef1ec;
+    --ink:#17231d; --ink2:#3f5148; --mut:#647168; --micro:#77837c;
+    --grn:#104d31; --grn2:#2e7149; --grn-ink:#1d6740; --grn-bg:#e8f3eb;
+    --amb:#9b6819; --amb-bg:#fff8e8; --amb-line:#efdfb8; --amb-dot:#d99a31;
+    --red:#bd312d; --grey-ink:#9aa49c; --grey-bg:#eef1ec;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;}
+  .phone{max-width:420px;margin:0 auto;padding:14px 14px 40px;}
+  .sect{font-size:12px;margin:6px 3px 10px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:6px;}
+
+  /* 월 전환기 */
+  .monthnav{display:flex;align-items:center;justify-content:space-between;
+    background:var(--grn);color:#fff;border-radius:15px;padding:11px 8px;box-shadow:0 6px 18px rgba(16,77,49,.18);}
+  .monthnav button{background:rgba(255,255,255,.13);border:0;color:#fff;width:38px;height:38px;border-radius:11px;
+    font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+  .monthnav button:hover:not(:disabled){background:rgba(255,255,255,.24);}
+  .monthnav button:disabled{opacity:.28;cursor:default;}
+  .monthnav .mlabel{text-align:center;line-height:1.15;}
+  .monthnav .mlabel b{font-size:17px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;display:block;}
+  .monthnav .mlabel span{font-size:9px;opacity:.72;font-weight:700;letter-spacing:.04em;}
+  .thismo{display:inline-block;margin:9px auto 0;text-align:center;width:100%;}
+  .thismo button{background:var(--grn-bg);color:var(--grn-ink);border:0;font-size:10px;font-weight:800;
+    padding:5px 13px;border-radius:99px;cursor:pointer;}
+
+  /* 연 누적 요약 — 큰 그림은 한 줄, 상세는 월별 */
+  .yearroll{margin-top:10px;display:flex;align-items:center;gap:8px;background:#eef3ee;border:1px solid var(--line);
+    border-radius:12px;padding:9px 13px;font-size:10.5px;color:var(--ink2);font-weight:700;}
+  .yearroll .yr{color:var(--grn);font-weight:850;}
+  .yearroll .sep{color:#c2ccc3;}
+  .yearroll b{color:var(--grn);font-variant-numeric:tabular-nums;}
+  .yearroll .cap{margin-left:auto;font-size:8.5px;color:#93a099;font-weight:700;}
+
+  /* 요약 카드 */
+  .summary{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:18px;
+    box-shadow:0 6px 20px rgba(24,54,35,.06);overflow:hidden;}
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;}
+  .stat{padding:15px 12px;text-align:center;border-right:1px solid var(--line2);}
+  .stat:last-child{border-right:0;}
+  .stat .k{font-size:8.5px;font-weight:850;letter-spacing:.11em;color:var(--micro);}
+  .stat .v{font-size:26px;font-weight:800;letter-spacing:-.05em;color:var(--grn);
+    font-variant-numeric:tabular-nums;line-height:1.05;margin-top:5px;}
+  .stat .v small{font-size:12px;font-weight:700;color:var(--mut);letter-spacing:0;margin-left:1px;}
+  .stat .u{font-size:9px;color:var(--mut);margin-top:2px;}
+  .stat .tag{display:inline-block;margin-top:3px;font-size:7.5px;font-weight:800;letter-spacing:.03em;
+    color:var(--amb);background:var(--amb-bg);border:1px solid var(--amb-line);border-radius:99px;padding:1px 6px;}
+  .assume{font-size:9px;color:#93a099;padding:8px 15px 0;line-height:1.5;font-weight:600;}
+  .assume b{color:var(--mut);}
+  .tidy{display:flex;align-items:center;gap:8px;padding:11px 15px;border-top:1px solid var(--line2);font-size:11px;font-weight:700;}
+  .tidy.ok{background:var(--grn-bg);color:var(--grn-ink);}
+  .tidy.warn{background:var(--amb-bg);color:var(--amb);}
+  .tidy .ic{font-size:13px;}
+  .tidy .go{margin-left:auto;font-size:10px;font-weight:800;opacity:.75;}
+
+  /* 필터 세그먼트 */
+  .seg{display:flex;gap:6px;margin:13px 1px 4px;}
+  .seg button{flex:1;background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 4px;
+    font-size:10.5px;font-weight:800;color:var(--mut);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;}
+  .seg button.on{background:var(--grn);border-color:var(--grn);color:#fff;}
+  .seg button .n{font-size:13px;line-height:1;font-variant-numeric:tabular-nums;}
+  .seg button.on .n{color:#fff;}
+  .seg button .n.warn{color:var(--amb);}
+  .seg button.on .n.warn{color:#ffe0a3;}
+
+  /* 일자 카드 */
+  .days{margin-top:8px;display:flex;flex-direction:column;gap:8px;}
+  .day{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    position:relative;transition:box-shadow .15s;}
+  .day.attn{border-color:var(--amb-line);}
+  .day.attn::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--amb-dot);}
+  .drow{display:flex;align-items:center;gap:11px;padding:12px 14px 12px 15px;cursor:pointer;}
+  .dbadge{width:44px;text-align:center;flex-shrink:0;}
+  .dbadge .d{font-size:19px;font-weight:800;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink);}
+  .dbadge .w{font-size:9px;font-weight:800;color:var(--mut);margin-top:2px;}
+  .dbadge .w.sun{color:var(--red);} .dbadge .w.sat{color:#2f6ab0;}
+  .dmid{flex:1;min-width:0;}
+  .dmid .tee{font-size:12.5px;font-weight:700;color:var(--ink);letter-spacing:-.01em;}
+  .dmid .meta{font-size:10px;color:var(--mut);margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .dmid .meta .ph{color:var(--grn-ink);font-weight:700;}
+  .dmid .meta .ph.miss{color:var(--amb);}
+  .chip{font-size:10px;font-weight:800;padding:5px 11px;border-radius:99px;white-space:nowrap;flex-shrink:0;}
+  .chip.ok{background:var(--grn-bg);color:var(--grn-ink);}
+  .chip.no{background:var(--grey-bg);color:var(--grey-ink);}
+  .chip.ask{background:var(--amb-bg);color:var(--amb);border:1px solid var(--amb-line);}
+  .askbtns{display:flex;gap:6px;flex-shrink:0;}
+  .askbtns button{border:0;font-size:11px;font-weight:800;padding:6px 12px;border-radius:9px;cursor:pointer;}
+  .askbtns .yes{background:var(--grn);color:#fff;} .askbtns .no{background:var(--grey-bg);color:#69736b;}
+  .caret{color:#b7c1b8;font-size:12px;flex-shrink:0;transition:transform .18s;}
+  .day.open .caret{transform:rotate(180deg);}
+
+  /* 펼침: 계기판 사진 + km */
+  .panel{border-top:1px solid var(--line2);padding:13px 14px;background:#fcfdfb;display:none;}
+  .day.open .panel{display:block;}
+  .slots{display:flex;gap:8px;}
+  .slot{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;}
+  .slot .box{width:100%;aspect-ratio:4/3;border:1.5px dashed #dfe5e0;border-radius:9px;background:#f6f8f5;
+    display:flex;align-items:center;justify-content:center;font-size:19px;color:#aeb8b0;overflow:hidden;}
+  .slot .box.done{border-style:solid;border-color:var(--grn2);background:linear-gradient(135deg,#dbe9df,#c7dccd);color:var(--grn);}
+  .slot .lab{font-size:9px;font-weight:800;color:#647168;}
+  .odo{display:flex;align-items:center;gap:6px;margin-top:11px;font-size:10px;color:var(--mut);font-weight:700;}
+  .odo input{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px;font-size:12px;text-align:center;min-width:0;
+    font-variant-numeric:tabular-nums;}
+  .odo .save{background:var(--grn2);color:#fff;border:0;font-weight:800;padding:7px 12px;border-radius:8px;font-size:11px;flex-shrink:0;cursor:pointer;}
+
+  /* 내보내기 */
+  .export{margin-top:16px;display:flex;flex-direction:column;gap:8px;}
+  .export button{border:0;border-radius:13px;padding:14px;font-size:13px;font-weight:800;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;}
+  .export .pdf{background:var(--grn);color:#fff;box-shadow:0 5px 14px rgba(16,77,49,.2);}
+  .export .csv{background:#fff;color:var(--grn-ink);border:1px solid var(--line);}
+  .export .scope{font-size:9px;font-weight:700;opacity:.7;}
+
+  /* 설정(접힘) */
+  .settings{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;}
+  .settings summary{list-style:none;cursor:pointer;padding:13px 15px;font-size:12px;font-weight:800;color:var(--ink2);
+    display:flex;align-items:center;justify-content:space-between;}
+  .settings summary::-webkit-details-marker{display:none;}
+  .settings summary .car{font-size:11px;color:var(--mut);transition:transform .18s;}
+  .settings[open] summary .car{transform:rotate(180deg);}
+  .setbody{padding:2px 15px 15px;border-top:1px solid var(--line2);}
+  .frow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink2);margin-top:11px;font-weight:600;}
+  .frow input{border:1px solid var(--line);border-radius:8px;padding:8px 9px;font-size:13px;}
+  .frow input.km{width:66px;text-align:center;} .frow .save{margin-left:auto;background:var(--grn2);color:#fff;border:0;
+    font-weight:800;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;}
+  .note{font-size:10px;color:#8a948c;line-height:1.6;margin-top:14px;padding:0 3px;}
+  .note b{color:var(--ink2);}
+  .empty{text-align:center;color:#9aa49c;font-size:12px;padding:34px 0;}
+</style>
+
+<div class="phone">
+  <div class="sect">📋 세무·차량 기록</div>
+
+  <div class="monthnav">
+    <button id="prev" aria-label="이전 달">‹</button>
+    <div class="mlabel"><b id="mlabel">2026년 7월</b><span id="msub">이번 달</span></div>
+    <button id="next" aria-label="다음 달">›</button>
+  </div>
+  <div class="thismo" id="thismo" style="display:none;"><button id="jump">↩︎ 이번 달로</button></div>
+
+  <div class="yearroll">
+    <span class="yr" id="yr-year">2026년</span> 누적
+    <span class="sep">·</span> 근무 <b id="yr-days">0</b>일
+    <span class="sep">·</span> 주행 <b id="yr-km">0</b>km
+    <span class="cap">상세는 월별로</span>
+  </div>
+
+  <div class="summary">
+    <div class="stats">
+      <div class="stat"><div class="k">근무일</div><div class="v" id="s-days">0</div><div class="u">일</div></div>
+      <div class="stat"><div class="k">주행거리</div><div class="v" id="s-km">0</div><div class="u">km</div></div>
+      <div class="stat" id="stat3">
+        <div class="k" id="s3-k">증빙 사진</div><div class="v" id="s-fuel">0</div><div class="u" id="s3-u">일</div>
+      </div>
+    </div>
+    <div class="assume" id="assume" style="display:none;"></div>
+    <div class="tidy ok" id="tidy"><span class="ic">✓</span><span id="tidytxt">모두 정리됐어요</span></div>
+  </div>
+
+  <div class="seg" id="seg">
+    <button data-f="all" class="on">이 달<span class="n" id="c-all">0</span></button>
+    <button data-f="ask">확인 필요<span class="n warn" id="c-ask">0</span></button>
+    <button data-f="photo">사진 미입력<span class="n warn" id="c-photo">0</span></button>
+  </div>
+
+  <div style="text-align:center;margin-top:9px;">
+    <button id="fueltoggle" style="background:transparent;border:0;color:#93a099;font-size:10px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">예상 유류비 어림값 켜기</button>
+  </div>
+
+  <div class="days" id="days"></div>
+
+  <div class="export">
+    <button class="pdf">📑 증빙 문서(사진 포함) 인쇄·PDF<span class="scope" id="sc1">7월</span></button>
+    <button class="csv">📄 운행일지 CSV<span class="scope" id="sc2">7월</span></button>
+  </div>
+
+  <details class="settings">
+    <summary>⚙︎ 설정 (거리·성명·차량번호) <span class="car">▾</span></summary>
+    <div class="setbody">
+      <div class="frow"><span>집→골프장 편도</span><input class="km" type="number" value="30"><span>km · 왕복 ×2</span></div>
+      <div class="frow"><span>성명</span><input type="text" value="김홍구" style="width:82px;"><span>차량</span><input type="text" value="12가3456" style="width:98px;"><button class="save">저장</button></div>
+    </div>
+  </details>
+
+  <div class="note">
+    목록은 <b>한 달치만</b> 보여줘요 — 몇 년이 쌓여도 화면은 늘 그 달뿐이라 안 지저분합니다. 지난 기록은 <b>‹ ›</b> 로 월을 넘겨 보고, 큰 그림은 위의 <b>연 누적</b> 한 줄로 확인하세요. (원본은 서버에 계속 보관 → 세무 제출 시 그 달만 골라 PDF·CSV)<br><br>
+    근무 확정이 감지되면 자동으로 올라와요. <b>실제 근무한 날만</b> "예"로 확정하면 자료가 정확해집니다. 실제 공제 범위는 세무사 상담 권장.
+  </div>
+</div>
+
+<script>
+  // ── 데모용 가짜 데이터: 여러 달이 쌓여도 '월 단위'로 넘겨보면 항상 깔끔하다는 걸 보여줌 ──
+  const WD=['일','월','화','수','목','금','토'];
+  const DATA={
+    '2026-07':[
+      {d:'2026-07-21',worked:true,tee:'18:31',course:'IN',photos:2,odo:true},
+      {d:'2026-07-18',worked:true,tee:'17:05',course:'OUT',photos:3,odo:true},
+      {d:'2026-07-15',worked:true,tee:'16:48',course:'IN',photos:0,odo:false}, // 사진 미입력
+      {d:'2026-07-11',worked:null,tee:'17:20',course:'OUT',photos:0,odo:false}, // 확인 필요
+      {d:'2026-07-08',worked:true,tee:'16:20',course:'IN',photos:2,odo:true},
+      {d:'2026-07-04',worked:false,tee:'',course:'',photos:0,odo:false},
+    ],
+    '2026-06':[
+      {d:'2026-06-27',worked:true,tee:'17:40',course:'OUT',photos:3,odo:true},
+      {d:'2026-06-22',worked:true,tee:'16:10',course:'IN',photos:2,odo:true},
+      {d:'2026-06-19',worked:true,tee:'18:00',course:'OUT',photos:2,odo:true},
+      {d:'2026-06-13',worked:true,tee:'16:55',course:'IN',photos:0,odo:false},
+    ],
+    '2026-05':[
+      {d:'2026-05-30',worked:true,tee:'17:12',course:'IN',photos:3,odo:true},
+      {d:'2026-05-24',worked:true,tee:'16:30',course:'OUT',photos:2,odo:true},
+    ],
+  };
+  const KEYS=Object.keys(DATA).sort(); // 오래된→최신
+  const CURRENT='2026-07';
+  let idx=KEYS.indexOf(CURRENT), filter='all', fuelOn=false;
+  const ONEWAY=30, ROUND=ONEWAY*2, KMPERL=12, PRICE=1700;
+
+  const $=(id)=>document.getElementById(id);
+  const isBlank=(x)=>x.worked===true && x.photos===0 && !x.odo;
+  const isAsk=(x)=>x.worked===null;
+
+  function render(){
+    const key=KEYS[idx], [y,mo]=key.split('-'), rows=DATA[key]||[];
+    $('mlabel').textContent=`${y}년 ${Number(mo)}월`;
+    const isNow=key===CURRENT;
+    $('msub').textContent=isNow?'이번 달':`${KEYS.length-1-idx===0?'':''}지난 기록`;
+    $('msub').style.opacity=isNow?'.72':'.55';
+    $('thismo').style.display=isNow?'none':'block';
+    $('prev').disabled=idx<=0; $('next').disabled=idx>=KEYS.length-1;
+    $('sc1').textContent=$('sc2').textContent=`${Number(mo)}월`;
+
+    const worked=rows.filter(x=>x.worked===true);
+    const km=worked.length*ROUND;
+    $('s-days').textContent=worked.length;
+    $('s-km').textContent=km.toLocaleString();
+
+    // 연 누적 요약 — 그 해 전체를 한 줄로(상세는 월별)
+    let yDays=0,yKm=0;
+    KEYS.filter(k=>k.startsWith(y+'-')).forEach(k=>{const w=DATA[k].filter(x=>x.worked===true).length;yDays+=w;yKm+=w*ROUND;});
+    $('yr-year').textContent=`${y}년`; $('yr-days').textContent=yDays; $('yr-km').textContent=yKm.toLocaleString();
+
+    // 세 번째 통계칸: 기본은 '증빙 사진 있는 날', 켜면 '예상 유류비 어림값'
+    const s3=$('stat3'), tag=s3.querySelector('.tag');
+    if(fuelOn){
+      const fuel=Math.round(km/KMPERL*PRICE);
+      $('s3-k').innerHTML=`예상 유류비 <span class="tag">어림값</span>`;
+      $('s-fuel').innerHTML=fuel>=10000?`${(fuel/10000).toFixed(1)}<small>만</small>`:fuel.toLocaleString();
+      $('s3-u').textContent='원';
+      $('assume').style.display='block';
+      $('assume').innerHTML=`※ 유류비는 <b>주행거리 ÷ 연비(${KMPERL}km/L) × 평균유가(${PRICE.toLocaleString()}원)</b> 로 낸 <b>어림값</b>입니다. 기름값은 매일·주유소마다 달라 정확할 수 없고, <b>실제 세무 공제는 주유 영수증 기준</b>이에요.`;
+      $('fueltoggle').textContent='예상 유류비 어림값 끄기';
+    }else{
+      const nPhoto=worked.filter(x=>x.photos>0).length;
+      $('s3-k').textContent='증빙 사진';
+      $('s-fuel').textContent=nPhoto;
+      $('s3-u').textContent=`/ ${worked.length}일`;
+      $('assume').style.display='none';
+      $('fueltoggle').textContent='예상 유류비 어림값 켜기';
+    }
+
+    const nAsk=rows.filter(isAsk).length, nPhoto=rows.filter(isBlank).length;
+    $('c-all').textContent=rows.length; $('c-ask').textContent=nAsk; $('c-photo').textContent=nPhoto;
+    const t=$('tidy');
+    if(nAsk+nPhoto===0){t.className='tidy ok';$('tidytxt').textContent='모두 정리됐어요';t.querySelector('.ic').textContent='✓';}
+    else{t.className='tidy warn';t.querySelector('.ic').textContent='⚠️';
+      const parts=[];if(nAsk)parts.push(`확인 대기 ${nAsk}일`);if(nPhoto)parts.push(`사진 미입력 ${nPhoto}일`);
+      $('tidytxt').innerHTML=parts.join(' · ')+`<span class="go">여기서 정리 ↓</span>`;}
+
+    let list=rows;
+    if(filter==='ask')list=rows.filter(isAsk);
+    if(filter==='photo')list=rows.filter(isBlank);
+
+    $('days').innerHTML=list.length?list.map(x=>card(x)).join(''):
+      `<div class="empty">해당 항목이 없어요.</div>`;
+    bind();
+  }
+
+  function card(x){
+    const dt=new Date(x.d+'T00:00:00'), day=Number(x.d.slice(8,10)), w=WD[dt.getDay()];
+    const wc=dt.getDay()===0?'sun':dt.getDay()===6?'sat':'';
+    const attn=isAsk(x)||isBlank(x);
+    let right,meta;
+    if(x.worked===null){
+      right=`<div class="askbtns"><button class="yes">예</button><button class="no">아니오</button></div>`;
+      meta=`<span>근무 확정 감지 · 실제 근무하셨나요?</span>`;
+    }else if(x.worked===false){
+      right=`<span class="chip no">안 함</span>`; meta=`<span>근무 안 한 날</span>`;
+    }else{
+      right=`<span class="chip ok">✓ 근무</span>`;
+      const ph=x.photos>0?`<span class="ph">📷 ${x.photos}장</span>`:`<span class="ph miss">📷 사진 미입력</span>`;
+      const odo=x.odo?`<span>계기판 입력됨</span>`:``;
+      meta=`${ph}${odo?`<span>·</span>${odo}`:''}`;
+    }
+    const tee=x.tee?`${x.tee} ${x.course}코스`:(x.worked===false?'—':'수동 입력');
+    return `<div class="day${attn?' attn':''}" data-d="${x.d}">
+      <div class="drow">
+        <div class="dbadge"><div class="d">${day}</div><div class="w ${wc}">${w}</div></div>
+        <div class="dmid"><div class="tee">${tee}</div><div class="meta">${meta}</div></div>
+        ${right}
+        ${x.worked!==false?`<span class="caret">▾</span>`:''}
+      </div>
+      <div class="panel">
+        <div class="slots">
+          ${['집 출발','직장 도착','집 복귀'].map((l,i)=>`<div class="slot"><div class="box${x.photos>i?' done':''}">${x.photos>i?'✓':'📷'}</div><div class="lab">${l}</div></div>`).join('')}
+        </div>
+        <div class="odo">계기판
+          <input placeholder="출발" ${x.odo?'value="82,140"':''}>
+          <input placeholder="복귀" ${x.odo?'value="82,200"':''}>
+          <button class="save">저장</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function bind(){
+    document.querySelectorAll('.day').forEach(el=>{
+      const dr=el.querySelector('.drow');
+      dr.addEventListener('click',(e)=>{
+        if(e.target.closest('button'))return;
+        if(el.querySelector('.caret'))el.classList.toggle('open');
+      });
+    });
+  }
+
+  $('prev').onclick=()=>{if(idx>0){idx--;render();}};
+  $('next').onclick=()=>{if(idx<KEYS.length-1){idx++;render();}};
+  $('jump').onclick=()=>{idx=KEYS.indexOf(CURRENT);render();};
+  $('fueltoggle').onclick=()=>{fuelOn=!fuelOn;render();};
+  document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
+    filter=b.dataset.f;document.querySelectorAll('#seg button').forEach(x=>x.classList.toggle('on',x===b));render();
+  });
+  render();
+</script>

@@ -3,5 +3,6 @@
 *.zip
 
 node_modules/
+# 회원 개인정보(이름·차량번호·근무기록·사진) + SQLite DB(app.db) — 공개 저장소에 절대 금지
 data/
 *.log

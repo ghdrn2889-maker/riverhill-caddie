@@ -15,17 +15,38 @@ import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON } from './store.mjs';
+import { seedPrimaryUser, getProfile } from './users.mjs';
+import { attachUser, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
 const freshFeed = (arr) => (arr || []).filter((x) => (Date.now() - (x.detectedAt || 0)) < FEED_KEEP_MS);
 
 initPush();
+seedPrimaryUser(); // 1번 회원(김홍구) 보장 — 회원제 도입 전 '나'를 그대로 이관
+console.log(`🔐 인증 모드: ${soloMode() ? '솔로(로그인 없이 1번 회원)' : '회원제(네이버 로그인)'}${authConfigured() ? '' : ' · 네이버 미설정'}`);
 
 const app = express();
 app.use(express.json({ limit: '12mb' }));         // 계기판 사진(base64) 업로드 허용
 app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
+app.use(attachUser);                              // req.user 채움(세션 쿠키 or 솔로 폴백)
 app.use(express.static(path.join(ROOT_DIR, 'public')));
+
+// ── 인증(네이버 로그인) ──
+app.get('/api/auth/naver', beginNaverLogin);
+app.get('/api/auth/naver/callback', naverCallback);
+app.post('/api/logout', logout);
+// 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
+app.get('/api/me', (req, res) => {
+  if (!req.user) return res.json({ ok: true, authed: false, solo: soloMode(), naverEnabled: authConfigured() });
+  const prof = getProfile(req.user.id) || {};
+  const needsOnboarding = !prof.board_name;
+  res.json({ ok: true, authed: true, solo: soloMode(), naverEnabled: authConfigured(),
+    user: { id: req.user.id, role: req.user.role },
+    profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, carNo: prof.car_no,
+      workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
+    needsOnboarding });
+});
 
 // 프로젝트 허브(다른 AI·사람 공유용 단일 진실 소스) — 마크다운 원문 서빙.
 //  https://…/project/PROJECT.md 등으로 브라우징 되는 AI가 링크만으로 열람.

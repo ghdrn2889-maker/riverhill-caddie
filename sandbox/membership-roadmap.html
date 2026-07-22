@@ -1,0 +1,168 @@
+<title>리버힐 캐디 앱 — 회원제 전환 로드맵</title>
+<style>
+  :root{
+    --bg:#f5f6f3; --card:#fff; --line:#e3e8e2; --line2:#eef1ec;
+    --ink:#18231d; --ink2:#3d4c43; --mut:#6a756c; --micro:#8a948c;
+    --grn:#104d31; --grn2:#2e7149; --grn-ink:#1d6740; --grn-bg:#e7f2ea;
+    --amb:#8a5e18; --amb-bg:#fdf4e0; --amb-line:#eaddba;
+    --red:#a8322c; --red-bg:#fbecea;
+    --shadow:0 6px 22px rgba(24,54,35,.07);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#12161380;--bg:#0f1512;--card:#161d18;--line:#26302a;--line2:#202821;
+      --ink:#e9efe9;--ink2:#c2ccc4;--mut:#93a099;--micro:#76837b;
+      --grn:#8fd3a8;--grn2:#7cc596;--grn-ink:#9ad9b1;--grn-bg:#16271d;
+      --amb:#e2bc72;--amb-bg:#2a2113;--amb-line:#463a1f;
+      --red:#e88b84;--red-bg:#2c1917;--shadow:0 6px 22px rgba(0,0,0,.34);}
+  }
+  :root[data-theme="light"]{--bg:#f5f6f3;--card:#fff;--line:#e3e8e2;--line2:#eef1ec;
+    --ink:#18231d;--ink2:#3d4c43;--mut:#6a756c;--micro:#8a948c;--grn:#104d31;--grn2:#2e7149;
+    --grn-ink:#1d6740;--grn-bg:#e7f2ea;--amb:#8a5e18;--amb-bg:#fdf4e0;--amb-line:#eaddba;
+    --red:#a8322c;--red-bg:#fbecea;--shadow:0 6px 22px rgba(24,54,35,.07);}
+  :root[data-theme="dark"]{--bg:#0f1512;--card:#161d18;--line:#26302a;--line2:#202821;
+    --ink:#e9efe9;--ink2:#c2ccc4;--mut:#93a099;--micro:#76837b;--grn:#8fd3a8;--grn2:#7cc596;
+    --grn-ink:#9ad9b1;--grn-bg:#16271d;--amb:#e2bc72;--amb-bg:#2a2113;--amb-line:#463a1f;
+    --red:#e88b84;--red-bg:#2c1917;--shadow:0 6px 22px rgba(0,0,0,.34);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;line-height:1.6;}
+  .wrap{max-width:760px;margin:0 auto;padding:34px 20px 64px;}
+  .eyebrow{font-size:11px;font-weight:850;letter-spacing:.16em;color:var(--grn2);text-transform:uppercase;}
+  h1{font-size:30px;letter-spacing:-.03em;margin:10px 0 6px;text-wrap:balance;}
+  .lede{font-size:14px;color:var(--mut);margin:0 0 6px;max-width:60ch;}
+  .decisions{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 4px;}
+  .chip{font-size:12px;font-weight:750;background:var(--grn-bg);color:var(--grn-ink);
+    border:1px solid var(--line);border-radius:99px;padding:6px 13px;}
+  .chip b{font-weight:850;}
+
+  h2{font-size:13px;font-weight:850;letter-spacing:.04em;color:var(--ink);margin:36px 0 12px;
+    display:flex;align-items:center;gap:9px;}
+  h2::before{content:"";width:16px;height:2px;background:var(--grn2);border-radius:2px;}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);
+    padding:18px 19px;margin-bottom:12px;}
+
+  /* phase timeline */
+  .phase{display:grid;grid-template-columns:44px 1fr;gap:15px;}
+  .pnum{width:44px;height:44px;border-radius:12px;background:var(--grn);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-size:17px;font-weight:850;letter-spacing:-.03em;}
+  :root[data-theme="dark"] .pnum,@media (prefers-color-scheme:dark){.pnum{color:#0f1512;}}
+  .ph-h{font-size:15px;font-weight:800;letter-spacing:-.01em;margin:2px 0 3px;}
+  .ph-sub{font-size:11px;font-weight:700;color:var(--grn2);margin-bottom:8px;}
+  .ph-list{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink2);}
+  .ph-list li{margin:4px 0;}
+  .ph-list b{color:var(--ink);}
+
+  .todo{border-left:3px solid var(--amb);}
+  .todo .card-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin-bottom:4px;}
+  ol.tasks{margin:8px 0 0;padding-left:20px;font-size:13px;color:var(--ink2);}
+  ol.tasks li{margin:9px 0;}
+  ol.tasks b{color:var(--ink);}
+  .who{display:inline-block;font-size:10px;font-weight:800;background:var(--amb-bg);color:var(--amb);
+    border:1px solid var(--amb-line);border-radius:6px;padding:1px 7px;margin-left:4px;vertical-align:1px;}
+  .who.me{background:var(--grn-bg);color:var(--grn-ink);border-color:var(--line);}
+
+  .risk{background:var(--red-bg);border:1px solid var(--red);border-radius:14px;padding:15px 17px;margin-bottom:12px;}
+  .risk h3{font-size:13px;font-weight:850;color:var(--red);margin:0 0 6px;display:flex;align-items:center;gap:7px;}
+  .risk p{font-size:12.5px;color:var(--ink2);margin:0;}
+  .risk p b{color:var(--ink);}
+
+  .note{font-size:11.5px;color:var(--micro);margin-top:22px;line-height:1.7;}
+  .kv{font-size:12.5px;color:var(--ink2);}
+  .kv b{color:var(--ink);}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">리버힐 캐디 앱 · 방향 전환</div>
+  <h1>개인 도구 → 회원제 서비스</h1>
+  <p class="lede">김홍구님 한 사람을 위해 지어진 앱을, 리버힐 캐디 전체가 각자 가입해 쓰는 서비스로 다시 세웁니다. 아래는 그 결정과 실제로 지어갈 순서입니다.</p>
+
+  <div class="decisions">
+    <span class="chip">규모 · <b>리버힐 전체(~수백)</b></span>
+    <span class="chip">로그인 · <b>네이버</b></span>
+    <span class="chip">board 읽기 · <b>공용 전용 계정</b></span>
+    <span class="chip">저장소 · <b>SQLite</b></span>
+  </div>
+
+  <h2>지금 무엇이 바뀌나</h2>
+  <div class="card">
+    <p class="kv" style="margin:0 0 10px;">지금 앱은 <b>이름·부·쿠키·모든 데이터가 서버에 하나씩</b>만 존재합니다(완전 1인용). 회원제는 이 뼈대를 바꿉니다:</p>
+    <ul class="ph-list" style="padding-left:18px;">
+      <li><b>정체성</b> — 네이버 로그인으로 "누구"인지 구분. 단, 네이버 이름 ≠ board 이름일 수 있어 <b>실명(배치표 이름)은 가입 시 따로 입력</b>.</li>
+      <li><b>판독</b> — board는 <b>공용 리더 계정으로 한 번</b> 읽고, <b>회원 이름마다 나눠 판단</b>. 회원이 늘어도 Gemini 비용은 거의 그대로.</li>
+      <li><b>데이터</b> — 오늘 상황·근무일지·카트·구독·설정을 전부 <b>회원별로 분리</b> 저장.</li>
+      <li><b>개인설정</b> — 집 거리·차량·주유소·연비·부(部)가 회원 프로필로. <b>유류비는 이 프로필 위에 얹습니다.</b></li>
+    </ul>
+  </div>
+
+  <h2>지어갈 순서</h2>
+
+  <div class="card"><div class="phase">
+    <div class="pnum">1</div>
+    <div>
+      <div class="ph-h">뼈대 — 계정과 데이터 분리</div>
+      <div class="ph-sub">겉모습·기능은 그대로, 속만 회원별로</div>
+      <ul class="ph-list">
+        <li>SQLite 도입, <b>회원·세션·프로필</b> 테이블 설계</li>
+        <li>네이버 로그인(OAuth) 연동</li>
+        <li>기존 데이터를 <b>김홍구님 = 1번 회원</b>으로 이관 — 지금 쓰던 게 안 끊기게</li>
+      </ul>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="phase">
+    <div class="pnum">2</div>
+    <div>
+      <div class="ph-h">가입 · 온보딩</div>
+      <div class="ph-sub">캐디가 스스로 가입하는 흐름</div>
+      <ul class="ph-list">
+        <li>네이버 로그인 → <b>실명(배치표 이름)·부·집 거리·차량번호</b> 입력</li>
+        <li>동명이인은 순번으로 구분</li>
+        <li>board 판독을 <b>공용 리더 계정</b>으로 전환</li>
+      </ul>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="phase">
+    <div class="pnum">3</div>
+    <div>
+      <div class="ph-h">다부(部) 판독 + 기능 이식</div>
+      <div class="ph-sub">1·2·3부를 모두 다루고, 개인 기능을 회원별로</div>
+      <ul class="ph-list">
+        <li>지금 <b>3부 전용</b>인 판독(티오프 하한·N팀·확정선)을 <b>부별로 일반화</b></li>
+        <li>근무 판단·근무일지·카트 점검을 회원별로</li>
+        <li><b>유류비 자동화(오피넷)</b> — 회원마다 자기 주유소·연비. API 키는 서버에 하나</li>
+      </ul>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="phase">
+    <div class="pnum">4</div>
+    <div>
+      <div class="ph-h">운영 · 보안 · 개인정보</div>
+      <div class="ph-sub">수백 명이 믿고 쓰려면</div>
+      <ul class="ph-list">
+        <li>실서버로 이전(집 PC는 꺼지면 전원 먹통)</li>
+        <li>개인정보 동의·처리방침, 회원별 접근 차단, 백업·모니터링</li>
+      </ul>
+    </div>
+  </div></div>
+
+  <h2>먼저 처리해야 할 현실 작업</h2>
+  <div class="card todo">
+    <div class="card-h">🔧 이건 계정·권한 문제라 김홍구님(또는 카페 관리자)만 할 수 있습니다</div>
+    <ol class="tasks">
+      <li><b>네이버 개발자센터 앱 등록</b><span class="who">김홍구</span><span class="who me">내가 화면 안내</span> — 네이버 로그인 Client ID/Secret 발급, 콜백 주소 등록.</li>
+      <li><b>공용 리더 네이버 계정 생성 + 리버힐 카페 가입 승인</b><span class="who">김홍구/관리자</span> — board 읽기 전용. 카페 관리자 승인이 필요.</li>
+      <li><b>호스팅 결정</b><span class="who">함께</span> — 수백 명이면 집 PC는 불안정. 실서버(클라우드) 이전 시점을 잡아야 함. <b>1단계는 지금 환경에서 진행 가능.</b></li>
+      <li><b>오피넷 무료 API 키</b><span class="who">김홍구</span><span class="who me">내가 안내</span> — 유류비용, 3단계에서 필요.</li>
+    </ol>
+  </div>
+
+  <div class="risk">
+    <h3>⚠️ 개인정보 책임이 커집니다</h3>
+    <p>이제 <b>수백 명의 실명·차량번호·근무기록·사진</b>을 보관합니다. 이건 개인정보라 <b>가입 동의·회원별 분리·철저한 접근 차단</b>이 필수이고, <b>공개된 GitHub 저장소에는 어떤 회원 데이터도 절대 올라가면 안 됩니다.</b> 4단계에서 제대로 다루되, 1단계부터 이 원칙으로 설계합니다.</p>
+  </div>
+
+  <p class="note">※ 유류비 기능은 지금 붙이지 않고 <b>3단계</b>에서 회원 프로필 위에 얹습니다 — 그래야 다시 안 뜯습니다. 이 문서는 진행하며 갱신됩니다.</p>
+</div>
