@@ -600,9 +600,19 @@ function initCartButtons() {
 let meState = null;
 async function loadMe() {
   try { meState = await (await fetch('/api/me')).json(); } catch { meState = null; }
+  // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
+  if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
+  hideLogin();
   renderAccount();
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
 }
+function showLogin() {
+  $('naverLoginBtn').style.display = meState.naverEnabled ? 'block' : 'none';
+  $('loginTestBtn').hidden = !meState.testLogin;
+  $('loginErr').textContent = (!meState.naverEnabled && !meState.testLogin) ? '로그인 수단이 아직 설정되지 않았어요.' : '';
+  $('loginOv').hidden = false;
+}
+function hideLogin() { $('loginOv').hidden = true; }
 function renderAccount() {
   const btn = $('acctBtn');
   if (!meState || !meState.authed) { btn.hidden = true; return; }
@@ -658,6 +668,7 @@ function initAccount() {
   $('obClose').onclick = () => { $('ov').hidden = true; };
   $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
   $('obTestSignup').onclick = () => { location.href = '/api/dev/login'; };
+  $('loginTestBtn').onclick = () => { location.href = '/api/dev/login'; };
 }
 
 /* ── 부팅 ── */

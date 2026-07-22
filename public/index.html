@@ -287,6 +287,8 @@
       font-size:12.5px; font-weight:800; cursor:pointer; }
     .ov-test { width:100%; margin-top:14px; background:#fdf4e0; color:#8a5e18; border:1px dashed #eaddba;
       border-radius:11px; padding:11px; font-size:11.5px; font-weight:800; cursor:pointer; }
+    .ov-submit.naver { display:block; text-decoration:none; text-align:center; background:#03C75A;
+      box-shadow:0 5px 14px rgba(3,199,90,.28); }
   </style>
 </head>
 <body>
@@ -318,6 +320,18 @@
         <button class="ov-ghost" id="obClose">닫기</button>
       </div>
       <button class="ov-test" id="obTestSignup" hidden>🧪 테스트: 새 회원으로 가입해보기</button>
+    </div>
+  </div>
+
+  <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) -->
+  <div class="ov" id="loginOv" hidden>
+    <div class="ov-card" style="text-align:center;">
+      <div class="ov-badge" style="margin:0 auto 14px;">🏌️</div>
+      <h2 class="ov-title">리버힐 캐디 일정</h2>
+      <p class="ov-desc" style="text-align:center;">근무·스페어 알림을 받으려면 로그인하세요.</p>
+      <a class="ov-submit naver" id="naverLoginBtn" href="/api/auth/naver">네이버로 로그인</a>
+      <button class="ov-test" id="loginTestBtn" hidden>🧪 테스트 로그인</button>
+      <div class="ov-err" id="loginErr" style="text-align:center;"></div>
     </div>
   </div>
 

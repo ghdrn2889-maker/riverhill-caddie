@@ -59,6 +59,17 @@ app.post('/api/profile', requireAuth, (req, res) => {
   res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, carNo: prof.car_no } });
 });
 
+// ── API 인증 게이트 ──
+//  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
+//  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
+//  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
+const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout', '/dev'];
+app.use('/api', (req, res, next) => {
+  const p = req.path;
+  if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
+  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/naver' });
+});
+
 // 프로젝트 허브(다른 AI·사람 공유용 단일 진실 소스) — 마크다운 원문 서빙.
 //  https://…/project/PROJECT.md 등으로 브라우징 되는 AI가 링크만으로 열람.
 app.use('/project', express.static(path.join(ROOT_DIR, 'hub'), {
