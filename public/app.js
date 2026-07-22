@@ -290,65 +290,188 @@ async function loadJournal() {
   } catch { $('jSummary').textContent = '불러오기 실패'; }
 }
 
-/* ── 근무·세무 기록(기존 기능 보존) ── */
-async function loadWorklog() {
-  try {
-    const now = new Date(); const y = now.getFullYear(), m = now.getMonth() + 1;
-    const r = await (await fetch(`/api/worklog?year=${y}&month=${m}`)).json();
-    const s = r.summary || {}, set = r.settings || {};
-    $('wlSummary').textContent = `${y}년 ${m}월 · 근무 ${s.workedDays || 0}일 · 주행 ${(s.totalKm || 0).toLocaleString()}km` + (s.estFuel != null ? ` · 예상 유류비 ${s.estFuel.toLocaleString()}원` : '');
-    const warn = [];
-    if (s.pendingDays) warn.push(`확인 대기 ${s.pendingDays}일`);
-    if (s.blankDays) warn.push(`📷 기록 미입력 ${s.blankDays}일`);
-    $('wlSub').textContent = (warn.length ? '⚠️ ' + warn.join(' · ') : '모두 정리됨') + ` · 왕복 ${s.roundKm || 0}km/일`;
-    if ($('wlKm').value === '' || document.activeElement !== $('wlKm')) $('wlKm').value = set.homeGolfKmOneway ?? 30;
-    if (document.activeElement !== $('wlName')) $('wlName').value = set.driverName || '';
-    if (document.activeElement !== $('wlCar')) $('wlCar').value = set.carNo || '';
-    const days = r.days || [];
-    const LEG = [['start', '🏠 집출발'], ['work', '⛳ 직장도착'], ['home', '🏠 집복귀']];
-    $('wlDays').innerHTML = days.length ? days.map((d) => {
-      const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
-      const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
-      const tee = d.teeTime ? `티오프 ${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.source === 'manual' ? '수동입력' : '');
-      const nPhoto = d.photos ? Object.keys(d.photos).length : 0;
-      let right;
-      if (d.worked === true) right = `<span class="wl-chip ok">✓ 근무</span>`;
-      else if (d.worked === false) right = `<span class="wl-chip x">안함</span>`;
-      else right = `<button class="wl-btn wl-yes" data-d="${d.date}" data-w="1">예</button><button class="wl-btn wl-no" data-d="${d.date}" data-w="0">아니오</button>`;
-      const photoBtn = d.worked !== false ? `<button class="wl-btn wl-no wl-photo" data-toggle="${d.date}">📷 ${nPhoto}/3</button>` : '';
-      const slots = LEG.map(([leg, lab]) => {
-        const has = d.photos && d.photos[leg];
-        const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '📷';
-        return `<label class="wl-slot"><span class="lab">${lab}</span><span class="box${has ? ' done' : ''}">${inner}</span>
-          <input type="file" accept="image/*" capture="environment" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
-      }).join('');
-      const odo = d.odo || {};
-      const panel = `<div class="wl-photos" id="wp-${d.date}" hidden>
-        <div class="wl-slots">${slots}</div>
-        <div class="wl-odo">계기판 km(선택):
-          <input type="number" inputmode="numeric" placeholder="출발" data-odo="${d.date}" data-leg="start" value="${odo.start ?? ''}">
-          <input type="number" inputmode="numeric" placeholder="도착" data-odo="${d.date}" data-leg="work" value="${odo.work ?? ''}">
-          <input type="number" inputmode="numeric" placeholder="복귀" data-odo="${d.date}" data-leg="home" value="${odo.home ?? ''}">
-          <button class="wl-btn wl-no" data-odosave="${d.date}">저장</button>
-        </div><div class="wl-up" id="up-${d.date}"></div></div>`;
-      return `<div class="wl-day"><div><span class="d">${md}</span> <span class="t">${esc(tee)}</span></div>
-        <div style="display:flex;gap:6px;align-items:center;">${right}${photoBtn}</div></div>${panel}`;
-    }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
+/* ── 근무·세무 기록 (월 단위 · 요약 카드 · 정리 필터) ── */
+let wlYear = null, wlMonth = null, wlFilter = 'all', wlFuelOn = false, wlOpenDate = null;
+let wlCache = { year: null, days: [], settings: {} }; // 연 단위로 한 번만 로드 → 월 이동은 재요청 없이
 
-    $('wlDays').querySelectorAll('button[data-w]').forEach((b) => { b.onclick = async () => { await fetch('/api/worklog/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: b.dataset.d, worked: b.dataset.w === '1' }) }); loadWorklog(); }; });
-    $('wlDays').querySelectorAll('button[data-toggle]').forEach((b) => { b.onclick = () => { const p = $('wp-' + b.dataset.toggle); p.hidden = !p.hidden; }; });
-    $('wlDays').querySelectorAll('input[type=file][data-leg]').forEach((inp) => {
-      inp.onchange = async () => {
-        if (!inp.files || !inp.files[0]) return;
-        const dt = inp.dataset.d, up = $('up-' + dt); up.textContent = '업로드 중…';
-        try { const dataUrl = await compressImage(inp.files[0]); await fetch('/api/worklog/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: dt, leg: inp.dataset.leg, image: dataUrl }) }); await loadWorklog(); const p = $('wp-' + dt); if (p) p.hidden = false; }
-        catch (e) { up.textContent = '업로드 실패: ' + e.message; }
-      };
-    });
-    $('wlDays').querySelectorAll('button[data-odosave]').forEach((b) => {
-      b.onclick = async () => { const dt = b.dataset.odosave, odo = {}; $('wlDays').querySelectorAll(`input[data-odo="${dt}"]`).forEach((i) => { if (i.value !== '') odo[i.dataset.leg] = Number(i.value); }); await fetch('/api/worklog/odo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: dt, odo }) }); await loadWorklog(); const p = $('wp-' + dt); if (p) p.hidden = false; };
-    });
-  } catch { $('wlSummary').textContent = '불러오기 실패'; }
+const wlIsAsk = (d) => d.worked == null;
+const wlIsBlank = (d) => d.worked === true
+  && !(d.photos && Object.keys(d.photos).length) && !(d.odo && Object.keys(d.odo).length);
+function wlDayKm(d, roundKm) {
+  const o = d.odo || {};
+  if (o.start != null && o.home != null && o.home >= o.start) return o.home - o.start;
+  return roundKm;
+}
+
+async function loadWorklog() {
+  const now = new Date();
+  if (wlYear == null) { wlYear = now.getFullYear(); wlMonth = now.getMonth() + 1; }
+  if (wlCache.year !== wlYear) {
+    try {
+      const r = await (await fetch(`/api/worklog?year=${wlYear}`)).json();
+      wlCache = { year: wlYear, days: r.days || [], settings: r.settings || {} };
+    } catch { $('wlMLabel').textContent = '불러오기 실패'; return; }
+  }
+  renderWorklog();
+}
+function reloadWorklog() { wlCache.year = null; return loadWorklog(); } // 변경 후 강제 새로고침
+
+function renderWorklog() {
+  const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
+  const s = wlCache.settings || {};
+  const roundKm = (Number(s.homeGolfKmOneway) || 30) * 2;
+  const kmPerL = Number(s.kmPerL) || 12, price = Number(s.fuelPrice) || 1700;
+
+  // 설정 입력칸(포커스 중 아니면 갱신)
+  if (document.activeElement !== $('wlKm')) $('wlKm').value = s.homeGolfKmOneway ?? 30;
+  if (document.activeElement !== $('wlName')) $('wlName').value = s.driverName || '';
+  if (document.activeElement !== $('wlCar')) $('wlCar').value = s.carNo || '';
+
+  // 월 라벨·네비
+  $('wlMLabel').textContent = `${wlYear}년 ${wlMonth}월`;
+  const isNow = wlYear === realY && wlMonth === realM;
+  $('wlMSub').textContent = isNow ? '이번 달' : '지난 기록';
+  $('wlMSub').style.opacity = isNow ? '.72' : '.5';
+  $('wlThisMo').hidden = isNow;
+  $('wlNext').disabled = (wlYear > realY) || (wlYear === realY && wlMonth >= realM);
+  $('wlSc1').textContent = $('wlSc2').textContent = `${wlMonth}월`;
+
+  const yearDays = wlCache.days;
+  const monthDays = yearDays.filter((d) => Number(d.date.slice(5, 7)) === wlMonth);
+
+  // 연 누적
+  const yWorked = yearDays.filter((d) => d.worked === true);
+  $('wlYrY').textContent = `${wlYear}년`;
+  $('wlYrDays').textContent = yWorked.length;
+  $('wlYrKm').textContent = yWorked.reduce((a, d) => a + wlDayKm(d, roundKm), 0).toLocaleString();
+
+  // 월 통계
+  const mWorked = monthDays.filter((d) => d.worked === true);
+  const mKm = mWorked.reduce((a, d) => a + wlDayKm(d, roundKm), 0);
+  $('wlSDays').textContent = mWorked.length;
+  $('wlSKm').textContent = mKm.toLocaleString();
+
+  // 세 번째 칸: 기본 '증빙 사진 있는 날', 켜면 '예상 유류비 어림값'
+  if (wlFuelOn) {
+    const fuel = Math.round(mKm / kmPerL * price);
+    $('wlS3k').innerHTML = `예상 유류비 <span class="tg">어림값</span>`;
+    $('wlS3v').innerHTML = fuel >= 10000 ? `${(fuel / 10000).toFixed(1)}<small>만</small>` : fuel.toLocaleString();
+    $('wlS3u').textContent = '원';
+    $('wlAssume').hidden = false;
+    $('wlAssume').innerHTML = `※ 유류비는 <b>주행거리 ÷ 연비(${kmPerL}km/L) × 평균유가(${price.toLocaleString()}원)</b> 로 낸 <b>어림값</b>이에요. 기름값은 매일·주유소마다 달라 정확할 수 없고, <b>실제 공제는 주유 영수증 기준</b>입니다.`;
+    $('wlFuelToggle').textContent = '예상 유류비 어림값 끄기';
+  } else {
+    $('wlS3k').textContent = '증빙 사진';
+    $('wlS3v').textContent = mWorked.filter((d) => d.photos && Object.keys(d.photos).length).length;
+    $('wlS3u').textContent = `/ ${mWorked.length}일`;
+    $('wlAssume').hidden = true;
+    $('wlFuelToggle').textContent = '예상 유류비 어림값 켜기';
+  }
+
+  // 정리 상태 + 세그먼트 카운트
+  const nAsk = monthDays.filter(wlIsAsk).length, nPhoto = monthDays.filter(wlIsBlank).length;
+  $('wlCAll').textContent = monthDays.length; $('wlCAsk').textContent = nAsk; $('wlCPhoto').textContent = nPhoto;
+  const tidy = $('wlTidy');
+  if (nAsk + nPhoto === 0) {
+    tidy.className = 'wl-tidy ok'; tidy.querySelector('.ic').textContent = '✓';
+    $('wlTidyTxt').textContent = '모두 정리됐어요';
+  } else {
+    tidy.className = 'wl-tidy warn'; tidy.querySelector('.ic').textContent = '⚠️';
+    const parts = []; if (nAsk) parts.push(`확인 대기 ${nAsk}일`); if (nPhoto) parts.push(`사진 미입력 ${nPhoto}일`);
+    $('wlTidyTxt').innerHTML = parts.join(' · ') + `<span class="go">아래에서 정리 ↓</span>`;
+  }
+
+  // 목록(필터 적용)
+  let list = monthDays;
+  if (wlFilter === 'ask') list = monthDays.filter(wlIsAsk);
+  else if (wlFilter === 'photo') list = monthDays.filter(wlIsBlank);
+  $('wlDays').innerHTML = list.length ? list.map((d) => wlCard(d, roundKm)).join('')
+    : `<div class="empty">${wlFilter === 'all' ? '이 달 기록이 아직 없어요.' : '해당 항목이 없어요.'}</div>`;
+  wlBind();
+}
+
+const WL_LEG = [['start', '🏠 집출발'], ['work', '⛳ 직장도착'], ['home', '🏠 집복귀']];
+function wlCard(d, roundKm) {
+  const dt = new Date(d.date + 'T00:00:00'), day = Number(d.date.slice(8, 10)), dow = dt.getDay();
+  const wc = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';
+  const attn = wlIsAsk(d) || wlIsBlank(d);
+  const nPhoto = d.photos ? Object.keys(d.photos).length : 0;
+  let right, meta;
+  if (d.worked == null) {
+    right = `<button class="wl-btn wl-yes" data-w="1" data-d="${d.date}">예</button><button class="wl-btn wl-no" data-w="0" data-d="${d.date}">아니오</button>`;
+    meta = `<span>근무 확정 감지 · 근무하셨나요?</span>`;
+  } else if (d.worked === false) {
+    right = `<span class="wl-chip x">안 함</span>`; meta = `<span>근무 안 한 날</span>`;
+  } else {
+    right = `<span class="wl-chip ok">✓ 근무</span>`;
+    const ph = nPhoto > 0 ? `<span class="ph">📷 ${nPhoto}장</span>` : `<span class="ph miss">📷 사진 미입력</span>`;
+    const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
+    meta = `${ph}${odo}`;
+  }
+  const tee = d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
+  const expandable = d.worked !== false;
+  let panel = '';
+  if (expandable) {
+    const odo = d.odo || {};
+    const slots = WL_LEG.map(([leg, lab]) => {
+      const has = d.photos && d.photos[leg];
+      const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '📷';
+      return `<label class="wl-slot"><span class="box${has ? ' done' : ''}">${inner}</span><span class="lab">${lab}</span>
+        <input type="file" accept="image/*" capture="environment" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
+    }).join('');
+    panel = `<div class="wl-panel">
+      <div class="wl-slots">${slots}</div>
+      <div class="wl-odo">계기판 km(선택):
+        <input type="number" inputmode="numeric" placeholder="출발" data-odo="${d.date}" data-leg="start" value="${odo.start ?? ''}">
+        <input type="number" inputmode="numeric" placeholder="복귀" data-odo="${d.date}" data-leg="home" value="${odo.home ?? ''}">
+        <button class="wl-btn wl-no" data-odosave="${d.date}">저장</button>
+      </div><div class="wl-up" id="up-${d.date}"></div></div>`;
+  }
+  const open = d.date === wlOpenDate ? ' open' : '';
+  return `<div class="wl-card${attn ? ' attn' : ''}${open}" data-card="${d.date}">
+    <div class="wl-crow">
+      <div class="wl-badge"><div class="dd">${day}</div><div class="ww ${wc}">${WD[dow]}</div></div>
+      <div class="wl-cmid"><div class="tee">${esc(tee)}</div><div class="meta">${meta}</div></div>
+      ${right}
+      ${expandable ? `<span class="wl-caret">▾</span>` : ''}
+    </div>${panel}</div>`;
+}
+
+function wlBind() {
+  // 카드 펼침/접힘(버튼 클릭은 제외)
+  $('wlDays').querySelectorAll('.wl-card').forEach((el) => {
+    const row = el.querySelector('.wl-crow');
+    if (!el.querySelector('.wl-caret')) return;
+    row.onclick = (e) => {
+      if (e.target.closest('button')) return;
+      const d = el.dataset.card;
+      wlOpenDate = el.classList.contains('open') ? null : d;
+      el.classList.toggle('open');
+    };
+  });
+  // 예/아니오
+  $('wlDays').querySelectorAll('button[data-w]').forEach((b) => {
+    b.onclick = async () => { await postJSON('/api/worklog/confirm', { date: b.dataset.d, worked: b.dataset.w === '1' }); reloadWorklog(); };
+  });
+  // 계기판 사진 업로드
+  $('wlDays').querySelectorAll('input[type=file][data-leg]').forEach((inp) => {
+    inp.onchange = async () => {
+      if (!inp.files || !inp.files[0]) return;
+      const dt = inp.dataset.d, up = $('up-' + dt); if (up) up.textContent = '업로드 중…';
+      wlOpenDate = dt;
+      try { const image = await compressImage(inp.files[0]); await postJSON('/api/worklog/photo', { date: dt, leg: inp.dataset.leg, image }); await reloadWorklog(); }
+      catch (e) { if (up) up.textContent = '업로드 실패: ' + e.message; }
+    };
+  });
+  // 계기판 숫자 저장
+  $('wlDays').querySelectorAll('button[data-odosave]').forEach((b) => {
+    b.onclick = async () => {
+      const dt = b.dataset.odosave, odo = {};
+      $('wlDays').querySelectorAll(`input[data-odo="${dt}"]`).forEach((i) => { if (i.value !== '') odo[i.dataset.leg] = Number(i.value); });
+      wlOpenDate = dt;
+      await postJSON('/api/worklog/odo', { date: dt, odo }); await reloadWorklog();
+    };
+  });
 }
 function compressImage(file, maxSide = 1280, quality = 0.7) {
   return new Promise((resolve, reject) => {
@@ -359,9 +482,18 @@ function compressImage(file, maxSide = 1280, quality = 0.7) {
   });
 }
 function initWorklogButtons() {
-  $('wlSave').onclick = async () => { await fetch('/api/worklog/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ homeGolfKmOneway: Number($('wlKm').value) || 0, driverName: $('wlName').value.trim(), carNo: $('wlCar').value.trim() }) }); loadWorklog(); };
-  $('wlExport').onclick = () => window.open(`/api/worklog/export.csv?year=${new Date().getFullYear()}`, '_blank');
-  $('wlReport').onclick = () => window.open(`/api/worklog/report.html?year=${new Date().getFullYear()}`, '_blank');
+  $('wlSave').onclick = async () => { await postJSON('/api/worklog/settings', { homeGolfKmOneway: Number($('wlKm').value) || 0, driverName: $('wlName').value.trim(), carNo: $('wlCar').value.trim() }); reloadWorklog(); };
+  // 월 이동 (연 경계 넘으면 자동으로 연도도 이동 → 필요 시 재요청)
+  $('wlPrev').onclick = () => { wlMonth--; if (wlMonth < 1) { wlMonth = 12; wlYear--; } wlOpenDate = null; loadWorklog(); };
+  $('wlNext').onclick = () => { if ($('wlNext').disabled) return; wlMonth++; if (wlMonth > 12) { wlMonth = 1; wlYear++; } wlOpenDate = null; loadWorklog(); };
+  $('wlJump').onclick = () => { const n = new Date(); wlYear = n.getFullYear(); wlMonth = n.getMonth() + 1; wlOpenDate = null; loadWorklog(); };
+  $('wlFuelToggle').onclick = () => { wlFuelOn = !wlFuelOn; renderWorklog(); };
+  $('wlSeg').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => { wlFilter = b.dataset.f; $('wlSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); renderWorklog(); };
+  });
+  // 내보내기 — 지금 보는 그 달 기준
+  $('wlExport').onclick = () => window.open(`/api/worklog/export.csv?year=${wlYear}&month=${wlMonth}`, '_blank');
+  $('wlReport').onclick = () => window.open(`/api/worklog/report.html?year=${wlYear}&month=${wlMonth}`, '_blank');
 }
 
 /* ── 카트 점검 ── */
