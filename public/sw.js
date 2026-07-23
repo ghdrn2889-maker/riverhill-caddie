@@ -2,18 +2,28 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
+// 알림 중요도별 진동 패턴 — 카톡처럼 중요한 알림은 길고 세게 울린다.
+//  (기종/안드로이드 버전에 따라 OS 알림채널 설정이 우선할 수 있음 → 되는 기기에서만 적용)
+const VIBRATE = {
+  high:   [600, 150, 600, 150, 900], // 근무확정·곧차례: 길게 3번, 마지막은 더 길게
+  check:  [400, 150, 400],           // 확인필요: 중간
+  normal: [300, 150, 300],           // 리마인더 등
+};
+
 self.addEventListener('push', (event) => {
-  let data = { title: '리버힐 알림', body: '새 소식이 있습니다.', url: '/' };
+  let data = { title: '리버힐 알림', body: '새 소식이 있습니다.', url: '/', level: 'normal' };
   try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
+  const level = data.level || 'normal';
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       data: { url: data.url },
-      vibrate: [200, 100, 200],
+      vibrate: VIBRATE[level] || VIBRATE.normal,
+      requireInteraction: level === 'high', // 중요 알림은 탭할 때까지 화면에 유지(자동으로 안 사라짐)
       tag: 'riverhill',       // 같은 소식 중복 방지
-      renotify: true,
+      renotify: true,         // 같은 tag라도 다시 울림
     })
   );
 });

@@ -606,6 +606,20 @@ async function loadMe() {
   renderAccount();
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
 }
+// 계정 오버레이(#ov) 닫기 제어 — 계정 화면은 닫기 가능, 가입(온보딩) 화면은 닫기 금지.
+let ovDismissable = false;
+function ovIsOpen() { return !$('ov').hidden; }
+// 오버레이를 열 때 히스토리에 한 칸 쌓아, 폰 뒤로가기가 '앱 종료'가 아니라 '팝업 닫기'가 되게 한다.
+function pushOvHistory() { if (!(history.state && history.state.ov)) history.pushState({ ov: 1 }, ''); }
+function closeOv() {
+  $('ov').hidden = true;
+  ovDismissable = false;
+  if (history.state && history.state.ov) history.back(); // 쌓아둔 히스토리 정리
+}
+// 폰 뒤로가기: 오버레이가 열려 있으면 앱을 나가지 않고 팝업만 닫는다.
+window.addEventListener('popstate', () => {
+  if (ovIsOpen() && ovDismissable) { $('ov').hidden = true; ovDismissable = false; }
+});
 function showLogin() {
   $('naverLoginBtn').style.display = meState.naverEnabled ? 'block' : 'none';
   $('loginErr').textContent = !meState.naverEnabled ? '로그인 수단이 아직 설정되지 않았어요.' : '';
@@ -633,6 +647,7 @@ function openOnboarding() {
   $('ovActions').hidden = true;      // 신규 가입은 닫기 불가
   $('obSwitch').hidden = true;       // 가입 화면에선 계정전환 숨김
   $('ovErr').textContent = '';
+  ovDismissable = false;             // 가입 화면: 배경/뒤로가기로 닫히지 않게
   $('ov').hidden = false;
 }
 function openAccount() {
@@ -645,7 +660,9 @@ function openAccount() {
   $('ovActions').hidden = false;
   $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
   $('ovErr').textContent = '';
+  ovDismissable = true;              // 계정 화면: 배경 클릭·뒤로가기로 닫힘
   $('ov').hidden = false;
+  pushOvHistory();
 }
 async function submitProfile() {
   const boardName = $('obName').value.trim();
@@ -655,7 +672,7 @@ async function submitProfile() {
   try {
     const r = await postJSON('/api/profile', body);
     if (!r || !r.ok) throw new Error((r && r.error) || '저장 실패');
-    $('ov').hidden = true;
+    if (ovDismissable) closeOv(); else $('ov').hidden = true; // 가입완료 직후엔 히스토리 없음
     await loadMe();
     loadToday();
   } catch (e) { $('ovErr').textContent = e.message || '저장 실패'; }
@@ -664,7 +681,9 @@ async function submitProfile() {
 function initAccount() {
   $('acctBtn').onclick = openAccount;
   $('obSubmit').onclick = submitProfile;
-  $('obClose').onclick = () => { $('ov').hidden = true; };
+  $('obClose').onclick = () => closeOv();
+  // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
+  $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
   $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
 }
 

@@ -57,10 +57,12 @@ export function addSubscription(sub, userId = 1) {
 
 function removeSubscription(endpoint) { run('DELETE FROM push_subscriptions WHERE endpoint = ?', endpoint); }
 
-export async function broadcast({ title, body, url }, userId = 1) {
+export async function broadcast({ title, body, url, level }, userId = 1) {
   const subs = getSubscriptions(userId);
   if (!subs.length) { console.log(`(회원 ${userId} 구독 기기 없음 — 폰에서 알림 켜기 필요)`); return; }
-  const payload = JSON.stringify({ title, body, url });
+  // level: 'high'(근무확정·곧차례) | 'check'(확인필요) | 그 외(리마인더 등).
+  //  서비스워커가 이 값으로 진동 세기·화면 유지 여부를 정한다.
+  const payload = JSON.stringify({ title, body, url, level: level || 'normal' });
   let ok = 0, dead = 0, fail = 0;
   for (const s of subs) {
     const tag = String(s.endpoint || '').slice(-12);

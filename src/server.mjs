@@ -649,7 +649,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
     saveUserJSON(userId, 'pushlog.json', log);
   }
 
-  await broadcast({ title, body, url: full.url }, userId);
+  await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
 }
