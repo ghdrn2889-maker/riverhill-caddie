@@ -563,10 +563,13 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
     }
   }
-  if (verdict && !(Number(verdict.myPosition) > 0)
-      && today && today.myPosition
-      && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
-    verdict.myPosition = today.myPosition; // 잠긴 순번 보완(0·실패값이면 오늘 순번으로)
+  // ★순번(myPosition)의 권위는 '배치표 이미지'뿐. 텍스트 글에서 Gemini가 순번을 지어내면(환각)
+  //  저장된(배치표에서 읽은) 순번으로 덮는다 — 텍스트엔 순번 정보가 없으니 저장값이 authoritative.
+  //  배치표(isBoard)는 실제로 이미지를 봤으니 그 판독을 신뢰하되, 실패(0)했을 때만 저장값으로 보완.
+  if (verdict && today && Number(today.myPosition) > 0
+      && (!today.date || !verdict.dateLabel || today.date === verdict.dateLabel)) {
+    if (!isBoard) verdict.myPosition = today.myPosition;                       // 텍스트: 저장 순번 고정(환각 차단)
+    else if (!(Number(verdict.myPosition) > 0)) verdict.myPosition = today.myPosition; // 배치표: 실패 시만 보완
   }
   // ★"현재 3부 N팀" 팀 수 보정: Gemini가 놓쳤으면 코드가 추출(내 부 한정). = 실시간 확정선.
   //  1) 부 표기 있는 'N부 N팀'(엄격) → 2) 없으면 3부 문맥의 순수 'N팀'(정용만님 실시간 관례) 보정.
