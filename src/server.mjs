@@ -234,7 +234,10 @@ app.get('/api/today', (req, res) => {
   if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
   const prof = getProfile(req.user?.id || 1) || {};
   const commute = t.teeTime ? commuteInfo(t.teeTime, prof.commute_min) : null;
-  res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
+  // 근무 대상일이 며칠 뒤인지(0=오늘, 1=내일…). 저녁에 뜬 '내일 배치표'를 오늘로 오인하지 않게.
+  let dayOffset = 0;
+  if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(todayISOKST())) / 86400000);
+  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
 });
 
 // ── 근무일지/세무 증빙 ──────────────────────────────────

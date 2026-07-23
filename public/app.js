@@ -132,15 +132,20 @@ function renderToday(t) {
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const isSpare = st === 'spare' || st === 'waiting' || st === 'near';
   const posTxt = s.myPosition ? ` · ${s.myPosition}번째` : '';
+  // 근무 대상일(0=오늘, 1=내일, 2=모레…). 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
+  const off = Number(t.dayOffset) || 0;
+  const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
+  $('heroLabel').textContent = `${dayW} 내 상황`;
   $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
-    : isWork ? '오늘 근무 확정'
-    : st === 'off' ? '오늘 휴무'
-    : isSpare ? `${s.part || '3부'} 스페어${posTxt}` : '대기 중';
+    : isWork ? `${dayW} 근무 확정`
+    : st === 'off' ? `${dayW} 휴무`
+    : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
+    : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
-    : st === 'off' ? '오늘은 예정된 근무가 없어요. 편히 쉬세요.'
+    : st === 'off' ? `${dayW}은 예정된 근무가 없어요. 편히 쉬세요.`
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
-    : '아직 오늘 상황이 확정되지 않았어요.';
+    : '아직 상황이 확정되지 않았어요.';
   renderBoard(t);
 }
 // 오른쪽(백대기 방향)을 향한 자동차 SVG. driving=true면 바퀴 회전·배기 연기·바람 라인 모션.
@@ -189,14 +194,18 @@ function renderBoard(t) {
     const nowS = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
     const L = toMin(c.leave) * 60, S = toMin(c.standby) * 60, T = toMin(c.tee) * 60;
     const nowMinNow = Math.floor(nowS / 60);
+    const off = Number(t.dayOffset) || 0;
+    const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
     // 4단계: 0 출발 전 / 1 이동 중(집→백대기) / 2 백대기·준비(백대기→티오프) / 3 근무 중
+    //  ★미래 근무일(off>=1, 저녁에 뜬 내일 배치표 등)은 타임라인이 아직 시작 전 → '출발 전' 고정(게이지 0).
     let phase, big, cap, pct, targetPct, targetS;
-    if (nowS < L)      { phase = 0; big = c.leave;   cap = `출발까지 ${gap(Math.round((L - nowS) / 60))}`;   pct = 0;  targetPct = 0;   targetS = L; }
+    if (off >= 1)      { phase = 0; big = c.leave;   cap = `${dayW} ${c.leave} 출발`;                        pct = 0;  targetPct = 0;   targetS = L; }
+    else if (nowS < L) { phase = 0; big = c.leave;   cap = `출발까지 ${gap(Math.round((L - nowS) / 60))}`;   pct = 0;  targetPct = 0;   targetS = L; }
     else if (nowS < S) { phase = 1; big = c.standby; cap = `백대기까지 ${gap(Math.round((S - nowS) / 60))}`; pct = 50 * (nowS - L) / Math.max(1, S - L); targetPct = 50;  targetS = S; }
     else if (nowS < T) { phase = 2; big = c.tee;     cap = `티오프까지 ${gap(Math.round((T - nowS) / 60))}`; pct = 50 + 50 * (nowS - S) / Math.max(1, T - S); targetPct = 100; targetS = T; }
     else               { phase = 3; big = c.tee;     cap = '근무 중';                   pct = 100; targetPct = 100; targetS = T; }
     pct = Math.max(0, Math.min(100, pct));
-    const act = ['집에서 출발 준비', '백대기로 이동 중', '도착 · 티오프 준비', '근무 중'][phase];
+    const act = off >= 1 ? `${dayW} 출발 준비` : ['집에서 출발 준비', '백대기로 이동 중', '도착 · 티오프 준비', '근무 중'][phase];
     const crs = s.course ? ` ${esc(s.course)}` : '';
     // 지점 상태(done=지남, next=다음 목표·글로우)
     const pStart = phase === 0 ? 'next' : 'done';
@@ -209,7 +218,7 @@ function renderBoard(t) {
     // 티오프 이후(근무 중): 골프채 휘두르는 골퍼가 티오프 지점 위에 상주(모션 없음).
     const flagHtml = phase === 3 ? `<span class="ricon golfer" style="left:100%">🏌️</span>` : '';
     const filling = (phase === 1 || phase === 2) ? ' filling' : '';
-    const alert = phase === 0 ? [`${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, '10분 전']
+    const alert = phase === 0 ? [`${off >= 1 ? dayW + ' ' : ''}${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, off >= 1 ? '출발 전' : '10분 전']
       : phase === 1 ? [`곧 백대기 시간(${c.standby})이에요`, '이동 중']
       : phase === 2 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
       : ['좋은 라운드 되세요!', '근무 중'];

@@ -3,6 +3,18 @@
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON } from './gemini.mjs';
+import { labelToISO } from './worklog.mjs';
+
+// 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
+function kstTodayISO() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+export function dayWordFor(dateLabel) {
+  const iso = labelToISO(dateLabel);
+  if (!iso) return '오늘';
+  const off = Math.round((Date.parse(iso) - Date.parse(kstTodayISO())) / 86400000);
+  return off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : String(dateLabel);
+}
 
 // 회원 컨텍스트(이름·부). 미지정이면 .env(=1번 회원 김홍구) → 기존 동작 무변화.
 //  ★judge()가 회원을 인자로 받아 buildPrompt/decide/applyRoster 등에 전달 → "누구 기준"만 바깥에서.
@@ -241,7 +253,7 @@ export function decide(article, verdict, member = memberFromEnv()) {
   if (tee) {
     // 티오프 배정 = 근무 확정. 산수(남은인원) 무시, 출근/출발 안내.
     status = status === 'your_turn' ? 'your_turn' : (status === 'work' ? 'work' : 'assigned');
-    body = `${name}님, 오늘 근무 배정됐어요!${commuteLine(tee, verdict.course, member.commuteMin)}`;
+    body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 배정됐어요!${commuteLine(tee, verdict.course, member.commuteMin)}`;
   } else if (status === 'waiting' || status === 'near' || status === 'spare') {
     const mp = Number(verdict.myPosition), cp = Number(verdict.cutoffPosition);
     // 남은 인원은 '○○까지'가 텍스트에 명시됐을 때만 계산(지어낸 커트라인 방지).
