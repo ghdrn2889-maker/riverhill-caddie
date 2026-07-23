@@ -148,13 +148,3 @@ export function logout(req, res) {
   res.json({ ok: true });
 }
 
-export function testLoginEnabled() { return process.env.ALLOW_TEST_LOGIN === '1'; }
-
-// ★테스트 전용: 네이버 없이 '새 회원인 척' 가입 체험. ALLOW_TEST_LOGIN=1 일 때만 동작(시험 후 끔).
-export function devLogin(req, res) {
-  if (!testLoginEnabled()) return res.status(403).send('테스트 로그인이 비활성 상태입니다.');
-  const u = createUser({}); // 네이버 미연결 새 회원 → board_name 비어있어 온보딩으로 유도
-  const tok = createSession(u.id, req.headers['user-agent'] || '');
-  setSessionCookie(req, res, tok);
-  res.redirect('/');
-}

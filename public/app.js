@@ -608,8 +608,7 @@ async function loadMe() {
 }
 function showLogin() {
   $('naverLoginBtn').style.display = meState.naverEnabled ? 'block' : 'none';
-  $('loginTestBtn').hidden = !meState.testLogin;
-  $('loginErr').textContent = (!meState.naverEnabled && !meState.testLogin) ? '로그인 수단이 아직 설정되지 않았어요.' : '';
+  $('loginErr').textContent = !meState.naverEnabled ? '로그인 수단이 아직 설정되지 않았어요.' : '';
   $('loginOv').hidden = false;
 }
 function hideLogin() { $('loginOv').hidden = true; }
@@ -632,7 +631,6 @@ function openOnboarding() {
   $('obSubmit').textContent = '가입 완료';
   fillProfileForm();
   $('ovActions').hidden = true;      // 신규 가입은 닫기 불가
-  $('obTestSignup').hidden = true;
   $('ovErr').textContent = '';
   $('ov').hidden = false;
 }
@@ -644,7 +642,6 @@ function openAccount() {
   $('obSubmit').textContent = '저장';
   fillProfileForm();
   $('ovActions').hidden = false;
-  $('obTestSignup').hidden = !(meState && meState.testLogin);
   $('ovErr').textContent = '';
   $('ov').hidden = false;
 }
@@ -667,8 +664,6 @@ function initAccount() {
   $('obSubmit').onclick = submitProfile;
   $('obClose').onclick = () => { $('ov').hidden = true; };
   $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
-  $('obTestSignup').onclick = () => { location.href = '/api/dev/login'; };
-  $('loginTestBtn').onclick = () => { location.href = '/api/dev/login'; };
 }
 
 /* ── 부팅 ── */
