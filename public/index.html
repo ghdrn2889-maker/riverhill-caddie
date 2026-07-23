@@ -64,7 +64,7 @@
       background:linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent); transform:translateX(-100%); animation:gauge-shimmer 2.6s ease-in-out infinite; }
     @keyframes gauge-shimmer { to { transform:translateX(100%) } }
     .rail2 .rp { position:absolute; top:26px; width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #9cb2a1; transform:translateX(-50%); z-index:2; }
-    .rail2 .rp.done { background:#2e7149; border-color:#2e7149; }
+    .rail2 .rp.done { background:#e6b422; border-color:#e6b422; }
     .rail2 .rp.next { border-color:#d99a31; animation:pt-glow 1.7s ease-out infinite; }
     @keyframes pt-glow { 0% { box-shadow:0 0 0 0 rgba(217,154,49,.5) } 70%,100% { box-shadow:0 0 0 9px rgba(217,154,49,0) } }
     .ricon { position:absolute; top:3px; transform:translateX(-50%); font-size:16px; line-height:1; z-index:3; transition:left .5s linear; }
@@ -72,12 +72,7 @@
     .carsvg, .bagsvg { display:block; overflow:visible; }
     .carsvg.drv { animation:drive-bob .5s ease-in-out infinite; }         /* 노면 진동(위아래 미세) */
     @keyframes drive-bob { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-.7px) } }
-    .ricon.flag { top:1px; font-size:17px; }                              /* 티오프 이후 깃발 — 티오프 위에 상주 */
-    .ricon.flag .flagwave { display:inline-block; transform-origin:bottom center; animation:flag-bob 2.4s ease-in-out infinite; }
-    @keyframes flag-bob { 0%,100% { transform:translateY(0) rotate(-3deg) } 50% { transform:translateY(-1.6px) rotate(3deg) } }
-    .ricon.prep .halo { position:absolute; inset:-7px; border-radius:50%; z-index:-1;
-      background:radial-gradient(circle, rgba(217,154,49,.42), rgba(217,154,49,0) 70%); animation:halo 1.6s ease-in-out infinite; }
-    @keyframes halo { 0%,100% { opacity:.35; transform:scale(.8) } 50% { opacity:.95; transform:scale(1.2) } }
+    .ricon.golfer { top:0; font-size:18px; }                              /* 티오프 이후 골퍼 — 티오프 위 상주(모션 없음) */
     .railtext3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:3px; }
     .railtext3 .rt { display:flex; flex-direction:column; gap:1px; }
     .railtext3 .rt.l { align-items:flex-start } .railtext3 .rt.c { align-items:center } .railtext3 .rt.r { align-items:flex-end }
