@@ -118,8 +118,13 @@ ${postedLine}
 - 시간은 위→아래로 일정 간격 증가(예: 16:32,16:39,16:46,16:53,17:00,17:07,17:14,17:21,17:28…). 순번이 인쇄된 행을 찾아 그 행의 시간과 정확히 짝지으세요.
 - ${name}의 티오프는 코드가 이 표에서 ${name} 순번(myPosition)으로 찾습니다 — 표만 정확히 옮기고 myPosition만 정확히 읽으면 됩니다.
 
+★★ 배치표의 '부(部) 헤더' — 가장 확실한 근거 (환각 방지용 이중검증):
+- 티오프 시간표(OUT/IN 표)의 **맨 위 헤더 행은 [OUT | N부 | IN] 형식**이고, 가운데 칸의 "N부"가 이 표가 몇 부인지 알려주는 **가장 확실한 표시**입니다(글에 부 표시가 없어도 이 헤더로 확정).
+- boardParts 에 이미지의 티오프 표 헤더에서 실제로 보이는 부 숫자들을 배열로 넣으세요: 3부 표 하나만 있으면 [3], 전체 배치표라 1·2·3부 표가 다 있으면 [1,2,3]. 표 헤더가 안 보이거나 이미지가 배치표가 아니면 [].
+- ★boardParts 는 '눈에 보이는 헤더 숫자'만. 추측 금지. 이게 part 판단의 최우선 근거입니다.
+
 ★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
-- part 에 이 글이 몇 부에 관한 것인지 넣으세요: 제목/본문에 "1부/2부/3부" 명시가 있으면 그 숫자, 배치표 이미지나 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
+- part 에 이 글이 몇 부에 관한 것인지 넣으세요: **배치표 헤더(boardParts)가 있으면 그게 최우선**, 없으면 제목/본문의 "1부/2부/3부" 명시, 그것도 없으면 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
 - **절대 기본값으로 ${part}부라고 가정하지 마세요.** ${part}부라는 근거(명시된 "${part}부" / "${name}" 이름·순번 / ${part}부 배치표 / ${part}부 시간대(오후·저녁) 티오프)가 하나도 없으면 part는 실제 부 숫자 또는 "unknown"으로.
 - part 가 ${part}가 아닌 다른 부로 확인되면 relevant=false (다른 부는 "${name}"과 무관).
 - ⏰게시 시각 참고: ${part}부 추가·변동 소식은 보통 정오(12시) 이후 올라옵니다. 정오 이전엔 헷갈리지 않게 글에 "${part}부"라고 명시하는 편입니다. 따라서 **부 표시가 없고 정오 이후에 올라온 일정 변동/추가 글은 ${part}부일 가능성이 높습니다.** (단, 티오프 시간대가 다른 부를 가리키면 그 부가 우선 — 예: 정오 이후 올라와도 '아웃 7시대' 티오프는 1부.)
@@ -141,6 +146,7 @@ ${postedLine}
 {
   "relevant": true 또는 false,
   "part": "1|2|3|unknown (이 글이 몇 부인지, 모르면 unknown — ${part}부라 함부로 단정 금지)",
+  "boardParts": [배치표 티오프 표 헤더(OUT|N부|IN)에서 보이는 부 숫자들, 예: [3] 또는 [1,2,3], 없으면 []],
   "part3Roster": ["${part}부 전체 명단 이름들 — 전체 배치표일 때만, 아니면 []"],
   "crossPartNames": ["명단 중 여러 부 중복 표기((2,3)/(54)) 붙은 이름들, 없으면 []"],
   "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
@@ -501,6 +507,11 @@ export function consensusFromReads(reads) {
   if (withCut) { v.cutoffAnnounced = true; v.cutoffName = withCut.cutoffName; v.cutoffPosition = withCut.cutoffPosition; }
   const withTeam = rs.find((r) => Number(r?.teamCount) > 0);
   if (withTeam) v.teamCount = withTeam.teamCount;
+  // 부 헤더(boardParts)는 구조적이라 안정적 — 읽은 것 중 가장 흔한 비어있지 않은 값 채택.
+  const bpVotes = rs.map((r) => (Array.isArray(r?.boardParts)
+    ? [...new Set(r.boardParts.map((x) => (String(x).match(/[123]/) || [])[0]).filter(Boolean))].sort().join(',')
+    : '')).filter(Boolean);
+  if (bpVotes.length) { const bp = modeOf(bpVotes).value; if (bp) v.boardParts = bp.split(',').map(Number); }
 
   resolveTeeByGrid(v);       // 합의 순번으로 티오프표 최종 해석
   delete v._uncertain;       // 구조적 잡음 초기화 — 아래에서 '결론' 기준으로만 다시 판정
@@ -579,8 +590,31 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     if (!tc) tc = extractBareTeamCount(article.subject, article.text || article.contentText || article.content, member);
     if (tc) { verdict.teamCount = tc; if (!verdict.relevant) verdict.relevant = true; }
   }
+  applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
   return { ...decide(article, verdict, member), rawVerdict: verdict };
+}
+
+// ★배치표 티오프 표 헤더(OUT | N부 | IN)로 부(部)를 못박는 이중검증 — Gemini의 '부 환각'을 구조로 교정.
+//  헤더는 지어낼 수 없는 구조적 근거라, 텍스트에 부 표시가 없어도 '이 배치표가 몇 부'인지 확정한다.
+//  · 헤더에 내 부가 있으면 → 내 부로 확정(Gemini가 다른 부라 우겨도 무시).
+//  · 헤더에 내 부가 없으면(다른 부 표) → 내겐 무관(relevant=false).
+export function applyBoardParts(verdict, member = memberFromEnv()) {
+  if (!verdict) return;
+  const parts = (Array.isArray(verdict.boardParts) ? verdict.boardParts : [])
+    .map((x) => (String(x).match(/[123]/) || [])[0]).filter(Boolean);
+  if (!parts.length) return;                       // 헤더 못 읽음 → 기존 부 판단 유지
+  const mp = String(member.part);
+  const had = (String(verdict.part || '').match(/[123]/) || [])[0];
+  if (parts.includes(mp)) {
+    verdict.part = mp;                             // 헤더에 내 부 있음 → 내 부로 확정(환각 무시)
+  } else {
+    verdict.part = parts[0];                       // 내 부 없음 → 다른 부 표 → decide가 무관 처리
+    verdict.relevant = false;
+  }
+  const now = (String(verdict.part).match(/[123]/) || [])[0];
+  if (had && had !== now) verdict._partFixed = `표 헤더=${parts.join(',')}부 → part ${had}→${now} 교정`;
+  verdict._partSource = 'grid-header';
 }
 
 // ── 회원별 재해석 (Gemini 재호출 없이) ─────────────────────────
@@ -607,6 +641,7 @@ export function interpretForMember(article, shared, member, today = null) {
   const v = {
     relevant: shared.relevant,
     part: shared.part,
+    boardParts: shared.boardParts,       // 부 헤더(구조적) — 회원 부 기준으로 아래서 재검증
     category: shared.category,
     dateLabel: shared.dateLabel,
     cutoffAnnounced: shared.cutoffAnnounced,
@@ -627,6 +662,7 @@ export function interpretForMember(article, shared, member, today = null) {
   // ★공유 board 판독이 표결에서 갈렸으면(shared._uncertain) 이 회원 순번도 그 흔들린 명단에서 뽑은 것 →
   //  이 회원에게도 정직하게 '확인 필요'를 전달(문구는 회원 본인 기준으로 일반화 — 1번 회원 시각·순번 노출 금지).
   if (shared._uncertain) v._uncertain = '배치표 판독이 불안정합니다 — 원문(배치표)을 직접 확인하세요';
+  applyBoardParts(v, member);             // ★표 헤더로 이 회원 부(部) 재검증(다른 부 표면 무관 처리)
   resolveTeeByGrid(v);                    // 순번→티오프(구조·beyond-cut 스페어 등)
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
   if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) { v.teeTime = ''; v.course = ''; }
