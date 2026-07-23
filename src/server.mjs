@@ -15,7 +15,7 @@ import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers } from './users.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken } from './users.mjs';
 import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
@@ -52,8 +52,16 @@ app.get('/api/me', (req, res) => {
 // 프로필 저장(온보딩·수정). 로그인 필수(솔로 모드에선 1번 회원).
 app.post('/api/profile', requireAuth, (req, res) => {
   const b = req.body || {};
+  const boardName = String(b.boardName || '').trim();
+  const part = ['1', '2', '3'].includes(String(b.part)) ? String(b.part) : '3';
+  if (!boardName) return res.status(400).json({ ok: false, error: '배치표에 뜨는 실명을 입력해주세요.' });
+  // (이름+부) 유일 강제 — 같은 캐디가 계정 2개로 알림 2번 받는 중복 차단.
+  if (boardNameTaken(boardName, part, req.user.id)) {
+    return res.status(409).json({ ok: false,
+      error: `이미 등록된 이름이에요 (${boardName}·${part}부). 본인 계정이라면 그 계정으로 로그인하세요. 동명이인이면 관리자에게 문의해주세요.` });
+  }
   const prof = setProfile(req.user.id, {
-    board_name: b.boardName, part: b.part, home_km: b.homeKm, car_no: b.carNo,
+    board_name: boardName, part, home_km: b.homeKm, car_no: b.carNo,
   });
   res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, carNo: prof.car_no } });
 });

@@ -121,4 +121,16 @@ export function activeMembers() {
               ORDER BY u.id`);
 }
 
+// (배치표 이름 + 부) 중복 방지: 다른 활성 회원이 이미 같은 이름·부를 쓰는지.
+//  리버힐 한 부(部) 안엔 같은 이름이 없으므로 '이름+부'가 사실상 한 캐디의 고유 신원.
+//  → 같은 캐디가 계정 2개로 알림 2번 받는 문제 차단. 본인 프로필 수정은 exceptUserId로 제외.
+export function boardNameTaken(boardName, part, exceptUserId = 0) {
+  const name = String(boardName || '').trim();
+  if (!name) return false; // 빈 이름(가입 전)은 중복 대상 아님
+  const row = get(`SELECT u.id FROM users u JOIN profiles p ON p.user_id = u.id
+                   WHERE p.board_name = ? AND p.part = ? AND u.status = 'active' AND u.id != ?`,
+    name, String(part || '3'), exceptUserId);
+  return !!row;
+}
+
 export function ensureDb() { db(); } // 부팅 시 스키마 생성 트리거
