@@ -57,8 +57,8 @@
 
     /* 새 레일: 출발 → 백대기(티오프−50분) → 티오프. 이동중 🚗(SVG) / 준비 ⛳ */
     .rail2 { position:relative; height:44px; margin:9px 4px 0; }
-    .rail2 .track { position:absolute; left:6px; right:6px; top:31px; height:3px; background:#bccbbe; border-radius:3px; }
-    .rail2 .fill  { position:absolute; left:6px; top:31px; height:3px; background:#2e7149; border-radius:3px; overflow:hidden; transition:width .5s linear; }
+    .rail2 .track { position:absolute; left:6px; right:6px; top:30px; height:5px; background:#bccbbe; border-radius:4px; }
+    .rail2 .fill  { position:absolute; left:6px; top:30px; height:5px; background:#2e7149; border-radius:4px; overflow:hidden; transition:width .5s linear; }
     /* 게이지가 차오르는 생동감 — 좌→우로 빛이 얌전히 훑고 지나감 */
     .rail2 .fill.filling::after { content:''; position:absolute; top:0; left:0; width:100%; height:100%; border-radius:3px;
       background:linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent); transform:translateX(-100%); animation:gauge-shimmer 2.6s ease-in-out infinite; }

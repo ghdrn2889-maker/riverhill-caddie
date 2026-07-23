@@ -163,10 +163,13 @@ function carSVG(driving) {
 // 골프백 SVG — 백대기(도착·준비) 단계 아이콘. 클럽이 위로 삐죽, 초록 백·황토 클럽헤드.
 function golfBagSVG() {
   return `<svg class="bagsvg" viewBox="0 0 24 30" width="19" height="24" aria-hidden="true">
+    <defs><linearGradient id="mtl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eef1f3"/><stop offset=".5" stop-color="#bcc2c7"/><stop offset="1" stop-color="#8f979d"/>
+    </linearGradient></defs>
     <g stroke="#8a7350" stroke-width="1.5" stroke-linecap="round">
       <line x1="9" y1="9" x2="7.4" y2="2.2"/><line x1="12" y1="8.6" x2="12" y2="1.3"/><line x1="15" y1="9" x2="16.6" y2="2.6"/>
     </g>
-    <circle cx="7.2" cy="2.1" r="1.6" fill="#c98a2e"/><circle cx="12" cy="1.3" r="1.6" fill="#c98a2e"/><circle cx="16.8" cy="2.6" r="1.6" fill="#c98a2e"/>
+    <circle cx="7.2" cy="2.1" r="1.6" fill="url(#mtl)"/><circle cx="12" cy="1.3" r="1.6" fill="url(#mtl)"/><circle cx="16.8" cy="2.6" r="1.6" fill="url(#mtl)"/>
     <rect x="6.4" y="8.6" width="11.2" height="19.2" rx="5.6" fill="#26292b"/>
     <ellipse cx="12" cy="9.1" rx="5.6" ry="1.9" fill="#111315"/>
     <rect x="8.4" y="15.5" width="7.2" height="6.2" rx="2.2" fill="#3a3f42"/>
