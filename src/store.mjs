@@ -18,6 +18,14 @@ export function saveJSON(name, obj) {
   fs.writeFileSync(path.join(DATA_DIR, name), JSON.stringify(obj, null, 2));
 }
 
+// 한 줄씩 누적 기록(JSONL). 진단 로그용(예: 판독 불확실 사유) — 나중에 패턴 분석·근본원인 대응.
+export function appendJSONL(name, obj) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.appendFileSync(path.join(DATA_DIR, name), JSON.stringify(obj) + '\n');
+  } catch (e) { console.error('appendJSONL 오류:', e.message); }
+}
+
 // ── 회원별 저장소 (data/users/{userId}/) ──────────────────
 //  회원마다 today·worklog·cartcheck·journal·baseline·pushlog·recent·photos 를 분리 보관.
 //  ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부는 그대로 1번으로 동작(무변화).

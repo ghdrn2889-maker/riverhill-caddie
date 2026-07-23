@@ -14,7 +14,7 @@ import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
-import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore } from './store.mjs';
+import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken } from './users.mjs';
 import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
 
@@ -589,8 +589,12 @@ async function processForMember(userId, member, out, full, opts = {}) {
       const tc = Number(v.teamCount);
       if (myp && myp > tc) {
         const ahead = Math.max(0, myp - tc - 1);
+        const part = merged.next.part || `${member.part}부`;
         title = `🏌️ ${member.part}부 대기 현황`;
-        body = `현재 ${merged.next.part || `${member.part}부`} ${tc}팀 · 내 순번 ${myp}번 — 내 앞 ${ahead}명 남았어요.`;
+        // 스페어 1번(내 앞 0명)은 '출근 확정' 아니라 '언제든 나갈 1순위'로 구분해 안내.
+        body = ahead === 0
+          ? `현재 ${part} ${tc}팀 — ${member.name}님은 스페어 1번이에요. 팀이 하나만 더 차면 바로 출근이니 준비해두세요.`
+          : `현재 ${part} ${tc}팀 — ${member.name}님은 스페어 ${ahead + 1}번, 앞에 ${ahead}명 남았어요.`;
         // 확정선이 전진하면(팀 추가) 스페어 회원에게 알림. 너무 멀 때(WATCH 초과)만 피드로.
         //  같은 팀수 반복은 중복차단(sig에 cutLine 포함)이 걸러줌 → 전진 1회당 알림 1회.
         const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
@@ -606,6 +610,18 @@ async function processForMember(userId, member, out, full, opts = {}) {
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
     category: v?.category || null, change: change.message || null, reversal: change.reversal };
+
+  // ★판독 불확실(check) 발생 사유를 진단 로그에 기록 — 얼리액세스 동안 이걸 분석해 불확실 케이스를 줄여간다.
+  //  (불확실 알림 자체가 '앱이 덜 완성됐다'는 신호 → 사유별 빈도를 보고 근본 원인에 대응)
+  if (out.push === 'check') {
+    appendJSONL('uncertain-log.jsonl', {
+      at: Date.now(), userId, part: member.part, articleId: full.id, subject: full.subject,
+      status: out.status, category: v?.category || null,
+      confidence: v?.confidence ?? null,
+      reason: v?._uncertain || (v ? `저확신(confidence=${v?.confidence ?? '-'})` : '자동 판독 실패(Gemini 응답 없음)'),
+      partSource: v?._partSource || null, reads: v?._reads || null,
+    });
+  }
 
   if (out.push === 'low') {
     if (userId === 1) {

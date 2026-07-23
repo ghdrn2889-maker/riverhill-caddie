@@ -246,20 +246,29 @@ export function decide(article, verdict, member = memberFromEnv()) {
       && Number.isFinite(mp) && Number.isFinite(cp);
     if (announced) {
       const remaining = mp - cp - 1;
-      const cut = ` (${verdict.cutoffName}님까지 근무)`;
-      if (remaining < 0) { status = 'assigned'; body = `${name}님, 오늘 근무 배정됐어요!${cut}`; }
-      else if (remaining === 0) { status = 'your_turn'; body = `${name}님, 지금 출근하실 차례예요!${cut}`; }
-      else { status = remaining <= 2 ? 'near' : 'waiting'; body = `${name}님, 앞으로 ${remaining}명 남았어요${cut}`; }
+      if (remaining < 0) {
+        // 내 순번이 커트라인 안 → 근무 확정.
+        status = 'assigned';
+        body = `${name}님, ${verdict.cutoffName}님까지 근무라 오늘 근무 배정됐어요!`;
+      } else if (remaining === 0) {
+        // 커트라인 바로 다음 = 스페어 1번. '출근 확정'이 아니라 '언제든 나갈 수 있는 1순위'로 구분.
+        status = 'near';
+        body = `${name}님은 지금 스페어 1번이에요. 팀이 하나만 더 차면 바로 출근이니 준비해두세요.`;
+      } else {
+        // 뒤 순번 스페어 → 앞에 몇 명 남았는지로 대기감을 전달.
+        status = remaining <= 2 ? 'near' : 'waiting';
+        body = `${name}님은 스페어 ${remaining + 1}번, ${verdict.cutoffName}님까지 근무라 앞에 ${remaining}명 남았어요.`;
+      }
     } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
-      // 커트라인 이름은 명시됐지만 위치를 몰라(텍스트만) 정확한 N명 계산 불가 → 공지는 전달.
+      // 커트라인 이름만 있고 순번(내·커트라인)을 몰라 남은 인원 계산 불가 → 내 근무여부 단정 금지, 정보만.
       status = 'spare';
-      const pos = Number.isFinite(mp) ? ` (내 순번 ${mp}번)` : '';
-      body = `${verdict.cutoffName}님까지 근무 확정 소식이에요${pos}. 내 차례 근접 여부 확인해보세요`;
+      body = `${name}님, ${verdict.cutoffName}님까지 근무한다는 공지예요. 내 순번을 배치표와 비교해 확인해보세요.`;
     } else {
-      // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게 알림.
+      // 명시 커트라인 없음 → 지어내지 않고 '스페어 대기'만 정직하게, 괄호 없이 자연스러운 한 문장으로.
       status = 'spare';
-      const pos = Number.isFinite(mp) ? ` (순번 ${mp}번)` : '';
-      body = `${name}님, ${verdict.dateLabel || '오늘'} ${member.part}부 스페어 대기${pos}입니다.`;
+      body = Number.isFinite(mp)
+        ? `${name}님, ${verdict.dateLabel || '오늘'} ${member.part}부 스페어 대기 순번은 ${mp}번입니다.`
+        : `${name}님, ${verdict.dateLabel || '오늘'} ${member.part}부 스페어 대기입니다.`;
     }
   } else if (status === 'off') {
     body = `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
@@ -588,6 +597,14 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     let tc = extractTeamCount(blob, member);
     if (!tc) tc = extractBareTeamCount(article.subject, article.text || article.contentText || article.content, member);
     if (tc) { verdict.teamCount = tc; if (!verdict.relevant) verdict.relevant = true; }
+  }
+  // ★커트라인 위치 보완: '○○까지' 이름만 있고 번호를 모르면 저장된 3부 명단에서 그 사람 순번을 찾아 채운다.
+  //  → '위치 모름'으로 애매하게 넘기지 않고, 내 순번과 비교해 정확히 남은 인원을 계산(사용자 요구).
+  if (verdict && verdict.cutoffAnnounced && verdict.cutoffName
+      && !(Number(verdict.cutoffPosition) > 0)
+      && Array.isArray(today?.roster3) && today.roster3.length) {
+    const idx = today.roster3.findIndex((n) => String(n).includes(verdict.cutoffName));
+    if (idx >= 0) verdict.cutoffPosition = idx + 1;
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
