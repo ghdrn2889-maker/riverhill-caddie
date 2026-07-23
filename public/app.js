@@ -151,12 +151,26 @@ function carSVG(driving) {
   const line = (y, begin) => `<line x1="2" y1="${y}" x2="6" y2="${y}"><animate attributeName="opacity" values=".7;0" dur="0.6s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="x1" values="6;-1" dur="0.6s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="x2" values="10;3" dur="0.6s" begin="${begin}" repeatCount="indefinite"/></line>`;
   const smoke = driving ? `<g fill="#aeb9b0">${puff('0s')}${puff('0.65s')}</g>` : '';
   const speed = driving ? `<g stroke="#86b394" stroke-width="1.2" stroke-linecap="round">${line(8, '0s')}${line(12, '0.3s')}</g>` : '';
-  return `<svg class="carsvg${driving ? ' drv' : ''}" viewBox="0 0 44 24" width="30" height="16" aria-hidden="true">
+  return `<svg class="carsvg${driving ? ' drv' : ''}" viewBox="0 0 44 24" width="42" height="23" aria-hidden="true">
     ${speed}${smoke}
     <path d="M6 16.4 L6 14.6 Q6 13.2 7.6 13.1 L12 12.9 Q14.6 9 19.4 8.9 L26.5 8.9 Q30.6 9.1 32.6 12.7 L36.2 13 Q38.8 13.3 38.8 15.2 L38.8 16.6 Q38.8 17.7 37.4 17.7 L7.4 17.7 Q6 17.7 6 16.4 Z" fill="#2e7149"/>
     <path d="M14 12.6 Q15.9 9.9 19.5 9.8 L22.8 9.8 L22.8 12.6 Z M24.1 9.8 L26.2 9.9 Q29.2 10.1 30.8 12.6 L24.1 12.6 Z" fill="#d3ead9"/>
     <circle cx="37.4" cy="15.5" r="1" fill="#ffe08a"/>
     ${wheel(14.5)}${wheel(31)}
+  </svg>`;
+}
+
+// 골프백 SVG — 백대기(도착·준비) 단계 아이콘. 클럽이 위로 삐죽, 초록 백·황토 클럽헤드.
+function golfBagSVG() {
+  return `<svg class="bagsvg" viewBox="0 0 24 30" width="19" height="24" aria-hidden="true">
+    <g stroke="#8a7350" stroke-width="1.5" stroke-linecap="round">
+      <line x1="9" y1="9" x2="7.4" y2="2.2"/><line x1="12" y1="8.6" x2="12" y2="1.3"/><line x1="15" y1="9" x2="16.6" y2="2.6"/>
+    </g>
+    <circle cx="7.2" cy="2.1" r="1.6" fill="#c98a2e"/><circle cx="12" cy="1.3" r="1.6" fill="#c98a2e"/><circle cx="16.8" cy="2.6" r="1.6" fill="#c98a2e"/>
+    <rect x="6.4" y="8.6" width="11.2" height="19.2" rx="5.6" fill="#2e7149"/>
+    <ellipse cx="12" cy="9.1" rx="5.6" ry="1.9" fill="#214e36"/>
+    <rect x="8.4" y="15.5" width="7.2" height="6.2" rx="2.2" fill="#245c3b"/>
+    <path d="M7 11.5 Q2.6 18 7.6 25.5" stroke="#cfe6d6" stroke-width="1.3" fill="none"/>
   </svg>`;
 }
 
@@ -188,7 +202,9 @@ function renderBoard(t) {
     // 🚗 이동(출발~백대기)만 표시. ⛳ 준비는 백대기 단계(phase 2)에만 — 이동 중엔 아예 없음.
     const carPos = phase === 0 ? 0 : pct;
     const carHtml = phase <= 1 ? `<span class="ricon car" style="left:${carPos}%">${carSVG(phase === 1)}</span>` : '';
-    const prepHtml = phase === 2 ? `<span class="ricon prep active" style="left:${pct}%"><span class="halo"></span>⛳</span>` : '';
+    const prepHtml = phase === 2 ? `<span class="ricon prep active" style="left:${pct}%"><span class="halo"></span>${golfBagSVG()}</span>` : '';
+    // 티오프 이후(근무 중): 골프장 깃발이 티오프 지점 위에 계속 떠 있음.
+    const flagHtml = phase === 3 ? `<span class="ricon flag" style="left:100%"><span class="flagwave">⛳</span></span>` : '';
     const filling = (phase === 1 || phase === 2) ? ' filling' : '';
     const alert = phase === 0 ? [`${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, '10분 전']
       : phase === 1 ? [`곧 백대기 시간(${c.standby})이에요`, '이동 중']
@@ -199,7 +215,7 @@ function renderBoard(t) {
       <div class="nextline"><strong>${esc(big)}</strong><span>${cap}</span></div>
       <div class="rail2">
         <i class="track"></i><i class="fill${filling}" style="width:${pct}%"></i>
-        ${prepHtml}${carHtml}
+        ${prepHtml}${carHtml}${flagHtml}
         <i class="rp ${pStart}" style="left:0"></i>
         <i class="rp ${pMid}" style="left:50%"></i>
         <i class="rp ${pEnd}" style="left:100%"></i>
