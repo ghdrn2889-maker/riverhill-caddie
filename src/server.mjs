@@ -45,7 +45,7 @@ app.get('/api/me', (req, res) => {
   const needsOnboarding = !prof.board_name;
   res.json({ ...base, authed: true,
     user: { id: req.user.id, role: req.user.role },
-    profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, carNo: prof.car_no,
+    profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
     needsOnboarding });
 });
@@ -61,9 +61,9 @@ app.post('/api/profile', requireAuth, (req, res) => {
       error: `이미 등록된 이름이에요 (${boardName}·${part}부). 본인 계정이라면 그 계정으로 로그인하세요. 동명이인이면 관리자에게 문의해주세요.` });
   }
   const prof = setProfile(req.user.id, {
-    board_name: boardName, part, home_km: b.homeKm, car_no: b.carNo,
+    board_name: boardName, part, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
   });
-  res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, carNo: prof.car_no } });
+  res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
 });
 
 // ── API 인증 게이트 ──
@@ -232,7 +232,8 @@ app.get('/api/today', (req, res) => {
   p.push(statusKo(t.status));
   if (t.teeTime) p.push(`티오프 ${t.teeTime}${t.course ? `(${t.course})` : ''}`);
   if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
-  const commute = t.teeTime ? commuteInfo(t.teeTime) : null;
+  const prof = getProfile(req.user?.id || 1) || {};
+  const commute = t.teeTime ? commuteInfo(t.teeTime, prof.commute_min) : null;
   res.json({ ok: true, date: t.date, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
 });
 
@@ -526,7 +527,14 @@ function saveBaselineFromVerdict(full, v) {
 
 // 새 두뇌(judge)로 '오늘 상황판'에 비추어 판단 → 피드-우선 저장 → 상황판 갱신
 // → 번복 감지 + 확신도 라우팅으로 푸시.  push: 'high' | 'check' | 'low'
-const envMember = () => ({ name: (process.env.MY_NAME || '김홍구').trim(), part: (process.env.MY_PART || '3').trim() });
+const envMember = () => {
+  const p = getProfile(1) || {};
+  return {
+    name: (process.env.MY_NAME || '김홍구').trim(),
+    part: (process.env.MY_PART || '3').trim(),
+    commuteMin: Number.isFinite(Number(p.commute_min)) ? Number(p.commute_min) : Number(process.env.COMMUTE_MIN ?? 60),
+  };
+};
 
 // ── 배치표 '조용한 수정'(같은 글의 이미지만 교체) 감지 ─────────────────
 //  네이버는 글을 수정해도 목록 맨 위로 올리지 않아, 새 글만 보는 크롤러는 못 본다.
@@ -565,7 +573,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   for (const m of activeMembers()) {
     if (m.id === 1) continue;
     try {
-      const member = { name: m.board_name, part: String(m.part || '3') };
+      const member = { name: m.board_name, part: String(m.part || '3'), commuteMin: Number(m.commute_min) };
       const mout = interpretForMember(full, out.rawVerdict, member, loadToday(m.id));
       await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }

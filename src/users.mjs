@@ -26,6 +26,7 @@ const PROFILE_FIELDS = {
   board_name: (v) => String(v).slice(0, 40),
   part: (v) => (['1', '2', '3'].includes(String(v)) ? String(v) : '3'),
   home_km: (v) => Math.max(0, Number(v) || 0),
+  commute_min: (v) => Math.min(300, Math.max(0, Math.round(Number(v) || 0))), // 출근 소요시간(분)
   car_no: (v) => String(v).slice(0, 20),
   workplace: (v) => String(v).slice(0, 40),
   km_per_l: (v) => Math.max(1, Number(v) || 12),
@@ -115,7 +116,7 @@ function getLegacyWorklogSettings() {
 
 // board 판독 대상 회원들(실명 등록·활성). 크롤러가 board 1회 읽고 이들 각자에게 판단·발송.
 export function activeMembers() {
-  return all(`SELECT u.id, p.board_name, p.part
+  return all(`SELECT u.id, p.board_name, p.part, p.commute_min
               FROM users u JOIN profiles p ON p.user_id = u.id
               WHERE u.status = 'active' AND p.board_name != ''
               ORDER BY u.id`);

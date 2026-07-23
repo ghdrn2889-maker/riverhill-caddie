@@ -36,6 +36,7 @@ function migrate(d) {
       board_name    TEXT NOT NULL DEFAULT '',   -- ★배치표에 뜨는 실명(판독의 핵심)
       part          TEXT NOT NULL DEFAULT '3',  -- 부(1/2/3)
       home_km       REAL NOT NULL DEFAULT 30,   -- 집→골프장 편도(km)
+      commute_min   INTEGER NOT NULL DEFAULT 60, -- 집→골프장 출근 소요시간(분) — 백대기/출발 산정
       car_no        TEXT NOT NULL DEFAULT '',
       workplace     TEXT NOT NULL DEFAULT '리버힐CC',
       km_per_l      REAL NOT NULL DEFAULT 12,   -- 연비(유류비 어림용)
@@ -68,6 +69,17 @@ function migrate(d) {
     );
     CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
   `);
+  // 기존 DB(김홍구 등)에 새 컬럼 안전 추가 — 없을 때만 ALTER.
+  addColumn(d, 'profiles', 'commute_min', 'INTEGER NOT NULL DEFAULT 60');
+}
+
+// 컬럼이 없을 때만 추가(idempotent). SQLite ALTER는 DEFAULT로 기존 행을 채운다.
+function addColumn(d, table, col, decl) {
+  const cols = d.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === col)) {
+    d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+    console.log(`🧱 스키마 갱신: ${table}.${col} 추가`);
+  }
 }
 
 // 편의 래퍼

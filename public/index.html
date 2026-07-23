@@ -55,6 +55,32 @@
     .board-plain { margin-top:14px; border-radius:16px; background:#e1ebdf; padding:14px; font-size:11px; line-height:1.55; color:#3f5148; }
     .board-plain b { color:#153e2a; }
 
+    /* 새 레일: 출발 → 백대기(티오프−50분) → 티오프. 이동중 🚗 / 준비 ⛳ + 활성 글로우 */
+    .rail2 { position:relative; height:42px; margin:8px 4px 0; }
+    .rail2 .track { position:absolute; left:6px; right:6px; top:29px; height:3px; background:#bccbbe; border-radius:3px; }
+    .rail2 .fill  { position:absolute; left:6px; top:29px; height:3px; background:#2e7149; border-radius:3px; transition:width .5s ease; }
+    .rail2 .rp { position:absolute; top:24px; width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #9cb2a1; transform:translateX(-50%); z-index:2; }
+    .rail2 .rp.done { background:#2e7149; border-color:#2e7149; }
+    .rail2 .rp.next { border-color:#d99a31; animation:pt-glow 1.7s ease-out infinite; }
+    @keyframes pt-glow { 0% { box-shadow:0 0 0 0 rgba(217,154,49,.5) } 70%,100% { box-shadow:0 0 0 9px rgba(217,154,49,0) } }
+    .ricon { position:absolute; top:1px; transform:translateX(-50%); font-size:16px; line-height:1; z-index:3; }
+    .ricon.prep { opacity:.4; filter:grayscale(.7); }
+    .ricon.active { filter:none; opacity:1; }
+    .ricon.car.moving { animation:car-bob 1.5s ease-in-out infinite; }
+    .ricon .halo { position:absolute; inset:-7px; border-radius:50%; z-index:-1;
+      background:radial-gradient(circle, rgba(46,113,73,.32), rgba(46,113,73,0) 70%); animation:halo 1.6s ease-in-out infinite; }
+    .ricon.prep .halo { background:radial-gradient(circle, rgba(217,154,49,.4), rgba(217,154,49,0) 70%); }
+    @keyframes car-bob { 0%,100% { transform:translateX(-52%) } 50% { transform:translateX(-44%) } }
+    @keyframes halo { 0%,100% { opacity:.35; transform:scale(.8) } 50% { opacity:.95; transform:scale(1.2) } }
+    .railtext3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:3px; }
+    .railtext3 .rt { display:flex; flex-direction:column; gap:1px; }
+    .railtext3 .rt.l { align-items:flex-start } .railtext3 .rt.c { align-items:center } .railtext3 .rt.r { align-items:flex-end }
+    .railtext3 .rt b { font-size:9.5px; color:#68776e; }
+    .railtext3 .rt time { font-size:8.5px; color:#97a29b; font-variant-numeric:tabular-nums; }
+    .railtext3 .rt.done b { color:#2e7149; }
+    .railtext3 .rt.next b, .railtext3 .rt.next time { color:#9b6819; }
+    .mini small { font-size:8px; opacity:.7; }
+
     /* 스페어(대기) 순번 리스트 — '깔끔 리스트' 확정안(라이트 전용) */
     .sp-board { margin-top:14px; border:1px solid #e6ebe6; border-radius:16px; overflow:hidden; background:#fdfefc; }
     .sp-head { padding:13px 15px 11px; border-bottom:1px solid #eef1ec; display:flex; align-items:flex-end; justify-content:space-between; }
@@ -311,6 +337,7 @@
       <label class="ov-field"><span>실명 (배치표 이름) <b class="req">*</b></span><input id="obName" type="text" placeholder="예: 홍길동" maxlength="20"></label>
       <label class="ov-field"><span>소속 부 <b class="req">*</b></span>
         <select id="obPart"><option value="1">1부</option><option value="2">2부</option><option value="3" selected>3부</option></select></label>
+      <label class="ov-field"><span>집→골프장 출근 소요시간 <b class="req">*</b> <small>(분)</small></span><input id="obCommute" type="number" inputmode="numeric" placeholder="60"></label>
       <label class="ov-field"><span>집→골프장 편도 (km)</span><input id="obKm" type="number" inputmode="numeric" placeholder="30"></label>
       <label class="ov-field"><span>차량번호 <small>(선택)</small></span><input id="obCar" type="text" placeholder="12가3456" maxlength="20"></label>
       <div class="ov-err" id="ovErr"></div>

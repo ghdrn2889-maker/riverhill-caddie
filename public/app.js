@@ -149,32 +149,51 @@ function renderBoard(t) {
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const c = t.commute;
 
-  if (isWork && c && toMin(c.leave) != null) {
-    const now = nowMin(), leave = toMin(c.leave), arrive = toMin(c.arrive), tee = toMin(c.tee);
-    const commuteMin = (arrive != null && leave != null) ? arrive - leave : null;
-    const before = now < leave;
-    const act = before ? '집에서 출발' : (now < tee ? '골프장 도착' : '근무 중');
-    const big = before ? c.leave : (now < tee ? c.arrive : c.tee);
-    const rem = before ? gap(leave - now) : (now < arrive ? gap(arrive - now) : (now < tee ? gap(tee - now) : ''));
-    const ci = before ? 1 : 2;                     // 0 일정확인 / 1 출발 / 2 도착
-    const fill = ci === 1 ? 50 : 100;              // '출발'(가운데 50%)까지 / '도착'(100%)까지
-    const preAlarm = hhmm(leave - 10);
-    // 레일 3정거장: 일정확인(왼쪽) → 출발(가운데) → 도착(오른쪽). 동그라미를 라벨 위치에 정확히 맞춤.
-    //  ★출발 점은 라벨과 동일하게 가운데(50%)에 두고 translateX로 중심 정렬(예전엔 34%라 라벨과 어긋남).
-    const p2base = 'left:50%;transform:translateX(-50%)';
-    const p2 = ci >= 2 ? `${p2base};background:#2e7149;border-color:#2e7149` : p2base;
-    const p3 = ci >= 2 ? 'border-color:#d99a31;box-shadow:0 0 0 4px rgba(217,154,49,.2)' : '';
-    const lab = ['일정 확인', '출발', '도착'];
+  if (isWork && c && toMin(c.leave) != null && toMin(c.standby) != null && toMin(c.tee) != null) {
+    const now = nowMin();
+    const L = toMin(c.leave), S = toMin(c.standby), T = toMin(c.tee);
+    // 4단계: 0 출발 전 / 1 이동 중(집→백대기) / 2 백대기·준비(백대기→티오프) / 3 근무 중
+    let phase, big, cap, pct;
+    if (now < L)      { phase = 0; big = c.leave;   cap = `출발까지 ${gap(L - now)}`;   pct = 0; }
+    else if (now < S) { phase = 1; big = c.standby; cap = `백대기까지 ${gap(S - now)}`; pct = 50 * (now - L) / Math.max(1, S - L); }
+    else if (now < T) { phase = 2; big = c.tee;     cap = `티오프까지 ${gap(T - now)}`; pct = 50 + 50 * (now - S) / Math.max(1, T - S); }
+    else              { phase = 3; big = c.tee;     cap = '근무 중';                   pct = 100; }
+    pct = Math.max(0, Math.min(100, pct));
+    const act = ['집에서 출발 준비', '백대기로 이동 중', '도착 · 티오프 준비', '근무 중'][phase];
+    const crs = s.course ? ` ${esc(s.course)}` : '';
+    // 지점 상태(done=지남, next=다음 목표·글로우)
+    const pStart = phase === 0 ? 'next' : 'done';
+    const pMid   = phase === 1 ? 'next' : (phase >= 2 ? 'done' : '');
+    const pEnd   = phase === 2 ? 'next' : (phase >= 3 ? 'done' : '');
+    // 🚗 이동(출발~백대기) / ⛳ 준비(백대기~티오프)
+    const carPos = phase === 0 ? 0 : (phase === 1 ? pct : 50);
+    const carHtml = phase <= 1
+      ? `<span class="ricon car ${phase === 1 ? 'active moving' : ''}" style="left:${carPos}%">${phase === 1 ? '<span class="halo"></span>' : ''}🚗</span>` : '';
+    const prepPos = phase === 2 ? pct : 75;
+    const prepHtml = `<span class="ricon prep ${phase === 2 ? 'active' : ''}" style="left:${prepPos}%">${phase === 2 ? '<span class="halo"></span>' : ''}⛳</span>`;
+    const alert = phase === 0 ? [`${hhmm(L - 10)}에 출발 알림을 보내드릴게요`, '10분 전']
+      : phase === 1 ? [`곧 백대기 시간(${c.standby})이에요`, '이동 중']
+      : phase === 2 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
+      : ['좋은 라운드 되세요!', '근무 중'];
     slot.innerHTML = `<div class="actionboard">
       <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(now)}</span></div>
-      <div class="nextline"><strong>${esc(big)}</strong><span>${rem}</span></div>
-      <div class="rail"><i class="track"></i><i class="fill" style="width:${fill}%"></i>
-        <i class="point p1"></i><i class="point p2" style="${p2}"></i><i class="point p3" style="${p3}"></i></div>
-      <div class="railtext"><span>${lab[0]}</span>${ci === 1 ? `<b>${lab[1]}</b>` : `<span>${lab[1]}</span>`}${ci >= 2 ? `<b>${lab[2]}</b>` : `<span>${lab[2]}</span>`}</div>
-      <div class="alert"><span>${preAlarm}에 다시 알려드릴게요</span><b>10분 전</b></div>
+      <div class="nextline"><strong>${esc(big)}</strong><span>${cap}</span></div>
+      <div class="rail2">
+        <i class="track"></i><i class="fill" style="width:${pct}%"></i>
+        ${prepHtml}${carHtml}
+        <i class="rp ${pStart}" style="left:0"></i>
+        <i class="rp ${pMid}" style="left:50%"></i>
+        <i class="rp ${pEnd}" style="left:100%"></i>
+      </div>
+      <div class="railtext3">
+        <div class="rt l ${phase >= 1 ? 'done' : (phase === 0 ? 'next' : '')}"><b>출발</b><time>${esc(c.leave)}</time></div>
+        <div class="rt c ${phase >= 2 ? 'done' : (phase === 1 ? 'next' : '')}"><b>백대기</b><time>${esc(c.standby)}</time></div>
+        <div class="rt r ${phase >= 3 ? 'done' : (phase === 2 ? 'next' : '')}"><b>티오프</b><time>${esc(c.tee)}</time></div>
+      </div>
+      <div class="alert"><span>${alert[0]}</span><b>${alert[1]}</b></div>
       <div class="minirow">
-        <div class="mini"><span>예상 이동</span><b>${commuteMin != null ? commuteMin + '분' : '—'}</b></div>
-        <div class="mini"><span>티오프</span><b>${esc(c.tee)}${s.course ? ` ${esc(s.course)}` : ''}</b></div>
+        <div class="mini"><span>백대기 <small>티오프 ${c.backWaitMin || 50}분 전</small></span><b>${esc(c.standby)}</b></div>
+        <div class="mini"><span>티오프</span><b>${esc(c.tee)}<small>${crs}</small></b></div>
       </div>
     </div>`;
     return;
@@ -636,6 +655,7 @@ function fillProfileForm() {
   const p = (meState && meState.profile) || {};
   $('obName').value = p.boardName || '';
   $('obPart').value = p.part || '3';
+  $('obCommute').value = p.commuteMin != null && p.commuteMin !== 0 ? p.commuteMin : '';
   $('obKm').value = p.homeKm != null && p.homeKm !== 0 ? p.homeKm : '';
   $('obCar').value = p.carNo || '';
 }
@@ -667,7 +687,7 @@ function openAccount() {
 async function submitProfile() {
   const boardName = $('obName').value.trim();
   if (!boardName) { $('ovErr').textContent = '배치표에 뜨는 실명을 입력해주세요.'; return; }
-  const body = { boardName, part: $('obPart').value, homeKm: Number($('obKm').value) || 0, carNo: $('obCar').value.trim() };
+  const body = { boardName, part: $('obPart').value, commuteMin: Number($('obCommute').value) || 0, homeKm: Number($('obKm').value) || 0, carNo: $('obCar').value.trim() };
   $('obSubmit').disabled = true;
   try {
     const r = await postJSON('/api/profile', body);

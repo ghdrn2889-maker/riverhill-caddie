@@ -10,6 +10,7 @@ function memberFromEnv() {
   return {
     name: (process.env.MY_NAME || '김홍구').trim(),
     part: (process.env.MY_PART || '3').trim(),
+    commuteMin: Number(process.env.COMMUTE_MIN ?? 60),
   };
 }
 
@@ -41,22 +42,24 @@ export function cheapRelevance(text, member = memberFromEnv()) {
   return 'unknown';
 }
 
-// ── 티오프(HH:MM) → 도착(−준비)·집출발(−이동) ─────────────
-export function commuteInfo(teeTime) {
+// ── 티오프(HH:MM) → 백대기(−50분 규정)·집출발(−출근시간) ─────────────
+//  백대기 = 티오프 − BACK_WAIT_MIN(골프장 규정 50분). 출발 = 백대기 − 회원 출근소요시간.
+//  출발~백대기 = 이동(운전), 백대기~티오프 = 도착 후 카트·물품 준비.
+export function commuteInfo(teeTime, commuteMin) {
   const m = String(teeTime || '').match(/(\d{1,2}):(\d{2})/);
   if (!m) return null;
-  const prep = Number(process.env.PREP_MIN ?? 60);
-  const commute = Number(process.env.COMMUTE_MIN ?? 60);
+  const backWait = Number(process.env.BACK_WAIT_MIN ?? 50);
+  const commute = Number.isFinite(Number(commuteMin)) ? Number(commuteMin) : Number(process.env.COMMUTE_MIN ?? 60);
   const tot = Number(m[1]) * 60 + Number(m[2]);
   const fmt = (x) => { const v = ((x % 1440) + 1440) % 1440; return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`; };
-  return { tee: fmt(tot), arrive: fmt(tot - prep), leave: fmt(tot - prep - commute) };
+  return { tee: fmt(tot), standby: fmt(tot - backWait), leave: fmt(tot - backWait - commute), backWaitMin: backWait, commuteMin: commute };
 }
 
-function commuteLine(teeTime, course) {
-  const c = commuteInfo(teeTime);
+function commuteLine(teeTime, course, commuteMin) {
+  const c = commuteInfo(teeTime, commuteMin);
   if (!c) return '';
   const crs = course ? ` (${String(course).toUpperCase()}코스)` : '';
-  return `\n⛳ 티오프 ${c.tee}${crs} · ${c.arrive} 도착 · 집에서 ${c.leave} 출발`;
+  return `\n⛳ 티오프 ${c.tee}${crs} · 백대기 ${c.standby} · 집에서 ${c.leave} 출발`;
 }
 
 // ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
@@ -238,7 +241,7 @@ export function decide(article, verdict, member = memberFromEnv()) {
   if (tee) {
     // 티오프 배정 = 근무 확정. 산수(남은인원) 무시, 출근/출발 안내.
     status = status === 'your_turn' ? 'your_turn' : (status === 'work' ? 'work' : 'assigned');
-    body = `${name}님, 오늘 근무 배정됐어요!${commuteLine(tee, verdict.course)}`;
+    body = `${name}님, 오늘 근무 배정됐어요!${commuteLine(tee, verdict.course, member.commuteMin)}`;
   } else if (status === 'waiting' || status === 'near' || status === 'spare') {
     const mp = Number(verdict.myPosition), cp = Number(verdict.cutoffPosition);
     // 남은 인원은 '○○까지'가 텍스트에 명시됐을 때만 계산(지어낸 커트라인 방지).
