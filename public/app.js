@@ -631,6 +631,7 @@ function openOnboarding() {
   $('obSubmit').textContent = '가입 완료';
   fillProfileForm();
   $('ovActions').hidden = true;      // 신규 가입은 닫기 불가
+  $('obSwitch').hidden = true;       // 가입 화면에선 계정전환 숨김
   $('ovErr').textContent = '';
   $('ov').hidden = false;
 }
@@ -642,6 +643,7 @@ function openAccount() {
   $('obSubmit').textContent = '저장';
   fillProfileForm();
   $('ovActions').hidden = false;
+  $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
   $('ovErr').textContent = '';
   $('ov').hidden = false;
 }

@@ -15,8 +15,8 @@ import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers, deleteTestUsers } from './users.mjs';
-import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, devLogin, soloMode, authConfigured } from './auth.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers } from './users.mjs';
+import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -37,13 +37,6 @@ app.use(express.static(path.join(ROOT_DIR, 'public')));
 app.get('/api/auth/naver', beginNaverLogin);
 app.get('/api/auth/naver/callback', naverCallback);
 app.post('/api/logout', logout);
-// ★1인 2역 테스트(숨김·비밀키 DEV_LOGIN_KEY). UI 미노출 — 김홍구님이 URL로만 임시 회원 생성/정리.
-app.get('/api/dev/login', devLogin);
-app.get('/api/dev/reset', (req, res) => {
-  if (!process.env.DEV_LOGIN_KEY || req.query.key !== process.env.DEV_LOGIN_KEY) return res.status(404).send('Not found');
-  const n = deleteTestUsers();
-  res.json({ ok: true, deleted: n });
-});
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
   const base = { ok: true, solo: soloMode(), naverEnabled: authConfigured() };
@@ -69,7 +62,7 @@ app.post('/api/profile', requireAuth, (req, res) => {
 //  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
 //  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
-const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout', '/dev'];
+const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();

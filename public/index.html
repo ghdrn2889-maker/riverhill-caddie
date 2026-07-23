@@ -285,8 +285,8 @@
     .ov-actions { display:flex; gap:8px; margin-top:10px; }
     .ov-ghost { flex:1; background:#eef1ec; color:#647168; border:0; border-radius:11px; padding:11px;
       font-size:12.5px; font-weight:800; cursor:pointer; }
-    .ov-test { width:100%; margin-top:14px; background:#fdf4e0; color:#8a5e18; border:1px dashed #eaddba;
-      border-radius:11px; padding:11px; font-size:11.5px; font-weight:800; cursor:pointer; }
+    .ov-switch { display:inline-block; margin-top:13px; color:#647168; font-size:12.5px; font-weight:700;
+      text-decoration:underline; cursor:pointer; background:none; border:0; }
     .ov-submit.naver { display:block; text-decoration:none; text-align:center; background:#03C75A;
       box-shadow:0 5px 14px rgba(3,199,90,.28); }
   </style>
@@ -319,6 +319,7 @@
         <button class="ov-ghost" id="obLogout">로그아웃</button>
         <button class="ov-ghost" id="obClose">닫기</button>
       </div>
+      <a class="ov-switch" id="obSwitch" href="/api/auth/naver?switch=1" hidden>다른 계정으로 로그인</a>
     </div>
   </div>
 
@@ -330,6 +331,7 @@
       <p class="ov-desc" style="text-align:center;">근무·스페어 알림을 받으려면 로그인하세요.</p>
       <a class="ov-submit naver" id="naverLoginBtn" href="/api/auth/naver">네이버로 로그인</a>
       <div class="ov-err" id="loginErr" style="text-align:center;"></div>
+      <a class="ov-switch" id="naverSwitchBtn" href="/api/auth/naver?switch=1">다른 네이버 계정으로 로그인</a>
     </div>
   </div>
 
