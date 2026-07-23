@@ -185,10 +185,10 @@ function golfBagSVG() {
 // 집 SVG — 출발 전(집에 있음) 상태 아이콘. 초록 지붕·크림 벽·문·창·굴뚝.
 function homeSVG() {
   return `<svg class="homesvg" viewBox="0 0 28 26" width="22" height="20" aria-hidden="true">
-    <rect x="19.4" y="5" width="2.4" height="5.6" fill="#21543b"/>
-    <path d="M2 13.2 L14 3.4 L26 13.2 Z" fill="#2e7149"/>
-    <rect x="6" y="12.6" width="16" height="11.4" rx="1.3" fill="#ece6d8"/>
-    <rect x="7.8" y="15" width="3.8" height="3.8" rx=".5" fill="#bcd6e0"/>
+    <rect x="19.4" y="5" width="2.4" height="5.6" fill="#7a4a3a"/>
+    <path d="M1.6 13.4 L14 3 L26.4 13.4 Z" fill="#c0392b" stroke="#96271d" stroke-width=".6" stroke-linejoin="round"/>
+    <rect x="6" y="12.6" width="16" height="11.4" rx="1.3" fill="#f4ecda" stroke="#b79b6e" stroke-width=".9"/>
+    <rect x="7.8" y="15" width="3.8" height="3.8" rx=".5" fill="#bcd6e0" stroke="#9fb9c4" stroke-width=".4"/>
     <rect x="12.6" y="16.6" width="5.2" height="7.4" rx=".8" fill="#8a5a2b"/>
     <circle cx="16.6" cy="20.3" r=".65" fill="#e8c877"/>
   </svg>`;
