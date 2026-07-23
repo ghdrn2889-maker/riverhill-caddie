@@ -148,3 +148,15 @@ export function logout(req, res) {
   res.json({ ok: true });
 }
 
+// ★1인 2역 테스트용(숨김·비밀키). UI엔 절대 노출 안 함 — 김홍구님이 비밀 URL로만 임시 회원 생성.
+//  공개 저장소라 경로(/api/dev/login)는 알려져 있으므로 DEV_LOGIN_KEY 일치가 유일한 관문.
+//  키 미설정이면 404(기능 자체가 꺼짐). 생성 회원은 role='test' 표식 → /api/dev/reset 로 일괄 정리.
+export function devLogin(req, res) {
+  const key = process.env.DEV_LOGIN_KEY;
+  if (!key || req.query.key !== key) return res.status(404).send('Not found');
+  const u = createUser({ role: 'test' }); // 빈 프로필 새 회원 → board_name 비어있어 온보딩으로 유도
+  const tok = createSession(u.id, req.headers['user-agent'] || '');
+  setSessionCookie(req, res, tok);
+  res.redirect('/');
+}
+

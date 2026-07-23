@@ -1,7 +1,8 @@
 // 회원·프로필·세션 로직. (판독/기능은 아직 1번 회원 기준으로 동작 — 이관은 단계적)
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { db, run, get, all } from './db.mjs';
-import { loadJSON } from './store.mjs';
+import { loadJSON, userDataDir } from './store.mjs';
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 90);
 
@@ -119,6 +120,15 @@ export function activeMembers() {
               FROM users u JOIN profiles p ON p.user_id = u.id
               WHERE u.status = 'active' AND p.board_name != ''
               ORDER BY u.id`);
+}
+
+// 테스트 회원(role='test') 일괄 삭제 + 그들의 데이터 폴더 정리. (1번 회원은 role='admin'이라 안전)
+//  FK가 ON DELETE CASCADE라 profiles/sessions/push_subscriptions 는 users 삭제 시 자동 정리.
+export function deleteTestUsers() {
+  const tests = all("SELECT id FROM users WHERE role = 'test'");
+  for (const t of tests) { try { fs.rmSync(userDataDir(t.id), { recursive: true, force: true }); } catch { /* 없으면 무시 */ } }
+  run("DELETE FROM users WHERE role = 'test'");
+  return tests.length;
 }
 
 export function ensureDb() { db(); } // 부팅 시 스키마 생성 트리거
