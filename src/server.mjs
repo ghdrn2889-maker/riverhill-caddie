@@ -582,16 +582,19 @@ async function processForMember(userId, member, out, full, opts = {}) {
       title = '⚠️ 변경됐어요!';
       body = `${change.message}\n${out.body}`;
       out.push = 'high';
-    } else if (out.push !== 'check' && Number(v.teamCount) > 0) {
-      // ★'check'(판독 불확실/저확신)는 여기서 건드리지 않는다 — 그대로 '확인 필요' 알림을 보내야 함.
-      //  (불확실 판독은 순번도 흔들려서 '내 앞 N명' 계산이 틀릴 수 있으니, 이 분기로 알림을 죽이지 않는다.)
+    } else if (!v._uncertain && Number(v.teamCount) > 0) {
+      // ★판독 불확실(_uncertain)일 때만 이 분기를 건너뛴다(그땐 순번이 흔들려 '내 앞 N명'이 부정확 →
+      //  '확인 필요' 알림을 그대로 보냄). 그 외엔 '확정선 전진'을 스페어 회원에게 반드시 알린다.
       const myp = Number(merged.next.myPosition) || 0;
       const tc = Number(v.teamCount);
       if (myp && myp > tc) {
         const ahead = Math.max(0, myp - tc - 1);
         title = `🏌️ ${member.part}부 대기 현황`;
         body = `현재 ${merged.next.part || `${member.part}부`} ${tc}팀 · 내 순번 ${myp}번 — 내 앞 ${ahead}명 남았어요.`;
-        out.push = ahead <= 2 ? 'check' : 'low';
+        // 확정선이 전진하면(팀 추가) 스페어 회원에게 알림. 너무 멀 때(WATCH 초과)만 피드로.
+        //  같은 팀수 반복은 중복차단(sig에 cutLine 포함)이 걸러줌 → 전진 1회당 알림 1회.
+        const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
+        out.push = ahead === 0 ? 'high' : (ahead <= WATCH ? 'check' : 'low');
       }
     }
   }

@@ -332,6 +332,19 @@ export function extractTeamCount(text, member = memberFromEnv()) {
   return (n >= 1 && n <= 40) ? n : null;
 }
 
+// 부(部) 표기 없이 순수 'N팀'만 올라오는 실시간 확정팀수 — 3부 단톡/번호표 관례(정용만님이 '15팀','14팀'처럼 올림).
+//  ★오검출 방지: (1)3부 문맥일 때만 (2)다른 부(1·2·4~9부) 언급 없을 때만 (3)제목이 'N팀…'으로 시작할 때만.
+//  이 3중 가드로 '실시간 확정선' 메시지만 정확히 집는다(긴 잡담 속 'N팀'은 제외).
+export function extractBareTeamCount(subject, text, member = memberFromEnv()) {
+  if (String(member.part) !== '3') return null;              // 지금은 3부 문맥만(다부 일반화는 나중)
+  const s = String(subject || '');
+  if (/[124-9]\s*부/.test(`${s} ${text || ''}`)) return null; // 다른 부 언급 → 모호 → 포기(안전)
+  const m = s.match(/^\s*(\d{1,2})\s*팀/);                    // 제목이 'N팀'으로 시작(확정팀수 관례)
+  if (!m) return null;
+  const n = Number(m[1]);
+  return (n >= 1 && n <= 40) ? n : null;
+}
+
 function gridLooksRownumbered(grid) {
   if (!Array.isArray(grid) || grid.length < 4) return false;
   const pos = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
@@ -555,9 +568,12 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       && today.date && verdict.dateLabel && today.date === verdict.dateLabel) {
     verdict.myPosition = today.myPosition; // 잠긴 순번 보완(0·실패값이면 오늘 순번으로)
   }
-  // ★"현재 3부 N팀" 팀 수 보정: Gemini가 놓쳤으면 정규식으로 추출(내 부 한정). = 실시간 확정선.
+  // ★"현재 3부 N팀" 팀 수 보정: Gemini가 놓쳤으면 코드가 추출(내 부 한정). = 실시간 확정선.
+  //  1) 부 표기 있는 'N부 N팀'(엄격) → 2) 없으면 3부 문맥의 순수 'N팀'(정용만님 실시간 관례) 보정.
   if (verdict && !(Number(verdict.teamCount) > 0)) {
-    const tc = extractTeamCount(`${article.subject || ''}\n${article.contentText || article.content || ''}`, member);
+    const blob = `${article.subject || ''}\n${article.text || article.contentText || article.content || ''}`;
+    let tc = extractTeamCount(blob, member);
+    if (!tc) tc = extractBareTeamCount(article.subject, article.text || article.contentText || article.content, member);
     if (tc) { verdict.teamCount = tc; if (!verdict.relevant) verdict.relevant = true; }
   }
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
