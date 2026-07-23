@@ -528,6 +528,22 @@ function saveBaselineFromVerdict(full, v) {
 // → 번복 감지 + 확신도 라우팅으로 푸시.  push: 'high' | 'check' | 'low'
 const envMember = () => ({ name: (process.env.MY_NAME || '김홍구').trim(), part: (process.env.MY_PART || '3').trim() });
 
+// ── 배치표 '조용한 수정'(같은 글의 이미지만 교체) 감지 ─────────────────
+//  네이버는 글을 수정해도 목록 맨 위로 올리지 않아, 새 글만 보는 크롤러는 못 본다.
+//  → 현재 배치표 글을 주기적으로 다시 읽어, 첨부 이미지가 바뀌면 재판독.
+//    회원 본인의 티오프가 바뀌었으면 ⚠️ 강한 알림(변경됐어요!)이 그대로 나간다.
+//    (이미지가 그대로면 Gemini를 호출하지 않으므로 비용 낭비 없음)
+const BOARD_WATCH_FILE = 'boardwatch.json';
+let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at }
+const imgFingerprint = (full) => (full.images || []).map((u) => String(u).split('?')[0]).join('|');
+function rememberBoard(full, out) {
+  const v = out && out.rawVerdict;
+  const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
+  if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
+  boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
+  saveJSON(BOARD_WATCH_FILE, boardWatch);
+}
+
 // 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
 async function notifyForArticle(full, result = {}, opts = {}) {
   const primary = envMember(); // 1번 회원(김홍구)
@@ -554,6 +570,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
+  rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
 
@@ -738,3 +755,36 @@ startCrawler({
     });
   },
 });
+
+// ── 배치표 재확인 루프: 같은 글의 이미지 교체(=조용한 티오프 변경)를 잡는다 ──
+//  활성 시간대에 현재 배치표 글을 다시 읽어, 이미지가 바뀐 경우에만 재판독→강한 알림.
+const BOARD_RECHECK_MS = Number(process.env.BOARD_RECHECK_MS ?? 90000);
+let recheckBusy = false;
+async function recheckBoard() {
+  if (recheckBusy) return;                                 // 재판독이 아직 진행 중이면 이번 틱은 건너뜀
+  if (!boardWatch || !boardWatch.id) return;
+  const h = new Date().getHours();
+  const aStart = Number(process.env.ACTIVE_START_HOUR ?? 12);
+  const aEnd = Number(process.env.ACTIVE_END_HOUR ?? 24);
+  if (h < aStart || h >= aEnd) return;                     // 활성 시간대만
+  if (Date.now() - (boardWatch.at || 0) > 18 * 3600 * 1000) { // 하루 지난 배치표는 감시 해제
+    boardWatch = null; saveJSON(BOARD_WATCH_FILE, null); return;
+  }
+  let full;
+  try { full = await fetchArticle(boardWatch.id); }
+  catch (e) { console.error('배치표 재확인 조회 실패:', e.message); return; }
+  const fp = imgFingerprint(full);
+  if (fp === boardWatch.fp) return;                        // 이미지 그대로 → Gemini 미호출(무비용)
+  console.log(`🔁 배치표 이미지 교체 감지(같은 글 #${boardWatch.id}) → 재판독`);
+  boardWatch.fp = fp; boardWatch.at = Date.now();
+  saveJSON(BOARD_WATCH_FILE, boardWatch);
+  recheckBusy = true;
+  try {
+    full.writer = full.writer || '';
+    // 변동 시에만 회원별 재판독 → 본인 티오프가 바뀌었으면 ⚠️ 강한 알림. (안 바뀐 회원은 dedup이 차단)
+    await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
+  } catch (e) { console.error('배치표 재판독 오류:', e.message); }
+  finally { recheckBusy = false; }
+}
+setInterval(() => { recheckBoard().catch(() => {}); }, BOARD_RECHECK_MS);
+console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 이미지 변경 시에만 재판독)`);
