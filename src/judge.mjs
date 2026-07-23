@@ -263,7 +263,8 @@ export function decide(article, verdict, member = memberFromEnv()) {
 
   // 확신도 낮거나 교차검증 불일치면 '확인필요'로 낮춤(틀린 단정 방지, 그래도 알림은 감).
   let push = (Number(verdict.confidence) || 0) < 0.4 ? 'check' : 'high';
-  if (verdict._uncertain) { push = 'check'; body = `⚠️ 판독이 불확실합니다 — 원문을 꼭 확인하세요.\n${body}`; }
+  // ★불확실이면 '구체적인 이유'를 그대로 보여준다(막연한 "판독 불확실"보다 불안이 덜하고 행동이 명확).
+  if (verdict._uncertain) { push = 'check'; body = `⚠️ ${verdict._uncertain}\n${body}`; }
   const title = push === 'check' ? '🏌️ 3부 소식 — 확인' : titleFor(status);
   return { relevant: true, push, status, verdict, title, body };
 }
@@ -452,12 +453,28 @@ export function consensusFromReads(reads) {
   if (rs.length === 1) return rs[0]; // 1회만 성공 → 표결 불가, 단일 판독 그대로
   const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
 
-  // 순번(다수결) → 그 순번 기준 티오프(다수결) → 명단(교차확인) → 색(다수결)
-  const posVotes = rs.map(posOf).filter(Boolean);
+  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
+  // ★각 읽기의 '결론'을 뽑는다 — 판단의 핵심은 순번 '숫자'가 아니라 "일하나/스페어냐, 근무면 몇 시냐".
+  //  순번이 판독마다 조금 흔들려도 결론(스페어)이 같으면 확실한 것 → 불필요한 '불확실' 경보를 없앤다.
+  const concl = rs.map((r) => {
+    const c = { ...r };
+    resolveTeeByGrid(c);                     // 각 읽기를 자기 순번 기준으로 해석
+    const tee = (String(c.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
+    const th = tee ? Number(tee.split(':')[0]) : null;
+    const teeOk = !!tee && th != null && th >= TEE_MIN;
+    const working = teeOk || ['work', 'assigned', 'your_turn'].includes(c.myStatus);
+    const color = String(c.myCellColor || '').toLowerCase();
+    const spare = !working && (['spare', 'waiting'].includes(c.myStatus) || /gray|회색/.test(color));
+    return { working, spare, tee: teeOk ? tee : '', pos: posOf(r) };
+  });
+  const workVotes = concl.filter((c) => c.working).length;
+  const spareVotes = concl.filter((c) => c.spare).length;
+  const majority = Math.floor(rs.length / 2) + 1;
+
+  // 순번(다수결) — 표시·'내 앞 N명' 계산용. ★불확실 판정 근거로는 쓰지 않는다.
+  const posVotes = concl.map((c) => c.pos).filter(Boolean);
   const posMode = modeOf(posVotes);
   const pos = posMode.value || posOf(rs[0]);
-  const teeVotes = rs.map((r) => teeForPosition(r, pos)).filter(Boolean);
-  const teeMode = teeVotes.length ? modeOf(teeVotes) : { value: '', count: 0 };
   const roster = pickRoster(rs);
 
   // 합의 verdict: 채택 순번과 가장 잘 맞는 읽기를 뼈대로, 표결값을 덮어쓴다.
@@ -472,17 +489,25 @@ export function consensusFromReads(reads) {
   const withTeam = rs.find((r) => Number(r?.teamCount) > 0);
   if (withTeam) v.teamCount = withTeam.teamCount;
 
-  // ── 불확실 판정 ── 순번·티오프가 과반 합의에 못 미치면 정직하게 '확인 필요'로.
-  const majority = Math.floor(rs.length / 2) + 1;
-  const posAgree = !!pos && posMode.count >= majority;
-  const anyTee = teeVotes.length > 0;
-  const teeAgree = teeMode.count >= majority;
-  if (!posAgree) {
-    v._uncertain = `순번 판독이 갈립니다(${posVotes.join('/') || '읽기 실패'}) — 배치표에서 직접 확인하세요`;
-  } else if (anyTee && !teeAgree) {
-    v._uncertain = `티오프 판독이 갈립니다(${teeVotes.join('/')}) — 시각을 직접 확인하세요`;
+  resolveTeeByGrid(v);       // 합의 순번으로 티오프표 최종 해석
+  delete v._uncertain;       // 구조적 잡음 초기화 — 아래에서 '결론' 기준으로만 다시 판정
+  v._resolved = true;        // judge()가 다시 resolveTeeByGrid 하지 않도록 표식
+
+  // ── 불확실 판정(결론 기준) ── 결정적인 건 '근무/스페어'와 '티오프 시각'뿐.
+  if (workVotes >= majority) {
+    // 다수가 '근무'. 티오프 시각이 갈리면(위험) 확인 필요, 아니면 확정.
+    if (!v.teeTime && !['work', 'assigned', 'your_turn'].includes(v.myStatus)) v.myStatus = 'work';
+    const teeVotes = concl.filter((c) => c.tee).map((c) => c.tee);
+    const teeMode = teeVotes.length ? modeOf(teeVotes) : { value: '', count: 0 };
+    if (teeVotes.length && teeMode.count < Math.floor(workVotes / 2) + 1) {
+      v._uncertain = `티오프 시각이 판독마다 달라요(${[...new Set(teeVotes)].join('/')}) — 배치표에서 시각을 확인하세요`;
+    }
+  } else if (spareVotes >= majority) {
+    // 다수가 '스페어' → 확정 스페어. 순번 숫자가 흔들려도 결론은 확실 → '불확실' 표시 안 함.
+    v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
   } else {
-    delete v._uncertain; // 과반 합의 → 확신(구조적 불확실은 이후 resolveTeeByGrid가 다시 검사)
+    // 근무/스페어가 갈리거나(결정적 충돌) 읽기 대부분이 부실 → 이때만 정직하게 확인 필요.
+    v._uncertain = '근무인지 스페어인지 판독이 갈려요 — 배치표를 직접 확인하세요';
   }
   v._reads = rs.length;
   return v;
@@ -514,7 +539,9 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   let verdict = isBoard
     ? await readBoardConsensus(article, member)
     : await callGeminiJSON(buildPrompt(article, member), img, null);
-  resolveTeeByGrid(verdict); // 코드가 순번→티오프 확정(눈대중 오독 차단) + 구조적 불확실(행번호매기기·컷밖) 재검사
+  // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
+  //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
+  if (!verdict?._resolved) resolveTeeByGrid(verdict);
   // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
   if (verdict) {
     const th = (String(verdict.teeTime || '').match(/(\d{1,2}):/) || [])[1];
