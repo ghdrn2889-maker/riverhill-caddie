@@ -188,54 +188,69 @@ function renderBoard(t) {
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const c = t.commute;
 
-  if (isWork && c && toMin(c.leave) != null && toMin(c.standby) != null && toMin(c.tee) != null) {
+  if (isWork && c && toMin(c.leave) != null && toMin(c.arrive) != null && toMin(c.standby) != null && toMin(c.tee) != null) {
     // 초 단위까지 반영해 실시간으로 게이지·아이콘이 함께 채워지며 이동하도록.
     const d = new Date();
     const nowS = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
-    const L = toMin(c.leave) * 60, S = toMin(c.standby) * 60, T = toMin(c.tee) * 60;
+    const L = toMin(c.leave) * 60;    // 출발(집)
+    const A = toMin(c.arrive) * 60;   // 도착(백대기 10분 전)
+    const B = toMin(c.standby) * 60;  // 백대기(티오프 50분 전)
+    const T = toMin(c.tee) * 60;      // 티오프
     const nowMinNow = Math.floor(nowS / 60);
     const off = Number(t.dayOffset) || 0;
     const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
-    // 4단계: 0 출발 전 / 1 이동 중(집→백대기) / 2 백대기·준비(백대기→티오프) / 3 근무 중
-    //  ★미래 근무일(off>=1, 저녁에 뜬 내일 배치표 등)은 타임라인이 아직 시작 전 → '출발 전' 고정(게이지 0).
-    let phase, big, cap, pct, targetPct, targetS;
-    if (off >= 1)      { phase = 0; big = c.leave;   cap = `${dayW} ${c.leave} 출발`;                        pct = 0;  targetPct = 0;   targetS = L; }
-    else if (nowS < L) { phase = 0; big = c.leave;   cap = `출발까지 ${gap(Math.round((L - nowS) / 60))}`;   pct = 0;  targetPct = 0;   targetS = L; }
-    else if (nowS < S) { phase = 1; big = c.standby; cap = `백대기까지 ${gap(Math.round((S - nowS) / 60))}`; pct = 50 * (nowS - L) / Math.max(1, S - L); targetPct = 50;  targetS = S; }
-    else if (nowS < T) { phase = 2; big = c.tee;     cap = `티오프까지 ${gap(Math.round((T - nowS) / 60))}`; pct = 50 + 50 * (nowS - S) / Math.max(1, T - S); targetPct = 100; targetS = T; }
-    else               { phase = 3; big = c.tee;     cap = '근무 중';                   pct = 100; targetPct = 100; targetS = T; }
+    // 5단계: 0 출발전 / 1 이동중(집→도착) / 2 도착(백대기 대기 10분) / 3 백대기중(→티오프) / 4 근무중
+    //  ★가운데 지점은 '도착'(도착 전) ↔ '백대기'(도착 이후)로 라벨·시각이 전환된다.
+    //  ★미래 근무일(off>=1)은 아직 시작 전 → '출발 전' 고정(게이지 0).
+    let phase;
+    if (off >= 1)      phase = 0;
+    else if (nowS < L) phase = 0;
+    else if (nowS < A) phase = 1;
+    else if (nowS < B) phase = 2;
+    else if (nowS < T) phase = 3;
+    else               phase = 4;
+    // 가운데 지점 morph: 도착 전이면 '도착'(=출근시각), 도착 이후면 '백대기'
+    const midLabel = phase <= 1 ? '도착' : '백대기';
+    const midTime  = phase <= 1 ? c.arrive : c.standby;
+    // 게이지·타깃(초 단위 실시간 이동). animate=true인 구간만 실시간 채움.
+    let big, cap, pct, targetPct, targetS, animate;
+    if (phase === 0)      { big = c.leave;   cap = off >= 1 ? `${dayW} ${c.leave} 출발` : `출발까지 ${gap(Math.round((L - nowS) / 60))}`; pct = 0;  targetPct = 0;   targetS = L; animate = false; }
+    else if (phase === 1) { big = c.arrive;  cap = `도착까지 ${gap(Math.round((A - nowS) / 60))}`;   pct = 50 * (nowS - L) / Math.max(1, A - L); targetPct = 50;  targetS = A; animate = true; }
+    else if (phase === 2) { big = c.standby; cap = `백대기까지 ${gap(Math.round((B - nowS) / 60))}`; pct = 50;                                   targetPct = 50;  targetS = B; animate = false; }
+    else if (phase === 3) { big = c.tee;     cap = `티오프까지 ${gap(Math.round((T - nowS) / 60))}`; pct = 50 + 50 * (nowS - B) / Math.max(1, T - B); targetPct = 100; targetS = T; animate = true; }
+    else                  { big = c.tee;     cap = '근무 중';                                        pct = 100; targetPct = 100; targetS = T; animate = false; }
     pct = Math.max(0, Math.min(100, pct));
-    const act = off >= 1 ? `${dayW} 출발 준비` : ['집에서 출발 준비', '백대기로 이동 중', '도착 · 티오프 준비', '근무 중'][phase];
+    const act = off >= 1 ? `${dayW} 출발 준비`
+      : ['집에서 출발 준비', '골프장으로 이동 중', '도착 · 백대기 대기', '백대기 · 티오프 준비', '근무 중'][phase];
     const crs = s.course ? ` ${esc(s.course)}` : '';
-    // 지점 상태(done=지남, next=다음 목표·글로우)
+    // 지점 상태(done=지남·노랑, next=다음 목표·글로우)
     const pStart = phase === 0 ? 'next' : 'done';
-    const pMid   = phase === 1 ? 'next' : (phase >= 2 ? 'done' : '');
-    const pEnd   = phase === 2 ? 'next' : (phase >= 3 ? 'done' : '');
-    // 🚗 이동(출발~백대기)만 표시. ⛳ 준비는 백대기 단계(phase 2)에만 — 이동 중엔 아예 없음.
-    const carPos = phase === 0 ? 0 : pct;
-    const carHtml = phase <= 1 ? `<span class="ricon car" style="left:${carPos}%">${carSVG(phase === 1)}</span>` : '';
-    const prepHtml = phase === 2 ? `<span class="ricon prep" style="left:${pct}%">${golfBagSVG()}</span>` : '';
-    // 티오프 이후(근무 중): 골프채 휘두르는 골퍼가 티오프 지점 위에 상주(모션 없음).
-    const flagHtml = phase === 3 ? `<span class="ricon golfer" style="left:100%">🏌️</span>` : '';
-    const filling = (phase === 1 || phase === 2) ? ' filling' : '';
+    const pMid   = (phase === 1 || phase === 2) ? 'next' : (phase >= 3 ? 'done' : '');
+    const pEnd   = phase === 3 ? 'next' : (phase >= 4 ? 'done' : '');
+    // 🚗 이동(0·1) / 골프백 백대기(2·3) / 🏌️ 근무중(4)
+    const carHtml = phase <= 1 ? `<span class="ricon car" style="left:${phase === 0 ? 0 : pct}%">${carSVG(phase === 1)}</span>` : '';
+    const bagHtml = (phase === 2 || phase === 3) ? `<span class="ricon prep" style="left:${phase === 2 ? 50 : pct}%">${golfBagSVG()}</span>` : '';
+    const golferHtml = phase === 4 ? `<span class="ricon golfer" style="left:100%">🏌️</span>` : '';
+    const filling = animate ? ' filling' : '';
     const alert = phase === 0 ? [`${off >= 1 ? dayW + ' ' : ''}${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, off >= 1 ? '출발 전' : '10분 전']
-      : phase === 1 ? [`곧 백대기 시간(${c.standby})이에요`, '이동 중']
-      : phase === 2 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
+      : phase === 1 ? [`곧 골프장 도착 예정(${c.arrive})`, '이동 중']
+      : phase === 2 ? [`백대기 시간(${c.standby})까지 잠시 대기`, '도착']
+      : phase === 3 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
       : ['좋은 라운드 되세요!', '근무 중'];
     slot.innerHTML = `<div class="actionboard">
       <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(nowMinNow)}</span></div>
       <div class="nextline"><strong>${esc(big)}</strong><span>${cap}</span></div>
       <div class="rail2">
         <i class="track"></i><i class="fill${filling}" style="width:${pct}%"></i>
-        ${prepHtml}${carHtml}${flagHtml}
+        ${bagHtml}${carHtml}${golferHtml}
         <i class="rp ${pStart}" style="left:0"></i>
         <i class="rp ${pMid}" style="left:50%"></i>
         <i class="rp ${pEnd}" style="left:100%"></i>
       </div>
       <div class="railtext3">
         <div class="rt l ${phase >= 1 ? 'done' : (phase === 0 ? 'next' : '')}"><b>출발</b><time>${esc(c.leave)}</time></div>
-        <div class="rt c ${phase >= 2 ? 'done' : (phase === 1 ? 'next' : '')}"><b>백대기</b><time>${esc(c.standby)}</time></div>
-        <div class="rt r ${phase >= 3 ? 'done' : (phase === 2 ? 'next' : '')}"><b>티오프</b><time>${esc(c.tee)}</time></div>
+        <div class="rt c ${phase >= 3 ? 'done' : ((phase === 1 || phase === 2) ? 'next' : '')}"><b>${midLabel}</b><time>${esc(midTime)}</time></div>
+        <div class="rt r ${phase >= 4 ? 'done' : (phase === 3 ? 'next' : '')}"><b>티오프</b><time>${esc(c.tee)}</time></div>
       </div>
       <div class="alert"><span>${alert[0]}</span><b>${alert[1]}</b></div>
       <div class="minirow">
@@ -244,7 +259,7 @@ function renderBoard(t) {
       </div>
     </div>`;
     // ★실시간 진행: 현재 위치에서 다음 지점까지 남은 시간 동안 게이지·아이콘을 선형으로 이동.
-    if (phase === 1 || phase === 2) {
+    if (animate) {
       const remMs = Math.max(0, (targetS - nowS) * 1000);
       const fillEl = slot.querySelector('.fill');
       const iconEl = slot.querySelector(phase === 1 ? '.ricon.car' : '.ricon.prep');

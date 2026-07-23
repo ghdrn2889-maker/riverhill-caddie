@@ -35,7 +35,7 @@
 | `off` | 휴무 | 조용한 톤 |
 | `unknown` / (empty) | 미상 | 히어로 숨김/안내 |
 
-**commute 계산:** 백대기 = 티오프 − BACK_WAIT_MIN(골프장 규정 기본50), 집출발 = 백대기 − 회원 출근소요시간(profiles.commute_min, 가입 시 입력·기본60). 반환 `{ tee, standby, leave, backWaitMin, commuteMin }`. 대시보드 레일: 출발 → 백대기(🚗 이동) → 티오프(⛳ 준비). "설정한 이동시간 기준"임을 표기(실시간 교통 아님).
+**commute 계산:** 백대기 = 티오프 − BACK_WAIT_MIN(규정 기본50), 도착(출근) = 백대기 − ARRIVE_BEFORE_MIN(기본10) = 티오프−60, 집출발 = 도착 − 회원 출근소요시간(profiles.commute_min, 가입 시 입력·기본60). 반환 `{ tee, standby, arrive, leave, backWaitMin, arriveBeforeMin, commuteMin }`. 대시보드 레일(5단계): 출발 → [도착↔백대기 morph] → 티오프. 이동=🚗, 백대기=골프백, 근무중=🏌️. 지난 지점=노랑. "설정한 이동시간 기준"(실시간 교통 아님).
 
 ### `GET /api/health` — 감시(서버) 상태
 ```jsonc
