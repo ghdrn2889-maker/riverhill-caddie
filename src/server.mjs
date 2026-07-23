@@ -582,7 +582,9 @@ async function processForMember(userId, member, out, full, opts = {}) {
       title = '⚠️ 변경됐어요!';
       body = `${change.message}\n${out.body}`;
       out.push = 'high';
-    } else if (Number(v.teamCount) > 0) {
+    } else if (out.push !== 'check' && Number(v.teamCount) > 0) {
+      // ★'check'(판독 불확실/저확신)는 여기서 건드리지 않는다 — 그대로 '확인 필요' 알림을 보내야 함.
+      //  (불확실 판독은 순번도 흔들려서 '내 앞 N명' 계산이 틀릴 수 있으니, 이 분기로 알림을 죽이지 않는다.)
       const myp = Number(merged.next.myPosition) || 0;
       const tc = Number(v.teamCount);
       if (myp && myp > tc) {
