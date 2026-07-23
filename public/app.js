@@ -143,6 +143,23 @@ function renderToday(t) {
     : '아직 오늘 상황이 확정되지 않았어요.';
   renderBoard(t);
 }
+// 오른쪽(백대기 방향)을 향한 자동차 SVG. driving=true면 바퀴 회전·배기 연기·바람 라인 모션.
+function carSVG(driving) {
+  const spin = driving ? '<animateTransform attributeName="transform" attributeType="XML" type="rotate" from="0 0 0" to="360 0 0" dur="0.55s" repeatCount="indefinite"/>' : '';
+  const wheel = (cx) => `<g transform="translate(${cx} 17.9)"><circle r="3.3" fill="#242a26"/><circle r="1.2" fill="#93998f"/><g stroke="#c9cec7" stroke-width=".7">${spin}<line x1="-2.9" x2="2.9"/><line y1="-2.9" y2="2.9"/><line x1="-2" y1="-2" x2="2" y2="2"/><line x1="-2" y1="2" x2="2" y2="-2"/></g></g>`;
+  const puff = (begin) => `<circle cx="7" cy="16.5" r="1"><animate attributeName="opacity" values="0;.6;0" dur="1.3s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="cy" values="16.5;11" dur="1.3s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="cx" values="7;2" dur="1.3s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="r" values=".7;2.3" dur="1.3s" begin="${begin}" repeatCount="indefinite"/></circle>`;
+  const line = (y, begin) => `<line x1="2" y1="${y}" x2="6" y2="${y}"><animate attributeName="opacity" values=".7;0" dur="0.6s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="x1" values="6;-1" dur="0.6s" begin="${begin}" repeatCount="indefinite"/><animate attributeName="x2" values="10;3" dur="0.6s" begin="${begin}" repeatCount="indefinite"/></line>`;
+  const smoke = driving ? `<g fill="#aeb9b0">${puff('0s')}${puff('0.65s')}</g>` : '';
+  const speed = driving ? `<g stroke="#86b394" stroke-width="1.2" stroke-linecap="round">${line(8, '0s')}${line(12, '0.3s')}</g>` : '';
+  return `<svg class="carsvg${driving ? ' drv' : ''}" viewBox="0 0 44 24" width="30" height="16" aria-hidden="true">
+    ${speed}${smoke}
+    <path d="M6 16.4 L6 14.6 Q6 13.2 7.6 13.1 L12 12.9 Q14.6 9 19.4 8.9 L26.5 8.9 Q30.6 9.1 32.6 12.7 L36.2 13 Q38.8 13.3 38.8 15.2 L38.8 16.6 Q38.8 17.7 37.4 17.7 L7.4 17.7 Q6 17.7 6 16.4 Z" fill="#2e7149"/>
+    <path d="M14 12.6 Q15.9 9.9 19.5 9.8 L22.8 9.8 L22.8 12.6 Z M24.1 9.8 L26.2 9.9 Q29.2 10.1 30.8 12.6 L24.1 12.6 Z" fill="#d3ead9"/>
+    <circle cx="37.4" cy="15.5" r="1" fill="#ffe08a"/>
+    ${wheel(14.5)}${wheel(31)}
+  </svg>`;
+}
+
 function renderBoard(t) {
   const slot = $('boardSlot'); if (!slot) return;
   const s = t.state, st = s.status;
@@ -150,14 +167,17 @@ function renderBoard(t) {
   const c = t.commute;
 
   if (isWork && c && toMin(c.leave) != null && toMin(c.standby) != null && toMin(c.tee) != null) {
-    const now = nowMin();
-    const L = toMin(c.leave), S = toMin(c.standby), T = toMin(c.tee);
+    // 초 단위까지 반영해 실시간으로 게이지·아이콘이 함께 채워지며 이동하도록.
+    const d = new Date();
+    const nowS = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    const L = toMin(c.leave) * 60, S = toMin(c.standby) * 60, T = toMin(c.tee) * 60;
+    const nowMinNow = Math.floor(nowS / 60);
     // 4단계: 0 출발 전 / 1 이동 중(집→백대기) / 2 백대기·준비(백대기→티오프) / 3 근무 중
-    let phase, big, cap, pct;
-    if (now < L)      { phase = 0; big = c.leave;   cap = `출발까지 ${gap(L - now)}`;   pct = 0; }
-    else if (now < S) { phase = 1; big = c.standby; cap = `백대기까지 ${gap(S - now)}`; pct = 50 * (now - L) / Math.max(1, S - L); }
-    else if (now < T) { phase = 2; big = c.tee;     cap = `티오프까지 ${gap(T - now)}`; pct = 50 + 50 * (now - S) / Math.max(1, T - S); }
-    else              { phase = 3; big = c.tee;     cap = '근무 중';                   pct = 100; }
+    let phase, big, cap, pct, targetPct, targetS;
+    if (nowS < L)      { phase = 0; big = c.leave;   cap = `출발까지 ${gap(Math.round((L - nowS) / 60))}`;   pct = 0;  targetPct = 0;   targetS = L; }
+    else if (nowS < S) { phase = 1; big = c.standby; cap = `백대기까지 ${gap(Math.round((S - nowS) / 60))}`; pct = 50 * (nowS - L) / Math.max(1, S - L); targetPct = 50;  targetS = S; }
+    else if (nowS < T) { phase = 2; big = c.tee;     cap = `티오프까지 ${gap(Math.round((T - nowS) / 60))}`; pct = 50 + 50 * (nowS - S) / Math.max(1, T - S); targetPct = 100; targetS = T; }
+    else               { phase = 3; big = c.tee;     cap = '근무 중';                   pct = 100; targetPct = 100; targetS = T; }
     pct = Math.max(0, Math.min(100, pct));
     const act = ['집에서 출발 준비', '백대기로 이동 중', '도착 · 티오프 준비', '근무 중'][phase];
     const crs = s.course ? ` ${esc(s.course)}` : '';
@@ -165,21 +185,20 @@ function renderBoard(t) {
     const pStart = phase === 0 ? 'next' : 'done';
     const pMid   = phase === 1 ? 'next' : (phase >= 2 ? 'done' : '');
     const pEnd   = phase === 2 ? 'next' : (phase >= 3 ? 'done' : '');
-    // 🚗 이동(출발~백대기) / ⛳ 준비(백대기~티오프)
-    const carPos = phase === 0 ? 0 : (phase === 1 ? pct : 50);
-    const carHtml = phase <= 1
-      ? `<span class="ricon car ${phase === 1 ? 'active moving' : ''}" style="left:${carPos}%">${phase === 1 ? '<span class="halo"></span>' : ''}🚗</span>` : '';
-    const prepPos = phase === 2 ? pct : 75;
-    const prepHtml = `<span class="ricon prep ${phase === 2 ? 'active' : ''}" style="left:${prepPos}%">${phase === 2 ? '<span class="halo"></span>' : ''}⛳</span>`;
-    const alert = phase === 0 ? [`${hhmm(L - 10)}에 출발 알림을 보내드릴게요`, '10분 전']
+    // 🚗 이동(출발~백대기)만 표시. ⛳ 준비는 백대기 단계(phase 2)에만 — 이동 중엔 아예 없음.
+    const carPos = phase === 0 ? 0 : pct;
+    const carHtml = phase <= 1 ? `<span class="ricon car" style="left:${carPos}%">${carSVG(phase === 1)}</span>` : '';
+    const prepHtml = phase === 2 ? `<span class="ricon prep active" style="left:${pct}%"><span class="halo"></span>⛳</span>` : '';
+    const filling = (phase === 1 || phase === 2) ? ' filling' : '';
+    const alert = phase === 0 ? [`${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, '10분 전']
       : phase === 1 ? [`곧 백대기 시간(${c.standby})이에요`, '이동 중']
       : phase === 2 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
       : ['좋은 라운드 되세요!', '근무 중'];
     slot.innerHTML = `<div class="actionboard">
-      <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(now)}</span></div>
+      <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(nowMinNow)}</span></div>
       <div class="nextline"><strong>${esc(big)}</strong><span>${cap}</span></div>
       <div class="rail2">
-        <i class="track"></i><i class="fill" style="width:${pct}%"></i>
+        <i class="track"></i><i class="fill${filling}" style="width:${pct}%"></i>
         ${prepHtml}${carHtml}
         <i class="rp ${pStart}" style="left:0"></i>
         <i class="rp ${pMid}" style="left:50%"></i>
@@ -196,6 +215,19 @@ function renderBoard(t) {
         <div class="mini"><span>티오프</span><b>${esc(c.tee)}<small>${crs}</small></b></div>
       </div>
     </div>`;
+    // ★실시간 진행: 현재 위치에서 다음 지점까지 남은 시간 동안 게이지·아이콘을 선형으로 이동.
+    if (phase === 1 || phase === 2) {
+      const remMs = Math.max(0, (targetS - nowS) * 1000);
+      const fillEl = slot.querySelector('.fill');
+      const iconEl = slot.querySelector(phase === 1 ? '.ricon.car' : '.ricon.prep');
+      if (fillEl && remMs > 0) {
+        fillEl.style.transition = 'none'; fillEl.style.width = pct + '%';
+        if (iconEl) { iconEl.style.transition = 'none'; iconEl.style.left = pct + '%'; }
+        void fillEl.offsetWidth; // reflow — 시작점 고정 후 목표로 선형 이동
+        fillEl.style.transition = `width ${remMs}ms linear`; fillEl.style.width = targetPct + '%';
+        if (iconEl) { iconEl.style.transition = `left ${remMs}ms linear`; iconEl.style.left = targetPct + '%'; }
+      }
+    }
     return;
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.

@@ -55,22 +55,25 @@
     .board-plain { margin-top:14px; border-radius:16px; background:#e1ebdf; padding:14px; font-size:11px; line-height:1.55; color:#3f5148; }
     .board-plain b { color:#153e2a; }
 
-    /* 새 레일: 출발 → 백대기(티오프−50분) → 티오프. 이동중 🚗 / 준비 ⛳ + 활성 글로우 */
-    .rail2 { position:relative; height:42px; margin:8px 4px 0; }
-    .rail2 .track { position:absolute; left:6px; right:6px; top:29px; height:3px; background:#bccbbe; border-radius:3px; }
-    .rail2 .fill  { position:absolute; left:6px; top:29px; height:3px; background:#2e7149; border-radius:3px; transition:width .5s ease; }
-    .rail2 .rp { position:absolute; top:24px; width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #9cb2a1; transform:translateX(-50%); z-index:2; }
+    /* 새 레일: 출발 → 백대기(티오프−50분) → 티오프. 이동중 🚗(SVG) / 준비 ⛳ */
+    .rail2 { position:relative; height:40px; margin:9px 4px 0; }
+    .rail2 .track { position:absolute; left:6px; right:6px; top:28px; height:3px; background:#bccbbe; border-radius:3px; }
+    .rail2 .fill  { position:absolute; left:6px; top:28px; height:3px; background:#2e7149; border-radius:3px; overflow:hidden; transition:width .5s linear; }
+    /* 게이지가 차오르는 생동감 — 좌→우로 빛이 훑고 지나감 */
+    .rail2 .fill.filling::after { content:''; position:absolute; top:0; left:0; width:100%; height:100%; border-radius:3px;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); transform:translateX(-100%); animation:gauge-shimmer 1.6s linear infinite; }
+    @keyframes gauge-shimmer { to { transform:translateX(100%) } }
+    .rail2 .rp { position:absolute; top:23px; width:13px; height:13px; border-radius:50%; background:#fff; border:3px solid #9cb2a1; transform:translateX(-50%); z-index:2; }
     .rail2 .rp.done { background:#2e7149; border-color:#2e7149; }
     .rail2 .rp.next { border-color:#d99a31; animation:pt-glow 1.7s ease-out infinite; }
     @keyframes pt-glow { 0% { box-shadow:0 0 0 0 rgba(217,154,49,.5) } 70%,100% { box-shadow:0 0 0 9px rgba(217,154,49,0) } }
-    .ricon { position:absolute; top:1px; transform:translateX(-50%); font-size:16px; line-height:1; z-index:3; }
-    .ricon.prep { opacity:.4; filter:grayscale(.7); }
-    .ricon.active { filter:none; opacity:1; }
-    .ricon.car.moving { animation:car-bob 1.5s ease-in-out infinite; }
-    .ricon .halo { position:absolute; inset:-7px; border-radius:50%; z-index:-1;
-      background:radial-gradient(circle, rgba(46,113,73,.32), rgba(46,113,73,0) 70%); animation:halo 1.6s ease-in-out infinite; }
-    .ricon.prep .halo { background:radial-gradient(circle, rgba(217,154,49,.4), rgba(217,154,49,0) 70%); }
-    @keyframes car-bob { 0%,100% { transform:translateX(-52%) } 50% { transform:translateX(-44%) } }
+    .ricon { position:absolute; top:2px; transform:translateX(-50%); font-size:16px; line-height:1; z-index:3; transition:left .5s linear; }
+    .ricon.car { top:4px; }
+    .carsvg { display:block; overflow:visible; }
+    .carsvg.drv { animation:drive-bob .5s ease-in-out infinite; }         /* 노면 진동(위아래 미세) */
+    @keyframes drive-bob { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-.7px) } }
+    .ricon.prep .halo { position:absolute; inset:-7px; border-radius:50%; z-index:-1;
+      background:radial-gradient(circle, rgba(217,154,49,.42), rgba(217,154,49,0) 70%); animation:halo 1.6s ease-in-out infinite; }
     @keyframes halo { 0%,100% { opacity:.35; transform:scale(.8) } 50% { opacity:.95; transform:scale(1.2) } }
     .railtext3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:3px; }
     .railtext3 .rt { display:flex; flex-direction:column; gap:1px; }
