@@ -172,7 +172,7 @@ ${postedLine}
 function titleFor(status) {
   switch (status) {
     case 'your_turn': return '🚨 지금 출근 순번!';
-    case 'near':      return '🔔 곧 출근 순번!';
+    case 'near':      return '🔔 스페어 상위 — 곧 차례!';
     case 'assigned':  return '✅ 오늘 근무 배정됨';
     case 'work':      return '✅ 출근 확정!';
     case 'waiting':   return '🏌️ 3부 대기 현황';
