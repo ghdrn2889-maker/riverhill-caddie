@@ -70,7 +70,7 @@ app.post('/api/profile', requireAuth, (req, res) => {
 //  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
 //  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
-const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout', '/ua'];
+const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
@@ -189,14 +189,6 @@ app.post('/api/judge', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
-
-// [임시 진단] 폰 브라우저가 보내는 User-Agent 확인 — 네이버 로그인 PC/모바일 판정 디버그용.
-app.get('/api/ua', (req, res) => {
-  const ua = req.headers['user-agent'] || '';
-  const looksMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
-  console.log('[UA check]', looksMobile ? 'MOBILE' : 'DESKTOP', '·', ua);
-  res.json({ ua, looksMobile });
 });
 
 // heartbeat: 감시가 살아있는지 (앱 상단에 "마지막 감시 N초 전" 표시용).
