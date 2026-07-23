@@ -182,6 +182,18 @@ function golfBagSVG() {
   </svg>`;
 }
 
+// 집 SVG — 출발 전(집에 있음) 상태 아이콘. 초록 지붕·크림 벽·문·창·굴뚝.
+function homeSVG() {
+  return `<svg class="homesvg" viewBox="0 0 28 26" width="22" height="20" aria-hidden="true">
+    <rect x="19.4" y="5" width="2.4" height="5.6" fill="#21543b"/>
+    <path d="M2 13.2 L14 3.4 L26 13.2 Z" fill="#2e7149"/>
+    <rect x="6" y="12.6" width="16" height="11.4" rx="1.3" fill="#ece6d8"/>
+    <rect x="7.8" y="15" width="3.8" height="3.8" rx=".5" fill="#bcd6e0"/>
+    <rect x="12.6" y="16.6" width="5.2" height="7.4" rx=".8" fill="#8a5a2b"/>
+    <circle cx="16.6" cy="20.3" r=".65" fill="#e8c877"/>
+  </svg>`;
+}
+
 function renderBoard(t) {
   const slot = $('boardSlot'); if (!slot) return;
   const s = t.state, st = s.status;
@@ -227,8 +239,9 @@ function renderBoard(t) {
     const pStart = phase === 0 ? 'next' : 'done';
     const pMid   = (phase === 1 || phase === 2) ? 'next' : (phase >= 3 ? 'done' : '');
     const pEnd   = phase === 3 ? 'next' : (phase >= 4 ? 'done' : '');
-    // 🚗 이동(0·1) / 골프백 백대기(2·3) / 🏌️ 근무중(4)
-    const carHtml = phase <= 1 ? `<span class="ricon car" style="left:${phase === 0 ? 0 : pct}%">${carSVG(phase === 1)}</span>` : '';
+    // 🏠 출발전(0) / 🚗 이동(1) / 골프백 백대기(2·3) / 🏌️ 근무중(4)
+    const homeHtml = phase === 0 ? `<span class="ricon home" style="left:0%">${homeSVG()}</span>` : '';
+    const carHtml = phase === 1 ? `<span class="ricon car" style="left:${pct}%">${carSVG(true)}</span>` : '';
     const bagHtml = (phase === 2 || phase === 3) ? `<span class="ricon prep" style="left:${phase === 2 ? 50 : pct}%">${golfBagSVG()}</span>` : '';
     const golferHtml = phase === 4 ? `<span class="ricon golfer" style="left:100%">🏌️</span>` : '';
     const filling = animate ? ' filling' : '';
@@ -242,7 +255,7 @@ function renderBoard(t) {
       <div class="nextline"><strong>${esc(big)}</strong><span>${cap}</span></div>
       <div class="rail2">
         <i class="track"></i><i class="fill${filling}" style="width:${pct}%"></i>
-        ${bagHtml}${carHtml}${golferHtml}
+        ${bagHtml}${carHtml}${homeHtml}${golferHtml}
         <i class="rp ${pStart}" style="left:0"></i>
         <i class="rp ${pMid}" style="left:50%"></i>
         <i class="rp ${pEnd}" style="left:100%"></i>
