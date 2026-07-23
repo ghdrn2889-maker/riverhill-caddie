@@ -118,13 +118,13 @@ ${postedLine}
 - 시간은 위→아래로 일정 간격 증가(예: 16:32,16:39,16:46,16:53,17:00,17:07,17:14,17:21,17:28…). 순번이 인쇄된 행을 찾아 그 행의 시간과 정확히 짝지으세요.
 - ${name}의 티오프는 코드가 이 표에서 ${name} 순번(myPosition)으로 찾습니다 — 표만 정확히 옮기고 myPosition만 정확히 읽으면 됩니다.
 
-★★ 배치표의 '부(部) 헤더' — 가장 확실한 근거 (환각 방지용 이중검증):
-- 티오프 시간표(OUT/IN 표)의 **맨 위 헤더 행은 [OUT | N부 | IN] 형식**이고, 가운데 칸의 "N부"가 이 표가 몇 부인지 알려주는 **가장 확실한 표시**입니다(글에 부 표시가 없어도 이 헤더로 확정).
-- boardParts 에 이미지의 티오프 표 헤더에서 실제로 보이는 부 숫자들을 배열로 넣으세요: 3부 표 하나만 있으면 [3], 전체 배치표라 1·2·3부 표가 다 있으면 [1,2,3]. 표 헤더가 안 보이거나 이미지가 배치표가 아니면 [].
-- ★boardParts 는 '눈에 보이는 헤더 숫자'만. 추측 금지. 이게 part 판단의 최우선 근거입니다.
+★★ 배치표의 '부(部) 이중 표시' — 가장 확실한 근거 (환각 방지 이중검증):
+- 각 부(部) 티오프 표에는 부를 알려주는 **두 가지 확실한 표시**가 있습니다: (1)맨 위 헤더 [OUT | N부 | IN]의 가운데 "N부" 글자, (2)표 전체의 **고유 배경색**(부마다 다름).
+- boardTables 에 이미지에서 보이는 각 부 표를 [{part, color}] 배열로 넣으세요: part=헤더의 부 숫자, color=그 표의 대표 배경색 이름(한국어 그대로, 예 '보라'·'하늘색'·'분홍'). 3부 표 하나면 [{"part":3,"color":"보라"}], 전체 배치표라 1·2·3부 표가 다 있으면 세 개 모두. 배치표가 아니거나 표가 안 보이면 [].
+- ★part도 color도 '눈에 실제로 보이는 것'만. 추측 금지. 이 헤더와 색이 part 판단의 최우선 근거입니다(둘이 서로 검증).
 
 ★ 부(部) 판단 (지어내기 금지 — 이번 오류의 핵심):
-- part 에 이 글이 몇 부에 관한 것인지 넣으세요: **배치표 헤더(boardParts)가 있으면 그게 최우선**, 없으면 제목/본문의 "1부/2부/3부" 명시, 그것도 없으면 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
+- part 에 이 글이 몇 부에 관한 것인지 넣으세요: **배치표 표(boardTables: 헤더+색)가 있으면 그게 최우선**, 없으면 제목/본문의 "1부/2부/3부" 명시, 그것도 없으면 티오프 시간대로 확실하면 그 숫자, 전혀 알 수 없으면 "unknown".
 - **절대 기본값으로 ${part}부라고 가정하지 마세요.** ${part}부라는 근거(명시된 "${part}부" / "${name}" 이름·순번 / ${part}부 배치표 / ${part}부 시간대(오후·저녁) 티오프)가 하나도 없으면 part는 실제 부 숫자 또는 "unknown"으로.
 - part 가 ${part}가 아닌 다른 부로 확인되면 relevant=false (다른 부는 "${name}"과 무관).
 - ⏰게시 시각 참고: ${part}부 추가·변동 소식은 보통 정오(12시) 이후 올라옵니다. 정오 이전엔 헷갈리지 않게 글에 "${part}부"라고 명시하는 편입니다. 따라서 **부 표시가 없고 정오 이후에 올라온 일정 변동/추가 글은 ${part}부일 가능성이 높습니다.** (단, 티오프 시간대가 다른 부를 가리키면 그 부가 우선 — 예: 정오 이후 올라와도 '아웃 7시대' 티오프는 1부.)
@@ -146,7 +146,7 @@ ${postedLine}
 {
   "relevant": true 또는 false,
   "part": "1|2|3|unknown (이 글이 몇 부인지, 모르면 unknown — ${part}부라 함부로 단정 금지)",
-  "boardParts": [배치표 티오프 표 헤더(OUT|N부|IN)에서 보이는 부 숫자들, 예: [3] 또는 [1,2,3], 없으면 []],
+  "boardTables": [{ "part": 정수(헤더 OUT|N부|IN의 부), "color": "그 표 배경색 이름(예 보라/하늘색/분홍)" }],
   "part3Roster": ["${part}부 전체 명단 이름들 — 전체 배치표일 때만, 아니면 []"],
   "crossPartNames": ["명단 중 여러 부 중복 표기((2,3)/(54)) 붙은 이름들, 없으면 []"],
   "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
@@ -507,11 +507,10 @@ export function consensusFromReads(reads) {
   if (withCut) { v.cutoffAnnounced = true; v.cutoffName = withCut.cutoffName; v.cutoffPosition = withCut.cutoffPosition; }
   const withTeam = rs.find((r) => Number(r?.teamCount) > 0);
   if (withTeam) v.teamCount = withTeam.teamCount;
-  // 부 헤더(boardParts)는 구조적이라 안정적 — 읽은 것 중 가장 흔한 비어있지 않은 값 채택.
-  const bpVotes = rs.map((r) => (Array.isArray(r?.boardParts)
-    ? [...new Set(r.boardParts.map((x) => (String(x).match(/[123]/) || [])[0]).filter(Boolean))].sort().join(',')
-    : '')).filter(Boolean);
-  if (bpVotes.length) { const bp = modeOf(bpVotes).value; if (bp) v.boardParts = bp.split(',').map(Number); }
+  // 부 표(boardTables: 헤더+색)는 구조적이라 안정적 — 표를 가장 많이(완전히) 읽은 판독 채택.
+  const bt = rs.map((r) => (Array.isArray(r?.boardTables) ? r.boardTables : []))
+    .reduce((best, cur) => (cur.length > best.length ? cur : best), []);
+  if (bt.length) v.boardTables = bt;
 
   resolveTeeByGrid(v);       // 합의 순번으로 티오프표 최종 해석
   delete v._uncertain;       // 구조적 잡음 초기화 — 아래에서 '결론' 기준으로만 다시 판정
@@ -595,26 +594,55 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   return { ...decide(article, verdict, member), rawVerdict: verdict };
 }
 
-// ★배치표 티오프 표 헤더(OUT | N부 | IN)로 부(部)를 못박는 이중검증 — Gemini의 '부 환각'을 구조로 교정.
-//  헤더는 지어낼 수 없는 구조적 근거라, 텍스트에 부 표시가 없어도 '이 배치표가 몇 부'인지 확정한다.
-//  · 헤더에 내 부가 있으면 → 내 부로 확정(Gemini가 다른 부라 우겨도 무시).
-//  · 헤더에 내 부가 없으면(다른 부 표) → 내겐 무관(relevant=false).
+// 표 배경색 이름 → 부(部). 리버힐: 1부=연분홍, 2부=하늘색, 3부=보라.
+const COLOR_PART = [
+  [/분홍|핑크|pink|연분홍|살구|로즈|자홍|rose/i, '1'],
+  [/하늘|스카이|sky|파랑|블루|blue|청록|시안|cyan|water/i, '2'],
+  [/보라|퍼플|purple|violet|자주|라벤더|바이올렛|lavender/i, '3'],
+];
+export function colorToPart(color) {
+  const c = String(color || '');
+  for (const [re, p] of COLOR_PART) if (re.test(c)) return p;
+  return '';
+}
+
+// ★배치표 티오프 표의 '헤더(OUT|N부|IN)' + '고유 배경색'으로 부(部)를 못박는 이중검증.
+//  둘 다 지어낼 수 없는 구조적 근거 → Gemini의 '부 환각'을 교정. 텍스트에 부 표시 없어도 확정.
+//  · 헤더·색 중 하나라도 내 부를 가리키면 내 부로 확정(관련). 어느 것도 안 가리키면 다른 부 → 무관.
+//  · 헤더와 색이 서로 어긋나고(구조 신호 충돌) 내 부가 양쪽에서 확인되지 않으면 → 정직하게 확인 필요.
 export function applyBoardParts(verdict, member = memberFromEnv()) {
   if (!verdict) return;
-  const parts = (Array.isArray(verdict.boardParts) ? verdict.boardParts : [])
-    .map((x) => (String(x).match(/[123]/) || [])[0]).filter(Boolean);
-  if (!parts.length) return;                       // 헤더 못 읽음 → 기존 부 판단 유지
+  const tables = Array.isArray(verdict.boardTables) ? verdict.boardTables : [];
+  const headerParts = new Set((Array.isArray(verdict.boardParts) ? verdict.boardParts : [])
+    .map((x) => (String(x).match(/[123]/) || [])[0]).filter(Boolean));           // 하위호환
+  const colorParts = new Set();
+  let conflict = null;
+  for (const t of tables) {
+    const hp = (String(t?.part).match(/[123]/) || [])[0];
+    const cp = colorToPart(t?.color);
+    if (hp) headerParts.add(hp);
+    if (cp) colorParts.add(cp);
+    if (hp && cp && hp !== cp) conflict = `헤더 ${hp}부 ↔ 색 ${cp}부(${t.color})`; // 같은 표인데 글자·색이 다른 부
+  }
+  const allParts = new Set([...headerParts, ...colorParts]);
+  if (!allParts.size) return;                       // 배치표 아님/헤더·색 못읽음 → 기존 판단 유지
   const mp = String(member.part);
   const had = (String(verdict.part || '').match(/[123]/) || [])[0];
-  if (parts.includes(mp)) {
-    verdict.part = mp;                             // 헤더에 내 부 있음 → 내 부로 확정(환각 무시)
+  if (allParts.has(mp)) {
+    verdict.part = mp;                              // 헤더 또는 색이 내 부 → 내 부로 확정(환각 무시)
+    verdict._partSource = (headerParts.has(mp) && colorParts.has(mp)) ? 'header+color'
+      : (colorParts.has(mp) ? 'color' : 'header');
   } else {
-    verdict.part = parts[0];                       // 내 부 없음 → 다른 부 표 → decide가 무관 처리
+    verdict.part = [...allParts][0];                // 내 부 없음 → 다른 부 표 → decide가 무관 처리
     verdict.relevant = false;
+    verdict._partSource = 'grid';
   }
   const now = (String(verdict.part).match(/[123]/) || [])[0];
-  if (had && had !== now) verdict._partFixed = `표 헤더=${parts.join(',')}부 → part ${had}→${now} 교정`;
-  verdict._partSource = 'grid-header';
+  if (had && had !== now) verdict._partFixed = `표(헤더/색)=${[...allParts].join(',')}부 → part ${had}→${now} 교정`;
+  // 구조 신호(헤더·색) 충돌 + 내 부가 양쪽에서 확인되진 않음 → 정직하게 확인 필요.
+  if (conflict && verdict.relevant && !(headerParts.has(mp) && colorParts.has(mp))) {
+    verdict._uncertain = verdict._uncertain || `배치표 부(部) 신호 불일치(${conflict}) — 원문 확인`;
+  }
 }
 
 // ── 회원별 재해석 (Gemini 재호출 없이) ─────────────────────────
@@ -641,7 +669,8 @@ export function interpretForMember(article, shared, member, today = null) {
   const v = {
     relevant: shared.relevant,
     part: shared.part,
-    boardParts: shared.boardParts,       // 부 헤더(구조적) — 회원 부 기준으로 아래서 재검증
+    boardParts: shared.boardParts,       // 하위호환
+    boardTables: shared.boardTables,     // 부 표(헤더+색) — 회원 부 기준으로 아래서 재검증
     category: shared.category,
     dateLabel: shared.dateLabel,
     cutoffAnnounced: shared.cutoffAnnounced,
