@@ -312,13 +312,6 @@ export function applyRoster(verdict, today, article, member = memberFromEnv()) {
 // 글 → Gemini가 '편견 없이' 판정(stateless) → 최종 결정. { relevant, push, title, body, status, rawVerdict }
 //  today 는 프롬프트에 넣지 않는다(이전 상태가 판독을 오염시키지 않게).
 //  단, 텍스트만 있어 순번을 못 읽었으면 '같은 날 잠긴 순번'으로만 코드가 채운다(안전한 보완).
-// 배치표 이미지인데 순번도 티오프도 못 읽으면 '부실 판독'(비전 불안정) → 재시도 대상.
-function weakBoardRead(v) {
-  if (!v) return true;
-  const posOk = Number(v.myPosition) > 0;
-  const teeOk = v.teeTime && /\d{1,2}:\d{2}/.test(v.teeTime);
-  return !posOk && !teeOk;
-}
 
 // ★코드가 3부 티오프 표(teeGrid)에서 김홍구 순번으로 티오프를 확정(모델의 눈대중 대신).
 //  · 순번이 표에 있으면 → 그 시간이 김홍구 티오프(근무 배정).
@@ -411,46 +404,123 @@ function resolveTeeByGrid(verdict) {
   }
 }
 
+// ── board 합의 판독(표결) — 비전 판독 흔들림을 다수결로 잡고, 갈리면 정직하게 '확인 필요' ──
+//  같은 배치표라도 Gemini는 읽을 때마다 순번·명단·색·티오프가 흔들린다. 그래서 배치표에 한해
+//  같은 글을 여러 번 읽어 표결한다: 과반이 일치하면 그 값을 '확신'(신뢰도↑ = 회원 순번도 안정),
+//  갈리면 _uncertain(확인 필요)로 정직하게 낮춘다. ★이 표결은 '공유 board 1건'에만 든다 —
+//  회원 수와 무관(회원별 재호출은 여전히 0). 총 판독 횟수는 BOARD_READ_MAX(기본 3)로 상한.
+function modeOf(arr) {
+  const m = new Map();
+  let best = null, bestN = 0;
+  for (const x of arr) { const n = (m.get(x) || 0) + 1; m.set(x, n); if (n > bestN) { bestN = n; best = x; } }
+  return { value: best, count: bestN };
+}
+
+// raw 판독 하나를 '주어진 순번' 기준으로 티오프까지 확정해 티오프 문자열만 얻는다(원본 불변).
+function teeForPosition(raw, pos) {
+  if (!raw) return '';
+  const v = { ...raw, myPosition: pos };
+  resolveTeeByGrid(v);
+  const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
+  if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) return '';
+  return (String(v.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
+}
+
+// 여러 읽기의 3부 명단 중 '가장 신뢰할' 하나 선택: 다른 읽기와 이름 겹침이 크고(교차 확인) 긴 것.
+//  → 채택된 명단이 today.roster3 가 되어 회원 순번 조회의 근거가 되므로 신뢰도가 곧 회원 정확도.
+function pickRoster(reads) {
+  const cands = reads.map((r) => ({
+    roster: (Array.isArray(r?.part3Roster) ? r.part3Roster : []).filter(Boolean),
+    cross: (Array.isArray(r?.crossPartNames) ? r.crossPartNames : []).filter(Boolean),
+  })).filter((x) => x.roster.length);
+  if (!cands.length) return { roster: [], cross: [] };
+  let best = cands[0], bestScore = -1;
+  for (const cand of cands) {
+    const set = new Set(cand.roster);
+    let overlap = 0;
+    for (const other of cands) { if (other !== cand) overlap += other.roster.filter((n) => set.has(n)).length; }
+    const score = overlap * 10 + cand.roster.length; // 교차 확인 우선, 동률이면 더 긴 명단
+    if (score > bestScore) { bestScore = score; best = cand; }
+  }
+  return best;
+}
+
+// 순수 표결: 여러 raw 읽기 → 합의 verdict 하나(불확실이면 _uncertain). I/O 없음(테스트 용이).
+export function consensusFromReads(reads) {
+  const rs = (reads || []).filter(Boolean);
+  if (!rs.length) return null;
+  if (rs.length === 1) return rs[0]; // 1회만 성공 → 표결 불가, 단일 판독 그대로
+  const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
+
+  // 순번(다수결) → 그 순번 기준 티오프(다수결) → 명단(교차확인) → 색(다수결)
+  const posVotes = rs.map(posOf).filter(Boolean);
+  const posMode = modeOf(posVotes);
+  const pos = posMode.value || posOf(rs[0]);
+  const teeVotes = rs.map((r) => teeForPosition(r, pos)).filter(Boolean);
+  const teeMode = teeVotes.length ? modeOf(teeVotes) : { value: '', count: 0 };
+  const roster = pickRoster(rs);
+
+  // 합의 verdict: 채택 순번과 가장 잘 맞는 읽기를 뼈대로, 표결값을 덮어쓴다.
+  const seed = rs.find((r) => posOf(r) === pos) || rs[0];
+  const v = { ...seed };
+  if (pos) v.myPosition = pos;
+  if (roster.roster.length) { v.part3Roster = roster.roster; v.crossPartNames = roster.cross; }
+  v.myCellColor = modeOf(rs.map((r) => String(r?.myCellColor || 'unknown'))).value;
+  // 커트라인·팀수는 '텍스트' 근거라 흔들림이 적음 — 하나라도 명시됐으면 채택.
+  const withCut = rs.find((r) => r?.cutoffAnnounced && r?.cutoffName);
+  if (withCut) { v.cutoffAnnounced = true; v.cutoffName = withCut.cutoffName; v.cutoffPosition = withCut.cutoffPosition; }
+  const withTeam = rs.find((r) => Number(r?.teamCount) > 0);
+  if (withTeam) v.teamCount = withTeam.teamCount;
+
+  // ── 불확실 판정 ── 순번·티오프가 과반 합의에 못 미치면 정직하게 '확인 필요'로.
+  const majority = Math.floor(rs.length / 2) + 1;
+  const posAgree = !!pos && posMode.count >= majority;
+  const anyTee = teeVotes.length > 0;
+  const teeAgree = teeMode.count >= majority;
+  if (!posAgree) {
+    v._uncertain = `순번 판독이 갈립니다(${posVotes.join('/') || '읽기 실패'}) — 배치표에서 직접 확인하세요`;
+  } else if (anyTee && !teeAgree) {
+    v._uncertain = `티오프 판독이 갈립니다(${teeVotes.join('/')}) — 시각을 직접 확인하세요`;
+  } else {
+    delete v._uncertain; // 과반 합의 → 확신(구조적 불확실은 이후 resolveTeeByGrid가 다시 검사)
+  }
+  v._reads = rs.length;
+  return v;
+}
+
+async function readBoardConsensus(article, member) {
+  const img = article.images?.[0] || null;
+  const boardModel = process.env.GEMINI_BOARD_MODEL || null; // 배치표는 강한 모델(정확도↑, 비용 소액)
+  const MAX = Math.max(1, Math.min(5, Number(process.env.BOARD_READ_MAX ?? 3)));
+  const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
+  const reads = [];
+  for (let i = 0; i < MAX; i++) {
+    let r = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
+    if (!r && boardModel) r = await callGeminiJSON(buildPrompt(article, member), img, null); // 등급 강등 안전망
+    if (r) reads.push(r);
+    if (reads.length >= 2) { // 조기 종료: 최근 2개가 순번·티오프까지 일치하면 더 안 읽음(비용 절약)
+      const a = reads[reads.length - 1], b = reads[reads.length - 2];
+      const pa = posOf(a);
+      if (pa && pa === posOf(b) && teeForPosition(a, pa) === teeForPosition(b, pa)) break;
+    }
+  }
+  return consensusFromReads(reads);
+}
+
 export async function judge(article, today = null, member = memberFromEnv()) {
   const img = article.images?.[0] || null;
   const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
-  // ★배치표(이미지) 판독만 강한 모델(GEMINI_BOARD_MODEL) 사용 — 조밀한 티오프 표 정확도↑, 비용은 소액.
-  //  텍스트/카톡/일반 글은 기본 모델(flash-lite) 유지.
-  const boardModel = isBoard ? (process.env.GEMINI_BOARD_MODEL || null) : null;
-  let verdict = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
-  // 안전망: 배치표 전용 모델(무료 등급)이 429 등으로 실패(null)하면 기본 모델(flash-lite)로 강등 재시도.
-  if (isBoard && boardModel && !verdict) {
-    console.log('[judge] 배치표 모델 실패 → 기본 모델로 강등 재시도');
-    verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
-  }
-  // ★배치표 판독이 부실하면(순번·티오프 실패) 최대 2회 재시도 — 비전 불안정으로
-  //  최신 배치표를 놓치거나 pos=0 같은 실패값이 나오던 문제 완화.
-  for (let tries = 0; isBoard && weakBoardRead(verdict) && tries < 2; tries++) {
-    const retry = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
-    if (retry) verdict = retry;
-    if (retry && !weakBoardRead(retry)) break;
-  }
-  resolveTeeByGrid(verdict); // 코드가 순번→티오프 확정(눈대중 오독 차단)
+  // ★배치표(이미지)는 여러 번 읽어 '표결'(신뢰도↑·정직한 불확실). 텍스트/카톡/일반 글은 1회(기본 모델).
+  let verdict = isBoard
+    ? await readBoardConsensus(article, member)
+    : await callGeminiJSON(buildPrompt(article, member), img, null);
+  resolveTeeByGrid(verdict); // 코드가 순번→티오프 확정(눈대중 오독 차단) + 구조적 불확실(행번호매기기·컷밖) 재검사
   // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
   if (verdict) {
     const th = (String(verdict.teeTime || '').match(/(\d{1,2}):/) || [])[1];
     if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) {
       verdict.teeTime = ''; verdict.course = '';
       if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
-    }
-  }
-
-  // ★티오프(근무 배정)가 읽힌 배치표는 교차검증: 한 번 더 읽어(표 기준) 티오프·순번이 다르면 '확인 필요'.
-  //  (17:56을 17:46으로 확신에 차서 보내던 오답 방지 — 가장 위험한 '시간 단정'만 이중확인)
-  const teeOf = (v) => (String(v?.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
-  if (isBoard && teeOf(verdict)) {
-    const v2 = await callGeminiJSON(buildPrompt(article, member), img, boardModel);
-    if (v2) {
-      resolveTeeByGrid(v2);
-      const posOf = (v) => (Number(v?.myPosition) > 0 ? Number(v.myPosition) : '');
-      if (teeOf(v2) !== teeOf(verdict) || posOf(v2) !== posOf(verdict)) {
-        verdict._uncertain = `판독 불일치(1차 순번${posOf(verdict) || '-'}/티오프${teeOf(verdict) || '-'} ↔ 2차 순번${posOf(v2) || '-'}/티오프${teeOf(v2) || '-'})`;
-      }
     }
   }
   if (verdict && !(Number(verdict.myPosition) > 0)
@@ -508,6 +578,9 @@ export function interpretForMember(article, shared, member, today = null) {
     teeTime: null, course: '',
     myPosition: memberPositionFromShared(shared, member, today),
   };
+  // ★공유 board 판독이 표결에서 갈렸으면(shared._uncertain) 이 회원 순번도 그 흔들린 명단에서 뽑은 것 →
+  //  이 회원에게도 정직하게 '확인 필요'를 전달(문구는 회원 본인 기준으로 일반화 — 1번 회원 시각·순번 노출 금지).
+  if (shared._uncertain) v._uncertain = '배치표 판독이 불안정합니다 — 원문(배치표)을 직접 확인하세요';
   resolveTeeByGrid(v);                    // 순번→티오프(구조·beyond-cut 스페어 등)
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
   if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) { v.teeTime = ''; v.course = ''; }
