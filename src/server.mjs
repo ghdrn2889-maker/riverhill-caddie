@@ -722,6 +722,61 @@ async function checkCartReminders() {
 }
 setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
 
+// ── 출근 타임라인 리마인더 (회원별) ─────────────────────────────
+//  근무 확정(오늘·티오프 있음)인 회원에게 각자의 출발/도착/티오프 시각에 맞춰 푸시.
+//  1분 간격 체크 · 회원별 중복방지 · 서버 다운 후 늦게 뜬 임계값은 스테일(GRACE 초과)로 미발송.
+const TEE_REMIND_BEFORE = Number(process.env.TEE_REMIND_BEFORE_MIN ?? 15);
+const LEAVE_REMIND_BEFORE = Number(process.env.LEAVE_REMIND_BEFORE_MIN ?? 10);
+const REMIND_GRACE = Number(process.env.REMIND_GRACE_MIN ?? 12);
+const toMinOfDay = (hhmm) => { const m = String(hhmm || '').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+
+function timelineReminders(c, name) {
+  const L = toMinOfDay(c.leave), A = toMinOfDay(c.arrive), T = toMinOfDay(c.tee);
+  if (L == null || A == null || T == null) return [];
+  return [
+    { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '🚗 곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발이에요. 준비하세요.` },
+    { key: 'leave',   at: L,                       level: 'high',  title: '🚗 출발 시간', body: `${name}님, 지금 출발하세요! 도착 ${c.arrive} · 티오프 ${c.tee}.` },
+    { key: 'arrive',  at: A,                       level: 'check', title: '⛳ 도착·백대기', body: `${name}님, 골프장 도착 시간이에요. 백대기 ${c.standby}까지 준비하세요.` },
+    { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '🏌️ 곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프예요. 코스로 이동하세요.` },
+  ];
+}
+
+async function checkTimelineReminders() {
+  try {
+    const todayISO = todayISOKST();
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    for (const mem of activeMembers()) {
+      const t = loadToday(mem.id);
+      if (!t || !t.teeTime) continue;
+      if (!['assigned', 'work', 'your_turn'].includes(t.status)) continue;
+      const tISO = worklog.labelToISO(t.date);
+      if (tISO && tISO !== todayISO) continue;           // 오늘 근무만(내일 배치표는 제외)
+      const c = commuteInfo(t.teeTime, mem.commute_min);
+      if (!c) continue;
+      const rems = timelineReminders(c, mem.board_name || '회원');
+      const store = loadUserJSON(mem.id, 'timeline-remind.json', {});
+      if (store.date !== todayISO) { store.date = todayISO; store.sent = {}; }
+      store.sent = store.sent || {};
+      let changed = false;
+      for (const r of rems) {
+        if (r.at == null || store.sent[r.key]) continue;
+        if (nowMin >= r.at) {
+          if (nowMin - r.at <= REMIND_GRACE) {           // 임계값 직후에만 발송(늦으면 조용히 통과)
+            await broadcast({ title: r.title, body: r.body, url: '/', level: r.level }, mem.id);
+            console.log(`[타임라인] 회원${mem.id} ${r.key} 발송 (예정 ${r.at}분, 현재 ${nowMin}분)`);
+          }
+          store.sent[r.key] = Date.now();
+          changed = true;
+        }
+      }
+      if (changed) saveUserJSON(mem.id, 'timeline-remind.json', store);
+    }
+  } catch (e) { console.error('타임라인 리마인더 오류:', e.message); }
+}
+setInterval(checkTimelineReminders, 60 * 1000); // 1분마다 체크
+console.log(`⏰ 출근 타임라인 리마인더: 출발 ${LEAVE_REMIND_BEFORE}분전·출발정각·도착·티오프 ${TEE_REMIND_BEFORE}분전 (1분 체크)`);
+
 startCrawler({
   onMatch: async (article, result) => {
     try {
