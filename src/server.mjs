@@ -607,8 +607,16 @@ async function processForMember(userId, member, out, full, opts = {}) {
         course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName }, userId);
     }
     if (change.reversal) {
-      title = '⚠️ 변경됐어요!';
-      body = `${change.message}\n${out.body}`;
+      const teeChg = (change.changes || []).find((c) => c.field === 'tee');
+      if (teeChg) {
+        // 티오프 시각 변경 → 출발·도착·백대기 전부 바뀜. 변경 사실 + 확인 요청 + 갱신된 전체 시각.
+        title = '⚠️ 티오프 시간 변경!';
+        body = `${member.name}님, 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 바뀌었으니 확인해주세요.\n${out.body}`;
+        rearmTimelineReminders(userId); // 새 시각으로 타임라인 리마인더 다시 울리게
+      } else {
+        title = '⚠️ 변경됐어요!';
+        body = `${change.message}\n${out.body}`;
+      }
       out.push = 'high';
     } else if (!v._uncertain && Number(v.teamCount) > 0) {
       // ★판독 불확실(_uncertain)일 때만 이 분기를 건너뛴다(그땐 순번이 흔들려 '내 앞 N명'이 부정확 →
@@ -739,6 +747,12 @@ function timelineReminders(c, name) {
     { key: 'arrive',  at: A,                       level: 'check', title: '⛳ 도착·백대기', body: `${name}님, 골프장 도착 시간이에요. 백대기 ${c.standby}까지 준비하세요.` },
     { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '🏌️ 곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프예요. 코스로 이동하세요.` },
   ];
+}
+
+// 티오프 시각이 바뀌면 그날 보낸 타임라인 리마인더 기록을 비워, 새 시각으로 다시 울리게 한다.
+function rearmTimelineReminders(userId) {
+  try { saveUserJSON(userId, 'timeline-remind.json', { date: todayISOKST(), sent: {} }); }
+  catch (e) { console.error('타임라인 재무장 오류:', e.message); }
 }
 
 async function checkTimelineReminders() {
