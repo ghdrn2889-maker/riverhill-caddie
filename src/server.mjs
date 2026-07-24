@@ -670,8 +670,15 @@ async function processForMember(userId, member, out, full, opts = {}) {
   // 중복 푸시 방지 — '결과 상태' 기준, 회원별 pushlog.
   if (!opts.force && !change.reversal) {
     const ns = merged ? merged.next : null;
-    const sig = ns ? `${ns.status}|${ns.teeTime || ''}|${ns.course || ''}|${ns.cutLine || ''}|${ns.myPosition || ''}`
-                   : `${out.status}|${v?.teeTime || ''}`;
+    // ★근무 확정·휴무는 커트라인 무관 → 서명에서 cutLine 제외.
+    //  (이미 근무 확정인데 다른 곳에서 팀이 추가돼 커트라인만 바뀌면 '근무 배정' 알림이 또 나가던 문제 차단)
+    //  스페어/대기는 커트라인 전진이 '내 앞 N명'에 직접 영향 → cutLine 포함(그건 알려야 함).
+    const confirmed = ns && ['assigned', 'work', 'your_turn', 'off'].includes(ns.status);
+    const sig = ns
+      ? (confirmed
+          ? `${ns.status}|${ns.teeTime || ''}|${ns.course || ''}|${ns.myPosition || ''}`
+          : `${ns.status}|${ns.teeTime || ''}|${ns.course || ''}|${ns.cutLine || ''}|${ns.myPosition || ''}`)
+      : `${out.status}|${v?.teeTime || ''}`;
     const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
     const now = Date.now();
     const log = loadUserJSON(userId, 'pushlog.json', {});
