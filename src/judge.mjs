@@ -259,6 +259,10 @@ export function decide(article, verdict, member = memberFromEnv()) {
     // 티오프 배정 = 근무 확정. 산수(남은인원) 무시, 출근/출발 안내.
     status = status === 'your_turn' ? 'your_turn' : (status === 'work' ? 'work' : 'assigned');
     body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 배정됐어요!${commuteLine(tee, verdict.course, member.commuteMin)}`;
+  } else if (status === 'work' || status === 'assigned' || status === 'your_turn') {
+    // 근무 결론인데 티오프 시각이 아직 안 읽힘 → 근무는 확정, 시각만 확인 안내(애매한 요약으로 새지 않게).
+    status = status === 'your_turn' ? 'your_turn' : 'assigned';
+    body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 배정됐어요! 티오프 시각은 배치표에서 확인해주세요.`;
   } else if (status === 'waiting' || status === 'near' || status === 'spare') {
     const mp = Number(verdict.myPosition), cp = Number(verdict.cutoffPosition);
     // 남은 인원은 '○○까지'가 텍스트에 명시됐을 때만 계산(지어낸 커트라인 방지).
@@ -561,6 +565,10 @@ export function consensusFromReads(reads) {
     // 근무/스페어가 갈리거나(결정적 충돌) 읽기 대부분이 부실 → 이때만 정직하게 확인 필요.
     v._uncertain = '근무인지 스페어인지 판독이 갈려요 — 배치표를 직접 확인하세요';
   }
+  // ★배치표에서 내 행(순번)을 찾았거나 근무/스페어 결론이 섰으면 '나와 관련 있음'을 확정한다.
+  //  (Gemini가 완료·마감 배치표를 relevant:false로 헷갈려, 순번·티오프는 잘 읽고도
+  //   "구체적 순번·근무 상태 확인 불가" 같은 애매한 요약만 소식에 남기던 문제 차단)
+  if (pos || workVotes >= majority || spareVotes >= majority) v.relevant = true;
   v._reads = rs.length;
   return v;
 }
