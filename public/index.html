@@ -7,6 +7,11 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#104d31" />
   <link rel="apple-touch-icon" href="/icon-192.png?v=3" />
+  <!-- iOS PWA: 홈 화면에 추가 시 앱처럼(주소창 없이) 실행 + 상태바 스타일 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="리버힐 캐디" />
   <style>
     /* ===== 확정 시안(sandbox/hybrid-prototypes.html · HYBRID 02 행동 진행 보드) CSS 그대로 이식 ===== */
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -330,6 +335,17 @@
       cursor:not-allowed; user-select:none; }
     .ov-naver-disabled small { font-size:10px; font-weight:800; background:#bccabf; color:#4c5a51;
       padding:2px 8px; border-radius:99px; letter-spacing:0; }
+    /* 설치 안내 배너(최상단 고정, 로그인 오버레이 위에도 보이게 z-index 높게) */
+    #installBar { position:fixed; top:0; left:0; right:0; z-index:9999; background:#0e5a39; color:#fff;
+      padding-top:env(safe-area-inset-top,0); box-shadow:0 3px 12px rgba(0,0,0,.25); }
+    #installBar .ib-inner { display:flex; align-items:center; gap:10px; max-width:600px; margin:0 auto; padding:10px 14px; }
+    #installBar .ib-ico { font-size:18px; flex-shrink:0; }
+    #installBar .ib-txt { flex:1; font-size:12px; line-height:1.5; }
+    #installBar .ib-txt b { color:#ffe08a; }
+    #installBar .ib-share { display:inline-flex; vertical-align:-3px; margin:0 1px; }
+    #installBar .ib-cta { flex-shrink:0; background:#ffd257; color:#3a2c00; border:0; border-radius:9px;
+      padding:9px 15px; font-weight:850; font-size:13px; white-space:nowrap; cursor:pointer; }
+    #installBar .ib-x { flex-shrink:0; background:transparent; border:0; color:#bcd9ca; font-size:15px; padding:4px 6px; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -342,6 +358,16 @@
       </div>
     </div>
   </header>
+
+  <!-- 설치 안내 배너 (iOS 사파리 미설치 안내 / 안드로이드 설치 버튼) — JS가 상황 판단해 노출 -->
+  <div id="installBar" hidden>
+    <div class="ib-inner">
+      <span class="ib-ico">📲</span>
+      <div class="ib-txt" id="installText"></div>
+      <button class="ib-cta" id="installCta" hidden>설치</button>
+      <button class="ib-x" id="installClose" aria-label="닫기">✕</button>
+    </div>
+  </div>
 
   <!-- 가입/프로필 · 계정 오버레이 -->
   <div class="ov" id="ov" hidden>

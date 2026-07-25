@@ -47,6 +47,50 @@ function initNav() {
   showView(location.hash.slice(1) || 'today');
 }
 
+/* ── 플랫폼 감지 + 설치 안내(iOS 사파리 전용 / 안드로이드 설치버튼) ── */
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function iosInfo() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|mercury/i.test(ua);
+  return { isIOS, isSafari };
+}
+// iOS 공유 아이콘(네모+위화살표) 인라인 SVG — 사파리 안내 문구에 그대로 삽입.
+const SHARE_SVG = '<span class="ib-share"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg></span>';
+let deferredInstall = null;
+function initInstallPrompt() {
+  const bar = $('installBar'), txt = $('installText'), cta = $('installCta'), x = $('installClose');
+  if (!bar || isStandalone()) return;                           // 이미 설치돼 실행 중이면 안내 불필요
+  if (sessionStorage.getItem('installDismissed')) return;       // 이번 세션에 닫았으면 조용히
+  const show = () => { bar.hidden = false; document.body.style.paddingTop = bar.offsetHeight + 'px'; };
+  x.onclick = () => { bar.hidden = true; document.body.style.paddingTop = ''; sessionStorage.setItem('installDismissed', '1'); };
+
+  const { isIOS, isSafari } = iosInfo();
+  if (isIOS && !isSafari) {
+    txt.innerHTML = '아이폰은 <b>사파리(Safari)</b>로 열어야 앱 설치·알림이 됩니다. 이 주소를 사파리로 열어주세요.';
+    cta.hidden = true; show(); return;
+  }
+  if (isIOS && isSafari) {
+    txt.innerHTML = `앱으로 설치하고 <b>알림</b>을 받으려면: 아래 <b>공유</b> ${SHARE_SVG} 를 누르고 <b>‘홈 화면에 추가’</b>. 알림은 설치 후에만 옵니다.`;
+    cta.hidden = true; show(); return;
+  }
+  // 안드로이드/데스크톱 크롬: beforeinstallprompt 가 뜨면 '설치' 버튼 노출.
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredInstall = e;
+    txt.innerHTML = '홈 화면에 <b>앱으로 설치</b>하면 더 편하고 알림도 잘 와요.';
+    cta.hidden = false; show();
+  });
+  cta.onclick = async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    try { await deferredInstall.userChoice; } catch {}
+    deferredInstall = null; bar.hidden = true; document.body.style.paddingTop = '';
+  };
+  window.addEventListener('appinstalled', () => { bar.hidden = true; document.body.style.paddingTop = ''; });
+}
+
 /* ── 서비스워커 + 알림 구독(자가복구) ── */
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -71,7 +115,13 @@ async function enableNotifications() {
   const btn = $('enableBtn'), msg = $('enableMsg');
   try {
     btn.disabled = true; msg.textContent = '';
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { msg.textContent = '이 브라우저는 웹푸시를 지원하지 않아요(안드로이드 크롬 권장).'; return; }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      const { isIOS } = iosInfo();
+      msg.textContent = (isIOS && !isStandalone())
+        ? '아이폰은 사파리에서 홈 화면에 추가로 설치한 뒤, 설치된 앱을 열어 알림을 켜주세요.'
+        : '이 브라우저는 웹푸시를 지원하지 않아요(안드로이드 크롬 권장).';
+      btn.disabled = false; return;
+    }
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { msg.textContent = '알림 권한이 거부됐어요. 브라우저 설정에서 허용해주세요.'; btn.disabled = false; return; }
     if (!swReg) await registerSW();
@@ -84,7 +134,11 @@ async function enableNotifications() {
 async function refreshPushHealth() {
   const el = $('hPush'), btn = $('enableBtn');
   const set = (cls, txt) => { el.className = cls; el.textContent = txt; };
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) { set('bad', '● 알림 미지원'); btn.hidden = true; return; }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    const { isIOS } = iosInfo();
+    set(isIOS && !isStandalone() ? 'warn' : 'bad', isIOS && !isStandalone() ? '● 설치하면 알림 가능' : '● 알림 미지원');
+    btn.hidden = true; return;
+  }
   if (Notification.permission === 'denied') { set('bad', '● 알림 권한 꺼짐'); btn.hidden = true; return; }
   let sub = null;
   try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
@@ -834,6 +888,7 @@ function initAccount() {
 /* ── 부팅 ── */
 async function main() {
   tickDate(); initNav(); initWorklogButtons(); initCartButtons(); initAccount();
+  initInstallPrompt();
   $('enableBtn').onclick = enableNotifications;
   $('readAll').onclick = markAllRead;
   await registerSW();
