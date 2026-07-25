@@ -11,14 +11,14 @@ const VIBRATE = {
 };
 
 self.addEventListener('push', (event) => {
-  let data = { title: '리버힐 알림', body: '새 소식이 있습니다.', url: '/', level: 'normal' };
+  let data = { title: '리버힐 알림', body: '새 소식이 있습니다.', url: '/', level: 'normal', badge: '/badge-flag.png' };
   try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
   const level = data.level || 'normal';
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icon-192.png',
-      badge: '/badge-flag.png',  // 상태바 작은 아이콘 = 골프 핀 깃발 실루엣(흰색·투명). 새 파일명이라 캐시 갱신도 확실
+      badge: data.badge || '/badge-flag.png',  // 상태바 작은 아이콘(흰색·투명 실루엣). payload로 교체 가능(디자인 비교용)
       data: { url: data.url },
       vibrate: VIBRATE[level] || VIBRATE.normal,
       requireInteraction: level === 'high', // 중요 알림은 탭할 때까지 화면에 유지(자동으로 안 사라짐)
