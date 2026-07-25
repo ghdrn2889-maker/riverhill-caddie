@@ -65,6 +65,8 @@ app.post('/api/profile', requireAuth, (req, res) => {
   const prof = setProfile(req.user.id, {
     board_name: boardName, part, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
   });
+  // 가입/이름 변경 직후 현재 배치표를 즉시 소급 반영(백대기 중간 가입 등으로 상황판이 비는 빈틈 방지).
+  backfillFromLastBoard(req.user.id, { name: prof.board_name, part: String(prof.part || '3'), commuteMin: Number(prof.commute_min) });
   res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
 });
 
@@ -555,6 +557,25 @@ function rememberBoard(full, out) {
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
   boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
+  // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
+  saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now() });
+}
+
+// 가입/프로필 저장 직후: 현재 감시 중인 최신 배치표를 이 회원 기준으로 즉시 소급 반영.
+//  (백대기 도중 가입 등, 배치표 처리가 끝난 뒤 들어온 회원의 상황판이 비어보이는 빈틈 방지 — Gemini 재호출 없음)
+function backfillFromLastBoard(userId, member) {
+  try {
+    const lb = loadJSON('lastboard.json', null);
+    if (!lb || !lb.rawVerdict || !lb.article) return false;
+    if (Date.now() - (lb.at || 0) > 18 * 3600 * 1000) return false; // 하루 지난 배치표는 소급 안 함
+    const mout = interpretForMember(lb.article, lb.rawVerdict, member, loadToday(userId));
+    const v = mout.rawVerdict;
+    if (!mout.relevant || !v) return false;
+    const merged = applyVerdict(loadToday(userId), v, lb.article);
+    saveToday(merged.next, userId);
+    console.log(`↩️  회원 ${userId}(${member.name}) 가입 소급: 최신 배치표 #${lb.id} 반영`);
+    return true;
+  } catch (e) { console.error('가입 소급 오류:', e.message); return false; }
 }
 
 // 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
