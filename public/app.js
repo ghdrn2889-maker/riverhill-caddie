@@ -758,24 +758,37 @@ function initWorklogButtons() {
 /* ── 카트 점검 ── */
 let ccDate = null;
 let ccEditMode = false;
-let ccIntakeCount = 0; // 현재 저장된 '카트 상태' 사진 수 — 다중 업로드 시 10장 상한 계산용
-function ccSetPhoto(leg, fname) {
-  const lbl = $(leg === 'intake' ? 'ccIntakeLbl' : 'ccExitLbl');
-  const thumb = $(leg === 'intake' ? 'ccIntakeThumb' : 'ccExitThumb');
-  if (fname) { thumb.src = `/api/cartcheck/photo/${fname}?t=${Date.now()}`; thumb.hidden = false; lbl.classList.add('has'); }
-  else { thumb.hidden = true; lbl.classList.remove('has'); }
-}
-// 카트 상태(intake) — 여러 장 썸네일 + 각 삭제 버튼. 카메라로 찍을 때마다 추가됨.
-function ccRenderIntakeThumbs(list) {
-  const box = $('ccIntakeThumbs'), lbl = $('ccIntakeLbl');
+const ccCounts = { intake: 0, exit: 0 }; // 각 구간 저장 사진 수 — 다중 업로드 10장 상한 계산용
+const CC_LABELS = {
+  intake: { box: 'ccIntakeThumbs', lbl: 'ccIntakeLbl', alt: '카트 상태', idle: '📷 사진 올리기', add: '📷 사진 추가' },
+  exit:   { box: 'ccExitThumbs',   lbl: 'ccExitLbl',   alt: '빈 카트',   idle: "📷 '비운 카트' 사진", add: '📷 사진 추가' },
+};
+// 카트 상태(intake)·빈 카트(exit) — 공통: 여러 장 썸네일 + 각 삭제 버튼. 갤러리에서 여러 장 추가됨.
+function ccRenderThumbs(leg, list) {
+  const cfg = CC_LABELS[leg];
+  const box = $(cfg.box), lbl = $(cfg.lbl);
   const arr = Array.isArray(list) ? list : (list ? [list] : []);
-  ccIntakeCount = arr.length;
-  box.innerHTML = arr.map((f) => `<span class="cc-thumbwrap"><img class="cc-thumb" src="/api/cartcheck/photo/${f}?t=${Date.now()}" alt="카트 상태"><button class="cc-thumbdel" data-f="${f}" aria-label="삭제">✕</button></span>`).join('');
+  ccCounts[leg] = arr.length;
+  box.innerHTML = arr.map((f) => `<span class="cc-thumbwrap"><img class="cc-thumb" src="/api/cartcheck/photo/${f}?t=${Date.now()}" alt="${cfg.alt}"><button class="cc-thumbdel" data-f="${f}" aria-label="삭제">✕</button></span>`).join('');
   box.querySelectorAll('button[data-f]').forEach((b) => {
-    b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg: 'intake', fname: b.dataset.f }); loadCartCheck(); };
+    b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg, fname: b.dataset.f }); loadCartCheck(ccDate); };
   });
   lbl.classList.toggle('has', arr.length > 0);
-  if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `📷 사진 추가 (${arr.length}장)` : '📷 사진 찍기';
+  if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `${cfg.add} (${arr.length}장)` : cfg.idle;
+}
+// 지난 카트 점검 기록 스트립(최근 2주) — 날짜를 눌러 그날 기록을 연다.
+async function loadCartHistory() {
+  const box = $('ccHistory'); if (!box) return;
+  try {
+    const r = await (await fetch('/api/cartcheck/history')).json();
+    const days = r.days || [];
+    box.innerHTML = days.map((d) => {
+      const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}`;
+      const mark = d.done ? '✓완료' : (d.nPhoto ? `📷${d.nPhoto}` : '기록없음');
+      return `<button class="cc-hday${d.date === ccDate ? ' sel' : ''}" data-date="${d.date}">${md}<small>${mark}</small></button>`;
+    }).join('');
+    box.querySelectorAll('button[data-date]').forEach((b) => { b.onclick = () => loadCartCheck(b.dataset.date); });
+  } catch { box.innerHTML = ''; }
 }
 function ccRenderList(items, checklist, progress) {
   const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
@@ -790,26 +803,27 @@ function ccRenderList(items, checklist, progress) {
       inp.onchange = async () => { const v = inp.value.trim(); if (v) await postJSON('/api/cartcheck/items/rename', { key: inp.dataset.key, label: v }); };
     });
     list.querySelectorAll('button[data-del]').forEach((b) => {
-      b.onclick = async () => { await postJSON('/api/cartcheck/items/remove', { key: b.dataset.del }); loadCartCheck(); };
+      b.onclick = async () => { await postJSON('/api/cartcheck/items/remove', { key: b.dataset.del }); loadCartCheck(ccDate); };
     });
-    $('ccAddItem').onclick = async () => { const v = $('ccNewItem').value.trim(); if (!v) return; await postJSON('/api/cartcheck/items/add', { label: v }); loadCartCheck(); };
+    $('ccAddItem').onclick = async () => { const v = $('ccNewItem').value.trim(); if (!v) return; await postJSON('/api/cartcheck/items/add', { label: v }); loadCartCheck(ccDate); };
     $('ccNewItem').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('ccAddItem').click(); } };
-    $('ccResetItems').onclick = async () => { await postJSON('/api/cartcheck/items/recommend', {}); loadCartCheck(); };
+    $('ccResetItems').onclick = async () => { await postJSON('/api/cartcheck/items/recommend', {}); loadCartCheck(ccDate); };
   } else {
     editBtn.textContent = '✎ 항목 편집';
     list.innerHTML = items.length
       ? items.map((it) => { const on = !!checklist[it.key]; return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? '✓' : ''}</span><span>${esc(it.label)}</span></div>`; }).join('')
       : `<div class="wl-sub">항목이 없어요. ‘✎ 항목 편집’에서 추가하세요.</div>`;
     list.querySelectorAll('.cc-item').forEach((el) => {
-      el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(); };
+      el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(ccDate); };
     });
     prog.textContent = `${progress.checked}/${progress.total}${progress.done ? ' ✓ 완료' : ''}`;
     prog.classList.toggle('done', !!progress.done);
   }
 }
-async function loadCartCheck() {
+async function loadCartCheck(date) {
   try {
-    const r = await (await fetch('/api/cartcheck')).json();
+    const q = date ? `?date=${encodeURIComponent(date)}` : '';
+    const r = await (await fetch('/api/cartcheck' + q)).json();
     ccDate = r.date;
     const day = r.day || {}, work = r.work || {}, items = r.items || [];
     const md = `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`;
@@ -818,38 +832,35 @@ async function loadCartCheck() {
       $('ccSub').textContent = work.teeTime ? `티오프 ${work.teeTime}${work.course ? `(${work.course})` : ''} · 반납 전 아래를 하나씩 훑으세요.` : '반납 전 아래를 하나씩 훑으세요.';
     } else {
       $('ccHead').textContent = `${md} 카트 점검`;
-      $('ccSub').textContent = '오늘 근무일이 아니어도 기록할 수 있어요.';
+      $('ccSub').textContent = '지난 기록도 아래 날짜를 눌러 열어볼 수 있어요.';
     }
     $('ccCart').value = day.cartNo || work.cartNo || '';
-    ccRenderIntakeThumbs(day.photos && day.photos.intake);
-    ccSetPhoto('exit', day.photos && day.photos.exit);
+    ccRenderThumbs('intake', day.photos && day.photos.intake);
+    ccRenderThumbs('exit', day.photos && day.photos.exit);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
+    await loadCartHistory();
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
 }
+// intake·exit 공통 다중 업로드(갤러리에서 여러 장). 각 구간 최대 10장.
 async function ccUpload(leg, inp) {
   if (!inp.files || !inp.files[0]) return;
   const files = Array.from(inp.files);
+  const CAP = 10;
+  const room = Math.max(0, CAP - (ccCounts[leg] || 0));
+  let pick = files.filter((f) => /^image\//.test(f.type));
+  if (pick.length > room) { alert(`사진은 최대 ${CAP}장까지예요. 앞에서 ${room}장만 올릴게요.`); pick = pick.slice(0, room); }
+  const lbl = $(CC_LABELS[leg].lbl);
+  const orig = lbl.firstChild ? lbl.firstChild.textContent : '';
   try {
-    if (leg === 'intake') {
-      const CAP = 10;
-      const room = Math.max(0, CAP - ccIntakeCount);
-      let pick = files.filter((f) => /^image\//.test(f.type));
-      if (pick.length > room) { alert(`카트 상태 사진은 최대 ${CAP}장까지예요. 앞에서 ${room}장만 올릴게요.`); pick = pick.slice(0, room); }
-      const lbl = $('ccIntakeLbl'); const orig = lbl.textContent;
-      for (let i = 0; i < pick.length; i++) {
-        lbl.textContent = `⏳ 올리는 중 ${i + 1}/${pick.length}`;
-        const image = await compressImage(pick[i]);
-        await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image });
-      }
-      lbl.textContent = orig;
-    } else {
-      const image = await compressImage(files[0]);
+    for (let i = 0; i < pick.length; i++) {
+      if (lbl.firstChild) lbl.firstChild.textContent = `⏳ 올리는 중 ${i + 1}/${pick.length}`;
+      const image = await compressImage(pick[i]);
       await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image });
     }
-  } finally { inp.value = ''; loadCartCheck(); }
+  } finally { if (lbl.firstChild) lbl.firstChild.textContent = orig; inp.value = ''; loadCartCheck(ccDate); }
 }
 function initCartButtons() {
-  $('ccEdit').onclick = () => { ccEditMode = !ccEditMode; loadCartCheck(); };
+  $('ccEdit').onclick = () => { ccEditMode = !ccEditMode; loadCartCheck(ccDate); };
   $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);

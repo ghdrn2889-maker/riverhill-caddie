@@ -319,6 +319,11 @@ app.get('/api/cartcheck', (req, res) => {
   res.json({ ok: true, date, items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid),
     work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
 });
+// 지난 카트 점검 기록 목록(최근 2주치) — 날짜를 넘겨보며 열람.
+app.get('/api/cartcheck/history', (req, res) => {
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, today: todayISOKST(), days: cartcheck.recentDays(uid, 14, todayISOKST()) });
+});
 // 체크리스트 항목 편집(추가/이름변경/삭제/복원) — 개인 목록으로 저장.
 app.post('/api/cartcheck/items/add', (req, res) => {
   const label = (req.body || {}).label;

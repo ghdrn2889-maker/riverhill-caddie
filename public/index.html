@@ -264,6 +264,11 @@
     .cc-item.on { color:#1d6740; font-weight:700; }
     .cc-photo { display:inline-flex; align-items:center; gap:6px; padding:9px 12px; border:1px dashed #b9c6bd; border-radius:9px; font-size:11px; font-weight:700; color:#3d5a49; background:#f6f9f5; cursor:pointer; }
     .cc-photo.has { border-style:solid; border-color:#1d6740; color:#1d6740; background:#eef7f0; }
+    .cc-history { display:flex; gap:7px; overflow-x:auto; padding:2px 0 10px; -webkit-overflow-scrolling:touch; }
+    .cc-history:empty { display:none; }
+    .cc-hday { flex:none; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 11px; border:1px solid #dfe5e0; border-radius:10px; background:#fff; font-size:12px; font-weight:800; color:#3d5a49; cursor:pointer; line-height:1.15; }
+    .cc-hday small { font-size:8.5px; font-weight:700; color:#8a978c; }
+    .cc-hday.sel { border-color:#1d6740; background:#eef7f0; color:#0b5d34; }
     .cc-thumb { width:44px; height:44px; border-radius:8px; object-fit:cover; border:1px solid #dfe5e0; }
     .cc-thumbs { display:flex; flex-wrap:wrap; gap:8px; }
     .cc-thumbwrap { position:relative; }
@@ -499,6 +504,7 @@
       <section class="hero">
         <div id="ccHead" class="wl-sum">불러오는 중…</div>
         <div id="ccSub" class="wl-sub"></div>
+        <div id="ccHistory" class="cc-history" aria-label="지난 카트 점검 기록"></div>
 
         <div class="cc-step first">
           <div class="cc-step-h">① 라운드 전 · 카트 상태</div>
@@ -512,9 +518,9 @@
         <div class="cc-step">
           <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">✎ 항목 편집</button></div>
           <div id="ccList"></div>
-          <div class="wl-row">
-            <label class="cc-photo" id="ccExitLbl">📷 '비운 카트' 사진<input id="ccExit" type="file" accept="image/*" capture="environment" hidden></label>
-            <img id="ccExitThumb" class="cc-thumb" hidden alt="빈 카트 사진">
+          <div class="wl-row" style="align-items:flex-start;">
+            <label class="cc-photo" id="ccExitLbl">📷 '비운 카트' 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccExit" type="file" accept="image/*" multiple hidden></label>
+            <div id="ccExitThumbs" class="cc-thumbs"></div>
           </div>
         </div>
 

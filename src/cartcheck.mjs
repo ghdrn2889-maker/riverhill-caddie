@@ -121,6 +121,7 @@ export function toggleCheck(dateISO, key, done, userId = 1) {
 }
 
 let photoSeq = 0;
+// intake(카트 상태)·exit(빈 카트) 모두 여러 장 누적(배열). 갤러리에서 여러 장 올릴 수 있다.
 export function savePhoto(dateISO, leg, dataUrl, userId = 1) {
   if (!isISO(dateISO) || !PHOTO_LEGS.includes(leg)) return null;
   const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
@@ -128,33 +129,42 @@ export function savePhoto(dateISO, leg, dataUrl, userId = 1) {
   const ext = m[1] === 'image/png' ? 'png' : 'jpg';
   const dir = userPhotoDir(userId);
   fs.mkdirSync(dir, { recursive: true });
-  if (leg === 'intake') { // 카트 상태 — 여러 장 누적(배열)
-    const fname = `cart_${dateISO}_intake_${Date.now()}_${photoSeq++}.${ext}`;
-    fs.writeFileSync(path.join(dir, fname), Buffer.from(m[2], 'base64'));
-    return mutate(dateISO, (r) => {
-      const cur = r.photos && r.photos.intake;
-      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
-      r.photos = { ...r.photos, intake: [...arr, fname] };
-    }, userId);
-  }
-  const fname = `cart_${dateISO}_${leg}.${ext}`; // exit(빈 카트) — 단일
+  const fname = `cart_${dateISO}_${leg}_${Date.now()}_${photoSeq++}.${ext}`;
   fs.writeFileSync(path.join(dir, fname), Buffer.from(m[2], 'base64'));
-  return mutate(dateISO, (r) => { r.photos = { ...r.photos, [leg]: fname }; }, userId);
+  return mutate(dateISO, (r) => {
+    const cur = r.photos && r.photos[leg];
+    const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []); // 과거 단일 문자열도 배열로 흡수(하위호환)
+    r.photos = { ...r.photos, [leg]: [...arr, fname] };
+  }, userId);
 }
 
-// 사진 삭제(intake는 배열에서 해당 파일만, exit는 통째로). 파일도 지운다.
+// 사진 삭제 — 두 구간 모두 배열에서 해당 파일만 제거. 파일도 지운다.
 export function removePhoto(dateISO, leg, fname, userId = 1) {
   return mutate(dateISO, (r) => {
     if (!r.photos) return;
-    if (leg === 'intake') {
-      const cur = r.photos.intake;
-      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
-      r.photos = { ...r.photos, intake: arr.filter((f) => f !== fname) };
-    } else {
-      const p = { ...r.photos }; delete p[leg]; r.photos = p;
-    }
+    const cur = r.photos[leg];
+    const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+    r.photos = { ...r.photos, [leg]: arr.filter((f) => f !== fname) };
     try { if (fname && /^[\w.-]+\.(jpg|png)$/.test(fname)) fs.unlinkSync(path.join(userPhotoDir(userId), fname)); } catch { /* 이미 없음 */ }
   }, userId);
+}
+
+// 최근 기록 요약(지난 카트 점검 열람용). 기록이 있는 날 + 오늘을 최신순으로.
+export function recentDays(userId = 1, n = 14, todayISO = null) {
+  const d = loadAll(userId);
+  const items = getItems(userId);
+  const dates = new Set(Object.keys(d).filter(isISO));
+  if (todayISO && isISO(todayISO)) dates.add(todayISO);
+  return [...dates].sort().reverse().slice(0, n).map((date) => {
+    const rec = d[date] || {};
+    const photos = rec.photos || {};
+    const nPhoto = PHOTO_LEGS.reduce((s, leg) => {
+      const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0));
+    }, 0);
+    const checked = items.filter((i) => rec.checklist && rec.checklist[i.key]).length;
+    return { date, cartNo: rec.cartNo || '', nPhoto, checked, total: items.length,
+      done: items.length > 0 && checked === items.length };
+  });
 }
 
 export function photoPath(fname, userId = 1) { return path.join(userPhotoDir(userId), fname); }
