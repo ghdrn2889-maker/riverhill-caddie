@@ -101,7 +101,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 async function registerSW() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
-  try { swReg = await navigator.serviceWorker.register('/sw.js'); } catch { swReg = null; }
+  try {
+    swReg = await navigator.serviceWorker.register('/sw.js');
+    try { await swReg.update(); } catch {}   // 접속할 때마다 SW 최신화 — 오래된 SW로 인한 알림 오류(중복 tag·구 badge) 방지
+  } catch { swReg = null; }
   return swReg;
 }
 async function healSubscription() {
