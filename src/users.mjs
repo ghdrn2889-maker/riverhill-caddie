@@ -8,10 +8,11 @@ const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 90);
 // ── 회원 ────────────────────────────────────────────────
 export function getUser(id) { return get('SELECT * FROM users WHERE id = ?', id); }
 export function getUserByNaver(naverId) { return get('SELECT * FROM users WHERE naver_id = ?', naverId); }
+export function getUserByGoogle(googleId) { return googleId ? get('SELECT * FROM users WHERE google_id = ?', googleId) : null; }
 
-export function createUser({ naverId = null, role = 'member' } = {}) {
+export function createUser({ naverId = null, googleId = null, role = 'member' } = {}) {
   const now = Date.now();
-  const r = run('INSERT INTO users (naver_id, created_at, role) VALUES (?, ?, ?)', naverId, now, role);
+  const r = run('INSERT INTO users (naver_id, google_id, created_at, role) VALUES (?, ?, ?, ?)', naverId, googleId, now, role);
   const id = Number(r.lastInsertRowid);
   run('INSERT INTO profiles (user_id, updated_at) VALUES (?, ?)', id, now);
   return getUser(id);

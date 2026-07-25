@@ -2,14 +2,18 @@
 //  ★솔로 모드: 지인이 아직 없을 때(또는 네이버 미설정)엔 로그인 없이 자동으로 1번 회원(김홍구)로 동작.
 //   → 지금처럼 불편 없이 혼자 쓰다가, 회원제로 열 땐 SOLO_MODE=0 한 줄로 로그인 벽을 켠다.
 import {
-  getUserByNaver, createUser, touchLogin, seedPrimaryUser,
+  getUserByNaver, getUserByGoogle, createUser, touchLogin, seedPrimaryUser,
   createSession, userForSession, destroySession, newOAuthState, consumeOAuthState,
 } from './users.mjs';
 
 const COOKIE = 'rh_sess';
 
-export function authConfigured() {
+export function naverConfigured() {
   return !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
+}
+// 로그인 수단이 하나라도(네이버 또는 구글) 설정돼 있으면 회원제 가능.
+export function authConfigured() {
+  return naverConfigured() || googleConfigured();
 }
 // 네이버 미설정이면 무조건 솔로. 설정돼 있어도 SOLO_MODE=0 으로 바꾸기 전엔 솔로 유지(의도적 전환).
 export function soloMode() {
@@ -64,7 +68,7 @@ export function attachUser(req, res, next) {
 // 로그인 필수 라우트 보호. 솔로 모드에선 항상 통과(1번 회원).
 export function requireAuth(req, res, next) {
   if (req.user) return next();
-  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/naver' });
+  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
 }
 
 // ── 네이버 OAuth ──
@@ -143,6 +147,83 @@ function linkOrCreate(naverId) {
     return getUser(1);
   }
   return createUser({ naverId });
+}
+
+// ── 구글 OAuth ──
+export function googleConfigured() {
+  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+function googleCallbackURL(req) {
+  if (process.env.GOOGLE_CALLBACK) return process.env.GOOGLE_CALLBACK;
+  const proto = isHttps(req) ? 'https' : 'http';
+  return `${proto}://${req.headers.host}/api/auth/google/callback`;
+}
+
+export function beginGoogleLogin(req, res) {
+  if (!googleConfigured()) return res.status(503).json({ error: '구글 로그인이 아직 설정되지 않았습니다(.env)' });
+  const state = newOAuthState();
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    redirect_uri: googleCallbackURL(req),
+    scope: 'openid email profile',
+    state,
+    // ?switch=1 → 계정 선택 화면 강제(다른 구글 계정으로 로그인). 기본도 계정 선택을 띄워 실수 방지.
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+}
+
+export async function googleCallback(req, res) {
+  try {
+    if (!googleConfigured()) return res.status(503).send('구글 로그인 미설정');
+    const { code, state } = req.query;
+    if (!code || !consumeOAuthState(state)) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
+
+    // 1) 코드 → 액세스 토큰(폼 인코딩 POST)
+    const body = new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: googleCallbackURL(req),
+      grant_type: 'authorization_code',
+    });
+    const tokRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+    });
+    const tok = await tokRes.json();
+    if (!tok.access_token) return res.status(502).send('구글 토큰 발급 실패');
+
+    // 2) 토큰 → 프로필(고유 sub)
+    const meRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${tok.access_token}` },
+    });
+    const me = await meRes.json();
+    const googleId = me?.sub;
+    if (!googleId) return res.status(502).send('구글 프로필 조회 실패');
+
+    // 3) 회원 찾기/생성 + 세션. (1번 회원은 이미 네이버 소유 → 구글 로그인은 새 회원)
+    let user = getUserByGoogle(googleId);
+    if (!user) user = linkOrCreateGoogle(googleId);
+    touchLogin(user.id);
+    const sessTok = createSession(user.id, req.headers['user-agent'] || '');
+    setSessionCookie(req, res, sessTok);
+    res.redirect('/');
+  } catch (e) {
+    console.error('googleCallback 오류:', e.message);
+    res.status(500).send('로그인 처리 중 오류가 발생했습니다.');
+  }
+}
+
+// 1번 회원이 아직 아무 소셜(네이버·구글)과도 연결 안 됐을 때만 연결. 이미 네이버 소유면 항상 새 회원.
+function linkOrCreateGoogle(googleId) {
+  const primary = getUser(1);
+  if (primary && !primary.naver_id && !primary.google_id) {
+    run('UPDATE users SET google_id = ? WHERE id = 1', googleId);
+    console.log(`🔗 1번 회원에 구글 계정 연결됨`);
+    return getUser(1);
+  }
+  return createUser({ googleId });
 }
 
 export function logout(req, res) {

@@ -317,6 +317,17 @@
       text-decoration:underline; cursor:pointer; background:none; border:0; }
     .ov-submit.naver { display:block; text-decoration:none; text-align:center; background:#03C75A;
       box-shadow:0 5px 14px rgba(3,199,90,.28); }
+    /* 구글 로그인(주 로그인) */
+    .ov-submit.google { display:flex; align-items:center; justify-content:center; gap:9px; text-decoration:none;
+      background:#fff; color:#3c4043; border:1px solid #dadce0; box-shadow:0 1px 3px rgba(60,64,67,.16); }
+    .ov-submit.google .glogo { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px;
+      border-radius:50%; background:#fff; border:1px solid #e3e3e3; color:#4285f4; font:900 13px/1 Arial, sans-serif; }
+    /* 네이버 로그인(비활성 — 검수 후 지원 예정) */
+    .ov-naver-disabled { margin-top:10px; display:flex; align-items:center; justify-content:center; gap:8px;
+      background:#dfe7e1; color:#8a988e; border-radius:12px; padding:13px; font-size:14px; font-weight:800;
+      cursor:not-allowed; user-select:none; }
+    .ov-naver-disabled small { font-size:10px; font-weight:800; background:#bccabf; color:#4c5a51;
+      padding:2px 8px; border-radius:99px; letter-spacing:0; }
   </style>
 </head>
 <body>
@@ -348,7 +359,7 @@
         <button class="ov-ghost" id="obLogout">로그아웃</button>
         <button class="ov-ghost" id="obClose">닫기</button>
       </div>
-      <a class="ov-switch" id="obSwitch" href="/api/auth/naver?switch=1" hidden>다른 계정으로 로그인</a>
+      <a class="ov-switch" id="obSwitch" href="/api/auth/google?switch=1" hidden>다른 계정으로 로그인</a>
     </div>
   </div>
 
@@ -358,9 +369,9 @@
       <div class="ov-badge" style="margin:0 auto 14px;">🏌️</div>
       <h2 class="ov-title">리버힐 캐디 일정</h2>
       <p class="ov-desc" style="text-align:center;">근무·스페어 알림을 받으려면 로그인하세요.</p>
-      <a class="ov-submit naver" id="naverLoginBtn" href="/api/auth/naver">네이버로 로그인</a>
+      <a class="ov-submit google" id="googleLoginBtn" href="/api/auth/google"><span class="glogo">G</span> Google로 로그인</a>
+      <div class="ov-naver-disabled" title="네이버 로그인은 검수 후 지원 예정입니다"><span>네이버로 로그인</span><small>곧 지원</small></div>
       <div class="ov-err" id="loginErr" style="text-align:center;"></div>
-      <a class="ov-switch" id="naverSwitchBtn" href="/api/auth/naver?switch=1">다른 네이버 계정으로 로그인</a>
     </div>
   </div>
 

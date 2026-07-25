@@ -16,7 +16,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken } from './users.mjs';
-import { attachUser, requireAuth, beginNaverLogin, naverCallback, logout, soloMode, authConfigured } from './auth.mjs';
+import { attachUser, requireAuth, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -36,10 +36,12 @@ app.use(express.static(path.join(ROOT_DIR, 'public')));
 // ── 인증(네이버 로그인) ──
 app.get('/api/auth/naver', beginNaverLogin);
 app.get('/api/auth/naver/callback', naverCallback);
+app.get('/api/auth/google', beginGoogleLogin);
+app.get('/api/auth/google/callback', googleCallback);
 app.post('/api/logout', logout);
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
-  const base = { ok: true, solo: soloMode(), naverEnabled: authConfigured() };
+  const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
   if (!req.user) return res.json({ ...base, authed: false });
   const prof = getProfile(req.user.id) || {};
   const needsOnboarding = !prof.board_name;
@@ -74,7 +76,7 @@ const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
-  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/naver' });
+  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
 });
 
 // 프로젝트 허브(다른 AI·사람 공유용 단일 진실 소스) — 마크다운 원문 서빙.

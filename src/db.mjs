@@ -25,6 +25,7 @@ function migrate(d) {
     CREATE TABLE IF NOT EXISTS users (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       naver_id    TEXT UNIQUE,               -- 네이버 OAuth 고유 id(없으면 로컬/시드 회원)
+      google_id   TEXT,                      -- 구글 OAuth 고유 id(sub). UNIQUE는 인덱스로(ALTER 호환)
       created_at  INTEGER NOT NULL,
       last_login  INTEGER,
       role        TEXT NOT NULL DEFAULT 'member',  -- 'member' | 'admin'
@@ -71,6 +72,8 @@ function migrate(d) {
   `);
   // 기존 DB(김홍구 등)에 새 컬럼 안전 추가 — 없을 때만 ALTER.
   addColumn(d, 'profiles', 'commute_min', 'INTEGER NOT NULL DEFAULT 60');
+  addColumn(d, 'users', 'google_id', 'TEXT');
+  d.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_id);'); // NULL은 서로 중복 허용
 }
 
 // 컬럼이 없을 때만 추가(idempotent). SQLite ALTER는 DEFAULT로 기존 행을 채운다.

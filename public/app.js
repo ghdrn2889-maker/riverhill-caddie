@@ -728,8 +728,8 @@ window.addEventListener('popstate', () => {
   if (ovIsOpen() && ovDismissable) { $('ov').hidden = true; ovDismissable = false; }
 });
 function showLogin() {
-  $('naverLoginBtn').style.display = meState.naverEnabled ? 'block' : 'none';
-  $('loginErr').textContent = !meState.naverEnabled ? '로그인 수단이 아직 설정되지 않았어요.' : '';
+  $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
+  $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
   $('loginOv').hidden = false;
 }
 function hideLogin() { $('loginOv').hidden = true; }
