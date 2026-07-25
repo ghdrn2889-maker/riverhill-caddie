@@ -145,17 +145,17 @@ async function updateNotifyButton() {
   const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
   const { isIOS } = iosInfo();
   if (!supported) {
-    if (isIOS && !isStandalone()) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 설치 후 알림 가능'; }
+    if (isIOS && !isStandalone()) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '설치 후 알림 가능'; }
     else { btn.hidden = true; }
     return;
   }
   if (Notification.permission === 'denied') {
-    btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 알림 차단됨';
+    btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '알림 차단됨';
     if (msg) msg.textContent = '기기 설정에서 이 앱 알림을 허용해주세요.'; return;
   }
   let sub = null; try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
-  if (Notification.permission === 'granted' && sub) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 알림 켜짐'; }
-  else { btn.hidden = false; btn.disabled = false; btn.className = 'ov-notify'; btn.textContent = '🔔 알림 켜기'; }
+  if (Notification.permission === 'granted' && sub) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '알림 켜짐'; }
+  else { btn.hidden = false; btn.disabled = false; btn.className = 'ov-notify'; btn.textContent = '알림 켜기'; }
 }
 
 async function refreshPushHealth() {
@@ -175,7 +175,9 @@ async function refreshPushHealth() {
   syncHealthVisibility();
 }
 
-// 첫 방문(권한 미결정) 시 자동으로 알림 허용 요청 — iOS 규칙상 '사용자 첫 탭'에 맞춰 트리거(1회).
+// 설치 후 첫 실행 시 자동으로 알림 허용 요청(1회).
+//  · 안드로이드 크롬 등: 앱을 열자마자 즉시 프롬프트를 띄운다.
+//  · iOS 등 사용자 제스처가 필요한 환경: 즉시 시도는 조용히 무시되므로 '첫 탭'에 자동 재시도.
 function maybeAutoAskNotifications() {
   try {
     if (localStorage.getItem('autoAskedPush')) return;
@@ -183,12 +185,27 @@ function maybeAutoAskNotifications() {
     if (Notification.permission !== 'default') return;         // 이미 허용/거부면 안 물음
     const { isIOS } = iosInfo();
     if (isIOS && !isStandalone()) return;                       // iOS는 설치된 앱에서만
-    const arm = () => {
+
+    let done = false;
+    const finish = () => {
+      if (done) return true;
+      done = true;
       document.removeEventListener('pointerdown', arm, true);
       localStorage.setItem('autoAskedPush', '1');
-      enableNotifications();
+      return false;
     };
+    const arm = () => { if (finish()) return; enableNotifications(); };   // 첫 탭 폴백
     document.addEventListener('pointerdown', arm, true);
+
+    // 즉시 시도: 프롬프트가 바로 뜨는 환경이면 여기서 끝. 제스처가 필요하면 리스너가 첫 탭을 잡는다.
+    (async () => {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'default') return;                         // 제스처 필요 → 첫 탭 폴백 유지
+        if (finish()) return;
+        if (perm === 'granted') await enableNotifications();
+      } catch { /* 제스처 필요 → 첫 탭 폴백 유지 */ }
+    })();
   } catch {}
 }
 
