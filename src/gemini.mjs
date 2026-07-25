@@ -287,3 +287,29 @@ export async function analyzeRoster(article, part = '3') {
     .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
     .sort((a, b) => a.pos - b.pos);
 }
+
+// ── 4) 오른쪽 '조 배치표'(전체 캐디 명부) 판독 ────────────────
+//  1~4조 × (이름·근무·카트) = 그날 소속 캐디 전원(총원). 이름 사전(오탈자 보정용) + 부·신분 태그의 원천.
+function buildCrewsPrompt() {
+  return `당신은 골프장 배치표 이미지를 정확히 옮겨적는 도우미입니다.
+이미지 오른쪽에 "1조 2조 3조 4조" 로 나뉜 '조 배치표'(그날 전체 캐디 명부)가 있습니다.
+각 조 블록은 세 열: 이름 | 근무 | 카트 입니다.
+- 네 개 조(1~4조) 각각을 위에서 아래로, 이름이 적힌 '모든 줄'을 빠짐없이 옮기세요.
+- 각 사람마다: name(이름 그대로), duty(근무 열 값 — 예: "3부","2,3","1,3","54h","휴무","휴가","벌당","선발","프리","배치","당번"; 비었으면 ""), jo(조 번호 1~4 정수).
+- 카트 번호 열은 무시하세요.
+- 이름칸이 비어있는 줄은 건너뛰세요. 이름을 지어내지 마세요.
+
+반드시 JSON "하나만"(설명 금지):
+{ "crews": [ {"jo":1,"name":"김홍구","duty":"3부"}, {"jo":1,"name":"김상미","duty":""} ] }`;
+}
+
+// 반환: [{jo:number, name:string, duty:string}] — 실패/미검출이면 [].
+export async function analyzeCrews(article) {
+  if (!article.images?.length) return [];
+  const model = process.env.GEMINI_BOARD_MODEL || undefined;
+  const out = await callGeminiJSON(buildCrewsPrompt(), article.images[0], model);
+  const rows = Array.isArray(out?.crews) ? out.crews : [];
+  return rows
+    .map((r) => ({ jo: Number(r?.jo) || 0, name: String(r?.name || '').trim(), duty: String(r?.duty || '').trim() }))
+    .filter((r) => r.name);
+}

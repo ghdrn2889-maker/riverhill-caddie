@@ -2,9 +2,9 @@
 //  글 하나(제목+본문+이미지) + 내 프로필 + 오늘 기준표 → 구조화된 판정 '하나'.
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
-import { callGeminiJSON, analyzeRoster } from './gemini.mjs';
+import { callGeminiJSON, analyzeRoster, analyzeCrews } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
-import { correctAndLearn, snapName } from './roster.mjs';
+import { correctAndLearn, snapName, learnCrews } from './roster.mjs';
 
 // 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
 function kstTodayISO() {
@@ -643,15 +643,21 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
   if (isBoard && verdict) {
     try {
-      const ordered = await analyzeRoster(article, member.part);
+      // 순번 목록(순서)·조 배치표(전원 명부)를 병렬 판독.
+      const [ordered, crews] = await Promise.all([
+        analyzeRoster(article, member.part),
+        analyzeCrews(article),
+      ]);
+      // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
+      if (crews.length) { const n = learnCrews(crews); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
       const built = buildPositionalRoster(ordered, verdict);
       if (built) {
-        // ★캐디 명단으로 후처리 보정 + 축적(오탈자 되돌림, 정확도↑). 위치(빈칸)는 보존.
-        verdict.part3Roster = correctAndLearn(built.roster, member.part);
-        verdict.crossPartNames = built.cross.map((n) => snapName(n, member.part));
+        // ★캐디 사전으로 순번 이름 후처리 보정 + 축적(오탈자 되돌림). 위치(빈칸)는 보존.
+        verdict.part3Roster = correctAndLearn(built.roster);
+        verdict.crossPartNames = built.cross.map((n) => snapName(n));
         verdict.rosterReliable = true;
       } else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
-    } catch (e) { console.error('[roster] 전용 명단 판독 실패:', e.message); }
+    } catch (e) { console.error('[roster] 명단/조 판독 실패:', e.message); }
   }
   // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
   if (verdict) {
