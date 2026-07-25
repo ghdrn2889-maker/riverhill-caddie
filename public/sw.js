@@ -22,7 +22,7 @@ self.addEventListener('push', (event) => {
       data: { url: data.url },
       vibrate: VIBRATE[level] || VIBRATE.normal,
       requireInteraction: level === 'high', // 중요 알림은 탭할 때까지 화면에 유지(자동으로 안 사라짐)
-      tag: 'riverhill',       // 같은 소식 중복 방지
+      tag: data.tag || 'riverhill',       // 같은 소식 중복 방지(payload로 지정 가능)
       renotify: true,         // 같은 tag라도 다시 울림
     })
   );
