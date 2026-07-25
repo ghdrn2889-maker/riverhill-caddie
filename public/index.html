@@ -317,6 +317,10 @@
     .ov-err { font-size:11px; color:#bd312d; font-weight:700; min-height:15px; margin-bottom:4px; }
     .ov-submit { width:100%; background:#104d31; color:#fff; border:0; border-radius:12px; padding:13px;
       font-size:14px; font-weight:800; cursor:pointer; box-shadow:0 5px 14px rgba(16,77,49,.2); }
+    .ov-notify { width:100%; margin-top:9px; background:#eaf4ee; color:#186c41; border:1px solid #bfe0cc;
+      border-radius:12px; padding:12px; font-size:13.5px; font-weight:800; cursor:pointer; }
+    .ov-notify.on { background:#eef1ec; color:#7a857f; border-color:#e0e4dd; cursor:default; }
+    .ov-notify-msg { font-size:11.5px; color:#8a7a3a; text-align:center; margin-top:6px; }
     .ov-actions { display:flex; gap:8px; margin-top:10px; }
     .ov-ghost { flex:1; background:#eef1ec; color:#647168; border:0; border-radius:11px; padding:11px;
       font-size:12.5px; font-weight:800; cursor:pointer; }
@@ -383,6 +387,8 @@
       <label class="ov-field"><span>차량번호 <small>(선택)</small></span><input id="obCar" type="text" placeholder="12가3456" maxlength="20"></label>
       <div class="ov-err" id="ovErr"></div>
       <button class="ov-submit" id="obSubmit">가입 완료</button>
+      <button class="ov-notify" id="ovEnableBtn" hidden>🔔 알림 켜기</button>
+      <div class="ov-notify-msg" id="ovEnableMsg"></div>
       <div class="ov-actions" id="ovActions" hidden>
         <button class="ov-ghost" id="obLogout">로그아웃</button>
         <button class="ov-ghost" id="obClose">닫기</button>
@@ -417,8 +423,6 @@
         <span id="hWatch">일정 감시 확인 중…</span>
         <span id="hPush">알림 확인 중…</span>
       </div>
-      <button class="enable" id="enableBtn" hidden>🔔 알림 켜기</button>
-      <div class="enable-msg" id="enableMsg"></div>
 
       <div class="sect"><span>최근 일정 소식</span><button class="more" id="toNews">전체 보기 →</button></div>
       <div id="todayNews"></div>

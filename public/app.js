@@ -111,40 +111,82 @@ async function healSubscription() {
     if (sub) await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
   } catch {}
 }
+// 알림 구독 켜기 — 계정 팝업의 버튼 또는 '첫 방문 자동 요청'에서 호출. (msg/btn 없어도 안전)
 async function enableNotifications() {
-  const btn = $('enableBtn'), msg = $('enableMsg');
+  const btn = $('ovEnableBtn'), msg = $('ovEnableMsg');
   try {
-    btn.disabled = true; msg.textContent = '';
+    if (btn) btn.disabled = true;
+    if (msg) msg.textContent = '';
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       const { isIOS } = iosInfo();
-      msg.textContent = (isIOS && !isStandalone())
-        ? '아이폰은 사파리에서 홈 화면에 추가로 설치한 뒤, 설치된 앱을 열어 알림을 켜주세요.'
+      if (msg) msg.textContent = (isIOS && !isStandalone())
+        ? '아이폰은 홈 화면에 설치한 뒤, 설치된 앱에서 알림을 켜주세요.'
         : '이 브라우저는 웹푸시를 지원하지 않아요(안드로이드 크롬 권장).';
-      btn.disabled = false; return;
+      if (btn) btn.disabled = false; return;
     }
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { msg.textContent = '알림 권한이 거부됐어요. 브라우저 설정에서 허용해주세요.'; btn.disabled = false; return; }
+    if (perm !== 'granted') { if (msg) msg.textContent = '알림이 꺼져 있어요. 기기 설정에서 이 앱 알림을 허용할 수 있어요.'; await updateNotifyButton(); return; }
     if (!swReg) await registerSW();
     const { vapidPublicKey } = await (await fetch('/api/config')).json();
     const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
     await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
     await refreshPushHealth();
-  } catch (e) { msg.textContent = '알림 켜기 실패: ' + e.message; btn.disabled = false; }
+  } catch (e) { if (msg) msg.textContent = '알림 켜기 실패: ' + e.message; if (btn) btn.disabled = false; }
 }
-async function refreshPushHealth() {
-  const el = $('hPush'), btn = $('enableBtn');
-  const set = (cls, txt) => { el.className = cls; el.textContent = txt; };
-  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-    const { isIOS } = iosInfo();
-    set(isIOS && !isStandalone() ? 'warn' : 'bad', isIOS && !isStandalone() ? '● 설치하면 알림 가능' : '● 알림 미지원');
-    btn.hidden = true; return;
+
+// 계정 팝업의 알림 버튼 상태 갱신(켜기 / 켜짐 / 차단됨 / 설치필요).
+async function updateNotifyButton() {
+  const btn = $('ovEnableBtn'), msg = $('ovEnableMsg');
+  if (!btn) return;
+  if (msg && Notification.permission !== 'denied') msg.textContent = '';
+  const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  const { isIOS } = iosInfo();
+  if (!supported) {
+    if (isIOS && !isStandalone()) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 설치 후 알림 가능'; }
+    else { btn.hidden = true; }
+    return;
   }
-  if (Notification.permission === 'denied') { set('bad', '● 알림 권한 꺼짐'); btn.hidden = true; return; }
-  let sub = null;
-  try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
-  if (Notification.permission === 'granted' && sub) { set('', ''); btn.hidden = true; healSubscription(); } // 정상이면 표시 숨김(사용자용)
-  else { set('warn', '● 이 폰 알림 꺼짐'); btn.hidden = false; btn.disabled = false; }
+  if (Notification.permission === 'denied') {
+    btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 알림 차단됨';
+    if (msg) msg.textContent = '기기 설정에서 이 앱 알림을 허용해주세요.'; return;
+  }
+  let sub = null; try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
+  if (Notification.permission === 'granted' && sub) { btn.hidden = false; btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '🔔 알림 켜짐'; }
+  else { btn.hidden = false; btn.disabled = false; btn.className = 'ov-notify'; btn.textContent = '🔔 알림 켜기'; }
+}
+
+async function refreshPushHealth() {
+  const el = $('hPush');
+  const set = (cls, txt) => { el.className = cls; el.textContent = txt; };
+  const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  const { isIOS } = iosInfo();
+  if (!supported) { set(isIOS && !isStandalone() ? 'warn' : 'bad', isIOS && !isStandalone() ? '● 설치하면 알림 가능' : '● 알림 미지원'); }
+  else if (Notification.permission === 'denied') { set('bad', '● 알림 권한 꺼짐'); }
+  else {
+    let sub = null;
+    try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
+    if (Notification.permission === 'granted' && sub) { set('', ''); healSubscription(); }
+    else set('warn', '● 이 폰 알림 꺼짐');
+  }
+  await updateNotifyButton();
   syncHealthVisibility();
+}
+
+// 첫 방문(권한 미결정) 시 자동으로 알림 허용 요청 — iOS 규칙상 '사용자 첫 탭'에 맞춰 트리거(1회).
+function maybeAutoAskNotifications() {
+  try {
+    if (localStorage.getItem('autoAskedPush')) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    if (Notification.permission !== 'default') return;         // 이미 허용/거부면 안 물음
+    const { isIOS } = iosInfo();
+    if (isIOS && !isStandalone()) return;                       // iOS는 설치된 앱에서만
+    const arm = () => {
+      document.removeEventListener('pointerdown', arm, true);
+      localStorage.setItem('autoAskedPush', '1');
+      enableNotifications();
+    };
+    document.addEventListener('pointerdown', arm, true);
+  } catch {}
 }
 
 // 감시·알림 표시가 모두 '정상(빈 값)'이면 상태 바 자체를 숨김 — 문제가 있을 때만 노출.
@@ -802,6 +844,7 @@ async function loadMe() {
   hideLogin();
   renderAccount();
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
+  else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
 }
 // 계정 오버레이(#ov) 닫기 제어 — 계정 화면은 닫기 가능, 가입(온보딩) 화면은 닫기 금지.
 let ovDismissable = false;
@@ -857,6 +900,7 @@ function openAccount() {
   fillProfileForm();
   $('ovActions').hidden = false;
   $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
+  updateNotifyButton();              // 계정 팝업 열 때 알림 버튼 상태(켜기/켜짐/차단) 갱신
   $('ovErr').textContent = '';
   ovDismissable = true;              // 계정 화면: 배경 클릭·뒤로가기로 닫힘
   $('ov').hidden = false;
@@ -879,6 +923,7 @@ async function submitProfile() {
 function initAccount() {
   $('acctBtn').onclick = openAccount;
   $('obSubmit').onclick = submitProfile;
+  $('ovEnableBtn').onclick = enableNotifications;
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
@@ -889,7 +934,6 @@ function initAccount() {
 async function main() {
   tickDate(); initNav(); initWorklogButtons(); initCartButtons(); initAccount();
   initInstallPrompt();
-  $('enableBtn').onclick = enableNotifications;
   $('readAll').onclick = markAllRead;
   await registerSW();
   await refreshPushHealth();
