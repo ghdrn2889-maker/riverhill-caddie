@@ -202,9 +202,9 @@ export async function googleCallback(req, res) {
     const googleId = me?.sub;
     if (!googleId) return res.status(502).send('구글 프로필 조회 실패');
 
-    // 3) 회원 찾기/생성 + 세션. (1번 회원은 이미 네이버 소유 → 구글 로그인은 새 회원)
+    // 3) 회원 찾기/생성 + 세션.
     let user = getUserByGoogle(googleId);
-    if (!user) user = linkOrCreateGoogle(googleId);
+    if (!user) user = linkOrCreateGoogle(googleId, me.email, me.email_verified);
     touchLogin(user.id);
     const sessTok = createSession(user.id, req.headers['user-agent'] || '');
     setSessionCookie(req, res, sessTok);
@@ -215,12 +215,24 @@ export async function googleCallback(req, res) {
   }
 }
 
-// 1번 회원이 아직 아무 소셜(네이버·구글)과도 연결 안 됐을 때만 연결. 이미 네이버 소유면 항상 새 회원.
-function linkOrCreateGoogle(googleId) {
+// 관리자 구글 이메일 화이트리스트(ADMIN_GOOGLE_EMAILS, 콤마구분). 소문자 정규화.
+function adminGoogleEmails() {
+  return String(process.env.ADMIN_GOOGLE_EMAILS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+// 1번 회원(김홍구)에 구글을 이어붙이는 규칙:
+//  (a) 1번이 아직 구글 미연결 + 로그인 이메일이 관리자 화이트리스트에 있고 구글이 검증한 이메일(email_verified)
+//      → 네이버가 이미 연결돼 있어도 같은 사람이므로 1번에 구글 연결(네이버 잠긴 동안 구글로 같은 계정 접속).
+//  (b) 예전 폴백: 1번이 네이버·구글 어디에도 연결 안 됐을 때(솔로 초기) 첫 소셜을 1번에 연결.
+//  그 외 → 정상적으로 새 회원 생성.
+function linkOrCreateGoogle(googleId, email = '', emailVerified = false) {
   const primary = getUser(1);
-  if (primary && !primary.naver_id && !primary.google_id) {
+  const em = String(email || '').trim().toLowerCase();
+  const isAdmin = em && emailVerified && adminGoogleEmails().includes(em);
+  if (primary && !primary.google_id && (isAdmin || (!primary.naver_id))) {
     run('UPDATE users SET google_id = ? WHERE id = 1', googleId);
-    console.log(`🔗 1번 회원에 구글 계정 연결됨`);
+    console.log(`🔗 1번 회원에 구글 계정 연결됨${isAdmin ? ' (관리자 이메일)' : ''}`);
     return getUser(1);
   }
   return createUser({ googleId });
