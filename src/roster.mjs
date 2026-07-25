@@ -96,3 +96,17 @@ export function caddieStats() {
   const db = load();
   return { total: Object.keys(db).length, confirmed: confirmedFrom(db).length };
 }
+
+// ── 조 배치표 중복 수확 방지 ──────────────────────────────
+//  조 명부는 날마다 거의 같으므로(순번·티오프만 변동, 조 상태는 유지), 같은 배치표 이미지를 재판독(조용한 수정
+//  감시 등)할 때 조 판독을 또 돌릴 필요가 없다. 이미 수확한 이미지 키는 건너뛴다(Gemini 사용량 절약).
+const HARVEST_FILE = 'roster-harvest.json'; // 최근 수확한 배치표 이미지 키 목록
+export function alreadyHarvested(key) {
+  if (!key) return false;
+  return loadJSON(HARVEST_FILE, []).includes(key);
+}
+export function markHarvested(key) {
+  if (!key) return;
+  const a = loadJSON(HARVEST_FILE, []);
+  if (!a.includes(key)) { a.push(key); while (a.length > 300) a.shift(); saveJSON(HARVEST_FILE, a); }
+}

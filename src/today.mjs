@@ -122,6 +122,14 @@ export function applyVerdict(prev, verdict, article) {
     next.rosterAt = Date.now();
   }
 
+  // ── 티오프표(순번→시각) 저장 — 스페어 대시보드에서 확정자 티오프를 이름 옆에 표기하기 위함 ──
+  //  (배치표 판독일 때만 채워짐. 텍스트 소식은 teeGrid 없음 → 기존 유지)
+  if (Array.isArray(verdict.teeGrid) && verdict.teeGrid.length) {
+    next.teeGrid = verdict.teeGrid
+      .filter((g) => Number(g?.pos) > 0 && /\d{1,2}:\d{2}/.test(String(g?.time || '')))
+      .map((g) => ({ pos: Number(g.pos), time: String(g.time), course: g.course || '' }));
+  }
+
   // ── ★"현재 3부 N팀" → 확정선 즉시 갱신 + 내 순번과 비교해 근무↔스페어 재계산 ──
   //  N팀 = 순번 N번까지 근무 (거의) 확정. 내 순번이 N 안에 들면 근무 준비, 벗어나면 스페어.
   //  예약이 늘면(스페어→근무 "준비 시작"), 취소로 줄면(근무→스페어 "대기 전환") 양방향 반영.

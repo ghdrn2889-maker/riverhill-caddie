@@ -4,7 +4,7 @@
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON, analyzeRoster, analyzeCrews } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
-import { correctAndLearn, snapName, learnCrews } from './roster.mjs';
+import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 
 // 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
 function kstTodayISO() {
@@ -261,9 +261,9 @@ export function decide(article, verdict, member = memberFromEnv()) {
     status = status === 'your_turn' ? 'your_turn' : (status === 'work' ? 'work' : 'assigned');
     body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 배정됐어요!${commuteLine(tee, verdict.course, member.commuteMin)}`;
   } else if (status === 'work' || status === 'assigned' || status === 'your_turn') {
-    // 근무 결론인데 티오프 시각이 아직 안 읽힘 → 근무는 확정, 시각만 확인 안내(애매한 요약으로 새지 않게).
+    // 근무 결론인데 티오프 시각이 아직 안 읽힘 → '확정'이 아니라 '예정'으로(티오프 매칭 = 확정 기준).
     status = status === 'your_turn' ? 'your_turn' : 'assigned';
-    body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 배정됐어요! 티오프 시각은 배치표에서 확인해주세요.`;
+    body = `${name}님, ${dayWordFor(verdict.dateLabel)} 근무 예정이에요. 티오프가 매칭되면 확정 알림 드릴게요.`;
   } else if (status === 'waiting' || status === 'near' || status === 'spare') {
     const mp = Number(verdict.myPosition), cp = Number(verdict.cutoffPosition);
     // 남은 인원은 '○○까지'가 텍스트에 명시됐을 때만 계산(지어낸 커트라인 방지).
@@ -272,9 +272,9 @@ export function decide(article, verdict, member = memberFromEnv()) {
     if (announced) {
       const remaining = mp - cp - 1;
       if (remaining < 0) {
-        // 내 순번이 커트라인 안 → 근무 확정.
+        // 내 순번이 커트라인 안 → 근무 순번에 듦. 아직 티오프 매칭 전이므로 '확정' 아니라 '예정'으로 구분.
         status = 'assigned';
-        body = `${name}님, ${verdict.cutoffName}님까지 근무라 오늘 근무 배정됐어요!`;
+        body = `${name}님, ${verdict.cutoffName}님까지 근무예요. 순번(${mp}번)이 그 안이라 ${dayWordFor(verdict.dateLabel)} 근무 예정이에요. 티오프가 매칭되면 확정 알림 드릴게요.`;
       } else if (remaining === 0) {
         // 커트라인 바로 다음 = 스페어 1번. '출근 확정'이 아니라 '언제든 나갈 수 있는 1순위'로 구분.
         status = 'near';
@@ -643,13 +643,15 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
   if (isBoard && verdict) {
     try {
-      // 순번 목록(순서)·조 배치표(전원 명부)를 병렬 판독.
+      // 순번 목록(순서)·조 배치표(전원 명부)를 병렬 판독. 조 명부는 이미 수확한 이미지면 건너뜀(사용량 절약).
+      const imgKey = article.images?.[0] || '';
+      const doCrew = !!imgKey && !alreadyHarvested(imgKey);
       const [ordered, crews] = await Promise.all([
         analyzeRoster(article, member.part),
-        analyzeCrews(article),
+        doCrew ? analyzeCrews(article) : Promise.resolve([]),
       ]);
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
-      if (crews.length) { const n = learnCrews(crews); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
+      if (crews.length) { const n = learnCrews(crews); markHarvested(imgKey); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
       const built = buildPositionalRoster(ordered, verdict);
       if (built) {
         // ★캐디 사전으로 순번 이름 후처리 보정 + 축적(오탈자 되돌림). 위치(빈칸)는 보존.

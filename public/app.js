@@ -136,11 +136,15 @@ function renderToday(t) {
   const off = Number(t.dayOffset) || 0;
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
   $('heroLabel').textContent = `${dayW} 내 상황`;
+  // 근무 '확정'은 티오프가 실제 매칭됐을 때만. 그 전(순번상 근무권)은 '근무 예정'으로 스페어와 구분.
+  const isConfirmed = isWork && s.teeTime;
   $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
-    : isWork ? `${dayW} 근무 확정`
+    : isConfirmed ? `${dayW} 근무 확정`
+    : isWork ? `${dayW} 근무 예정`
     : st === 'off' ? `${dayW} 휴무`
     : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
+    : (isWork && !s.teeTime) ? '순번상 근무권에 들었어요. 티오프가 매칭되면 시간을 알려드릴게요.'
     : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
     : st === 'off' ? `${dayW}은 예정된 근무가 없어요. 편히 쉬세요.`
@@ -310,6 +314,9 @@ function renderSpareBoard(s) {
   const cut = Number(s.cutLine) || 0;
   const roster = Array.isArray(s.roster3) ? s.roster3 : [];
   const nameAt = (p) => (typeof p === 'number' && p >= 1 && roster[p - 1]) ? roster[p - 1] : '';
+  // 티오프표(순번→시각) — 확정된 사람 이름 옆에 매칭 티오프 시간을 함께 보여준다.
+  const grid = Array.isArray(s.teeGrid) ? s.teeGrid : [];
+  const teeAt = (p) => { const g = grid.find((x) => Number(x.pos) === p); return g && g.time ? g.time : ''; };
   const note = ''; // (사용자 요청) 티오프 당겨짐 안내 문구 숨김
 
   // 확정선 정보가 없으면(텍스트-only 등) 간단 안내로 폴백.
@@ -338,11 +345,13 @@ function renderSpareBoard(s) {
   const rows = [];
   const rowHTML = (p, kind) => {
     const nm = nameAt(p);
+    const tee = teeAt(p);
     let st, badge;
     if (kind === 'done') { st = nm || '확정'; badge = '<span class="sp-badge sp-b-work">근무</span>'; }
     else if (kind === 'me') { st = '나 — 대기 중'; badge = '<span class="sp-badge sp-b-me">나</span>'; }
     else { st = nm || '대기'; badge = '<span class="sp-badge sp-b-wait">스페어</span>'; }
-    return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${badge}</div>`;
+    const teeHtml = tee ? `<span class="sp-tee">${esc(tee)}</span>` : '';
+    return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${teeHtml}${badge}</div>`;
   };
   // 확정 구간(커트라인 직전 2행)
   if (cut - 1 >= 1) rows.push(rowHTML(cut - 1, 'done'));
