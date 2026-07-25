@@ -2,7 +2,7 @@
 //  글 하나(제목+본문+이미지) + 내 프로필 + 오늘 기준표 → 구조화된 판정 '하나'.
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
-import { callGeminiJSON } from './gemini.mjs';
+import { callGeminiJSON, analyzeRoster } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
 
 // 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
@@ -592,6 +592,42 @@ async function readBoardConsensus(article, member) {
   return consensusFromReads(reads);
 }
 
+// 명단 셀 이름 정규화. 괄호 처리:
+//  · "(54)"·"(2,3)" 처럼 숫자/쉼표면 = 부·근무 구분 → 괄호 떼고 본명, 부-중복(cross)으로 표시.
+//  · "(사람이름)" 이면 = 순번 교환 → 그 자리 실제 점유자는 괄호 안 사람.
+function normRosterName(raw) {
+  const s = String(raw || '').trim();
+  const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  if (!m) return { name: s, cross: false };
+  const base = m[1].trim(), inner = m[2].trim();
+  if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true };  // 부/근무 구분
+  return { name: inner || base, cross: false };                       // 순번 교환 → 실제 점유자
+}
+
+// 전용 명단 판독([{pos,name}]) → { roster:위치정렬(index=순번-1,빈칸=''), cross:[부중복 본명] }.
+//  충분히 완전할 때만 반환, 아니면 null. (정확 우선) 맨 위(1~2번)부터 + 대부분 채움(≥70%) + 내 순번까지 덮을 때만.
+function buildPositionalRoster(ordered, verdict) {
+  if (!Array.isArray(ordered) || !ordered.length) return null;
+  const byPos = new Map();
+  for (const r of ordered) if (!byPos.has(r.pos)) byPos.set(r.pos, r.name);
+  const positions = [...byPos.keys()];
+  const minPos = Math.min(...positions);
+  const maxPos = Math.max(...positions);
+  const myPos = Number(verdict?.myPosition) || 0;
+  if (minPos > 2) return null;                              // 목록 앞부분을 못 읽음
+  if (byPos.size < Math.ceil(maxPos * 0.7)) return null;    // 중간이 너무 많이 빔
+  if (myPos && maxPos < myPos) return null;                 // 내 순번을 못 덮음
+  const arr = new Array(maxPos).fill('');
+  const cross = [];
+  for (const [pos, raw] of byPos) {
+    if (pos < 1 || pos > maxPos) continue;
+    const { name, cross: isCross } = normRosterName(raw);
+    arr[pos - 1] = name;
+    if (isCross && name) cross.push(name);
+  }
+  return { roster: arr, cross };
+}
+
 export async function judge(article, today = null, member = memberFromEnv()) {
   const img = article.images?.[0] || null;
   const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
@@ -602,6 +638,16 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
   if (!verdict?._resolved) resolveTeeByGrid(verdict);
+  // ★순번별 '이름' 명단 — 통합 판독이 자주 놓쳐서(타임아웃·부분) 전용 판독으로 다시 뽑아 위치정렬로 저장.
+  //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
+  if (isBoard && verdict) {
+    try {
+      const ordered = await analyzeRoster(article, member.part);
+      const built = buildPositionalRoster(ordered, verdict);
+      if (built) { verdict.part3Roster = built.roster; verdict.crossPartNames = built.cross; verdict.rosterReliable = true; }
+      else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
+    } catch (e) { console.error('[roster] 전용 명단 판독 실패:', e.message); }
+  }
   // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
   if (verdict) {
     const th = (String(verdict.teeTime || '').match(/(\d{1,2}):/) || [])[1];

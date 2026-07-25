@@ -293,6 +293,17 @@ function renderBoard(t) {
   else slot.innerHTML = '';
 }
 
+// 이름 느슨한 일치 — 판독 글자변형(예: 김홍구↔김흥구) 허용. 공백 제거 후 완전일치 또는 같은 길이 1글자 차.
+function nameLooseEq(a, b) {
+  const na = String(a || '').replace(/\s/g, ''), nb = String(b || '').replace(/\s/g, '');
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.length !== nb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < na.length; i++) if (na[i] !== nb[i]) diff++;
+  return diff <= 1;
+}
+
 // 스페어(대기) 대시보드 — '대기 순번 리스트'(깔끔 리스트 확정안). 실데이터로 그림.
 function renderSpareBoard(s) {
   const myPos = Number(s.myPosition) || 0;
@@ -308,6 +319,22 @@ function renderSpareBoard(s) {
   }
 
   const ahead = Math.max(0, myPos - cut - 1);
+
+  // ★정확 우선: 명단이 '신뢰할 만할 때만' 순번별 실제 이름을 보여준다.
+  //  ① 명단이 내 순번까지 덮고, ② 내 자리(myPos) 이름이 내 실명과 (거의) 일치해야 신뢰.
+  //  아니면 틀린 이름을 보이지 않고 '내 앞 N명 · 확정선' 깔끔 요약으로.
+  const myName = (meState && meState.profile && meState.profile.boardName || '').trim();
+  const rosterOK = roster.length >= myPos && nameLooseEq(nameAt(myPos), myName);
+  if (!rosterOK) {
+    return `<div class="sp-board">
+      <div class="sp-head">
+        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+        <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
+      </div>
+      <div class="sp-foot" style="border-top:0"><span>🕒</span><span>내 순번 <b>${myPos}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
+    </div>`;
+  }
+
   const rows = [];
   const rowHTML = (p, kind) => {
     const nm = nameAt(p);

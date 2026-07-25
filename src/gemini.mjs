@@ -257,3 +257,33 @@ export async function analyzeSchedule(article) {
   const { name, part } = nameAndPart();
   return callGeminiJSON(buildSchedulePrompt(article, name, part), article.images[0]);
 }
+
+// ── 3) 본배치표에서 'N부 순번/이름 목록'만 집중 판독 ─────────────
+//  통합 판독은 한 번에 너무 많은 걸 읽어 명단을 자주 놓친다(타임아웃·부분). 명단만 따로 뽑으면
+//  또렷한 인쇄 글씨라 순번 순서대로 안정적으로 읽힌다 → 스페어 대시보드의 '순번별 이름'의 근거.
+function buildRosterPrompt(part) {
+  return `당신은 골프장 배치표 이미지를 정확히 옮겨적는 도우미입니다.
+이미지에서 "${part}부 순번/이름 목록"을 찾으세요.
+- 이 목록은 "OUT ${part}부 IN" 티오프 시간표의 '왼쪽'에 있으며, 각 줄이 "순번(숫자) + 이름" 형태입니다.
+- 순번 1번부터 마지막 번호까지 한 명도 빠뜨리지 말고 순서대로 전부 옮기세요(근무·스페어 모두 포함).
+- 이름 옆 괄호 표기((54), (1,3), (2,3) 등)가 있으면 이름에 그대로 붙여 적으세요.
+- 목록이 두 개의 세로단으로 나뉘어 있으면(예: 왼쪽 1~20, 오른쪽 21~) 두 단을 순번 순서대로 이어붙이세요.
+- 순번 숫자는 이름 왼쪽에 분명히 적혀 있습니다. 그 숫자를 pos 로 쓰세요(임의로 매기지 말 것).
+- ${part}부가 아닌 1부/2부 목록은 절대 섞지 마세요.
+
+반드시 JSON "하나만" 출력(설명 금지):
+{ "part": ${part}, "roster": [ {"pos": 1, "name": "정유경(54)"}, {"pos": 2, "name": "표승완(54)"} ] }
+${part}부 목록을 못 찾으면 {"part": ${part}, "roster": []}.`;
+}
+
+// 반환: [{pos:number, name:string}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
+export async function analyzeRoster(article, part = '3') {
+  if (!article.images?.length) return [];
+  const model = process.env.GEMINI_BOARD_MODEL || undefined; // 명단은 더 좋은 board 모델로
+  const out = await callGeminiJSON(buildRosterPrompt(part), article.images[0], model);
+  const rows = Array.isArray(out?.roster) ? out.roster : [];
+  return rows
+    .map((r) => ({ pos: Number(r?.pos), name: String(r?.name || '').trim() }))
+    .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
+    .sort((a, b) => a.pos - b.pos);
+}

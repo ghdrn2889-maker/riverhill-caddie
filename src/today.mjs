@@ -117,7 +117,7 @@ export function applyVerdict(prev, verdict, article) {
   // ── 3부 명단(화이트리스트): 본배치표에서 통째로 읽혔을 때만 저장/갱신 ──
   //  (짧은 소식은 part3Roster=[] 이므로 기존 명단을 그대로 유지) — 이후 이름 기반 필터의 근거.
   if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length) {
-    next.roster3 = verdict.part3Roster.filter(Boolean);
+    next.roster3 = verdict.part3Roster.slice();   // ★위치정렬 보존(빈칸 유지) — 순번 = index+1
     next.crossPart3 = (verdict.crossPartNames || []).filter(Boolean);
     next.rosterAt = Date.now();
   }
