@@ -18,7 +18,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      badge: '/badge-96.png',  // 상태바 작은 아이콘은 흰색 실루엣(투명)이어야 사각형 대신 로고 모양으로 뜸
       data: { url: data.url },
       vibrate: VIBRATE[level] || VIBRATE.normal,
       requireInteraction: level === 'high', // 중요 알림은 탭할 때까지 화면에 유지(자동으로 안 사라짐)
