@@ -4,6 +4,7 @@
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON, analyzeRoster } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
+import { correctAndLearn, snapName } from './roster.mjs';
 
 // 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
 function kstTodayISO() {
@@ -644,8 +645,12 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     try {
       const ordered = await analyzeRoster(article, member.part);
       const built = buildPositionalRoster(ordered, verdict);
-      if (built) { verdict.part3Roster = built.roster; verdict.crossPartNames = built.cross; verdict.rosterReliable = true; }
-      else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
+      if (built) {
+        // ★캐디 명단으로 후처리 보정 + 축적(오탈자 되돌림, 정확도↑). 위치(빈칸)는 보존.
+        verdict.part3Roster = correctAndLearn(built.roster, member.part);
+        verdict.crossPartNames = built.cross.map((n) => snapName(n, member.part));
+        verdict.rosterReliable = true;
+      } else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
     } catch (e) { console.error('[roster] 전용 명단 판독 실패:', e.message); }
   }
   // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
