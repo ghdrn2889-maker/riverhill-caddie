@@ -123,6 +123,12 @@ export function activeMembers() {
               ORDER BY u.id`);
 }
 
+// 관리자(운영자) 계정 id 목록 — 네이버 쿠키 만료·테스트 등 '관리자 전용 알림' 수신 대상.
+//  일반 회원(테스터 등)에게는 운영성 알림이 절대 가지 않도록 역할(role)로 구분한다.
+export function adminUserIds() {
+  return all(`SELECT id FROM users WHERE role = 'admin' AND status = 'active' ORDER BY id`).map((r) => r.id);
+}
+
 // (배치표 이름 + 부) 중복 방지: 다른 활성 회원이 이미 같은 이름·부를 쓰는지.
 //  리버힐 한 부(部) 안엔 같은 이름이 없으므로 '이름+부'가 사실상 한 캐디의 고유 신원.
 //  → 같은 캐디가 계정 2개로 알림 2번 받는 문제 차단. 본인 프로필 수정은 exceptUserId로 제외.

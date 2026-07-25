@@ -71,6 +71,12 @@ export function requireAuth(req, res, next) {
   res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
 }
 
+// 관리자 전용 라우트 보호(테스트 알림 등 운영 기능) — 일반 회원은 403.
+export function requireAdmin(req, res, next) {
+  if (req.user && req.user.role === 'admin') return next();
+  res.status(403).json({ error: '관리자 전용 기능입니다' });
+}
+
 // ── 네이버 OAuth ──
 function callbackURL(req) {
   if (process.env.NAVER_CALLBACK) return process.env.NAVER_CALLBACK;

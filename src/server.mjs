@@ -15,8 +15,8 @@ import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken } from './users.mjs';
-import { attachUser, requireAuth, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds } from './users.mjs';
+import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -113,9 +113,15 @@ app.get('/api/journal', (req, res) => {
   res.json({ ok: true, days: journal.listJournal({ year, month }, uid), summary: journal.summary({ year, month }, uid) });
 });
 
-// 테스트용: 지금 바로 내 폰으로 알림 한 번 쏴보기
-app.post('/api/test', async (req, res) => {
-  await broadcast({ title: '🏌️ 테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
+// 관리자 전용 알림 발송 — role='admin' 계정들의 기기에만. (네이버 쿠키 만료·테스트 등 운영성 알림)
+//  일반 회원(테스터 등)에게는 절대 가지 않는다. 관리자 계정이 없으면 조용히 아무것도 안 보냄.
+async function broadcastAdmins(msg) {
+  for (const id of adminUserIds()) await broadcast(msg, id);
+}
+
+// 테스트용(관리자 전용): 관리자 폰으로 알림 한 번 쏴보기
+app.post('/api/test', requireAdmin, async (req, res) => {
+  await broadcastAdmins({ title: '🏌️ 테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
   res.json({ ok: true });
 });
 
@@ -863,7 +869,8 @@ startCrawler({
     }
   },
   onCafeError: async () => {
-    await broadcast({
+    // 운영성 알림 → 관리자(김홍구)에게만. 일반 회원(테스터)에게는 보내지 않는다.
+    await broadcastAdmins({
       title: '⚠️ 네이버 쿠키 만료',
       body: '카페 감시가 멈췄어요. .env 의 쿠키를 새로 갱신해주세요.',
       url: '/',
