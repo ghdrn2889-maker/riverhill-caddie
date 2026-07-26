@@ -320,11 +320,21 @@ function wmoDesc(code) {
     95: '뇌우', 96: '우박 뇌우', 99: '우박 뇌우' };
   return M[code] || '흐림';
 }
+// 맑은 밤 하늘: 크레이터 보름달 + 반짝이는 별(달 우상단과 안 겹치게 좌·하단 위주).
+function moonStarsHTML() {
+  const pts = [[10, 18], [22, 34], [14, 52], [30, 14], [38, 44], [26, 62], [44, 26], [52, 58], [46, 72], [60, 40], [64, 66], [35, 80], [18, 72]];
+  let s = '<div class="moon"></div>';
+  for (const [x, y] of pts) {
+    const dl = (Math.random() * 3).toFixed(2), sz = (2 + Math.random() * 1.8).toFixed(1);
+    s += `<span class="star" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;animation-delay:${dl}s"></span>`;
+  }
+  return s;
+}
 // 배경 효과 파티클 HTML(비·눈은 무작위 생성).
 function wxFxHTML(cat, day) {
   if (cat === 'clear') return day
     ? '<div class="rays"></div><div class="sun"></div>'
-    : '<div class="sun" style="background:radial-gradient(circle,#e6ecff 0%,rgba(200,215,255,0) 70%)"></div>';
+    : moonStarsHTML();
   if (cat === 'cloud') return '<div class="cloud c1"></div><div class="cloud c2"></div>';
   let s = '';
   if (cat === 'rain' || cat === 'storm') {
@@ -348,10 +358,11 @@ async function loadWeather() {
   try {
     const w = await (await fetch('/api/weather')).json();
     const cur = w && w.ok && w.current;
-    if (!cur) { hero.classList.remove('has-wx', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; return; }
+    if (!cur) { hero.classList.remove('has-wx', 'wx-night', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; return; }
     const cat = wmoCategory(cur.code);
     hero.classList.remove(...CATS);
     hero.classList.add('has-wx', 'w-' + cat);
+    hero.classList.toggle('wx-night', !cur.day); // 해가 졌으면 밤하늘 배경 + 밝은 글자
     if (fx) fx.innerHTML = wxFxHTML(cat, cur.day);
     if (ref) { ref.textContent = `📍 ${w.course || '안동'} · ${wmoEmoji(cur.code, cur.day)} ${wmoDesc(cur.code)} ${cur.temp}° · 강수 ${cur.pop}%`; ref.hidden = false; }
   } catch { /* 실패 시 기존 배경 유지 */ }
