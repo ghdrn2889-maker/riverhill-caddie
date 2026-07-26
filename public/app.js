@@ -426,39 +426,23 @@ function nameLooseEq(a, b) {
 
 // 스페어(대기) 대시보드 — '대기 순번 리스트'(깔끔 리스트 확정안). 실데이터로 그림.
 function renderSpareBoard(s) {
-  const myPos = Number(s.myPosition) || 0;
-  const cut = Number(s.cutLine) || 0;
   const roster = Array.isArray(s.roster3) ? s.roster3 : [];
   const nameAt = (p) => (typeof p === 'number' && p >= 1 && roster[p - 1]) ? roster[p - 1] : '';
   // 티오프표(순번→시각) — 확정된 사람 이름 옆에 매칭 티오프 시간을 함께 보여준다.
   const grid = Array.isArray(s.teeGrid) ? s.teeGrid : [];
   const teeAt = (p) => { const g = grid.find((x) => Number(x.pos) === p); return g && g.time ? g.time : ''; };
-  const note = ''; // (사용자 요청) 티오프 당겨짐 안내 문구 숨김
+  const cut = Number(s.cutLine) || 0;
 
-  // 확정선 정보가 없으면(텍스트-only 등) 간단 안내로 폴백.
-  if (!myPos || !cut || myPos <= cut) {
-    return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span>` +
-      `<span>아직 <b>근무 확정 전</b>이에요${myPos ? ` · 순번 ${myPos}번` : ''}. 확정선 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div>${note}</div>`;
-  }
-
-  const ahead = Math.max(0, myPos - cut - 1);
-
-  // ★정확 우선: 명단이 '신뢰할 만할 때만' 순번별 실제 이름을 보여준다.
-  //  ① 명단이 내 순번까지 덮고, ② 내 자리(myPos) 이름이 내 실명과 (거의) 일치해야 신뢰.
-  //  아니면 틀린 이름을 보이지 않고 '내 앞 N명 · 확정선' 깔끔 요약으로.
+  // ★명단에서 내 이름을 직접 찾아 순번을 확정한다(정확·자기일관 우선).
+  //  서버가 잠가둔 myPosition과 최신 명단이 한 칸 어긋나도, '표시 이름'과 '내 위치'가
+  //  같은 배열(roster)에서 나오므로 순번 리스트가 간헐적으로 숨겨지던 문제를 없앤다.
   const myName = (meState && meState.profile && meState.profile.boardName || '').trim();
-  const rosterOK = roster.length >= myPos && nameLooseEq(nameAt(myPos), myName);
-  if (!rosterOK) {
-    return `<div class="sp-board">
-      <div class="sp-head">
-        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
-        <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
-      </div>
-      <div class="sp-foot" style="border-top:0"><span>🕒</span><span>내 순번 <b>${myPos}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
-    </div>`;
-  }
+  const norm = (x) => String(x || '').replace(/\s/g, '');
+  const mn = norm(myName);
+  let myIdx = mn ? roster.findIndex((nm) => norm(nm) === mn) : -1;   // 정확 일치 우선
+  if (myIdx < 0 && mn) myIdx = roster.findIndex((nm) => nameLooseEq(nm, myName)); // 없으면 1글자 오차 허용
+  const myPos = myIdx >= 0 ? myIdx + 1 : (Number(s.myPosition) || 0);
 
-  const rows = [];
   const rowHTML = (p, kind) => {
     const nm = nameAt(p);
     const tee = teeAt(p);
@@ -469,28 +453,66 @@ function renderSpareBoard(s) {
     const teeHtml = tee ? `<span class="sp-tee">${esc(tee)}</span>` : '';
     return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${teeHtml}${badge}</div>`;
   };
-  // 확정 구간(커트라인 직전 2행)
-  if (cut - 1 >= 1) rows.push(rowHTML(cut - 1, 'done'));
-  rows.push(rowHTML(cut, 'done'));
-  rows.push(`<div class="sp-cut"><i></i><b>확정선 · 여기까지 근무</b><i></i></div>`);
-  // 대기 구간(길면 가운데 ⋯로 접기)
-  const waitStart = cut + 1;
-  if (myPos - 1 - waitStart <= 2) {
-    for (let p = waitStart; p <= myPos - 1; p++) rows.push(rowHTML(p, 'wait'));
-  } else {
-    rows.push(rowHTML(waitStart, 'wait'));
-    rows.push(`<div class="sp-row"><span class="no">⋯</span><span class="st">대기</span><span class="sp-badge sp-b-wait">스페어</span></div>`);
-    rows.push(rowHTML(myPos - 1, 'wait'));
-  }
-  rows.push(rowHTML(myPos, 'me'));
-  rows.push(rowHTML(myPos + 1, 'wait'));
 
+  // 명단에서 내 이름을 못 찾음(정확 우선 미충족) → 있는 정보(순번/확정선)만 숫자 요약.
+  if (myIdx < 0) {
+    const mp = Number(s.myPosition) || 0;
+    if (!mp) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
+    const ahead = (cut && mp > cut) ? Math.max(0, mp - cut - 1) : 0;
+    if (!cut || mp <= cut) {
+      return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span>` +
+        `<span>아직 <b>근무 확정 전</b>이에요 · 순번 <b>${mp}번</b>. 확정선 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div></div>`;
+    }
+    return `<div class="sp-board">
+      <div class="sp-head">
+        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+        <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
+      </div>
+      <div class="sp-foot" style="border-top:0"><span>🕒</span><span>내 순번 <b>${mp}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
+    </div>`;
+  }
+
+  // ── 여기부터 명단 신뢰 O: 순번별 이름 리스트를 그린다 ──
+  const hasCut = cut >= 1 && cut < myPos;
+  const rows = [];
+  if (hasCut) {
+    const ahead = Math.max(0, myPos - cut - 1);
+    // 확정 구간(커트라인 직전 2행)
+    if (cut - 1 >= 1) rows.push(rowHTML(cut - 1, 'done'));
+    rows.push(rowHTML(cut, 'done'));
+    rows.push(`<div class="sp-cut"><i></i><b>확정선 · 여기까지 근무</b><i></i></div>`);
+    // 대기 구간(길면 가운데 ⋯로 접기)
+    const waitStart = cut + 1;
+    if (myPos - 1 - waitStart <= 2) {
+      for (let p = waitStart; p <= myPos - 1; p++) rows.push(rowHTML(p, 'wait'));
+    } else {
+      rows.push(rowHTML(waitStart, 'wait'));
+      rows.push(`<div class="sp-row"><span class="no">⋯</span><span class="st">대기</span><span class="sp-badge sp-b-wait">스페어</span></div>`);
+      rows.push(rowHTML(myPos - 1, 'wait'));
+    }
+    rows.push(rowHTML(myPos, 'me'));
+    rows.push(rowHTML(myPos + 1, 'wait'));
+    return `<div class="sp-board">
+      <div class="sp-head">
+        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+        <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
+      </div>
+      <div class="sp-list">${rows.join('')}</div>
+    </div>`;
+  }
+
+  // 확정선 미정 — 순번은 아는데 확정선 소식이 아직. 내 주변 순번을 창(window)으로 보여준다.
+  const start = Math.max(1, myPos - 3);
+  for (let p = start; p < myPos; p++) rows.push(rowHTML(p, 'wait'));
+  rows.push(rowHTML(myPos, 'me'));
+  if (myPos + 1 <= roster.length) rows.push(rowHTML(myPos + 1, 'wait'));
   return `<div class="sp-board">
     <div class="sp-head">
-      <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
-      <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
+      <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">확정선 소식 대기 중</div></div>
+      <div class="sp-ahead"><b>${myPos}</b><span>내 순번</span></div>
     </div>
     <div class="sp-list">${rows.join('')}</div>
+    <div class="sp-foot"><span>🕒</span><span>확정선(“○○님까지”) 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div>
   </div>`;
 }
 
