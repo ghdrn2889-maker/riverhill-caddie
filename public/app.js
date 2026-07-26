@@ -232,6 +232,40 @@ async function loadWatchHealth() {
 async function loadToday() {
   try { const t = await (await fetch('/api/today')).json(); lastToday = t; todayOk = true; renderToday(t); }
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
+  loadWeather();
+}
+// WMO 날씨코드 → 이모지(주간/야간 구분).
+function wmoEmoji(code, day) {
+  if (code === 0) return day ? '☀️' : '🌙';
+  if (code === 1) return day ? '🌤️' : '🌙';
+  if (code === 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code === 45 || code === 48) return '🌫️';
+  if (code >= 51 && code <= 57) return '🌦️';
+  if (code >= 61 && code <= 67) return '🌧️';
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return '🌨️';
+  if (code >= 80 && code <= 82) return '🌦️';
+  if (code >= 95) return '⛈️';
+  return '☁️';
+}
+// 골프장 라운드 시간대 날씨 카드.
+async function loadWeather() {
+  const box = $('wxCard'); if (!box) return;
+  try {
+    const w = await (await fetch('/api/weather')).json();
+    if (!w || !w.ok || !Array.isArray(w.hours) || !w.hours.length) { box.hidden = true; return; }
+    const chips = w.hours.map((h) => {
+      const rainy = h.pop >= 60 || h.precip >= 0.5;
+      return `<div class="wx-h${rainy ? ' rainy' : ''}"><span class="wh">${h.hour}시</span>`
+        + `<span class="wi">${wmoEmoji(h.code, h.day)}</span><span class="wt">${h.temp}°</span>`
+        + `<span class="wp${h.pop < 20 ? ' dry' : ''}">${h.pop}%</span></div>`;
+    }).join('');
+    const sum = w.summary || {};
+    box.innerHTML = `<div class="wx-head"><span class="wx-title">${esc(w.label || '날씨')}</span><span class="wx-loc">📍 ${esc(w.course || '')}</span></div>`
+      + `<div class="wx-sum${sum.rain ? ' rain' : ''}">${esc(sum.text || '')}</div>`
+      + `<div class="wx-strip">${chips}</div>`;
+    box.hidden = false;
+  } catch { box.hidden = true; }
 }
 function renderToday(t) {
   if (!t || t.empty || !t.state) {

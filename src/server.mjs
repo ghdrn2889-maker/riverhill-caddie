@@ -13,6 +13,7 @@ import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance } 
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
+import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds } from './users.mjs';
@@ -248,6 +249,35 @@ app.get('/api/today', (req, res) => {
   let dayOffset = 0;
   if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(todayISOKST())) / 86400000);
   res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
+});
+
+// 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
+app.get('/api/weather', async (req, res) => {
+  try {
+    const uid = req.user?.id || 1;
+    const wx = await weather.getHourly();
+    const t = loadToday(uid);
+    const todayI = todayISOKST();
+    const tISO = t && worklog.labelToISO(t.date);
+    const target = (tISO && tISO >= todayI) ? tISO : todayI;               // 오늘~미래 배치일이면 그 날
+    const teeH = (String(t?.teeTime || '').match(/(\d{1,2}):/) || [])[1];
+    const confirmed = !!(t && ['assigned', 'work', 'your_turn'].includes(t.status) && teeH != null && tISO === target);
+    let startH, endH, label;
+    if (confirmed) {
+      startH = Number(teeH); endH = Math.min(23, startH + 6);
+      label = `라운드 날씨 (${t.teeTime} ~ +6시간)`;
+    } else {
+      startH = 9; endH = 18;
+      label = (target === todayI ? '오늘' : (tISO === worklog.labelToISO(t?.date) ? t.date : '해당일')) + ' 낮 날씨';
+    }
+    const full = wx.hours.filter((h) => h.date === target && h.hour >= startH && h.hour <= endH);
+    const hours = weather.windowFor(wx, target, startH, endH, 8);
+    res.json({ ok: true, updatedAt: wx.updatedAt, course: '리버힐 · 안동', date: target, label,
+      confirmed, hours, summary: weather.summarize(full) });
+  } catch (e) {
+    console.error('날씨 조회 오류:', e.message);
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 // ── 근무일지/세무 증빙 ──────────────────────────────────

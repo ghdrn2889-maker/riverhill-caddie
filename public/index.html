@@ -251,6 +251,22 @@
     .jk.spare { background:#fdf3df; color:#8a5d14; }
     .jk.off { background:#eef1ec; color:#79847d; }
 
+    /* 골프장 날씨 카드 */
+    .wx { margin-top:12px; background:#fff; border:1px solid #e7ece7; border-radius:14px; padding:13px 14px; }
+    .wx-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:4px; }
+    .wx-title { font-size:12.5px; font-weight:850; color:#153e2a; }
+    .wx-loc { font-size:10px; font-weight:700; color:#8a978c; flex:none; }
+    .wx-sum { font-size:11.5px; font-weight:700; color:#3d5a49; margin-bottom:10px; line-height:1.45; }
+    .wx-sum.rain { color:#255e8a; }
+    .wx-strip { display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
+    .wx-h { flex:none; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:46px; padding:8px 6px; border-radius:10px; background:#f6f9f5; border:1px solid #eef1ec; }
+    .wx-h.rainy { background:#eef5fb; border-color:#d6e6f2; }
+    .wx-h .wh { font-size:10px; font-weight:800; color:#647168; }
+    .wx-h .wi { font-size:18px; line-height:1; }
+    .wx-h .wt { font-size:12.5px; font-weight:850; color:#1b3527; }
+    .wx-h .wp { font-size:9.5px; font-weight:800; color:#3f7fb0; }
+    .wx-h .wp.dry { color:#b7c0b8; }
+
     /* 카트 점검 (기능용 최소 스타일 — 기존 토큰 재사용) */
     .cc-step { margin-top:15px; padding-top:13px; border-top:1px solid #eef1ec; }
     .cc-step.first { border-top:0; padding-top:2px; }
@@ -423,6 +439,8 @@
         <p class="sub" id="heroSub"></p>
         <div id="boardSlot"></div>
       </section>
+
+      <div id="wxCard" class="wx" hidden></div>
 
       <div class="health" id="health" aria-live="polite">
         <span id="hWatch">일정 감시 확인 중…</span>
