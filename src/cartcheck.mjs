@@ -23,7 +23,7 @@ export const DEFAULT_ITEMS = [
   { key: 'cooler', label: '쿨러·아이스박스' },
   { key: 'golfbag', label: '골프백 주머니(고객 확인 요청)' },
 ];
-export const PHOTO_LEGS = ['intake', 'exit', 'club']; // 시작 기준 / 빈 카트 / 클럽 점검(사진만)
+export const PHOTO_LEGS = ['intake', 'exit', 'club_pre', 'club_post']; // 카트 시작/빈카트 · 클럽 라운드전/후
 const SETTINGS_KEY = '__settings'; // 날짜 키와 안 겹치는 예약 키
 
 function loadAll(userId = 1) { return loadUserJSON(userId, FILE, {}); }

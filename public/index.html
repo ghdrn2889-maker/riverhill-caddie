@@ -583,15 +583,28 @@
         <div class="wl-note">카트가 매일 바뀌어도 <b>카트 상태 사진</b>이 있으면 "원래 있던 물건"과 구분되고, <b>빈 카트 사진</b>은 반납 시점의 증거가 됩니다.</div>
       </section>
 
-      <!-- 클럽 점검 (사진만) -->
+      <!-- 클럽 점검 (라운드 전/후 사진 비교) -->
       <section class="hero" style="margin-top:14px;">
         <div class="wl-sum">🏑 클럽 점검</div>
-        <div class="wl-sub">라운드 전·후 클럽 상태를 사진으로 남겨두세요. (분실·파손 대비 증거)</div>
-        <div class="wl-row" style="align-items:flex-start; margin-top:11px;">
-          <label class="cc-photo" id="clLbl">📷 클럽 사진 올리기 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPhoto" type="file" accept="image/*" multiple hidden></label>
-          <div id="clThumbs" class="cc-thumbs"></div>
+        <div class="wl-sub">라운드 전·후를 각각 찍어두면 클럽 개수·파손을 비교·증명할 수 있어요.</div>
+
+        <div class="cc-step first">
+          <div class="cc-step-h">① 라운드 전 · 클럽 상태</div>
+          <div class="wl-row" style="align-items:flex-start;">
+            <label class="cc-photo" id="clPreLbl">📷 라운드 전 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPre" type="file" accept="image/*" multiple hidden></label>
+            <div id="clPreThumbs" class="cc-thumbs"></div>
+          </div>
         </div>
-        <div class="wl-note">클럽 개수·헤드커버·상태를 한 컷 남겨두면 분실이나 파손 시 라운드 전후 상태를 증명할 수 있어요.</div>
+
+        <div class="cc-step">
+          <div class="cc-step-h">② 라운드 후 · 클럽 상태</div>
+          <div class="wl-row" style="align-items:flex-start;">
+            <label class="cc-photo" id="clPostLbl">📷 라운드 후 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPost" type="file" accept="image/*" multiple hidden></label>
+            <div id="clPostThumbs" class="cc-thumbs"></div>
+          </div>
+        </div>
+
+        <div class="wl-note">라운드 <b>전/후 사진을 나란히 비교</b>하면 클럽 개수·헤드커버·파손 여부를 명확히 확인할 수 있어요.</div>
       </section>
     </section>
   </main>
