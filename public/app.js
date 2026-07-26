@@ -849,10 +849,11 @@ function initWorklogButtons() {
 /* ── 카트 점검 ── */
 let ccDate = null;
 let ccEditMode = false;
-const ccCounts = { intake: 0, exit: 0 }; // 각 구간 저장 사진 수 — 다중 업로드 10장 상한 계산용
+const ccCounts = { intake: 0, exit: 0, club: 0 }; // 각 구간 저장 사진 수 — 다중 업로드 10장 상한 계산용
 const CC_LABELS = {
   intake: { box: 'ccIntakeThumbs', lbl: 'ccIntakeLbl', alt: '카트 상태', idle: '📷 사진 올리기', add: '📷 사진 추가' },
   exit:   { box: 'ccExitThumbs',   lbl: 'ccExitLbl',   alt: '빈 카트',   idle: "📷 '비운 카트' 사진", add: '📷 사진 추가' },
+  club:   { box: 'clThumbs',       lbl: 'clLbl',       alt: '클럽',      idle: '📷 클럽 사진 올리기', add: '📷 사진 추가' },
 };
 // 카트 상태(intake)·빈 카트(exit) — 공통: 여러 장 썸네일 + 각 삭제 버튼. 갤러리에서 여러 장 추가됨.
 function ccRenderThumbs(leg, list) {
@@ -864,10 +865,11 @@ function ccRenderThumbs(leg, list) {
   box.querySelectorAll('button[data-f]').forEach((b) => {
     b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg, fname: b.dataset.f }); loadCartCheck(ccDate); };
   });
-  // 썸네일 탭 → 확대 보기(현재 카트 화면의 모든 사진을 좌우로 넘길 수 있음)
+  // 썸네일 탭 → 확대 보기(같은 구간 사진끼리 좌우로 넘김)
   box.querySelectorAll('.cc-thumb').forEach((img) => {
     img.onclick = () => {
-      const all = Array.from(document.querySelectorAll('#view-cart .cc-thumb'));
+      const group = img.closest('.cc-thumbs') || document;
+      const all = Array.from(group.querySelectorAll('.cc-thumb'));
       openCcLightbox(all.map((im) => im.getAttribute('src')), all.indexOf(img));
     };
   });
@@ -935,6 +937,7 @@ async function loadCartCheck(date) {
     $('ccCart').value = day.cartNo || work.cartNo || '';
     ccRenderThumbs('intake', day.photos && day.photos.intake);
     ccRenderThumbs('exit', day.photos && day.photos.exit);
+    ccRenderThumbs('club', day.photos && day.photos.club);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
     await loadCartHistory();
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
@@ -962,6 +965,7 @@ function initCartButtons() {
   $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
+  $('clPhoto').onchange = (e) => ccUpload('club', e.target);
   initCcLightbox();
 }
 

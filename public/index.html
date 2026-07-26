@@ -554,9 +554,9 @@
       </section>
     </section>
 
-    <!-- 카트 점검 -->
+    <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
-      <div class="sect"><span>🛒 카트 점검</span></div>
+      <div class="sect"><span>🏌️ 라운드 점검</span></div>
       <section class="hero">
         <div id="ccHead" class="wl-sum">불러오는 중…</div>
         <div id="ccSub" class="wl-sub"></div>
@@ -582,13 +582,24 @@
 
         <div class="wl-note">카트가 매일 바뀌어도 <b>카트 상태 사진</b>이 있으면 "원래 있던 물건"과 구분되고, <b>빈 카트 사진</b>은 반납 시점의 증거가 됩니다.</div>
       </section>
+
+      <!-- 클럽 점검 (사진만) -->
+      <section class="hero" style="margin-top:14px;">
+        <div class="wl-sum">🏑 클럽 점검</div>
+        <div class="wl-sub">라운드 전·후 클럽 상태를 사진으로 남겨두세요. (분실·파손 대비 증거)</div>
+        <div class="wl-row" style="align-items:flex-start; margin-top:11px;">
+          <label class="cc-photo" id="clLbl">📷 클럽 사진 올리기 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPhoto" type="file" accept="image/*" multiple hidden></label>
+          <div id="clThumbs" class="cc-thumbs"></div>
+        </div>
+        <div class="wl-note">클럽 개수·헤드커버·상태를 한 컷 남겨두면 분실이나 파손 시 라운드 전후 상태를 증명할 수 있어요.</div>
+      </section>
     </section>
   </main>
 
   <nav class="nav" role="tablist" aria-label="주요 화면">
     <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">오늘</button>
     <button role="tab" id="tab-news" aria-selected="false" aria-controls="view-news" data-view="news">소식</button>
-    <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">카트 점검</button>
+    <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
     <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>
   </nav>
 
