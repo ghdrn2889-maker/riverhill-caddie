@@ -32,6 +32,13 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   saveUserJSON(userId, FILE, j);
 }
 
+// 특정 날짜의 최종 기록(그날 결과) 조회 — 응원 문구가 '오늘 무근무' 등을 인식하는 근거.
+export function getDay(dateISO, userId = 1) {
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  const j = loadUserJSON(userId, FILE, {});
+  return j[dateISO] || null;
+}
+
 export function listJournal({ year, month } = {}, userId = 1) {
   const j = loadUserJSON(userId, FILE, {});
   return Object.values(j)

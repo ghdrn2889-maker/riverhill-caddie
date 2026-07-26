@@ -72,7 +72,7 @@ async function fetchImageBase64(url) {
 
 // 프롬프트(+선택 이미지) → Gemini 호출 → JSON 파싱 (2회 재시도). 실패 시 null.
 // imageUrl 이 없으면 텍스트-only 로 호출한다(제목/본문만 있는 글도 판단 가능).
-export async function callGeminiJSON(promptText, imageUrl = null, modelOverride = null) {
+export async function callGeminiJSON(promptText, imageUrl = null, modelOverride = null, opts = {}) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
 
@@ -93,7 +93,7 @@ export async function callGeminiJSON(promptText, imageUrl = null, modelOverride 
 
   const body = {
     contents: [{ parts }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+    generationConfig: { responseMimeType: 'application/json', temperature: opts.temperature ?? 0, ...(opts.topP != null ? { topP: opts.topP } : {}) },
   };
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;

@@ -287,6 +287,7 @@ async function loadToday() {
   try { const t = await (await fetch('/api/today')).json(); lastToday = t; todayOk = true; renderToday(t); }
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
   loadWeather();
+  loadCheer();
 }
 // WMO 날씨코드 → 이모지(주간/야간 구분).
 function wmoEmoji(code, day) {
@@ -367,6 +368,34 @@ async function loadWeather() {
     if (ref) { ref.textContent = `📍 ${w.course || '안동'} · ${wmoEmoji(cur.code, cur.day)} ${wmoDesc(cur.code)} ${cur.temp}° · 강수 ${cur.pop}%`; ref.hidden = false; }
   } catch { /* 실패 시 기존 배경 유지 */ }
 }
+
+// ── 응원 한 줄(수호천사 아이/걱정 많은 엄마 · 존댓말) — 히어로 하단 ──
+//  서버가 '장면(scene)'별로 문구 풀을 캐시. 여기선 그 풀에서 최근 것 제외하고 하나만 표시.
+//  30초 폴링에도 안 깜빡이게: 풀(key)이 바뀔 때만 새로 뽑고, 앱을 다시 열 때(가시성 복귀)만 새 문구로 교체.
+const CHEER_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.8 H20 a2.2 2.2 0 0 1 2.2 2.2 V14 a2.2 2.2 0 0 1-2.2 2.2 H10.5 L6 20 V16.2 H4 a2.2 2.2 0 0 1-2.2-2.2 V7 A2.2 2.2 0 0 1 4 4.8 Z" fill="#8ac6a1"/><path d="M12 8.6 C11.3 7.6, 9.5 7.7, 9.5 9.2 C9.5 10.4, 12 11.9, 12 11.9 C12 11.9, 14.5 10.4, 14.5 9.2 C14.5 7.7, 12.7 7.6, 12 8.6 Z" fill="#fff"/></svg>';
+let cheerPool = [], cheerKey = null, cheerShown = false;
+async function loadCheer(forcePick = false) {
+  const el = $('heroCheer'); if (!el) return;
+  let key = null, lines = [];
+  try { const r = await (await fetch('/api/cheer')).json(); if (r && r.ok) { key = r.key; lines = Array.isArray(r.lines) ? r.lines : []; } } catch { /* 무시 */ }
+  const changed = key !== cheerKey;
+  cheerPool = lines; cheerKey = key;
+  if (!lines.length) { el.hidden = true; el.innerHTML = ''; cheerShown = false; return; }
+  if (changed || forcePick || !cheerShown) pickCheer();
+}
+function pickCheer() {
+  const el = $('heroCheer'); if (!el || !cheerPool.length) return;
+  const last = localStorage.getItem('cheerLast') || '';
+  let pool = cheerPool.filter((l) => l !== last);
+  if (!pool.length) pool = cheerPool;
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  localStorage.setItem('cheerLast', pick);
+  el.innerHTML = `<span class="ic">${CHEER_ICON}</span><span>${esc(pick)}</span>`;
+  el.hidden = false; cheerShown = true;
+}
+// 앱을 다시 볼 때마다 새 한마디(보는 도중엔 유지).
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadCheer(true); });
+
 function renderToday(t) {
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {

@@ -15,6 +15,7 @@ import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
+import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds } from './users.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
@@ -300,6 +301,18 @@ app.get('/api/weather', async (req, res) => {
   } catch (e) {
     console.error('날씨 조회 오류:', e.message);
     res.json({ ok: false, error: e.message });
+  }
+});
+
+// 응원 한 줄 — 지금 회원 상황에 맞춘 존댓말 한마디 풀(장면 바뀔 때만 생성·캐시). 앱 열 때 클라가 그중 하나를 표시.
+app.get('/api/cheer', async (req, res) => {
+  try {
+    const uid = req.user?.id || 1;
+    const out = await cheer.getCheer(uid);
+    res.json({ ok: true, scene: out.scene, key: out.key, lines: out.lines });
+  } catch (e) {
+    console.error('응원 생성 오류:', e.message);
+    res.json({ ok: false, lines: [] });
   }
 });
 
