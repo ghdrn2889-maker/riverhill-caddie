@@ -158,21 +158,75 @@ async function updateNotifyButton() {
   else { btn.hidden = false; btn.disabled = false; btn.className = 'ov-notify'; btn.textContent = '알림 켜기'; }
 }
 
+let pushSubscribed = false;   // 이 기기 구독 여부(캐시) — 알림유도 카드·텔레메트리에서 사용
 async function refreshPushHealth() {
   const el = $('hPush');
   const set = (cls, txt) => { el.className = cls; el.textContent = txt; };
   const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
   const { isIOS } = iosInfo();
+  pushSubscribed = false;
   if (!supported) { set(isIOS && !isStandalone() ? 'warn' : 'bad', isIOS && !isStandalone() ? '● 설치하면 알림 가능' : '● 알림 미지원'); }
   else if (Notification.permission === 'denied') { set('bad', '● 알림 권한 꺼짐'); }
   else {
     let sub = null;
     try { sub = swReg && await swReg.pushManager.getSubscription(); } catch {}
+    pushSubscribed = !!sub;
     if (Notification.permission === 'granted' && sub) { set('', ''); healSubscription(); }
     else set('warn', '● 이 폰 알림 꺼짐');
   }
   await updateNotifyButton();
   syncHealthVisibility();
+  renderNotifyNudge();
+  sendTelemetry();
+}
+
+// 오늘 화면 상단 알림 유도 카드 — 알림 미설정 회원에게 기기별 안내로 켜기를 유도(리텐션 핵심).
+function renderNotifyNudge() {
+  const el = $('notifyNudge'); if (!el) return;
+  if (!(meState && meState.authed) || meState.needsOnboarding) { el.hidden = true; return; }
+  const supported = ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  const permGranted = ('Notification' in window) && Notification.permission === 'granted';
+  if (permGranted && pushSubscribed) { el.hidden = true; return; }         // 이미 켜짐 → 숨김
+  if (sessionStorage.getItem('nudgeDismissed')) { el.hidden = true; return; }
+  const { isIOS } = iosInfo();
+  let title, body, cta = '';
+  if (isIOS && !isStandalone()) {
+    title = '아이폰은 설치해야 알림이 와요';
+    body = `사파리 아래 <b>공유</b> ${SHARE_SVG} → <b>‘홈 화면에 추가’</b> 로 설치하면, 설치된 앱에서 알림을 켤 수 있어요.`;
+  } else if (!supported) {
+    title = '이 브라우저는 알림 미지원';
+    body = '안드로이드 <b>크롬</b>으로 열면 알림을 받을 수 있어요.';
+  } else if (Notification.permission === 'denied') {
+    title = '알림이 차단돼 있어요';
+    body = '기기 <b>설정 &gt; 이 앱 알림</b>을 허용하면 배정·차례 소식을 받아요.';
+  } else {
+    title = '알림을 켜야 소식을 받아요';
+    body = '근무 배정·내 차례·티오프 변경을 <b>폰으로 바로</b> 알려드려요. 이 앱의 핵심이에요.';
+    cta = '알림 켜기';
+  }
+  el.innerHTML = `<div class="nudge-x" id="nudgeX" role="button" aria-label="닫기">✕</div>`
+    + `<div class="nudge-ic">🔔</div>`
+    + `<div class="nudge-tx"><b>${title}</b><span>${body}</span></div>`
+    + (cta ? `<button class="nudge-cta" id="nudgeCta">${cta}</button>` : '');
+  el.hidden = false;
+  $('nudgeX').onclick = () => { el.hidden = true; sessionStorage.setItem('nudgeDismissed', '1'); };
+  if (cta) $('nudgeCta').onclick = async () => { await enableNotifications(); await refreshPushHealth(); };
+}
+
+// 기기·알림 상태 텔레메트리 — iOS/안드 비율·설치·권한·구독 추적(상태 변할 때만 전송).
+let _telemetrySig = '';
+async function sendTelemetry() {
+  try {
+    if (!(meState && meState.authed)) return;
+    const { isIOS, isSafari } = iosInfo();
+    const platform = isIOS ? 'ios' : (/Android/i.test(navigator.userAgent) ? 'android' : 'desktop');
+    const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+    const sig = `${platform}|${isStandalone() ? 1 : 0}|${perm}|${pushSubscribed ? 1 : 0}`;
+    if (sig === _telemetrySig) return;      // 변화 없으면 재전송 안 함
+    _telemetrySig = sig;
+    await fetch('/api/telemetry', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, standalone: isStandalone(), perm, subscribed: pushSubscribed, browser: isSafari ? 'safari' : '', ua: (navigator.userAgent || '').slice(0, 180) }) });
+  } catch { /* 무시 */ }
 }
 
 // 설치 후 첫 실행 시 자동으로 알림 허용 요청(1회).
@@ -1038,6 +1092,8 @@ async function loadMe() {
   hideLogin();
   renderAccount();
   if (lastToday) renderToday(lastToday); // 내 이름(profile)이 늦게 로드돼도 보드를 다시 그려 순번 리스트가 뜨게(레이스 방지)
+  renderNotifyNudge();               // 알림 미설정이면 유도 카드 노출
+  sendTelemetry();                   // 기기·알림 상태 기록
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
 }

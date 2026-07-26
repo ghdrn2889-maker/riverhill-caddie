@@ -71,6 +71,25 @@ app.post('/api/profile', requireAuth, (req, res) => {
   res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
 });
 
+// 기기·알림 상태 텔레메트리 — iOS/안드 비율·설치·권한·구독을 회원별로 기록(최신 상태 유지).
+app.post('/api/telemetry', requireAuth, (req, res) => {
+  const b = req.body || {};
+  const rec = loadJSON('telemetry.json', {}) || {};
+  const prof = getProfile(req.user.id) || {};
+  rec[req.user.id] = {
+    name: prof.board_name || '', part: prof.part || '',
+    platform: String(b.platform || '').slice(0, 16),
+    standalone: !!b.standalone,
+    perm: String(b.perm || '').slice(0, 16),
+    subscribed: !!b.subscribed,
+    browser: String(b.browser || '').slice(0, 16),
+    ua: String(b.ua || '').slice(0, 200),
+    updatedAt: Date.now(),
+  };
+  saveJSON('telemetry.json', rec);
+  res.json({ ok: true });
+});
+
 // ── API 인증 게이트 ──
 //  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
