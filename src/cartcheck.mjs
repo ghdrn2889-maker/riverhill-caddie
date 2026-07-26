@@ -149,6 +149,21 @@ export function removePhoto(dateISO, leg, fname, userId = 1) {
   }, userId);
 }
 
+// 특정 '월'에 기록이 있는 날 요약(상단 날짜바용). year, month(1~12).
+export function monthDays(userId = 1, year, month) {
+  const d = loadAll(userId);
+  const items = getItems(userId);
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  return Object.keys(d).filter((k) => isISO(k) && k.startsWith(prefix)).sort().map((date) => {
+    const rec = d[date] || {};
+    const photos = rec.photos || {};
+    const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);
+    const checked = items.filter((i) => rec.checklist && rec.checklist[i.key]).length;
+    return { date, cartNo: rec.cartNo || '', nPhoto, checked, total: items.length,
+      done: items.length > 0 && checked === items.length };
+  });
+}
+
 // 최근 기록 요약(지난 카트 점검 열람용). 기록이 있는 날 + 오늘을 최신순으로.
 export function recentDays(userId = 1, n = 14, todayISO = null) {
   const d = loadAll(userId);

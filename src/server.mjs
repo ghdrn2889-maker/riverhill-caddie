@@ -366,6 +366,14 @@ app.get('/api/cartcheck/history', (req, res) => {
   const uid = req.user?.id || 1;
   res.json({ ok: true, today: todayISOKST(), days: cartcheck.recentDays(uid, 14, todayISOKST()) });
 });
+// 특정 월의 기록 있는 날 요약 — 상단 날짜 선택바용.
+app.get('/api/cartcheck/month', (req, res) => {
+  const uid = req.user?.id || 1;
+  const now = todayISOKST();
+  const year = Number(req.query.year) || Number(now.slice(0, 4));
+  const month = Number(req.query.month) || Number(now.slice(5, 7));
+  res.json({ ok: true, year, month, today: now, days: cartcheck.monthDays(uid, year, month) });
+});
 // 체크리스트 항목 편집(추가/이름변경/삭제/복원) — 개인 목록으로 저장.
 app.post('/api/cartcheck/items/add', (req, res) => {
   const label = (req.body || {}).label;

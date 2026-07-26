@@ -881,19 +881,39 @@ function ccRenderThumbs(leg, list) {
   lbl.classList.toggle('has', arr.length > 0);
   if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `${cfg.add} (${arr.length}장)` : cfg.idle;
 }
-// 지난 카트 점검 기록 스트립(최근 2주) — 날짜를 눌러 그날 기록을 연다.
-async function loadCartHistory() {
-  const box = $('ccHistory'); if (!box) return;
+// 상단 날짜 선택바 — 그 달의 날짜를 쭉 보여주고(기록 있는 날은 표시), 누르면 그날 점검을 연다.
+let rcYear = null, rcMonth = null;
+const RC_WD = ['일', '월', '화', '수', '목', '금', '토'];
+async function loadRcMonth() {
+  const strip = $('rcDayStrip'); if (!strip) return;
+  if (!rcYear || !rcMonth) { const t = ccDate || new Date().toISOString().slice(0, 10); rcYear = Number(t.slice(0, 4)); rcMonth = Number(t.slice(5, 7)); }
+  const lbl = $('rcMonthLbl'); if (lbl) lbl.textContent = `${rcYear}년 ${rcMonth}월`;
+  let recDays = new Map(), todayISO = new Date().toISOString().slice(0, 10);
   try {
-    const r = await (await fetch('/api/cartcheck/history')).json();
-    const days = r.days || [];
-    box.innerHTML = days.map((d) => {
-      const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}`;
-      const mark = d.done ? '✓완료' : (d.nPhoto ? `📷${d.nPhoto}` : '기록없음');
-      return `<button class="cc-hday${d.date === ccDate ? ' sel' : ''}" data-date="${d.date}">${md}<small>${mark}</small></button>`;
-    }).join('');
-    box.querySelectorAll('button[data-date]').forEach((b) => { b.onclick = () => loadCartCheck(b.dataset.date); });
-  } catch { box.innerHTML = ''; }
+    const r = await (await fetch(`/api/cartcheck/month?year=${rcYear}&month=${rcMonth}`)).json();
+    recDays = new Map((r.days || []).map((d) => [d.date, d]));
+    if (r.today) todayISO = r.today;
+  } catch { /* 네트워크 실패 시 빈 달 */ }
+  const lastDay = new Date(rcYear, rcMonth, 0).getDate();
+  let html = '';
+  for (let dn = 1; dn <= lastDay; dn++) {
+    const date = `${rcYear}-${String(rcMonth).padStart(2, '0')}-${String(dn).padStart(2, '0')}`;
+    const dow = new Date(rcYear, rcMonth - 1, dn).getDay();
+    const rec = recDays.get(date);
+    const fut = date > todayISO;
+    const mark = rec ? (rec.done ? '✓' : (rec.nPhoto ? '📷' : '·')) : '';
+    const cls = [dow === 0 ? 'sun' : (dow === 6 ? 'sat' : ''), date === ccDate ? 'sel' : '', date === todayISO ? 'today' : '', fut ? 'fut' : ''].filter(Boolean).join(' ');
+    html += `<button class="rc-day ${cls}" data-date="${date}" ${fut ? 'disabled' : ''}><span class="dn">${dn}</span><span class="dw">${RC_WD[dow]}</span><span class="dm">${mark}</span></button>`;
+  }
+  strip.innerHTML = html;
+  strip.querySelectorAll('button[data-date]:not([disabled])').forEach((b) => { b.onclick = () => loadCartCheck(b.dataset.date); });
+  const selEl = strip.querySelector('.rc-day.sel') || strip.querySelector('.rc-day.today');
+  if (selEl) selEl.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+function rcNavMonth(delta) {
+  rcMonth += delta;
+  if (rcMonth < 1) { rcMonth = 12; rcYear--; } else if (rcMonth > 12) { rcMonth = 1; rcYear++; }
+  loadRcMonth();
 }
 function ccRenderList(items, checklist, progress) {
   const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
@@ -945,7 +965,8 @@ async function loadCartCheck(date) {
     ccRenderThumbs('club_pre', day.photos && day.photos.club_pre);
     ccRenderThumbs('club_post', day.photos && day.photos.club_post);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
-    await loadCartHistory();
+    rcYear = Number(r.date.slice(0, 4)); rcMonth = Number(r.date.slice(5, 7)); // 선택 날짜의 달로 날짜바 동기화
+    await loadRcMonth();
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
 }
 // intake·exit 공통 다중 업로드(갤러리에서 여러 장). 각 구간 최대 10장.
@@ -973,6 +994,9 @@ function initCartButtons() {
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
   $('clPre').onchange = (e) => ccUpload('club_pre', e.target);
   $('clPost').onchange = (e) => ccUpload('club_post', e.target);
+  $('rcPrev').onclick = () => rcNavMonth(-1);
+  $('rcNext').onclick = () => rcNavMonth(1);
+  $('rcToday').onclick = () => loadCartCheck();  // 오늘로
   initCcLightbox();
 }
 
