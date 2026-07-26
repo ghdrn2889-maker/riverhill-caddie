@@ -269,9 +269,12 @@
     .hero.has-wx .label { color:#42524a; margin-top:11px; }     /* 배경 위에서도 또렷하게 + 참고표기와 간격 */
     .hero.has-wx h3 { color:#0e2018; }
     .hero.has-wx .sub { color:#3a4b43; }
-    .wxref { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800;
-      background:rgba(255,255,255,.76); color:#2b3b32; border:1px solid rgba(255,255,255,.6);
-      padding:5px 10px; border-radius:99px; backdrop-filter:blur(3px); box-shadow:0 1px 4px rgba(0,0,0,.06); }
+    /* 상단 날씨 표기 — 온도 강조(아이콘·위치 없음). 배경 없이 담백하게, 날씨 배경 위에 얹힘. */
+    .wxref { display:inline-flex; align-items:baseline; gap:5px; color:#22332b; font-variant-numeric:tabular-nums; }
+    .wxref b { font-size:16px; font-weight:850; letter-spacing:-.02em; line-height:1; }
+    .wxref em { font-style:normal; font-size:11px; font-weight:800; }
+    .wxref small { font-size:9.5px; font-weight:700; opacity:.62; }
+    .hero.wx-night.has-wx .wxref { color:#eef4fb; text-shadow:0 1px 3px rgba(0,0,0,.5); }
     /* 내부 보드는 반투명 유리로 → 배경 날씨가 은은히 비침 */
     .hero.has-wx .sp-board { background:rgba(255,255,255,.60); border-color:rgba(255,255,255,.55); backdrop-filter:blur(6px); }
     .hero.has-wx .sp-head, .hero.has-wx .sp-foot { border-color:rgba(120,140,125,.20); }
@@ -312,7 +315,6 @@
     .hero.wx-night.has-wx .label { color:#d6e2f0; text-shadow:0 1px 3px rgba(0,0,0,.5); }
     .hero.wx-night.has-wx h3 { color:#f7fafe; text-shadow:0 1px 4px rgba(0,0,0,.5); }
     .hero.wx-night.has-wx .sub { color:#e4edf7; text-shadow:0 1px 3px rgba(0,0,0,.5); }
-    .hero.wx-night .wxref { background:rgba(16,24,40,.7); color:#eaf1f9; border-color:rgba(170,190,220,.4); }
     /* 명단 보드 → 어두운 유리(진하게=분리↑) + 밝은 글자(자체 밝은 배경인 me행·sp-ahead·배지는 그대로 둠) */
     .hero.wx-night.has-wx .sp-board { background:rgba(14,21,36,.56); border-color:rgba(160,185,220,.28); }
     .hero.wx-night.has-wx .sp-head, .hero.wx-night.has-wx .sp-foot { border-color:rgba(160,185,220,.2); }

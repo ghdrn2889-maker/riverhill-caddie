@@ -365,7 +365,7 @@ async function loadWeather() {
     hero.classList.add('has-wx', 'w-' + cat);
     hero.classList.toggle('wx-night', !cur.day); // 해가 졌으면 밤하늘 배경 + 밝은 글자
     if (fx) fx.innerHTML = wxFxHTML(cat, cur.day);
-    if (ref) { ref.textContent = `📍 ${w.course || '안동'} · ${wmoEmoji(cur.code, cur.day)} ${wmoDesc(cur.code)} ${cur.temp}° · 강수 ${cur.pop}%`; ref.hidden = false; }
+    if (ref) { ref.innerHTML = `<b>${cur.temp}°</b><em>${esc(wmoDesc(cur.code))}</em><small>강수 ${cur.pop}%</small>`; ref.hidden = false; }
   } catch { /* 실패 시 기존 배경 유지 */ }
 }
 
