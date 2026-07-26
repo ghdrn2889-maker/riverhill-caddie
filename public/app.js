@@ -248,24 +248,59 @@ function wmoEmoji(code, day) {
   if (code >= 95) return '⛈️';
   return '☁️';
 }
-// 골프장 라운드 시간대 날씨 카드.
+// WMO 코드 → 배경 카테고리 / 한글 설명.
+function wmoCategory(code) {
+  if (code === 0 || code === 1) return 'clear';
+  if (code === 2 || code === 3 || code === 45 || code === 48) return 'cloud';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return 'snow';
+  if (code >= 95) return 'storm';
+  return 'cloud';
+}
+function wmoDesc(code) {
+  const M = { 0: '맑음', 1: '대체로 맑음', 2: '구름 많음', 3: '흐림', 45: '안개', 48: '안개',
+    51: '이슬비', 53: '이슬비', 55: '이슬비', 56: '어는 이슬비', 57: '어는 이슬비',
+    61: '약한 비', 63: '비', 65: '강한 비', 66: '어는 비', 67: '어는 비',
+    71: '약한 눈', 73: '눈', 75: '많은 눈', 77: '싸락눈',
+    80: '소나기', 81: '소나기', 82: '강한 소나기', 85: '소나기눈', 86: '소나기눈',
+    95: '뇌우', 96: '우박 뇌우', 99: '우박 뇌우' };
+  return M[code] || '흐림';
+}
+// 배경 효과 파티클 HTML(비·눈은 무작위 생성).
+function wxFxHTML(cat, day) {
+  if (cat === 'clear') return day
+    ? '<div class="rays"></div><div class="sun"></div>'
+    : '<div class="sun" style="background:radial-gradient(circle,#e6ecff 0%,rgba(200,215,255,0) 70%)"></div>';
+  if (cat === 'cloud') return '<div class="cloud c1"></div><div class="cloud c2"></div>';
+  let s = '';
+  if (cat === 'rain' || cat === 'storm') {
+    s += cat === 'storm' ? '<div class="flash"></div><div class="cloud rc"></div>' : '<div class="cloud rc"></div>';
+    for (let i = 0; i < 42; i++) { const l = Math.random() * 100, d = (0.5 + Math.random() * 0.5).toFixed(2), dl = Math.random().toFixed(2);
+      s += `<span class="drop" style="left:${l}%;animation-duration:${d}s;animation-delay:${dl}s"></span>`; }
+    return s;
+  }
+  if (cat === 'snow') {
+    for (let i = 0; i < 26; i++) { const l = Math.random() * 100, sz = (8 + Math.random() * 10).toFixed(0), d = (3 + Math.random() * 3).toFixed(2), dl = (Math.random() * 4).toFixed(2);
+      s += `<span class="flake" style="left:${l}%;font-size:${sz}px;animation-duration:${d}s;animation-delay:${dl}s">❄</span>`; }
+    return s;
+  }
+  return '';
+}
+// 오늘 화면 히어로 대시보드 배경을 '현재 날씨'로 칠하고, 좌상단에 현재 날씨를 참고 표기.
 async function loadWeather() {
-  const box = $('wxCard'); if (!box) return;
+  const hero = $('todayHero'), fx = $('wxFx'), ref = $('wxRef');
+  if (!hero) return;
+  const CATS = ['w-clear', 'w-cloud', 'w-rain', 'w-snow', 'w-storm'];
   try {
     const w = await (await fetch('/api/weather')).json();
-    if (!w || !w.ok || !Array.isArray(w.hours) || !w.hours.length) { box.hidden = true; return; }
-    const chips = w.hours.map((h) => {
-      const rainy = h.pop >= 60 || h.precip >= 0.5;
-      return `<div class="wx-h${rainy ? ' rainy' : ''}"><span class="wh">${h.hour}시</span>`
-        + `<span class="wi">${wmoEmoji(h.code, h.day)}</span><span class="wt">${h.temp}°</span>`
-        + `<span class="wp${h.pop < 20 ? ' dry' : ''}">${h.pop}%</span></div>`;
-    }).join('');
-    const sum = w.summary || {};
-    box.innerHTML = `<div class="wx-head"><span class="wx-title">${esc(w.label || '날씨')}</span><span class="wx-loc">📍 ${esc(w.course || '')}</span></div>`
-      + `<div class="wx-sum${sum.rain ? ' rain' : ''}">${esc(sum.text || '')}</div>`
-      + `<div class="wx-strip">${chips}</div>`;
-    box.hidden = false;
-  } catch { box.hidden = true; }
+    const cur = w && w.ok && w.current;
+    if (!cur) { hero.classList.remove('has-wx', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; return; }
+    const cat = wmoCategory(cur.code);
+    hero.classList.remove(...CATS);
+    hero.classList.add('has-wx', 'w-' + cat);
+    if (fx) fx.innerHTML = wxFxHTML(cat, cur.day);
+    if (ref) { ref.textContent = `📍 ${w.course || '안동'} · ${wmoEmoji(cur.code, cur.day)} ${wmoDesc(cur.code)} ${cur.temp}° · 강수 ${cur.pop}%`; ref.hidden = false; }
+  } catch { /* 실패 시 기존 배경 유지 */ }
 }
 function renderToday(t) {
   if (!t || t.empty || !t.state) {

@@ -272,8 +272,14 @@ app.get('/api/weather', async (req, res) => {
     }
     const full = wx.hours.filter((h) => h.date === target && h.hour >= startH && h.hour <= endH);
     const hours = weather.windowFor(wx, target, startH, endH, 8);
+    // 대시보드 배경용 '현재 날씨'(지금 이 시각 기준). 서버는 KST.
+    const nowH = new Date().getHours();
+    const cur = wx.hours.find((h) => h.date === todayI && h.hour === nowH)
+      || wx.hours.find((h) => h.date === todayI && h.hour >= nowH)
+      || wx.hours.find((h) => h.date === todayI);
+    const current = cur ? { code: cur.code, temp: cur.temp, pop: cur.pop, day: cur.day } : null;
     res.json({ ok: true, updatedAt: wx.updatedAt, course: '리버힐 · 안동', date: target, label,
-      confirmed, hours, summary: weather.summarize(full) });
+      confirmed, current, hours, summary: weather.summarize(full) });
   } catch (e) {
     console.error('날씨 조회 오류:', e.message);
     res.json({ ok: false, error: e.message });

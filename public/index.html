@@ -26,7 +26,7 @@
     .body { padding:14px; }
     .view[hidden] { display:none; }
 
-    .hero { background:#fff; border:1px solid #dfe5e0; border-radius:19px; box-shadow:0 6px 20px rgba(24,54,35,.06); padding:17px; }
+    .hero { position:relative; overflow:hidden; background:#fff; border:1px solid #dfe5e0; border-radius:19px; box-shadow:0 6px 20px rgba(24,54,35,.06); padding:17px; }
     .label { font-size:9px; color:#77837c; font-weight:850; letter-spacing:.13em; }
     .hero h3 { font-size:25px; line-height:1.1; letter-spacing:-.045em; margin:8px 0 6px; }
     .sub { font-size:11px; line-height:1.5; color:#647168; margin:0; }
@@ -251,21 +251,50 @@
     .jk.spare { background:#fdf3df; color:#8a5d14; }
     .jk.off { background:#eef1ec; color:#79847d; }
 
-    /* 골프장 날씨 카드 */
-    .wx { margin-top:12px; background:#fff; border:1px solid #e7ece7; border-radius:14px; padding:13px 14px; }
-    .wx-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:4px; }
-    .wx-title { font-size:12.5px; font-weight:850; color:#153e2a; }
-    .wx-loc { font-size:10px; font-weight:700; color:#8a978c; flex:none; }
-    .wx-sum { font-size:11.5px; font-weight:700; color:#3d5a49; margin-bottom:10px; line-height:1.45; }
-    .wx-sum.rain { color:#255e8a; }
-    .wx-strip { display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; }
-    .wx-h { flex:none; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:46px; padding:8px 6px; border-radius:10px; background:#f6f9f5; border:1px solid #eef1ec; }
-    .wx-h.rainy { background:#eef5fb; border-color:#d6e6f2; }
-    .wx-h .wh { font-size:10px; font-weight:800; color:#647168; }
-    .wx-h .wi { font-size:18px; line-height:1; }
-    .wx-h .wt { font-size:12.5px; font-weight:850; color:#1b3527; }
-    .wx-h .wp { font-size:9.5px; font-weight:800; color:#3f7fb0; }
-    .wx-h .wp.dry { color:#b7c0b8; }
+    /* ===== 대시보드 날씨 배경(오늘 화면 히어로) — 현재 날씨에 맞춰 배경이 바뀐다 ===== */
+    .hero .fx { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:19px; }
+    .hero.has-wx::before { content:''; position:absolute; inset:0; z-index:1; pointer-events:none; border-radius:19px;
+      background:linear-gradient(180deg, rgba(255,255,255,.40) 0%, rgba(255,255,255,.14) 45%, rgba(255,255,255,0) 72%); }
+    .hero.has-wx > *:not(.fx) { position:relative; z-index:2; }
+    .hero.has-wx .label { color:#42524a; }     /* 배경 위에서도 또렷하게 */
+    .hero.has-wx h3 { color:#0e2018; }
+    .hero.has-wx .sub { color:#3a4b43; }
+    .wxref { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800;
+      background:rgba(255,255,255,.76); color:#2b3b32; border:1px solid rgba(255,255,255,.6);
+      padding:5px 10px; border-radius:99px; backdrop-filter:blur(3px); box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:3px; }
+    /* 내부 보드는 반투명 유리로 → 배경 날씨가 은은히 비침 */
+    .hero.has-wx .sp-board { background:rgba(255,255,255,.60); border-color:rgba(255,255,255,.55); backdrop-filter:blur(6px); }
+    .hero.has-wx .sp-head, .hero.has-wx .sp-foot { border-color:rgba(120,140,125,.20); }
+    .hero.has-wx .actionboard { background:rgba(255,255,255,.55); border:1px solid rgba(255,255,255,.5); backdrop-filter:blur(7px); }
+    .hero.has-wx .mini { background:rgba(255,255,255,.76); border-color:rgba(255,255,255,.6); }
+
+    /* 날씨별 배경 + 효과 */
+    .w-clear { background:linear-gradient(165deg,#bfe2ff 0%,#e6f4ff 55%,#fbfdff 100%); }
+    .w-clear .sun { position:absolute; top:-40px; right:-30px; width:170px; height:170px; border-radius:50%;
+      background:radial-gradient(circle,#fff6d3 0%,#ffe9a6 40%,rgba(255,224,140,0) 70%); animation:wx-pulse 5s ease-in-out infinite; }
+    .w-clear .rays { position:absolute; top:-5px; right:5px; width:120px; height:120px; opacity:.5;
+      background:conic-gradient(from 0deg, rgba(255,238,170,0) 0 8deg, rgba(255,236,160,.55) 8deg 12deg, rgba(255,238,170,0) 12deg 30deg);
+      border-radius:50%; animation:wx-spin 40s linear infinite; }
+    @keyframes wx-pulse { 0%,100%{ transform:scale(1); opacity:.9 } 50%{ transform:scale(1.06); opacity:1 } }
+    @keyframes wx-spin { to { transform:rotate(360deg) } }
+    .w-cloud { background:linear-gradient(165deg,#c3ccd3 0%,#e8ecef 100%); }
+    .w-cloud .cloud, .w-rain .cloud, .w-storm .cloud { position:absolute; border-radius:50%; }
+    .w-cloud .cloud { background:#fff; filter:blur(2px); opacity:.9; }
+    .w-cloud .c1 { width:120px; height:44px; top:14px; left:-40px; box-shadow:40px 8px 0 6px #fff, 80px -6px 0 0 #fff; animation:wx-drift 26s linear infinite; }
+    .w-cloud .c2 { width:90px; height:34px; top:64px; left:-30px; opacity:.7; box-shadow:34px 6px 0 4px #f3f6f8; animation:wx-drift 38s linear infinite; animation-delay:-10s; }
+    @keyframes wx-drift { from{ transform:translateX(0) } to{ transform:translateX(560px) } }
+    .w-rain { background:linear-gradient(165deg,#8ea6bd 0%,#b9c8d7 60%,#cdd9e4 100%); }
+    .w-rain .cloud { background:#e9eef2; filter:blur(1px); }
+    .w-rain .rc, .w-storm .rc { width:120px; height:40px; top:12px; left:20px; box-shadow:44px 8px 0 4px #dfe6ec, 84px -4px 0 0 #eef2f5; opacity:.9; }
+    .drop { position:absolute; top:-14%; width:2px; height:16px; background:linear-gradient(to bottom, rgba(255,255,255,0), rgba(233,241,247,.85)); border-radius:2px; animation:wx-fall linear infinite; }
+    @keyframes wx-fall { from{ transform:translateY(0) } to{ transform:translateY(460px) } }
+    .w-snow { background:linear-gradient(165deg,#c9d6e2 0%,#e9f0f6 60%,#f6faff 100%); }
+    .flake { position:absolute; top:-8%; color:#fff; opacity:.9; text-shadow:0 1px 2px rgba(120,140,160,.4); animation:wx-snow linear infinite; }
+    @keyframes wx-snow { 0%{ transform:translateY(0) translateX(0) } 100%{ transform:translateY(460px) translateX(18px) } }
+    .w-storm { background:linear-gradient(165deg,#8a97a6 0%,#aab5c1 60%,#c2ccd5 100%); }
+    .w-storm .cloud { background:#c9d3dc; filter:blur(1px); }
+    .w-storm .flash { position:absolute; inset:0; background:#fff; opacity:0; animation:wx-flash 6s linear infinite; }
+    @keyframes wx-flash { 0%,92%,100%{opacity:0} 93%{opacity:.42} 95%{opacity:.1} 96%{opacity:.38} 98%{opacity:0} }
 
     /* 카트 점검 (기능용 최소 스타일 — 기존 토큰 재사용) */
     .cc-step { margin-top:15px; padding-top:13px; border-top:1px solid #eef1ec; }
@@ -433,14 +462,14 @@
   <main>
     <!-- 오늘 -->
     <section class="view body" id="view-today" role="tabpanel" aria-labelledby="tab-today">
-      <section class="hero">
+      <section class="hero" id="todayHero">
+        <div class="fx" id="wxFx" aria-hidden="true"></div>
+        <span class="wxref" id="wxRef" hidden></span>
         <div class="label" id="heroLabel">오늘 내 상황</div>
         <h3 id="heroTitle">—</h3>
         <p class="sub" id="heroSub"></p>
         <div id="boardSlot"></div>
       </section>
-
-      <div id="wxCard" class="wx" hidden></div>
 
       <div class="health" id="health" aria-live="polite">
         <span id="hWatch">일정 감시 확인 중…</span>
