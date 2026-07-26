@@ -318,6 +318,15 @@
     .cc-thumbs { display:flex; flex-wrap:wrap; gap:8px; }
     .cc-thumbwrap { position:relative; }
     .cc-thumbdel { position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; border:0; background:#b3453b; color:#fff; font-size:11px; font-weight:800; line-height:1; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .cc-thumb { cursor:pointer; }
+    /* 사진 확대 보기(라이트박스) */
+    .cc-lb { position:fixed; inset:0; z-index:9999; background:rgba(8,14,10,.93); display:flex; align-items:center; justify-content:center; }
+    .cc-lb[hidden] { display:none; }
+    .cc-lb img { max-width:94vw; max-height:82vh; border-radius:10px; box-shadow:0 10px 44px rgba(0,0,0,.5); object-fit:contain; }
+    .cc-lb-close { position:absolute; top:calc(14px + env(safe-area-inset-top,0)); right:16px; width:40px; height:40px; border-radius:50%; border:0; background:rgba(255,255,255,.16); color:#fff; font-size:19px; font-weight:800; cursor:pointer; }
+    .cc-lb-nav { position:absolute; top:50%; transform:translateY(-50%); width:46px; height:46px; border-radius:50%; border:0; background:rgba(255,255,255,.16); color:#fff; font-size:26px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .cc-lb-nav.prev { left:12px; } .cc-lb-nav.next { right:12px; }
+    .cc-lb-count { position:absolute; bottom:calc(20px + env(safe-area-inset-bottom,0)); left:50%; transform:translateX(-50%); color:#fff; font-size:12px; font-weight:800; background:rgba(0,0,0,.4); padding:5px 12px; border-radius:99px; }
     .cc-found { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #eef1ec; font-size:11.5px; }
     .cc-found:last-child { border-bottom:0; }
     .cc-found .cf-note { flex:1; }
@@ -582,6 +591,15 @@
     <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">카트 점검</button>
     <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>
   </nav>
+
+  <!-- 사진 확대 보기(라이트박스) -->
+  <div id="ccLightbox" class="cc-lb" hidden role="dialog" aria-modal="true" aria-label="사진 확대 보기">
+    <button class="cc-lb-close" id="ccLbClose" aria-label="닫기">✕</button>
+    <button class="cc-lb-nav prev" id="ccLbPrev" aria-label="이전 사진">‹</button>
+    <img id="ccLbImg" alt="카트 점검 사진 확대">
+    <button class="cc-lb-nav next" id="ccLbNext" aria-label="다음 사진">›</button>
+    <div class="cc-lb-count" id="ccLbCount"></div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

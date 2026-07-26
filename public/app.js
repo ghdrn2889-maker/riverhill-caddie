@@ -864,6 +864,13 @@ function ccRenderThumbs(leg, list) {
   box.querySelectorAll('button[data-f]').forEach((b) => {
     b.onclick = async () => { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg, fname: b.dataset.f }); loadCartCheck(ccDate); };
   });
+  // 썸네일 탭 → 확대 보기(현재 카트 화면의 모든 사진을 좌우로 넘길 수 있음)
+  box.querySelectorAll('.cc-thumb').forEach((img) => {
+    img.onclick = () => {
+      const all = Array.from(document.querySelectorAll('#view-cart .cc-thumb'));
+      openCcLightbox(all.map((im) => im.getAttribute('src')), all.indexOf(img));
+    };
+  });
   lbl.classList.toggle('has', arr.length > 0);
   if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `${cfg.add} (${arr.length}장)` : cfg.idle;
 }
@@ -955,6 +962,42 @@ function initCartButtons() {
   $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('ccIntake').onchange = (e) => ccUpload('intake', e.target);
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
+  initCcLightbox();
+}
+
+/* ── 사진 확대 보기(라이트박스) — 카트 점검 사진 탭 시 전체화면, 좌우로 넘김 ── */
+let ccLb = { srcs: [], i: 0 };
+function openCcLightbox(srcs, i) {
+  if (!srcs || !srcs.length) return;
+  ccLb = { srcs, i: Math.max(0, i) };
+  ccLbShow();
+  const lb = $('ccLightbox'); if (lb) { lb.hidden = false; document.body.style.overflow = 'hidden'; }
+}
+function ccLbShow() {
+  const img = $('ccLbImg'); if (img) img.src = ccLb.srcs[ccLb.i] || '';
+  const cnt = $('ccLbCount'); if (cnt) cnt.textContent = `${ccLb.i + 1} / ${ccLb.srcs.length}`;
+  const multi = ccLb.srcs.length > 1;
+  document.querySelectorAll('#ccLightbox .cc-lb-nav').forEach((b) => { b.style.display = multi ? '' : 'none'; });
+}
+function ccLbMove(d) { if (!ccLb.srcs.length) return; ccLb.i = (ccLb.i + d + ccLb.srcs.length) % ccLb.srcs.length; ccLbShow(); }
+function closeCcLightbox() { const lb = $('ccLightbox'); if (lb) lb.hidden = true; const img = $('ccLbImg'); if (img) img.src = ''; document.body.style.overflow = ''; }
+function initCcLightbox() {
+  const lb = $('ccLightbox'); if (!lb || lb.dataset.bound) return;
+  lb.dataset.bound = '1';
+  $('ccLbClose').onclick = closeCcLightbox;
+  $('ccLbPrev').onclick = (e) => { e.stopPropagation(); ccLbMove(-1); };
+  $('ccLbNext').onclick = (e) => { e.stopPropagation(); ccLbMove(1); };
+  lb.onclick = (e) => { if (e.target === lb) closeCcLightbox(); }; // 배경(사진 바깥) 탭 → 닫기
+  document.addEventListener('keydown', (e) => {
+    if (!lb || lb.hidden) return;
+    if (e.key === 'Escape') closeCcLightbox();
+    else if (e.key === 'ArrowLeft') ccLbMove(-1);
+    else if (e.key === 'ArrowRight') ccLbMove(1);
+  });
+  // 모바일 스와이프로 넘기기
+  let tx = 0;
+  lb.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  lb.addEventListener('touchend', (e) => { const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) ccLbMove(dx < 0 ? 1 : -1); });
 }
 
 /* ── 계정 · 가입(온보딩) ── */
