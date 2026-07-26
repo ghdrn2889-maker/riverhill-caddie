@@ -26,7 +26,7 @@ function timeBucket(h) {
 }
 function seasonKo(m) { return (m >= 3 && m <= 5) ? '봄' : (m >= 6 && m <= 8) ? '여름' : (m >= 9 && m <= 11) ? '가을' : '겨울'; }
 function tempBand(t) { return t >= 29 ? '무더움' : t >= 25 ? '더움' : t >= 17 ? '선선함' : t >= 9 ? '쌀쌀함' : '추움'; }
-const CHEER_VER = 3; // 프롬프트/문맥 규칙 바뀌면 올려서 캐시 강제 무효화(오래된 문구 축출)
+const CHEER_VER = 5; // 프롬프트/문맥 규칙 바뀌면 올려서 캐시 강제 무효화(오래된 문구 축출)
 
 // ── WMO 코드 → 한글/카테고리(문맥·캐시키용) ──
 function wmoDescKo(code) {
@@ -162,15 +162,15 @@ function buildPrompt(facts, n) {
 - 오글거리는 감정 선언 금지: "곁에 있을게요", "함께할게요", "마음 챙겨요" 같은 표현 절대 금지.
 - 시적 미사여구 자제. 실제 엄마·아이가 말하듯 자연스럽고 담백하게. 훈계·조언질 금지.
 
-[반드시 지킬 것 — 길이 규칙 매우 중요]
-- 한국어 한 문장, 공백 포함 18자 내외(최대 22자). 모바일 한 줄에 들어가야 하니 짧게.
-- 한 호흡에 끝나는 담백한 단문. "~하니까 ~하세요"처럼 두세 마디 잇지 말고 '딱 한 가지'만 말하세요.
+[반드시 지킬 것]
+- 한국어 한 문장. 공백 포함 22자 내외(최대 30자)로, 한 문장이 자연스럽게 완결되게. (너무 짧아 사무적이면 안 됨)
+- 엄마가 챙기듯 따뜻하고 다정하게. 걱정 한 스푼 담아 정말 챙겨주는 느낌으로(차갑거나 딱딱하면 안 됨).
 - 아래 '오늘 상황'에 주어진 사실만 사용. 없는 사실 지어내지 마세요.
-- 근무를 마쳤으면 짧게 수고를 알아주고, 일이 없던 날이면 억지 긍정 없이 담담히 쉬라고만.
-- 이모지는 넣지 마세요. ${n}개는 서로 확실히 다른 말이어야 합니다.
+- 근무를 마쳤으면 진심으로 수고를 알아주고, 일이 없던 날이면 억지 긍정 없이 담담히 쉬라고.
+- 이모지는 없거나 최대 1개. ${n}개는 서로 확실히 다른 말이어야 합니다.
 
-[좋은 예 — 이 길이·담백함으로]
-"오늘도 조심히 다녀오세요." / "물 자주 드세요." / "그늘에서 쉬엄쉬엄해요." / "고생했어요, 푹 쉬세요." / "밥은 챙겨 드셨어요?"
+[좋은 예 — 이 정도 길이·따뜻함]
+"밥은 챙겨 드셨어요? 조심히 다녀오세요." / "그늘에서 물 자주 드시며 쉬엄쉬엄해요." / "오늘 고생 많았어요, 얼른 씻고 푹 쉬어요." / "너무 조바심 내지 말고 편히 기다려요."
 
 [오늘 상황]
 ${facts}
@@ -188,12 +188,24 @@ const FALLBACK = {
   nextday: ['오늘도 고생했어요, 저녁 챙겨 먹고 푹 자요.', '오늘은 이만 쉬고 내일 또 힘내요.', '얼른 씻고 일찍 잠자리에 들어요.', '고단한 하루였죠, 오늘은 푹 쉬세요.'],
 };
 
-async function generatePool(facts, n = 6) {
+// 계절 금지어 하드 필터 — 여름엔 추운 뉘앙스, 겨울엔 더운 뉘앙스 문구를 아예 축출.
+//  (봄/가을은 온화하므로 필터 없음. 골프장갑 오탐 방지 위해 '장갑'은 목록에서 제외.)
+const SEASON_BAN = {
+  여름: /따뜻|따끈|몸.?녹|녹여|녹이|핫팩|감기|체온|방한|외투|겉옷|점퍼|패딩|목도리|내복|두껍게|두툼|춥|추워|추운|추울|추위|쌀쌀|싸늘|냉기|한파|얼어|동상/,
+  겨울: /더위|더워|더운|더울|무더|폭염|열대야|시원|자외선|선크림|그늘|열사병|일사병|부채|선풍기|에어컨|얼음물|아이스|땀/,
+};
+function seasonOk(line, season) {
+  const re = SEASON_BAN[season];
+  return !re || !re.test(line);
+}
+
+async function generatePool(facts, season, n = 6) {
   const model = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
   const out = await callGeminiJSON(buildPrompt(facts, n), null, model, { temperature: 1.0, topP: 0.95 });
   const lines = Array.isArray(out?.lines) ? out.lines : [];
-  // 한 줄에 들어가게 길이 컷(23자 초과는 버림) — 짧고 담백한 것만 통과.
-  return lines.map((l) => String(l || '').trim()).filter((l) => l.length >= 4 && l.length <= 23).slice(0, n);
+  // 길이 컷(30자 초과만 버림 — 한두 줄로 깔끔히 끝나게, 따뜻함은 유지) + 계절 금지어 컷.
+  return lines.map((l) => String(l || '').trim())
+    .filter((l) => l.length >= 6 && l.length <= 30 && seasonOk(l, season)).slice(0, n);
 }
 
 // 공개: 현재 회원의 응원 문구 풀을 얻는다(캐시 우선, 장면 바뀌면 재생성, 실패 시 안전망).
@@ -211,7 +223,8 @@ export async function getCheer(userId = 1) {
     return { key, scene: s.scene, lines: cached.lines };
   }
 
-  let lines = await generatePool(factsText(s, now, wx), 5);
+  const season = seasonKo(Number(now.iso.split('-')[1]) || 0);
+  let lines = await generatePool(factsText(s, now, wx), season, 6);
   if (!lines.length) lines = (FALLBACK[s.scene] || []).slice();
   if (!lines.length) return { key: 'skip', scene: s.scene, lines: [] };
 
