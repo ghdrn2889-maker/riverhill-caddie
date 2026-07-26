@@ -629,7 +629,7 @@ function renderSpareBoard(s) {
       rows.push(rowHTML(myPos - 1, 'wait'));
     }
     rows.push(rowHTML(myPos, 'me'));
-    rows.push(rowHTML(myPos + 1, 'wait'));
+    if (myPos + 1 <= roster.length) rows.push(rowHTML(myPos + 1, 'wait')); // 내가 마지막이면 뒤 행 없음
     return `<div class="sp-board">
       <div class="sp-head">
         <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
