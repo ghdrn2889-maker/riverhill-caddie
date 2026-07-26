@@ -510,7 +510,11 @@ function renderSpareBoard(s) {
   const mn = norm(myName);
   let myIdx = mn ? roster.findIndex((nm) => norm(nm) === mn) : -1;   // 정확 일치 우선
   if (myIdx < 0 && mn) myIdx = roster.findIndex((nm) => nameLooseEq(nm, myName)); // 없으면 1글자 오차 허용
-  const myPos = myIdx >= 0 ? myIdx + 1 : (Number(s.myPosition) || 0);
+  // 아직 내 이름(프로필)을 못 받았지만 서버 순번이 명단 안이면, 서버 순번을 임시로 신뢰해 리스트를 그린다.
+  //  (프로필 로드되면 loadMe가 재렌더 → 이름 기준으로 정밀화). 부팅 레이스로 폴백 뜨던 문제 방지.
+  const serverPos = Number(s.myPosition) || 0;
+  const trustByPos = myIdx < 0 && !mn && serverPos >= 1 && roster.length >= serverPos;
+  const myPos = myIdx >= 0 ? myIdx + 1 : serverPos;
 
   const rowHTML = (p, kind) => {
     const nm = nameAt(p);
@@ -523,8 +527,8 @@ function renderSpareBoard(s) {
     return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${teeHtml}${badge}</div>`;
   };
 
-  // 명단에서 내 이름을 못 찾음(정확 우선 미충족) → 있는 정보(순번/확정선)만 숫자 요약.
-  if (myIdx < 0) {
+  // 명단에서 내 이름을 못 찾고(정확 우선 미충족), 서버 순번으로도 신뢰 못하면 → 숫자 요약 폴백.
+  if (myIdx < 0 && !trustByPos) {
     const mp = Number(s.myPosition) || 0;
     if (!mp) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
     const ahead = (cut && mp > cut) ? Math.max(0, mp - cut - 1) : 0;
@@ -1012,6 +1016,7 @@ async function loadMe() {
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
   hideLogin();
   renderAccount();
+  if (lastToday) renderToday(lastToday); // 내 이름(profile)이 늦게 로드돼도 보드를 다시 그려 순번 리스트가 뜨게(레이스 방지)
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
 }
