@@ -167,6 +167,29 @@ export function recentDays(userId = 1, n = 14, todayISO = null) {
   });
 }
 
+// 블랙박스식 롤링 삭제: cutoffISO보다 오래된 날(카트·클럽 점검)의 사진 파일 + 기록을 통째로 삭제.
+//  ★근무기록(worklog·세무 증빙)과는 별개 파일이라 영향 없음. 체크리스트 항목 설정(__settings)은 보존.
+export function pruneOld(userId, cutoffISO) {
+  if (!isISO(cutoffISO)) return { days: 0, files: 0 };
+  const d = loadAll(userId);
+  let days = 0, files = 0;
+  for (const key of Object.keys(d)) {
+    if (!isISO(key) || key >= cutoffISO) continue;   // 예약키(__settings)·유예기간 내 날짜는 보존
+    const photos = (d[key] && d[key].photos) || {};
+    for (const leg of PHOTO_LEGS) {
+      const cur = photos[leg];
+      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
+      for (const f of arr) {
+        try { if (f && /^[\w.-]+\.(jpg|png)$/.test(f)) { fs.unlinkSync(path.join(userPhotoDir(userId), f)); files++; } } catch { /* 이미 없음 */ }
+      }
+    }
+    delete d[key];
+    days++;
+  }
+  if (days) saveAll(userId, d);
+  return { days, files };
+}
+
 export function photoPath(fname, userId = 1) { return path.join(userPhotoDir(userId), fname); }
 export function markReminded(dateISO, userId = 1) { return mutate(dateISO, (r) => { r.remindedAt = Date.now(); }, userId); }
 

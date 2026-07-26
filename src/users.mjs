@@ -123,6 +123,11 @@ export function activeMembers() {
               ORDER BY u.id`);
 }
 
+// 전체 회원 id — 라운드 점검 사진 자동정리 등 회원별 유지보수 작업에 사용.
+export function allUserIds() {
+  return all('SELECT id FROM users ORDER BY id').map((r) => r.id);
+}
+
 // 관리자(운영자) 계정 id 목록 — 네이버 쿠키 만료·테스트 등 '관리자 전용 알림' 수신 대상.
 //  일반 회원(테스터 등)에게는 운영성 알림이 절대 가지 않도록 역할(role)로 구분한다.
 export function adminUserIds() {

@@ -16,7 +16,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds } from './users.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds } from './users.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
@@ -806,6 +806,25 @@ async function checkCartReminders() {
   } catch (e) { console.error('카트 리마인더 오류:', e.message); }
 }
 setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
+
+// ── 라운드 점검(카트·클럽) 사진 자동 정리 — 블랙박스식 롤링 삭제 ──────────
+//  기본 30일 보관 후 그 이전 날의 사진+기록을 통째 삭제(용량·프라이버시). ★근무기록(세무)은 별개라 영향 없음.
+const ROUNDCHECK_RETAIN_DAYS = Number(process.env.ROUNDCHECK_RETAIN_DAYS ?? 30);
+function isoDaysAgo(n) {
+  const [y, m, d] = todayISOKST().split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d)); dt.setUTCDate(dt.getUTCDate() - n);
+  return dt.toISOString().slice(0, 10);
+}
+function pruneRoundChecks() {
+  try {
+    const cutoff = isoDaysAgo(ROUNDCHECK_RETAIN_DAYS);
+    let days = 0, files = 0;
+    for (const id of allUserIds()) { const r = cartcheck.pruneOld(id, cutoff); days += r.days; files += r.files; }
+    if (days || files) console.log(`🧹 라운드 점검 정리: ${cutoff} 이전 ${days}일·사진 ${files}장 삭제(보관 ${ROUNDCHECK_RETAIN_DAYS}일)`);
+  } catch (e) { console.error('라운드 점검 정리 오류:', e.message); }
+}
+pruneRoundChecks();                                   // 부팅 시 1회
+setInterval(pruneRoundChecks, 24 * 3600 * 1000);      // 이후 하루 1회
 
 // ── 출근 타임라인 리마인더 (회원별) ─────────────────────────────
 //  근무 확정(오늘·티오프 있음)인 회원에게 각자의 출발/도착/티오프 시각에 맞춰 푸시.
