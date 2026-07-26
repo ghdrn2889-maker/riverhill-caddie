@@ -586,7 +586,7 @@ function renderSpareBoard(s) {
     const tee = teeAt(p);
     let st, badge;
     if (kind === 'done') { st = nm || '확정'; badge = '<span class="sp-badge sp-b-work">근무</span>'; }
-    else if (kind === 'me') { st = '나 — 대기 중'; badge = '<span class="sp-badge sp-b-me">나</span>'; }
+    else if (kind === 'me') { st = nm || myName || '나'; badge = '<span class="sp-badge sp-b-me">나</span>'; }
     else { st = nm || '대기'; badge = '<span class="sp-badge sp-b-wait">스페어</span>'; }
     const teeHtml = tee ? `<span class="sp-tee">${esc(tee)}</span>` : '';
     return `<div class="sp-row ${kind}"><span class="no">${p}</span><span class="st">${esc(st)}</span>${teeHtml}${badge}</div>`;
