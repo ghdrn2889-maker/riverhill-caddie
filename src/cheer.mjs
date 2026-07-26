@@ -24,6 +24,9 @@ function kstNow() {
 function timeBucket(h) {
   return h < 6 ? '새벽' : h < 11 ? '아침' : h < 14 ? '점심때' : h < 18 ? '오후' : h < 21 ? '저녁' : '밤';
 }
+function seasonKo(m) { return (m >= 3 && m <= 5) ? '봄' : (m >= 6 && m <= 8) ? '여름' : (m >= 9 && m <= 11) ? '가을' : '겨울'; }
+function tempBand(t) { return t >= 29 ? '무더움' : t >= 25 ? '더움' : t >= 17 ? '선선함' : t >= 9 ? '쌀쌀함' : '추움'; }
+const CHEER_VER = 2; // 프롬프트/문맥 규칙 바뀌면 올려서 캐시 강제 무효화(오래된 문구 축출)
 
 // ── WMO 코드 → 한글/카테고리(문맥·캐시키용) ──
 function wmoDescKo(code) {
@@ -102,7 +105,11 @@ function factsText(s, now, wx) {
   const t = s.t || {};
   const tee = t.teeTime ? `${t.teeTime}${t.course ? ` ${t.course} 코스` : ''}` : '';
   const timeStr = `지금 ${timeBucket(now.hour)}(${now.hour}시경).`;
-  const wStr = wx ? ` 날씨: ${wx.desc}, ${wx.temp}도, 강수확률 ${wx.pop}%.` : '';
+  const month = Number(now.iso.split('-')[1]) || 0;
+  const season = seasonKo(month);
+  const wStr = wx
+    ? ` 계절: ${season}. 날씨: ${wx.desc}, ${wx.temp}도(${tempBand(wx.temp)}), 강수확률 ${wx.pop}%.`
+    : ` 계절: ${season}.`;
   const ahead = (t.myPosition && t.cutLine) ? Math.max(0, Number(t.myPosition) - Number(t.cutLine) - 1) : null;
 
   switch (s.scene) {
@@ -133,8 +140,10 @@ function factsText(s, now, wx) {
 // 캐시 키 — 장면·핵심 사실·시간대·날씨가 바뀌면 새로 생성.
 function stateKey(s, now, wx) {
   const t = s.t || {};
-  return [s.scene, s.offset ?? 0, t.status || '', t.teeTime || '', t.myPosition ?? '', t.cutLine ?? '',
-    s.todayKind || '', wx ? wx.cat : '', wx ? (wx.day ? 'd' : 'n') : '', timeBucket(now.hour)].join('|');
+  const month = Number(now.iso.split('-')[1]) || 0;
+  return [CHEER_VER, s.scene, s.offset ?? 0, t.status || '', t.teeTime || '', t.myPosition ?? '', t.cutLine ?? '',
+    s.todayKind || '', wx ? wx.cat : '', wx ? (wx.day ? 'd' : 'n') : '', wx ? tempBand(wx.temp) : '',
+    seasonKo(month), timeBucket(now.hour)].join('|');
 }
 
 // ── AI 생성 프롬프트(수호천사 아이/걱정 많은 엄마 · 존댓말) ──
@@ -146,7 +155,10 @@ function buildPrompt(facts, n) {
 
 [말투 — 매우 중요]
 - 반드시 존댓말(~요 / ~세요 / ~해요).
-- 엄마가 챙기듯 '구체적으로': 밥·옷·날씨 대비·안전·따뜻한 것·푹 쉬기 등.
+- 엄마가 챙기듯 '구체적으로' 챙겨주되(밥·물·안전·컨디션·쉬기 등), 조언은 반드시 아래 '오늘 상황'의 계절·기온에 맞추세요.
+- ★계절/기온 준수(가장 중요): 더운 날·여름이면 더위·수분·햇빛·그늘·시원함을 챙기고, 추운 날·겨울이면 방한을 챙기세요.
+  여름이나 더운 날에 '따뜻하게 입어라 / 몸 녹여라 / 감기 조심 / 핫팩 / 체온 떨어질라' 같은 방한 표현은 절대 금지.
+  반대로 추운 날에 '더위·자외선 조심' 같은 표현도 금지. 계절과 안 맞는 말은 공감이 확 깨집니다.
 - 오글거리는 감정 선언 금지: "곁에 있을게요", "함께할게요", "마음 챙겨요" 같은 표현 절대 금지.
 - 시적 미사여구 자제. 실제 엄마·아이가 말하듯 자연스럽고 담백하게. 훈계·조언질 금지.
 
@@ -164,12 +176,13 @@ JSON "하나만" 출력: {"lines": ["문구1", "문구2", ...]}`;
 }
 
 // 안전망 풀(사람이 써둔 존댓말) — AI 실패/빈응답 시 대체.
+// 계절 중립(방한/더위 어느 쪽으로도 안 치우친) 문구 — AI 실패 시에도 어색하지 않게.
 const FALLBACK = {
   work_active: ['오늘도 다치지 않게 조심히 다녀오세요.', '밥은 챙겨 드셨어요? 든든히 먹고 나가요.', '무리하지 말고 천천히, 안전하게 하세요.', '물 자주 마시면서 하세요, 힘내요.'],
-  work_done: ['오늘 하루 정말 수고 많으셨어요, 푹 쉬세요.', '고생했어요, 따뜻한 밥 챙겨 드시고 쉬어요.', '다리 아프죠, 오늘은 얼른 씻고 쉬세요.', '무사히 마쳤으니 이제 편히 쉬어요.'],
-  spare: ['너무 조바심 내지 말고 편하게 기다려요.', '따뜻한 물 한 잔 마시면서 기다려요.', '대기하느라 힘들죠, 잠깐 앉아서 쉬어요.', '밥은 드셨어요? 속 든든하게 챙겨요.'],
+  work_done: ['오늘 하루 정말 수고 많으셨어요, 푹 쉬세요.', '고생했어요, 밥 꼭 챙겨 드시고 쉬어요.', '다리 아프죠, 오늘은 얼른 씻고 쉬세요.', '무사히 마쳤으니 이제 편히 쉬어요.'],
+  spare: ['너무 조바심 내지 말고 편하게 기다려요.', '물 한 잔 마시면서 여유 있게 기다려요.', '대기하느라 힘들죠, 잠깐 앉아서 쉬어요.', '밥은 드셨어요? 속 든든하게 챙겨요.'],
   off_today: ['오늘은 쉬는 날이니 푹 쉬세요.', '모처럼 쉬는 날, 편하게 보내요.', '오늘은 아무 걱정 말고 쉬어요.'],
-  nextday: ['오늘도 고생했어요, 저녁 챙겨 먹고 푹 자요.', '오늘은 이만 쉬고 내일 또 힘내요.', '따뜻하게 씻고 일찍 잠자리에 들어요.', '고단한 하루였죠, 오늘은 푹 쉬세요.'],
+  nextday: ['오늘도 고생했어요, 저녁 챙겨 먹고 푹 자요.', '오늘은 이만 쉬고 내일 또 힘내요.', '얼른 씻고 일찍 잠자리에 들어요.', '고단한 하루였죠, 오늘은 푹 쉬세요.'],
 };
 
 async function generatePool(facts, n = 5) {
