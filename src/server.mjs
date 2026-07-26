@@ -176,12 +176,10 @@ async function handleIngest(req, res) {
     text, writer: sender, menuId: '', menuName: source,
     images: [], writeDate: '', url: '/',
   };
-  // ★잡담/사진/광고 사전 필터: 일정 단서가 전혀 없으면 Gemini 호출 없이 피드에만.
-  //  (카톡방 잡담마다 Gemini를 부르면 429 폭주 + 판독 실패 시 광고까지 알림 스팸 → 사전 차단)
+  // ★잡담/사진/광고 사전 필터: 일정 단서가 전혀 없으면 Gemini 호출 없이 '완전 무시'.
+  //  (개인정보 보호: 카톡 잡담·개인 메시지·광고는 소식 피드에 남기지 않는다. Gemini도 생략)
   if (!scheduleHint(text)) {
-    saveRecentV2(pseudo, { relevant: false, push: 'low', status: 'unknown', body: text,
-      rawVerdict: { category: '기타', summary: text } });
-    console.log(`💬 [ingest] 일정 단서 없음 → Gemini 생략, 피드만: "${text.slice(0, 25)}"`);
+    console.log(`💬 [ingest] 일정 단서 없음 → 무시(피드에도 안 남김): "${text.slice(0, 25)}"`);
     return res.json({ ok: true, skipped: true, reason: 'no_schedule_hint' });
   }
   try {
@@ -588,6 +586,9 @@ function saveRecentV2(full, out, userId = 1) {
   saveUserJSON(userId, 'recent.json', recent.slice(0, 100));
 }
 
+// 카톡(단톡방 포워더)發 글인가? — 소식 피드에서 원문·방이름을 숨기고 '배치표 변동'으로만 표기하기 위한 판별.
+const isKakaoSource = (full) => String(full?.id || '').startsWith('ingest-') || full?.menuName === '카톡';
+
 // 배치표 판정에서 '오늘 내 기준(부/역할/순번/티오프)'을 뽑아 저장 → 다음 글 판단 앵커.
 function saveBaselineFromVerdict(full, v) {
   const s = v.myStatus;
@@ -687,8 +688,15 @@ async function processForMember(userId, member, out, full, opts = {}) {
   const v = out.rawVerdict;
   let title = out.title, body = out.body;
 
-  if (out.relevant) saveRecentV2(full, out, userId);
-  else if (userId === 1) console.log(`·  (무관 → 앱에 안 남김) ${full.subject} — ${v?.category || ''}`);
+  if (out.relevant) {
+    if (isKakaoSource(full)) {
+      // 카톡發은 소식 피드에 원문·방이름 없이 '배치표 변동'으로만 남긴다(개인정보 보호). 푸시(아래 title/body)는 상세 유지.
+      saveRecentV2({ ...full, subject: '배치표가 변동됐어요', writer: '', menuName: '배치표', url: '/' },
+        { ...out, body: '카톡으로 배치표 변동이 감지됐어요. 앱에서 최신 상황을 확인하세요.' }, userId);
+    } else {
+      saveRecentV2(full, out, userId);
+    }
+  } else if (userId === 1) console.log(`·  (무관 → 앱에 안 남김) ${full.subject} — ${v?.category || ''}`);
 
   let change = { reversal: false, material: false, message: '' };
   let merged = null;
