@@ -881,39 +881,36 @@ function ccRenderThumbs(leg, list) {
   lbl.classList.toggle('has', arr.length > 0);
   if (lbl.firstChild) lbl.firstChild.textContent = arr.length ? `${cfg.add} (${arr.length}장)` : cfg.idle;
 }
-// 상단 날짜 선택바 — 그 달의 날짜를 쭉 보여주고(기록 있는 날은 표시), 누르면 그날 점검을 연다.
-let rcYear = null, rcMonth = null;
+// 상단 날짜 선택바 — 유예기간(최근 N일)만 롤링으로 보여주고, 누르면 그날 점검을 연다.
+//  (사진이 30일 뒤 자동 삭제되므로 그 이전 날은 열람 대상이 아니라 표시하지 않음)
 const RC_WD = ['일', '월', '화', '수', '목', '금', '토'];
-async function loadRcMonth() {
+async function loadRcStrip() {
   const strip = $('rcDayStrip'); if (!strip) return;
-  if (!rcYear || !rcMonth) { const t = ccDate || new Date().toISOString().slice(0, 10); rcYear = Number(t.slice(0, 4)); rcMonth = Number(t.slice(5, 7)); }
-  const lbl = $('rcMonthLbl'); if (lbl) lbl.textContent = `${rcYear}년 ${rcMonth}월`;
-  let recDays = new Map(), todayISO = new Date().toISOString().slice(0, 10);
+  let recDays = new Map(), todayISO = new Date().toISOString().slice(0, 10), retain = 30;
   try {
-    const r = await (await fetch(`/api/cartcheck/month?year=${rcYear}&month=${rcMonth}`)).json();
+    const r = await (await fetch('/api/cartcheck/recent')).json();
     recDays = new Map((r.days || []).map((d) => [d.date, d]));
     if (r.today) todayISO = r.today;
-  } catch { /* 네트워크 실패 시 빈 달 */ }
-  const lastDay = new Date(rcYear, rcMonth, 0).getDate();
+    if (r.retainDays) retain = r.retainDays;
+  } catch { /* 네트워크 실패 시 빈 스트립 */ }
+  const title = $('rcBarTitle'); if (title) title.textContent = `최근 ${retain}일`;
+  const [ty, tm, td] = todayISO.split('-').map(Number);
+  const base = new Date(Date.UTC(ty, tm - 1, td));
   let html = '';
-  for (let dn = 1; dn <= lastDay; dn++) {
-    const date = `${rcYear}-${String(rcMonth).padStart(2, '0')}-${String(dn).padStart(2, '0')}`;
-    const dow = new Date(rcYear, rcMonth - 1, dn).getDay();
+  for (let i = retain - 1; i >= 0; i--) {          // 오래된→오늘 순 (오늘이 맨 오른쪽)
+    const dt = new Date(base); dt.setUTCDate(dt.getUTCDate() - i);
+    const date = dt.toISOString().slice(0, 10);
+    const dow = dt.getUTCDay();
     const rec = recDays.get(date);
-    const fut = date > todayISO;
+    const md = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
     const mark = rec ? (rec.done ? '✓' : (rec.nPhoto ? '📷' : '·')) : '';
-    const cls = [dow === 0 ? 'sun' : (dow === 6 ? 'sat' : ''), date === ccDate ? 'sel' : '', date === todayISO ? 'today' : '', fut ? 'fut' : ''].filter(Boolean).join(' ');
-    html += `<button class="rc-day ${cls}" data-date="${date}" ${fut ? 'disabled' : ''}><span class="dn">${dn}</span><span class="dw">${RC_WD[dow]}</span><span class="dm">${mark}</span></button>`;
+    const cls = [dow === 0 ? 'sun' : (dow === 6 ? 'sat' : ''), date === ccDate ? 'sel' : '', date === todayISO ? 'today' : ''].filter(Boolean).join(' ');
+    html += `<button class="rc-day ${cls}" data-date="${date}"><span class="dn">${md}</span><span class="dw">${RC_WD[dow]}</span><span class="dm">${mark}</span></button>`;
   }
   strip.innerHTML = html;
-  strip.querySelectorAll('button[data-date]:not([disabled])').forEach((b) => { b.onclick = () => loadCartCheck(b.dataset.date); });
+  strip.querySelectorAll('button[data-date]').forEach((b) => { b.onclick = () => loadCartCheck(b.dataset.date); });
   const selEl = strip.querySelector('.rc-day.sel') || strip.querySelector('.rc-day.today');
   if (selEl) selEl.scrollIntoView({ inline: 'center', block: 'nearest' });
-}
-function rcNavMonth(delta) {
-  rcMonth += delta;
-  if (rcMonth < 1) { rcMonth = 12; rcYear--; } else if (rcMonth > 12) { rcMonth = 1; rcYear++; }
-  loadRcMonth();
 }
 function ccRenderList(items, checklist, progress) {
   const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
@@ -965,8 +962,7 @@ async function loadCartCheck(date) {
     ccRenderThumbs('club_pre', day.photos && day.photos.club_pre);
     ccRenderThumbs('club_post', day.photos && day.photos.club_post);
     ccRenderList(items, day.checklist || {}, day.progress || { checked: 0, total: items.length, done: false });
-    rcYear = Number(r.date.slice(0, 4)); rcMonth = Number(r.date.slice(5, 7)); // 선택 날짜의 달로 날짜바 동기화
-    await loadRcMonth();
+    await loadRcStrip();
   } catch { $('ccHead').textContent = '불러오기 실패'; $('ccSub').textContent = '잠시 후 다시 시도해주세요.'; }
 }
 // intake·exit 공통 다중 업로드(갤러리에서 여러 장). 각 구간 최대 10장.
@@ -994,8 +990,6 @@ function initCartButtons() {
   $('ccExit').onchange = (e) => ccUpload('exit', e.target);
   $('clPre').onchange = (e) => ccUpload('club_pre', e.target);
   $('clPost').onchange = (e) => ccUpload('club_post', e.target);
-  $('rcPrev').onclick = () => rcNavMonth(-1);
-  $('rcNext').onclick = () => rcNavMonth(1);
   $('rcToday').onclick = () => loadCartCheck();  // 오늘로
   initCcLightbox();
 }

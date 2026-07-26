@@ -149,12 +149,11 @@ export function removePhoto(dateISO, leg, fname, userId = 1) {
   }, userId);
 }
 
-// 특정 '월'에 기록이 있는 날 요약(상단 날짜바용). year, month(1~12).
-export function monthDays(userId = 1, year, month) {
+// 유예기간 내(sinceISO 이상) 기록 있는 날 요약 — 상단 날짜바용.
+export function recordsSince(userId = 1, sinceISO) {
   const d = loadAll(userId);
   const items = getItems(userId);
-  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
-  return Object.keys(d).filter((k) => isISO(k) && k.startsWith(prefix)).sort().map((date) => {
+  return Object.keys(d).filter((k) => isISO(k) && (!sinceISO || k >= sinceISO)).sort().map((date) => {
     const rec = d[date] || {};
     const photos = rec.photos || {};
     const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);

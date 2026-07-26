@@ -319,15 +319,14 @@
     .cc-thumbwrap { position:relative; }
     .cc-thumbdel { position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; border:0; background:#b3453b; color:#fff; font-size:11px; font-weight:800; line-height:1; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.3); }
     .cc-thumb { cursor:pointer; }
-    /* 상단 날짜 선택바 (월 기준) */
+    /* 상단 날짜 선택바 (최근 N일 롤링) */
     .rc-datebar { margin-bottom:14px; }
-    .rc-monthnav { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
-    .rc-navbtn { width:30px; height:30px; border-radius:8px; border:1px solid #dfe5e0; background:#fff; color:#3d5a49; font-size:16px; font-weight:800; cursor:pointer; flex:none; }
-    .rc-monthlbl { font-size:14px; font-weight:850; color:#153e2a; min-width:98px; text-align:center; font-variant-numeric:tabular-nums; }
+    .rc-bartop { display:flex; align-items:center; margin-bottom:9px; }
+    .rc-bartitle { font-size:12px; font-weight:850; color:#3d5a49; letter-spacing:.02em; }
     .rc-todaybtn { margin-left:auto; font-size:11px; font-weight:800; color:#0b5d34; background:#eef7f0; border:1px solid #cfe6d8; border-radius:8px; padding:6px 12px; cursor:pointer; }
     .rc-daystrip { display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:3px; }
-    .rc-day { flex:none; display:flex; flex-direction:column; align-items:center; gap:1px; width:46px; padding:7px 0; border:1px solid #e2e6e1; border-radius:10px; background:#fff; cursor:pointer; }
-    .rc-day .dn { font-size:14px; font-weight:850; color:#2b3b32; font-variant-numeric:tabular-nums; }
+    .rc-day { flex:none; display:flex; flex-direction:column; align-items:center; gap:1px; width:50px; padding:7px 0; border:1px solid #e2e6e1; border-radius:10px; background:#fff; cursor:pointer; }
+    .rc-day .dn { font-size:12.5px; font-weight:850; color:#2b3b32; font-variant-numeric:tabular-nums; }
     .rc-day .dw { font-size:8.5px; font-weight:700; color:#8a978c; }
     .rc-day .dm { font-size:10px; height:12px; line-height:1; color:#1d6740; }
     .rc-day.sun .dn { color:#c0392b; } .rc-day.sat .dn { color:#2f6bb0; }
@@ -573,12 +572,10 @@
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
       <div class="sect"><span>🏌️ 라운드 점검</span></div>
 
-      <!-- 상단 날짜 선택바 (월 기준) -->
+      <!-- 상단 날짜 선택바 (최근 N일 롤링) -->
       <div class="rc-datebar">
-        <div class="rc-monthnav">
-          <button id="rcPrev" class="rc-navbtn" aria-label="이전 달">‹</button>
-          <span id="rcMonthLbl" class="rc-monthlbl">—</span>
-          <button id="rcNext" class="rc-navbtn" aria-label="다음 달">›</button>
+        <div class="rc-bartop">
+          <span class="rc-bartitle" id="rcBarTitle">최근 30일</span>
           <button id="rcToday" class="rc-todaybtn">오늘</button>
         </div>
         <div id="rcDayStrip" class="rc-daystrip" aria-label="날짜 선택"></div>
