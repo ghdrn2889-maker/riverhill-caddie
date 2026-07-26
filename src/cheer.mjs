@@ -26,7 +26,7 @@ function timeBucket(h) {
 }
 function seasonKo(m) { return (m >= 3 && m <= 5) ? '봄' : (m >= 6 && m <= 8) ? '여름' : (m >= 9 && m <= 11) ? '가을' : '겨울'; }
 function tempBand(t) { return t >= 29 ? '무더움' : t >= 25 ? '더움' : t >= 17 ? '선선함' : t >= 9 ? '쌀쌀함' : '추움'; }
-const CHEER_VER = 2; // 프롬프트/문맥 규칙 바뀌면 올려서 캐시 강제 무효화(오래된 문구 축출)
+const CHEER_VER = 3; // 프롬프트/문맥 규칙 바뀌면 올려서 캐시 강제 무효화(오래된 문구 축출)
 
 // ── WMO 코드 → 한글/카테고리(문맥·캐시키용) ──
 function wmoDescKo(code) {
@@ -162,12 +162,15 @@ function buildPrompt(facts, n) {
 - 오글거리는 감정 선언 금지: "곁에 있을게요", "함께할게요", "마음 챙겨요" 같은 표현 절대 금지.
 - 시적 미사여구 자제. 실제 엄마·아이가 말하듯 자연스럽고 담백하게. 훈계·조언질 금지.
 
-[반드시 지킬 것]
-- 한국어 한 문장, 공백 포함 30자 내외(최대 44자).
+[반드시 지킬 것 — 길이 규칙 매우 중요]
+- 한국어 한 문장, 공백 포함 18자 내외(최대 22자). 모바일 한 줄에 들어가야 하니 짧게.
+- 한 호흡에 끝나는 담백한 단문. "~하니까 ~하세요"처럼 두세 마디 잇지 말고 '딱 한 가지'만 말하세요.
 - 아래 '오늘 상황'에 주어진 사실만 사용. 없는 사실 지어내지 마세요.
-- 근무를 마쳤으면 진심으로 수고를 알아주되 과장 금지. 일이 없던 날이면 억지 긍정 금지, 담담히 쉬라고.
-- 내일 일정이 함께 주어지면 오늘 마무리 + 내일 챙김을 한 문장에 자연스럽게 담아도 좋음.
-- 이모지는 없거나 최대 1개. ${n}개는 서로 확실히 다른 말이어야 합니다.
+- 근무를 마쳤으면 짧게 수고를 알아주고, 일이 없던 날이면 억지 긍정 없이 담담히 쉬라고만.
+- 이모지는 넣지 마세요. ${n}개는 서로 확실히 다른 말이어야 합니다.
+
+[좋은 예 — 이 길이·담백함으로]
+"오늘도 조심히 다녀오세요." / "물 자주 드세요." / "그늘에서 쉬엄쉬엄해요." / "고생했어요, 푹 쉬세요." / "밥은 챙겨 드셨어요?"
 
 [오늘 상황]
 ${facts}
@@ -185,11 +188,12 @@ const FALLBACK = {
   nextday: ['오늘도 고생했어요, 저녁 챙겨 먹고 푹 자요.', '오늘은 이만 쉬고 내일 또 힘내요.', '얼른 씻고 일찍 잠자리에 들어요.', '고단한 하루였죠, 오늘은 푹 쉬세요.'],
 };
 
-async function generatePool(facts, n = 5) {
+async function generatePool(facts, n = 6) {
   const model = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
   const out = await callGeminiJSON(buildPrompt(facts, n), null, model, { temperature: 1.0, topP: 0.95 });
   const lines = Array.isArray(out?.lines) ? out.lines : [];
-  return lines.map((l) => String(l || '').trim()).filter((l) => l.length >= 4 && l.length <= 60).slice(0, n);
+  // 한 줄에 들어가게 길이 컷(23자 초과는 버림) — 짧고 담백한 것만 통과.
+  return lines.map((l) => String(l || '').trim()).filter((l) => l.length >= 4 && l.length <= 23).slice(0, n);
 }
 
 // 공개: 현재 회원의 응원 문구 풀을 얻는다(캐시 우선, 장면 바뀌면 재생성, 실패 시 안전망).
