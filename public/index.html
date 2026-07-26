@@ -256,12 +256,12 @@
     .hero.has-wx::before { content:''; position:absolute; inset:0; z-index:1; pointer-events:none; border-radius:19px;
       background:linear-gradient(180deg, rgba(255,255,255,.40) 0%, rgba(255,255,255,.14) 45%, rgba(255,255,255,0) 72%); }
     .hero.has-wx > *:not(.fx) { position:relative; z-index:2; }
-    .hero.has-wx .label { color:#42524a; }     /* 배경 위에서도 또렷하게 */
+    .hero.has-wx .label { color:#42524a; margin-top:11px; }     /* 배경 위에서도 또렷하게 + 참고표기와 간격 */
     .hero.has-wx h3 { color:#0e2018; }
     .hero.has-wx .sub { color:#3a4b43; }
     .wxref { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-weight:800;
       background:rgba(255,255,255,.76); color:#2b3b32; border:1px solid rgba(255,255,255,.6);
-      padding:5px 10px; border-radius:99px; backdrop-filter:blur(3px); box-shadow:0 1px 4px rgba(0,0,0,.06); margin-bottom:3px; }
+      padding:5px 10px; border-radius:99px; backdrop-filter:blur(3px); box-shadow:0 1px 4px rgba(0,0,0,.06); }
     /* 내부 보드는 반투명 유리로 → 배경 날씨가 은은히 비침 */
     .hero.has-wx .sp-board { background:rgba(255,255,255,.60); border-color:rgba(255,255,255,.55); backdrop-filter:blur(6px); }
     .hero.has-wx .sp-head, .hero.has-wx .sp-foot { border-color:rgba(120,140,125,.20); }
