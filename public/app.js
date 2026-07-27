@@ -394,7 +394,62 @@ function pickCheer() {
   el.hidden = false; cheerShown = true;
 }
 // 앱을 다시 볼 때마다 새 한마디(보는 도중엔 유지).
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadCheer(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  loadCheer(true);
+  if (offTitleActive) setOffTitle(nextOffTitle(), true); // 재진입 시 휴무 제목도 새로
+});
+
+// 오늘 휴무일 때 히어로 제목 — 10문구 랜덤, 진입/재진입/일정시간마다 아래→위 슬라이드로 교체.
+const OFF_TITLES = [
+  '오늘은 온전히 당신의 하루예요',
+  '잘 달려온 당신에게 주는 쉼표',
+  '오늘 코스는 잠시 내려놓아도 돼요',
+  '오늘은 페어웨이 대신 쉼표 하나',
+  '푹 쉬어요, 그게 오늘 할 일이에요',
+  '오늘은 걸음을 멈춰도 되는 날',
+  '내일을 위해 잠시 숨 고르는 날',
+  '오늘만큼은 당신을 먼저 챙겨요',
+  '카트도 캐디백도 오늘은 쉬어가요',
+  '수고한 당신, 오늘은 마음껏 쉬어요',
+];
+const OFF_ROTATE_MS = 300000;  // 5분마다 교체(보는 도중)
+let offTitleActive = false, offTitleTimer = null, offTitleCur = '';
+function nextOffTitle() {
+  const last = offTitleCur || localStorage.getItem('offTitleLast') || '';
+  let pool = OFF_TITLES.filter((tt) => tt !== last);
+  if (!pool.length) pool = OFF_TITLES;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function setOffTitle(text, animate) {
+  const el = $('heroTitle'); if (!el) return;
+  offTitleCur = text;
+  try { localStorage.setItem('offTitleLast', text); } catch (_) {}
+  if (!animate || !el.querySelector('.tt')) {
+    el.innerHTML = `<span class="tt">${esc(text)}</span>`; return;
+  }
+  const out = el.querySelector('.tt');
+  const inc = document.createElement('span');
+  inc.className = 'tt enter';
+  inc.textContent = text;
+  el.appendChild(inc);
+  void inc.offsetWidth;                 // 시작 상태 확정
+  out.classList.add('leave');           // 기존 문구: 위로 빠짐
+  inc.classList.remove('enter');        // 새 문구: 아래→제자리
+  setTimeout(() => { if (out.parentNode) out.remove(); }, 520);
+}
+function startOffTitle() {
+  if (!offTitleActive) { offTitleActive = true; setOffTitle(nextOffTitle(), false); }
+  if (!offTitleTimer) {
+    offTitleTimer = setInterval(() => {
+      if (!document.hidden && offTitleActive) setOffTitle(nextOffTitle(), true);
+    }, OFF_ROTATE_MS);
+  }
+}
+function stopOffTitle() {
+  offTitleActive = false;
+  if (offTitleTimer) { clearInterval(offTitleTimer); offTitleTimer = null; }
+}
 
 // 휴무 코스 일러스트 — 언덕(좌우 풀폭) + 깃발(세 포즈 A→B→C→B 왕복, 1.2초/컷). 하늘은 기존 날씨 배경 재사용.
 const OFF_FLAG_A = 'M9 8 C16 10.5 24 8 33 5.5 L33 14.5 C24 17 16 19.5 9 17 Z';
@@ -436,11 +491,17 @@ function renderToday(t) {
   $('heroLabel').textContent = `${dayW} 내 상황`;
   // 근무 '확정'은 티오프가 실제 매칭됐을 때만. 그 전(순번상 근무권)은 '근무 예정'으로 스페어와 구분.
   const isConfirmed = isWork && s.teeTime;
-  $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
-    : isConfirmed ? `${dayW} 근무 확정`
-    : isWork ? `${dayW} 근무 예정`
-    : st === 'off' ? (off >= 1 ? `${dayW} 휴무예요` : '오늘 코스는 당신 없이도 잘 돌아가요')
-    : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
+  const offToday = st === 'off' && off < 1;
+  if (offToday) {
+    startOffTitle();                    // 랜덤 문구 + 슬라이드 로테이션 시작
+  } else {
+    stopOffTitle();
+    $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
+      : isConfirmed ? `${dayW} 근무 확정`
+      : isWork ? `${dayW} 근무 예정`
+      : st === 'off' ? `${dayW} 휴무예요`
+      : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
+  }
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
     : (isWork && !s.teeTime) ? '순번상 근무권에 들었어요. 티오프가 매칭되면 시간을 알려드릴게요.'
     : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
