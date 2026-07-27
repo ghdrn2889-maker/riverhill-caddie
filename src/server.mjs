@@ -1075,23 +1075,33 @@ setInterval(checkWorklogReminders, 60 * 60 * 1000); // 매시간 체크(리마�
 //  종료 점검(체크리스트)이 아직 미완이면 1회 상기. 고객 소지품 두고 오는 사고 방지.
 async function checkCartReminders() {
   try {
-    const t = loadToday();
-    if (!t || !['assigned', 'work', 'your_turn'].includes(t.status)) return;
-    const tISO = worklog.labelToISO(t.date);
-    if (!tISO || tISO !== todayISOKST()) return; // 오늘 근무만
-    const m = String(t.teeTime || '').match(/(\d{1,2}):(\d{2})/);
-    if (!m) return;
-    const teeMin = Number(m[1]) * 60 + Number(m[2]);
-    const roundMin = Number(process.env.CART_ROUND_HOURS ?? 2.5) * 60;
+    const todayISO = todayISOKST();
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    if (nowMin < teeMin + roundMin) return;          // 아직 라운드 중 → 나중에
-    if (!cartcheck.needsExitCheck(tISO)) return;      // 이미 점검 완료 → 조용
-    const rec = cartcheck.getDay(tISO);
-    if (rec.remindedAt && Date.now() - rec.remindedAt < 6 * 3600 * 1000) return; // 6h내 재알림 억제
-    await broadcast({ title: '🛒 카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' });
-    cartcheck.markReminded(tISO);
-    console.log(`[카트리마인더] ${tISO} 종료 점검 상기 발송`);
+    const roundMin = Number(process.env.CART_ROUND_HOURS ?? 2.5) * 60;
+    for (const mem of activeMembers()) {
+      // 오늘 근무 라운드(1·2·3부) 중 '마지막에 끝나는' 라운드 기준 — 두 탕/세 탕이면 하루 마무리 시점에 1회.
+      //  ★카트 점검은 하루 1건(cartcheck.json)이라 라운드별 개별 알림은 안 함(모델 한계, 하루 종료 알림으로 커버).
+      let lastTeeMin = -1;
+      for (const part of ['3', '2', '1']) {
+        const t = loadToday(mem.id, part);
+        if (!t || !['assigned', 'work', 'your_turn'].includes(t.status)) continue;
+        const tISO = worklog.labelToISO(t.date);
+        if (!tISO || tISO !== todayISO) continue;       // 오늘 근무만(내일 배치표 제외)
+        const m = String(t.teeTime || '').match(/(\d{1,2}):(\d{2})/);
+        if (!m) continue;
+        const teeMin = Number(m[1]) * 60 + Number(m[2]);
+        if (teeMin > lastTeeMin) lastTeeMin = teeMin;
+      }
+      if (lastTeeMin < 0) continue;                      // 오늘 이 회원 근무 라운드 없음
+      if (nowMin < lastTeeMin + roundMin) continue;      // 아직 라운드 중 → 나중에
+      if (!cartcheck.needsExitCheck(todayISO, mem.id)) continue;   // 이미 점검 완료 → 조용
+      const rec = cartcheck.getDay(todayISO, mem.id);
+      if (rec.remindedAt && Date.now() - rec.remindedAt < 6 * 3600 * 1000) continue; // 6h내 재알림 억제
+      await broadcast({ title: '🛒 카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' }, mem.id);
+      cartcheck.markReminded(todayISO, mem.id);
+      console.log(`[카트리마인더] 회원${mem.id} ${todayISO} 종료 점검 상기 발송`);
+    }
   } catch (e) { console.error('카트 리마인더 오류:', e.message); }
 }
 setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
