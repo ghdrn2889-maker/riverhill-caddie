@@ -58,6 +58,16 @@ function parseAddedTees(article) {
   return out;
 }
 
+// "N번 ○○님까지 근무/일/나갑니다" 커트라인을 텍스트에서 결정적으로 파싱(모델이 cutoff 필드를 놓쳐도 보완).
+//  반환 {name, pos|null} 또는 null. '까지' 뒤에 근무 확정 표현이 있어야 인정(취소·대기·질문 오탐 방지).
+function parseCutoff(article) {
+  const t = `${article?.subject || ''} ${article?.text || ''}`;
+  // 이름(2~4자 한글) + (님) 까지 … 근무/일됩니다/나갑니다/콜/배정/출근. 이름 앞 "N번"이 있으면 순번으로.
+  const m = t.match(/(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님?\s*까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/);
+  if (!m) return null;
+  return { name: m[2], pos: m[1] ? Number(m[1]) : null };
+}
+
 function renumberGrid(slots) {
   const clean = (slots || [])
     .map((s) => ({ time: (String(s?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(s?.course) ? 'IN' : 'OUT' }))
@@ -93,6 +103,17 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
 
   const next = { ...cur, timeline: [...(cur.timeline || [])] };
   const changes = [];
+
+  // ★커트라인 텍스트 보완: 모델이 "N번 ○○님까지 근무"를 cutoff 필드에 못 담아도(불안정) 정규식으로 채운다.
+  //  순번 숫자가 없으면 저장된 명단(roster3)에서 그 이름의 순번을 찾아 보완.
+  if (!verdict.cutoffAnnounced) {
+    const pc = parseCutoff(article);
+    if (pc) {
+      const posFromRoster = (cur.roster3 || []).findIndex((n) => String(n).replace(/\s/g, '').includes(pc.name)) + 1;
+      verdict = { ...verdict, cutoffAnnounced: true, cutoffName: pc.name,
+        cutoffPosition: pc.pos != null ? pc.pos : (posFromRoster || null) };
+    }
+  }
 
   // ── 순번(lock): 새로 확실히 읽었으면 갱신(교환 등), 아니면 유지 ──
   //  0·음수는 판독 실패값이므로 무시(상황판 오염 방지).
