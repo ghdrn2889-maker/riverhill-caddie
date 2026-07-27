@@ -6,9 +6,13 @@ import { loadUserJSON, saveUserJSON } from './store.mjs';
 
 const FILE = 'today.json';
 
-// ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화.
-export function loadToday(userId = 1) { return loadUserJSON(userId, FILE, null); }
-export function saveToday(s, userId = 1) { saveUserJSON(userId, FILE, s); }
+// 부(部)별 상황판 파일. 3부(기본)=today.json, 2부=today2.json (섬도/그림자 track).
+//  ★part 인자 없으면 기존 그대로 today.json → 기존 호출부 무변화.
+function fileFor(part) { return String(part) === '2' ? 'today2.json' : FILE; }
+
+// ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화. part='2'면 2부 슬롯.
+export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, fileFor(part), null); }
+export function saveToday(s, userId = 1, part = '3') { saveUserJSON(userId, fileFor(part), s); }
 
 export function statusKo(s) {
   return (s === 'assigned' || s === 'work') ? '근무 확정'
@@ -49,7 +53,7 @@ export function todayContext(today) {
 
 // 새 판정(verdict)을 상황판에 병합. { next, change } 반환.
 //  change = { changes:[{field,from,to,reversal,msg}], reversal, material, message }
-export function applyVerdict(prev, verdict, article) {
+export function applyVerdict(prev, verdict, article, opts = {}) {
   const d = verdict.dateLabel || (prev && prev.date) || '';
   // 날짜가 바뀌면(=다음 날 배치표) 상황판을 새로 시작.
   let cur = prev;
@@ -70,12 +74,13 @@ export function applyVerdict(prev, verdict, article) {
   }
 
   // ── 티오프: 새 확정 / 변경(번복) 감지 ──
-  //  ★3부 티오프 하한(TEE_MIN_HOUR, 기본 16시) 미만은 무효(남의 시간/취소·오독 방지).
-  //   예: "[당일취소] 인 13시35분 취소" 를 김홍구 배정으로 오독하던 문제 차단.
+  //  ★내 부 티오프 창 밖은 무효(남의 시간/취소·오독 방지). 창은 opts로 주입(3부 기본 16~24).
+  //   예: "[당일취소] 인 13시35분 취소" 를 김홍구(3부) 배정으로 오독하던 문제 차단.
   const teeRaw = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : '';
   const teeHour = teeRaw ? Number(teeRaw.split(':')[0]) : null;
-  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
-  const tee = (teeRaw && teeHour != null && teeHour >= TEE_MIN) ? teeRaw : '';
+  const TEE_MIN = Number(opts.teeMin ?? (process.env.TEE_MIN_HOUR ?? 16));
+  const TEE_MAX = Number(opts.teeMax ?? 24);
+  const tee = (teeRaw && teeHour != null && teeHour >= TEE_MIN && teeHour < TEE_MAX) ? teeRaw : '';
   if (tee) {
     if (cur.teeTime && cur.teeTime !== tee)
       changes.push({ field: 'tee', from: cur.teeTime, to: tee, reversal: true, msg: `티오프 ${cur.teeTime}→${tee}` });

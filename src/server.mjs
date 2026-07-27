@@ -691,6 +691,31 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
   rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
+
+  // ── 섬도(그림자) 2부 감지 — "2, 3 출근"의 1단계. 정확도 검증 전용. ──
+  //  ★알림/피드/저널/근무일지 일절 없음. 같은 board를 2부 창(10~16시)으로 한 번 더 판독해
+  //   today2.json + shadow-part2.jsonl 에만 기록. env(SHADOW_PART2=1) + 1번 회원 + 배치표 이미지 한정.
+  if (process.env.SHADOW_PART2 === '1') {
+    try {
+      const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
+      if (isBoardImg) {
+        const m2 = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
+        const out2 = await judge(full, loadToday(1, '2'), m2);
+        const v2 = out2.rawVerdict;
+        let nx = loadToday(1, '2');
+        if (v2) { const merged2 = applyVerdict(loadToday(1, '2'), v2, full, { teeMin: 10, teeMax: 16 }); nx = merged2.next; saveToday(nx, 1, '2'); }
+        appendJSONL('shadow-part2.jsonl', {
+          at: Date.now(), articleId: full.id, subject: full.subject || '',
+          relevant: !!out2.relevant, part: v2?.part || null,
+          myStatus: v2?.myStatus || null, myPosition: v2?.myPosition ?? null,
+          teeTime: nx?.teeTime || null, course: nx?.course || null, status: nx?.status || null,
+          confidence: v2?.confidence ?? null, boardTables: v2?.boardTables || null, uncertain: v2?._uncertain || null,
+        });
+        console.log(`🕵️  [섬도 2부] ${full.subject} → relevant=${out2.relevant} status=${nx?.status || '-'} tee=${nx?.teeTime || '-'} pos=${nx?.myPosition ?? '-'} part=${v2?.part || '-'}`);
+      }
+    } catch (e) { console.error('[섬도 2부 오류]', e.message); }
+  }
+
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
 
@@ -751,6 +776,22 @@ async function processForMember(userId, member, out, full, opts = {}) {
         const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
         out.push = ahead === 0 ? 'high' : (ahead <= WATCH ? 'check' : 'low');
       }
+    }
+  }
+
+  // ★★카톡發은 '배치표 감시' 전용 — 소식 피드에 절대 안 뜨고(위에서 미저장), 알림도 '실제 업무 변동'이 있을 때만.
+  //  개인 카톡·잡담·개인 톡방 내용은 상황판만 조용히 스치고 알림을 내지 않는다(변동 없으면 완전 무음).
+  //  변동(reversal: 티오프 변경/근무↔스페어/취소 등)이 있을 때만 '업무 시간 변동'을 최소한으로, 원문 노출 없이 알린다.
+  if (isKakaoSource(full)) {
+    if (out.relevant && change.reversal) {
+      const teeChg = (change.changes || []).find((c) => c.field === 'tee');
+      title = '⚠️ 업무 시간 변동';
+      body = teeChg
+        ? `${member.name}님, 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변동됐어요. 출발·백대기 시각도 확인해주세요.`
+        : `${member.name}님, 업무에 변동이 있어요 — ${change.message}.`;
+      out.push = 'high';
+    } else {
+      out.push = 'low'; // 변동 없음(또는 무관) → 무음. 소식·알림 어디에도 안 남김.
     }
   }
 

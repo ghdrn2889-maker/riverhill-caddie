@@ -17,14 +17,40 @@ export function dayWordFor(dateLabel) {
   return off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : String(dateLabel);
 }
 
-// 회원 컨텍스트(이름·부). 미지정이면 .env(=1번 회원 김홍구) → 기존 동작 무변화.
+// 부(部)별 티오프 시간대 창(window). 3부는 env(TEE_MIN_HOUR, 기본 16)~자정 = 기존 동작 유지.
+//  ★이 창으로 모든 '남의 부 시간' 가드를 매개변수화 → 2부(낮)도 같은 로직으로 판독 가능.
+export function partWindow(part) {
+  const p = String(part || '3').trim();
+  if (p === '1') return { min: 5, max: 10 };   // 1부: 오전 이른 시간
+  if (p === '2') return { min: 10, max: 16 };  // 2부: 낮(대략 10~15시대)
+  return { min: Number(process.env.TEE_MIN_HOUR ?? 16), max: 24 }; // 3부(기본): 16시 이후
+}
+// 창을 벗어난(=남의 부) 시각인가. teeMin/teeMax 없으면 부로 유추.
+function outOfWindow(hour, member) {
+  if (hour == null || !Number.isFinite(Number(hour))) return false;
+  const w = (member && member.teeMin != null) ? { min: member.teeMin, max: member.teeMax ?? 24 } : partWindow(member?.part);
+  const h = Number(hour);
+  return h < w.min || h >= w.max;
+}
+
+// 회원 컨텍스트(이름·부·티오프창). 미지정이면 .env(=1번 회원 김홍구) → 기존 동작 무변화.
 //  ★judge()가 회원을 인자로 받아 buildPrompt/decide/applyRoster 등에 전달 → "누구 기준"만 바깥에서.
 function memberFromEnv() {
+  const part = (process.env.MY_PART || '3').trim();
+  const w = partWindow(part);
   return {
     name: (process.env.MY_NAME || '김홍구').trim(),
-    part: (process.env.MY_PART || '3').trim(),
+    part,
     commuteMin: Number(process.env.COMMUTE_MIN ?? 60),
+    teeMin: w.min, teeMax: w.max,
   };
+}
+// 프롬프트용 티오프 시간대 서술 (부별).
+function partWindowDesc(member) {
+  const w = (member && member.teeMin != null) ? { min: member.teeMin, max: member.teeMax ?? 24 } : partWindow(member?.part);
+  if (w.min <= 10) return `오전 이른 시간(대략 ${w.min}~${w.max}시)`;
+  if (w.min < 16) return `낮(대략 ${w.min}~${w.max}시)`;
+  return `${w.min}시 이후(저녁까지)`;
 }
 
 // 일정 관련 '단서'가 있는 텍스트인가 (잡담/사진/광고 걸러내기 + Gemini 실패 시 스팸 방지용).
@@ -48,10 +74,9 @@ export function cheapRelevance(text, member = memberFromEnv()) {
   if (/[124-9]\s*부/.test(t)) return 'other';
   // 개인 근태 신청 (내 이름 없음)
   if (/(휴무|조출|후출|연차|반차|월차|병가|휴가|조퇴).{0,6}(신청|올립니다|재신청|합니다|취소)/.test(t)) return 'other';
-  // 티오프/시각이 있는데 전부 내 부 시간대(기본 16시) 이전 → 다른 부(오전·낮)
-  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
+  // 티오프/시각이 있는데 전부 내 부 시간대 창 밖 → 다른 부
   const hours = [...t.matchAll(/(\d{1,2})\s*(?::\d{2}|시)/g)].map((m) => Number(m[1]));
-  if (hours.length && hours.every((h) => h < TEE_MIN)) return 'other';
+  if (hours.length && hours.every((h) => outOfWindow(h, member))) return 'other';
   return 'unknown';
 }
 
@@ -83,6 +108,7 @@ function commuteLine(teeTime, course, commuteMin) {
 // ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
 function buildPrompt(article, member = memberFromEnv()) {
   const { name, part } = member;
+  const wdesc = partWindowDesc(member);   // 이 회원(부) 티오프 시간대 서술 — 3부면 "16시 이후(저녁까지)"
   const anchor = '';
   const hasImg = !!article.images?.length;
   const ts = Number(article.writeDate);
@@ -109,7 +135,7 @@ ${postedLine}
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
-- 부(部)별 티오프 시간대가 다름: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=낮(대략 10~15시), ${part}부=티오프 **16시 이후**(저녁까지). 예) "아웃 7시33분"(오전)은 1부, "인 13시35분"(오후 1시대)은 2부이며 ${part}부 아님. **16시 이전 티오프는 절대 ${part}부가 아닙니다.**
+- 부(部)별 티오프 시간대: 1부=오전 이른 시간(아웃/인 6~9시대), 2부=낮(대략 10~15시대), 3부=16시 이후(저녁까지). "${name}"은 ${part}부라 티오프 시간대가 **${wdesc}**입니다. **이 시간대 밖(다른 부 시간)만 있는 글은 "${name}"과 무관합니다.**
 - 배치표/번호표: 각 부 "순번·이름" 목록과 "OUT n부 IN" 티오프표(가운데=티오프 시간, OUT/IN=코스). 순번이 티오프 칸에 등록되면 그 사람 근무 확정.
 - 배경색: 회색=스페어(대기), 흰색/색칠됨=근무 확정. 이름 옆 "(2,3)"·"(54)" 같은 숫자표기는 그 사람이 여러 부에 걸쳐 일한다는 표시(부 중복)라, 이름만으론 어느 부 소식인지 모호합니다(→ 시간대로 판단).
 - "○○님까지 일됩니다/근무/나갑니다" = 그 사람까지(포함) 순번 근무 확정. 표현은 작성자마다 불규칙("나가요","콜","다근무","까지만" 등)해도 '뜻'으로 파악.
@@ -122,7 +148,7 @@ ${postedLine}
 - "${name}"이 근무 확정(흰색이거나 티오프 배정)이면 "${name}"의 티오프 시간(HH:MM)과 코스(OUT/IN)를 읽으세요(교환됐으면 바뀐 자리 기준).
 - "${name}"의 순번(myPosition)은 항상 읽으세요(이미지의 그 사람 번호).
 - ★★teeTime엔 오직 "${name}" 본인이 배정된 티오프만 넣으세요. 취소·추가·변동·노쇼 글에서 언급된 '남'의 시간(예: "인 13시35분 취소 박진수님까지"의 13:35는 박진수 관련 시간)은 "${name}"의 티오프가 절대 아니므로 teeTime=null. "${name}" 자리의 시간이 확실할 때만 채우세요.
-- ★★${part}부 티오프는 16시 이후입니다. 16시 이전 시간(예: 13:35)만 있는 글은 ${part}부가 아니라 다른 부이므로 "${name}"과 무관(relevant=false, part=해당 부/1·2).
+- ★★${part}부 티오프 시간대는 ${wdesc}입니다. 이 시간대 밖 시각만 있는 글은 ${part}부가 아니라 다른 부이므로 "${name}"과 무관(relevant=false, part=해당 부).
 
 ★★★ "${name}"의 근무/스페어 판정 — **이름칸 '배경색'이 최우선 근거입니다** (이번 오류의 핵심):
 1) 먼저 배치표에서 "${name}" 이름칸의 **배경색**을 확인해 myCellColor 에 넣으세요: **흰색/녹색/하늘색 등 색칠됨 = 근무 확정**, **회색 = 스페어(대기)**.
@@ -181,7 +207,7 @@ ${postedLine}
   "cutoffName": "명시된 커트라인 이름, 없으면 빈칸",
   "cutoffPosition": 정수 또는 null,
   "teamCount": "현재 ${part}부 예약 팀 수 정수 (예: '현재 3부 16팀'·'3부 16팀 운영' → 16). = 순번 그 번호까지 근무 확정을 뜻함. 다른 부 수치이거나 팀 수 언급 없으면 null",
-  "teeTime": "김홍구 본인 배정 티오프 HH:MM(16시 이후·본인 자리일 때만). 남의 시간이거나 16시 이전이면 null",
+  "teeTime": "${name} 본인 배정 티오프 HH:MM(${wdesc}·본인 자리일 때만). 남의 시간이거나 시간대 밖이면 null",
   "course": "OUT 또는 IN 또는 빈칸",
   "note": "오직 '시간 변동 가능/취소/캔슬/시간조정' 같은 실제 주의사항만 한 문장. 스페어/근무/대기 등 상태 재언급은 금지. 해당 없으면 반드시 빈칸",
   "confidence": 0.0~1.0 실수,
@@ -247,14 +273,13 @@ export function decide(article, verdict, member = memberFromEnv()) {
   let body = verdict.summary || article.subject || '';
   const teeRaw = verdict.teeTime && /\d{1,2}:\d{2}/.test(verdict.teeTime) ? verdict.teeTime : null;
   const teeHour = teeRaw ? Number(teeRaw.match(/(\d{1,2}):/)[1]) : null;
-  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16); // 3부 티오프 하한(그 이전 시간은 3부 아님)
-  // ★방어벽: 16시 이전 티오프만 있는 글은 남의 부(취소·변동 등)를 잘못 읽은 것 → 내 근무 아님 → 피드만.
+  // ★방어벽: 내 부 시간대 창 밖 티오프만 있는 글은 남의 부(취소·변동 등)를 잘못 읽은 것 → 내 근무 아님 → 피드만.
   //  ("인 13시35분 취소 박진수님까지"를 김홍구 티오프로 오판하던 버그 차단)
-  if (teeRaw && teeHour != null && teeHour < TEE_MIN) {
+  if (teeRaw && teeHour != null && outOfWindow(teeHour, member)) {
     return { relevant: false, push: 'low', status: 'unknown', verdict,
       title: '', body: verdict.summary || article.subject || '' };
   }
-  const tee = teeRaw; // 여기 도달하면 16시 이후(또는 티오프 없음)
+  const tee = teeRaw; // 여기 도달하면 창 안(또는 티오프 없음)
 
   if (tee) {
     // 티오프 배정 = 근무 확정. 산수(남은인원) 무시, 출근/출발 안내.
@@ -338,11 +363,10 @@ export function applyRoster(verdict, today, article, member = memberFromEnv()) {
     const hour = Number.isFinite(ts) && ts > 1e12 ? new Date(ts).getHours() : null;
     const tm = String(verdict.teeTime || '').match(/(\d{1,2}):(\d{2})/);
     const teeH = tm ? Number(tm[1]) : null;
-    const teeMin = Number(process.env.TEE_MIN_HOUR ?? 16);
-    const timeSays3 = (teeH != null && teeH >= teeMin) || (teeH == null && hour != null && hour >= 14);
-    if (!timeSays3) {
+    const timeSaysMine = (teeH != null && !outOfWindow(teeH, member)) || (teeH == null && hour != null && hour >= 14);
+    if (!timeSaysMine) {
       verdict.relevant = false;
-      verdict._rosterDrop = '부-중복 인물 + 3부 시간대(14시~) 아님';
+      verdict._rosterDrop = `부-중복 인물 + ${member.part}부 시간대 아님`;
       return;
     }
   }
@@ -397,7 +421,7 @@ function gridLooksRownumbered(grid) {
   return allSameCourse && mostlySequential;
 }
 
-function resolveTeeByGrid(verdict) {
+function resolveTeeByGrid(verdict, member = memberFromEnv()) {
   if (!verdict) return;
   const grid = Array.isArray(verdict.teeGrid) ? verdict.teeGrid : [];
   const mp = Number(verdict.myPosition);
@@ -426,7 +450,7 @@ function resolveTeeByGrid(verdict) {
     const maxTeePos = posList.length ? Math.max(...posList) : 0;
     const modelTee = (String(verdict.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
     const teeHour = modelTee ? Number(modelTee.split(':')[0]) : null;
-    const plausible = modelTee && teeHour != null && teeHour >= Number(process.env.TEE_MIN_HOUR ?? 16);
+    const plausible = modelTee && teeHour != null && !outOfWindow(teeHour, member);
     // ★배정된 티오프 최대 순번보다 확실히 뒤면(=아직 팀 안 참) 스페어(대기).
     //  이 경우 색 판독(흰/회색)이 어긋나도 구조적으로 대기가 맞다 — 회색을 흰색으로 오독해도 방어.
     //  (근무 확정은 김홍구 정의상 "임시라도 티오프 매칭된 상태"이므로, 티오프 없고 컷 밖이면 대기.)
@@ -471,12 +495,12 @@ function modeOf(arr) {
 }
 
 // raw 판독 하나를 '주어진 순번' 기준으로 티오프까지 확정해 티오프 문자열만 얻는다(원본 불변).
-function teeForPosition(raw, pos) {
+function teeForPosition(raw, pos, member = memberFromEnv()) {
   if (!raw) return '';
   const v = { ...raw, myPosition: pos };
-  resolveTeeByGrid(v);
+  resolveTeeByGrid(v, member);
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
-  if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) return '';
+  if (th != null && outOfWindow(Number(th), member)) return '';
   return (String(v.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
 }
 
@@ -500,21 +524,20 @@ function pickRoster(reads) {
 }
 
 // 순수 표결: 여러 raw 읽기 → 합의 verdict 하나(불확실이면 _uncertain). I/O 없음(테스트 용이).
-export function consensusFromReads(reads) {
+export function consensusFromReads(reads, member = memberFromEnv()) {
   const rs = (reads || []).filter(Boolean);
   if (!rs.length) return null;
   if (rs.length === 1) return rs[0]; // 1회만 성공 → 표결 불가, 단일 판독 그대로
   const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
 
-  const TEE_MIN = Number(process.env.TEE_MIN_HOUR ?? 16);
   // ★각 읽기의 '결론'을 뽑는다 — 판단의 핵심은 순번 '숫자'가 아니라 "일하나/스페어냐, 근무면 몇 시냐".
   //  순번이 판독마다 조금 흔들려도 결론(스페어)이 같으면 확실한 것 → 불필요한 '불확실' 경보를 없앤다.
   const concl = rs.map((r) => {
     const c = { ...r };
-    resolveTeeByGrid(c);                     // 각 읽기를 자기 순번 기준으로 해석
+    resolveTeeByGrid(c, member);             // 각 읽기를 자기 순번 기준으로 해석
     const tee = (String(c.teeTime || '').match(/\d{1,2}:\d{2}/) || [''])[0];
     const th = tee ? Number(tee.split(':')[0]) : null;
-    const teeOk = !!tee && th != null && th >= TEE_MIN;
+    const teeOk = !!tee && th != null && !outOfWindow(th, member);
     const working = teeOk || ['work', 'assigned', 'your_turn'].includes(c.myStatus);
     const color = String(c.myCellColor || '').toLowerCase();
     const spare = !working && (['spare', 'waiting'].includes(c.myStatus) || /gray|회색/.test(color));
@@ -546,7 +569,7 @@ export function consensusFromReads(reads) {
     .reduce((best, cur) => (cur.length > best.length ? cur : best), []);
   if (bt.length) v.boardTables = bt;
 
-  resolveTeeByGrid(v);       // 합의 순번으로 티오프표 최종 해석
+  resolveTeeByGrid(v, member); // 합의 순번으로 티오프표 최종 해석
   delete v._uncertain;       // 구조적 잡음 초기화 — 아래에서 '결론' 기준으로만 다시 판정
   v._resolved = true;        // judge()가 다시 resolveTeeByGrid 하지 않도록 표식
 
@@ -587,10 +610,10 @@ async function readBoardConsensus(article, member) {
     if (reads.length >= 2) { // 조기 종료: 최근 2개가 순번·티오프까지 일치하면 더 안 읽음(비용 절약)
       const a = reads[reads.length - 1], b = reads[reads.length - 2];
       const pa = posOf(a);
-      if (pa && pa === posOf(b) && teeForPosition(a, pa) === teeForPosition(b, pa)) break;
+      if (pa && pa === posOf(b) && teeForPosition(a, pa, member) === teeForPosition(b, pa, member)) break;
     }
   }
-  return consensusFromReads(reads);
+  return consensusFromReads(reads, member);
 }
 
 // 명단 셀 이름 정규화. 괄호 처리:
@@ -638,7 +661,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     : await callGeminiJSON(buildPrompt(article, member), img, null);
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
-  if (!verdict?._resolved) resolveTeeByGrid(verdict);
+  if (!verdict?._resolved) resolveTeeByGrid(verdict, member);
   // ★순번별 '이름' 명단 — 통합 판독이 자주 놓쳐서(타임아웃·부분) 전용 판독으로 다시 뽑아 위치정렬로 저장.
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
   if (isBoard && verdict) {
@@ -661,10 +684,10 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       } else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
     } catch (e) { console.error('[roster] 명단/조 판독 실패:', e.message); }
   }
-  // ★3부 티오프 하한 가드: 16시 미만 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
+  // ★티오프 창 가드: 내 부 시간대(3부=16시~) 밖 '티오프'는 무효(취소·남의 시간 오독) → 근무 배정 알림 방지.
   if (verdict) {
     const th = (String(verdict.teeTime || '').match(/(\d{1,2}):/) || [])[1];
-    if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) {
+    if (th != null && outOfWindow(Number(th), member)) {
       verdict.teeTime = ''; verdict.course = '';
       if (['assigned', 'work', 'your_turn'].includes(verdict.myStatus)) verdict.myStatus = 'spare';
     }
@@ -796,9 +819,9 @@ export function interpretForMember(article, shared, member, today = null) {
   //  이 회원에게도 정직하게 '확인 필요'를 전달(문구는 회원 본인 기준으로 일반화 — 1번 회원 시각·순번 노출 금지).
   if (shared._uncertain) v._uncertain = '배치표 판독이 불안정합니다 — 원문(배치표)을 직접 확인하세요';
   applyBoardParts(v, member);             // ★표 헤더로 이 회원 부(部) 재검증(다른 부 표면 무관 처리)
-  resolveTeeByGrid(v);                    // 순번→티오프(구조·beyond-cut 스페어 등)
+  resolveTeeByGrid(v, member);            // 순번→티오프(구조·beyond-cut 스페어 등)
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
-  if (th != null && Number(th) < Number(process.env.TEE_MIN_HOUR ?? 16)) { v.teeTime = ''; v.course = ''; }
+  if (th != null && outOfWindow(Number(th), member)) { v.teeTime = ''; v.course = ''; }
   applyRoster(v, today, article, member);
   return { ...decide(article, v, member), rawVerdict: v };
 }
