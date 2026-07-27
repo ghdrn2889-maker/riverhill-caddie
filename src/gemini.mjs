@@ -104,7 +104,7 @@ export async function callGeminiJSON(promptText, imageUrl = null, modelOverride 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30000),   // 30초 넘으면 중단 후 재시도
+        signal: AbortSignal.timeout(Number(process.env.GEMINI_TIMEOUT_MS ?? 60000)),   // 기본 60초(무거운 배치표 판독 완주용). 넘으면 중단 후 재시도
       });
       if (!res.ok) {
         console.error(`[gemini] HTTP ${res.status} (시도 ${attempt})`, (await res.text()).slice(0, 200));
