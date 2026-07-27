@@ -10,11 +10,20 @@ export function getUser(id) { return get('SELECT * FROM users WHERE id = ?', id)
 export function getUserByNaver(naverId) { return get('SELECT * FROM users WHERE naver_id = ?', naverId); }
 export function getUserByGoogle(googleId) { return googleId ? get('SELECT * FROM users WHERE google_id = ?', googleId) : null; }
 
-export function createUser({ naverId = null, googleId = null, role = 'member' } = {}) {
+// ★신규 회원 기본 status='pending' — 관리자(김홍구) 승인 전엔 데이터·푸시 차단(외부인 배제).
+//  시드/관리자만 status='active'로 생성.
+export function createUser({ naverId = null, googleId = null, role = 'member', status = 'pending' } = {}) {
   const now = Date.now();
-  const r = run('INSERT INTO users (naver_id, google_id, created_at, role) VALUES (?, ?, ?, ?)', naverId, googleId, now, role);
+  const r = run('INSERT INTO users (naver_id, google_id, created_at, role, status) VALUES (?, ?, ?, ?, ?)', naverId, googleId, now, role, status);
   const id = Number(r.lastInsertRowid);
   run('INSERT INTO profiles (user_id, updated_at) VALUES (?, ?)', id, now);
+  return getUser(id);
+}
+
+// 회원 상태 변경(관리자 승인/보류/차단). status ∈ 'active'|'pending'|'disabled'.
+export function setUserStatus(id, status) {
+  if (!['active', 'pending', 'disabled'].includes(status)) return null;
+  run('UPDATE users SET status = ? WHERE id = ?', status, id);
   return getUser(id);
 }
 
@@ -61,8 +70,8 @@ export function userForSession(token) {
   const s = get('SELECT * FROM sessions WHERE token = ?', token);
   if (!s) return null;
   if (s.expires_at < Date.now()) { run('DELETE FROM sessions WHERE token = ?', token); return null; }
-  const u = getUser(s.user_id);
-  return u && u.status === 'active' ? u : null;
+  // ★status 판단은 호출부(attachUser/게이트)에서 — pending 회원도 온보딩(이름 입력)은 해야 하므로 여기선 그대로 반환.
+  return getUser(s.user_id) || null;
 }
 
 export function destroySession(token) { if (token) run('DELETE FROM sessions WHERE token = ?', token); }
@@ -88,7 +97,7 @@ export function consumeOAuthState(state) {
 export function seedPrimaryUser() {
   const existing = getUser(1);
   if (existing) return existing;
-  const u = createUser({ role: 'admin' }); // 첫 회원 = 관리자
+  const u = createUser({ role: 'admin', status: 'active' }); // 첫 회원 = 관리자(활성)
   // .env 값으로 프로필 채우기
   const boardName = (process.env.MY_NAME || '').trim();
   const part = (process.env.MY_PART || '3').trim();
@@ -144,6 +153,32 @@ export function boardNameTaken(boardName, part, exceptUserId = 0) {
                    WHERE p.board_name = ? AND p.part = ? AND u.status = 'active' AND u.id != ?`,
     name, String(part || '3'), exceptUserId);
   return !!row;
+}
+
+// ── 캐디 실명 대조(외부인 배제 보조) ────────────────────────
+//  배치표에서 누적된 실제 캐디 명부(caddies.json 키)에 이 이름이 있는지. 승인 화면의 ✅/⚠️ 판단용.
+//  괄호·공백 제거 후 비교(예 "표승완(54)"→"표승완"). 판단 보조일 뿐, 최종 승인은 관리자가 함.
+function normName(s) { return String(s || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').trim(); }
+let _caddieCache = { at: 0, set: null };
+export function caddieNameKnown(name) {
+  const key = normName(name);
+  if (!key) return false;
+  const now = Date.now();
+  if (!_caddieCache.set || now - _caddieCache.at > 60000) {
+    const dict = loadJSON('caddies.json', {}) || {};
+    _caddieCache = { at: now, set: new Set(Object.keys(dict).map(normName)) };
+  }
+  return _caddieCache.set.has(key);
+}
+
+// 관리자 회원관리 화면용 — 전체 회원 + 상태 + 명부 일치 여부.
+export function listMembersForAdmin() {
+  const rows = all(`SELECT u.id, u.role, u.status, u.created_at, u.last_login, p.board_name, p.part
+                    FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.status='pending' DESC, u.id`);
+  return rows.map((r) => ({
+    id: r.id, role: r.role, status: r.status, createdAt: r.created_at, lastLogin: r.last_login,
+    boardName: r.board_name || '', part: r.part || '', nameKnown: caddieNameKnown(r.board_name),
+  }));
 }
 
 export function ensureDb() { db(); } // 부팅 시 스키마 생성 트리거

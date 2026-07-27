@@ -1211,12 +1211,62 @@ async function loadMe() {
   // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
   hideLogin();
+  // ★가입 승인 대기(pending): 이름부터 입력(온보딩) → 이후엔 '승인 대기' 화면. 앱 데이터는 게이트에서 잠김.
+  if (meState && meState.pending) {
+    renderAccount();
+    if (meState.needsOnboarding) { hidePending(); openOnboarding(); }
+    else showPending();
+    return;
+  }
+  hidePending();
   renderAccount();
   if (lastToday) renderToday(lastToday); // 내 이름(profile)이 늦게 로드돼도 보드를 다시 그려 순번 리스트가 뜨게(레이스 방지)
   renderNotifyNudge();               // 알림 미설정이면 유도 카드 노출
   sendTelemetry();                   // 기기·알림 상태 기록
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
+}
+function showPending() {
+  $('pendName').textContent = (meState.profile && meState.profile.boardName) || '회원';
+  $('pendingOv').hidden = false;
+}
+function hidePending() { $('pendingOv').hidden = true; }
+// ── 회원 관리(관리자 전용) ──
+async function openAdmin() {
+  $('adminOv').hidden = false;
+  $('adminList').innerHTML = '<p style="text-align:center;color:#888;padding:16px;">불러오는 중…</p>';
+  try {
+    const r = await (await fetch('/api/admin/members')).json();
+    renderAdminList((r && r.members) || []);
+  } catch { $('adminList').innerHTML = '<p style="text-align:center;color:#c33;padding:16px;">불러오기 실패</p>'; }
+}
+function renderAdminList(members) {
+  const STAT = { active: ['활성', '#2e7d32', '#e6f4ea'], pending: ['대기', '#b26a00', '#fff3e0'], disabled: ['차단', '#b3261e', '#fdecea'] };
+  const bstyle = 'flex:1;padding:8px;border:1px solid #ccc;border-radius:8px;background:#f7f7f7;font-weight:600;cursor:pointer;font-size:13px;';
+  $('adminList').innerHTML = (members.map((m) => {
+    const [sl, sc, sb] = STAT[m.status] || ['?', '#666', '#eee'];
+    const known = m.boardName ? (m.nameKnown ? '<span style="color:#2e7d32;font-weight:700;">✅ 명부일치</span>' : '<span style="color:#c33;font-weight:700;">⚠️ 명부없음</span>') : '<span style="color:#999;">이름 미입력</span>';
+    const btns = m.role === 'admin' ? '<span style="color:#888;font-size:12px;">관리자 계정</span>' :
+      `<button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="active">승인</button>
+       <button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="pending">대기</button>
+       <button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="disabled">차단</button>`;
+    return `<div style="border:1px solid #e0e0e0;border-radius:12px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <b>#${m.id} ${esc(m.boardName || '(이름 없음)')}</b><small>${m.part ? esc(m.part) + '부' : ''}</small>
+        <span style="margin-left:auto;background:${sb};color:${sc};border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;">${sl}</span>
+      </div>
+      <div style="font-size:12px;margin:4px 0 8px;">${known}</div>
+      <div style="display:flex;gap:6px;">${btns}</div>
+    </div>`;
+  }).join('')) || '<p style="text-align:center;color:#888;padding:16px;">회원이 없어요.</p>';
+  $('adminList').querySelectorAll('.adm-b').forEach((b) => { b.onclick = () => setMemberStatus(Number(b.dataset.id), b.dataset.s); });
+}
+async function setMemberStatus(id, status) {
+  try {
+    const r = await postJSON('/api/admin/user-status', { id, status });
+    if (!r || !r.ok) throw new Error((r && r.error) || '변경 실패');
+    openAdmin();
+  } catch (e) { alert(e.message || '변경 실패'); }
 }
 // 계정 오버레이(#ov) 닫기 제어 — 계정 화면은 닫기 가능, 가입(온보딩) 화면은 닫기 금지.
 let ovDismissable = false;
@@ -1271,6 +1321,7 @@ function openAccount() {
   $('obSubmit').textContent = '저장';
   fillProfileForm();
   $('ovActions').hidden = false;
+  $('obAdmin').hidden = !(meState.user && meState.user.role === 'admin'); // 관리자만 회원관리 버튼
   $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
   updateNotifyButton();              // 계정 팝업 열 때 알림 버튼 상태(켜기/켜짐/차단) 갱신
   $('ovErr').textContent = '';
@@ -1300,6 +1351,11 @@ function initAccount() {
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
   $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
+  $('obAdmin').onclick = openAdmin;
+  $('adminClose').onclick = () => { $('adminOv').hidden = true; };
+  $('adminOv').addEventListener('click', (e) => { if (e.target === $('adminOv')) $('adminOv').hidden = true; });
+  $('pendReload').onclick = () => location.reload();
+  $('pendLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
 }
 
 /* ── 부팅 ── */

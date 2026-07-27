@@ -17,7 +17,7 @@ import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds } from './users.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin } from './users.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
@@ -47,7 +47,8 @@ app.get('/api/me', (req, res) => {
   if (!req.user) return res.json({ ...base, authed: false });
   const prof = getProfile(req.user.id) || {};
   const needsOnboarding = !prof.board_name;
-  res.json({ ...base, authed: true,
+  const pending = req.user.status !== 'active'; // 승인 대기/차단 → 프론트가 '승인 대기' 화면 표시
+  res.json({ ...base, authed: true, pending, status: req.user.status,
     user: { id: req.user.id, role: req.user.role },
     profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
@@ -98,8 +99,12 @@ app.post('/api/telemetry', requireAuth, (req, res) => {
 const OPEN_API = ['/config', '/health', '/ingest', '/simulate', '/auth', '/me', '/logout'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
-  if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
-  res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
+  if (OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
+  if (!req.user) return res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
+  // ★가입 승인 대기(pending)·차단(disabled) 회원은 데이터·기능 엔드포인트 전면 차단(외부인 배제).
+  //  온보딩용 /me·/profile 은 이 게이트 앞(위)에 등록돼 있어 통과 — 이름 입력·상태 조회는 가능.
+  if (req.user.status !== 'active') return res.status(403).json({ error: '가입 승인 대기 중입니다. 관리자 확인 후 이용할 수 있어요.', pending: true });
+  next();
 });
 
 // 프로젝트 허브(다른 AI·사람 공유용 단일 진실 소스) — 마크다운 원문 서빙.
@@ -144,6 +149,21 @@ async function broadcastAdmins(msg) {
 app.post('/api/test', requireAdmin, async (req, res) => {
   await broadcastAdmins({ title: '🏌️ 테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
   res.json({ ok: true });
+});
+
+// ── 회원 관리(관리자 전용) — 외부인 배제: 신규 가입은 pending, 관리자가 승인해야 active ──
+app.get('/api/admin/members', requireAdmin, (req, res) => {
+  res.json({ ok: true, members: listMembersForAdmin() });
+});
+app.post('/api/admin/user-status', requireAdmin, (req, res) => {
+  const id = Number(req.body?.id);
+  const status = String(req.body?.status || '');
+  if (!id || !['active', 'pending', 'disabled'].includes(status)) return res.status(400).json({ ok: false, error: 'id·status(active|pending|disabled) 필요' });
+  if (id === req.user.id) return res.status(400).json({ ok: false, error: '본인 계정 상태는 바꿀 수 없어요.' });
+  const u = setUserStatus(id, status);
+  if (!u) return res.status(404).json({ ok: false, error: '회원을 찾을 수 없어요.' });
+  console.log(`👤 [admin] 회원 #${id} 상태 → ${status} (by #${req.user.id})`);
+  res.json({ ok: true, id, status });
 });
 
 // 외부 메시지 수신(카톡 단톡방 등) → 카페 글과 동일한 judge 파이프라인으로 처리.
