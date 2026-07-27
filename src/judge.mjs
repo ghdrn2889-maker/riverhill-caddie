@@ -528,6 +528,21 @@ function pickRoster(reads) {
   return best;
 }
 
+// 교차검증된 명단(순번순)에서 회원 이름의 순번(1-based)을 찾는다. 못 찾으면 0.
+//  ★대기명단=순번 순서이므로 index+1이 곧 순번. 괄호 교환("A(B)")이면 실제 점유자 B 기준.
+function rosterPosOf(roster, name) {
+  if (!Array.isArray(roster) || !name) return 0;
+  const key = String(name).replace(/\s/g, '');
+  for (let i = 0; i < roster.length; i++) {
+    const cell = String(roster[i] || '').replace(/\s/g, '');
+    if (!cell) continue;
+    const m = cell.match(/\(([^)]+)\)/);
+    const occupant = (m ? m[1] : cell.replace(/\(.*$/, '')).trim();
+    if (occupant === key || cell === key) return i + 1;
+  }
+  return 0;
+}
+
 // 순수 표결: 여러 raw 읽기 → 합의 verdict 하나(불확실이면 _uncertain). I/O 없음(테스트 용이).
 export function consensusFromReads(reads, member = memberFromEnv()) {
   const rs = (reads || []).filter(Boolean);
@@ -598,6 +613,30 @@ export function consensusFromReads(reads, member = memberFromEnv()) {
   //  (Gemini가 완료·마감 배치표를 relevant:false로 헷갈려, 순번·티오프는 잘 읽고도
   //   "구체적 순번·근무 상태 확인 불가" 같은 애매한 요약만 소식에 남기던 문제 차단)
   if (pos || workVotes >= majority || spareVotes >= majority) v.relevant = true;
+
+  // ── ★본인 순번 최종 교정(명단 대조) ── LLM이 자기 순번 숫자를 오독(예: 12→3)하면 근무로 오승격되고
+  //  남의 티오프가 매칭된다. 교차검증된 대기명단에서 이름으로 순번을 확정하고, 근무 상한(팀수/티오프표 최대순번)
+  //  밖이면 구조적으로 스페어 확정 — 표결(오독 순번 기반)보다 구조를 우선한다.
+  //  (사용자 원칙: "스페어면 매칭할 티오프 예약이 없다".) 다른 회원(interpretForMember)은 이미 명단 기반이라 무관.
+  if (Array.isArray(v.part3Roster) && v.part3Roster.length) {
+    const rp = rosterPosOf(v.part3Roster, member.name);
+    if (rp > 0) {
+      const prevPos = Number(v.myPosition) || 0;
+      const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
+      const workLimit = Number(v.teamCount) > 0 ? Number(v.teamCount) : gridMax; // 팀수(텍스트) 우선, 없으면 티오프표
+      if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
+      v.myPosition = rp;
+      if (workLimit > 0 && rp > workLimit) {
+        // 근무 상한 밖 → 스페어 확정(티오프 제거). 색·표결이 근무여도 구조가 맞다.
+        v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
+        v._teeSource = 'roster-beyond-cut';
+        delete v._uncertain;
+      } else if (rp !== prevPos) {
+        resolveTeeByGrid(v, member); // 근무 범위 안 + 순번 교정됨 → 티오프표 재해석
+      }
+    }
+  }
+
   v._reads = rs.length;
   return v;
 }
