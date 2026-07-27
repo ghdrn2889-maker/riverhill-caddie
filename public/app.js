@@ -331,11 +331,13 @@ function moonStarsHTML() {
   }
   return s;
 }
-// 배경 효과 파티클 HTML(비·눈은 무작위 생성).
-function wxFxHTML(cat, day) {
-  if (cat === 'clear') return day
-    ? '<div class="rays"></div><div class="sun"></div>'
-    : moonStarsHTML();
+// 배경 효과 파티클 HTML(비·눈은 무작위 생성). dusk=노을(저무는 해).
+function wxFxHTML(cat, day, dusk) {
+  if (cat === 'clear') return dusk
+    ? '<div class="rays duskrays"></div><div class="sun sunset"></div>'
+    : day
+      ? '<div class="rays"></div><div class="sun"></div>'
+      : moonStarsHTML();
   if (cat === 'cloud') return '<div class="cloud c1"></div><div class="cloud c2"></div>';
   let s = '';
   if (cat === 'rain' || cat === 'storm') {
@@ -351,6 +353,27 @@ function wxFxHTML(cat, day) {
   }
   return '';
 }
+// ★밤/노을은 '시각' 기준(사용자 지정): 낮 06~18시 · 노을 18~19시 · 밤 19시~다음날 06시.
+function skyModeNow() {
+  const h = new Date().getHours();
+  return (h >= 19 || h < 6) ? 'night' : (h >= 18 ? 'dusk' : 'day');
+}
+let lastWxCat = null, lastSkyMode = '';
+// 히어로에 하늘 모드(낮/노을/밤) 배경·효과 적용. 노을·밤은 밝은 글자 톤(wx-night) 공유, 노을은 wx-dusk 추가.
+function applySky(cat, mode) {
+  const hero = $('todayHero'), fx = $('wxFx');
+  if (!hero || !cat) return;
+  hero.classList.toggle('wx-night', mode !== 'day');
+  hero.classList.toggle('wx-dusk', mode === 'dusk');
+  if (fx) fx.innerHTML = wxFxHTML(cat, mode === 'day', mode === 'dusk');
+  lastWxCat = cat; lastSkyMode = mode;
+}
+// 정시 경계에서 앱을 켜둔 채로도 낮→노을→밤이 바뀌게(날씨 재요청 없이 하늘 모드만 재적용).
+function refreshSky() {
+  if (!lastWxCat) return;
+  const m = skyModeNow();
+  if (m !== lastSkyMode) applySky(lastWxCat, m);
+}
 // 오늘 화면 히어로 대시보드 배경을 '현재 날씨'로 칠하고, 좌상단에 현재 날씨를 참고 표기.
 async function loadWeather() {
   const hero = $('todayHero'), fx = $('wxFx'), ref = $('wxRef');
@@ -359,12 +382,11 @@ async function loadWeather() {
   try {
     const w = await (await fetch('/api/weather')).json();
     const cur = w && w.ok && w.current;
-    if (!cur) { hero.classList.remove('has-wx', 'wx-night', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; return; }
+    if (!cur) { hero.classList.remove('has-wx', 'wx-night', 'wx-dusk', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; lastWxCat = null; return; }
     const cat = wmoCategory(cur.code);
     hero.classList.remove(...CATS);
     hero.classList.add('has-wx', 'w-' + cat);
-    hero.classList.toggle('wx-night', !cur.day); // 해가 졌으면 밤하늘 배경 + 밝은 글자
-    if (fx) fx.innerHTML = wxFxHTML(cat, cur.day);
+    applySky(cat, skyModeNow());   // 시각 기준 낮/노을/밤
     if (ref) { ref.innerHTML = `<b>${cur.temp}°</b><em>${esc(wmoDesc(cur.code))}</em><small>강수 ${cur.pop}%</small>`; ref.hidden = false; }
   } catch { /* 실패 시 기존 배경 유지 */ }
 }
@@ -1423,6 +1445,6 @@ async function main() {
   loadMe();
   loadToday(); loadWatchHealth(); loadRecent();
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
-  setInterval(() => { tickDate(); if (lastToday) renderBoard(lastToday); }, 20000);
+  setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
 }
 main();
