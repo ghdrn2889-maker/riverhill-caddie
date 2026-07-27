@@ -407,6 +407,12 @@ app.post('/api/worklog/odo', (req, res) => {
   if (!date) return res.status(400).json({ error: 'date 필요' });
   res.json({ ok: true, day: worklog.saveOdo(date, odo || {}, req.user?.id || 1) });
 });
+// 왕복 횟수 수동 보정(떨어진 조합의 실제 귀가 여부는 사용자만 앎). trips=null이면 자동값 복귀.
+app.post('/api/worklog/trips', (req, res) => {
+  const { date, trips } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: worklog.setTrips(date, trips, req.user?.id || 1) });
+});
 // 계기판 사진 보기: /api/worklog/photo/2026-07-14_start.jpg
 app.get('/api/worklog/photo/:fname', (req, res) => {
   const fname = req.params.fname;

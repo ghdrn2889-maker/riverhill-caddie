@@ -479,7 +479,7 @@ function renderToday(t) {
       $('heroTitle').textContent = '아직 오늘 정보가 없어요';
       $('heroSub').textContent = '배치표나 3부 소식이 올라오면 여기에 표시됩니다.';
     }
-    $('boardSlot').innerHTML = ''; renderRound2(null); return;
+    $('boardSlot').innerHTML = ''; renderRoundsStack(null); return;
   }
   const s = t.state, st = s.status;
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
@@ -510,24 +510,44 @@ function renderToday(t) {
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
   renderBoard(t);
-  renderRound2(t.round2);
+  renderRoundsStack(t);
 }
-// 2부 라운드 카드("2,3 출근" 두 탕) — 2부 근무가 잡힌 날만 3부 히어로 위에 표시.
-function renderRound2(r2) {
+// 라운드 카드 스택(다중 라운드: 조출·두 탕·세 탕) — 요약 스트립 + 1·2부 라운드 카드를 3부 히어로 위에.
+//  ★3부는 아래 히어로/보드가 담당 → 스택엔 1·2부만 카드로(중복 방지). 요약 스트립엔 3부 포함 조합·홀수.
+function renderRoundsStack(t) {
   const el = $('round2Slot');
   if (!el) return;
-  if (!r2 || !['assigned', 'work', 'your_turn'].includes(r2.status)) { el.hidden = true; el.innerHTML = ''; return; }
-  const courseKo = r2.course === 'IN' ? '인' : r2.course === 'OUT' ? '아웃' : '';
-  const tee = r2.teeTime ? `${r2.teeTime}${courseKo ? `(${courseKo})` : ''}` : '미정';
-  const c = r2.commute || null;
-  const legs = (r2.teeTime && c) ? `<div class="r2-legs"><span>🏠 집 출발 ${c.leave}</span><span>📍 도착 ${c.arrive}</span><span>⛳ 백대기 ${c.standby}</span></div>` : '';
-  el.innerHTML = `<div class="r2-card">
-    <div class="r2-head"><span class="r2-badge">두 탕</span> 오늘 <b>2부</b>도 근무예요</div>
-    <div class="r2-tee">⛳ 2부 티오프 <b>${tee}</b></div>
-    ${legs}
-    <div class="r2-note">2부 뛰고 이어서 아래 3부까지 — 오늘 두 탕이에요.</div>
-  </div>`;
+  const rounds = Array.isArray(t && t.rounds) ? t.rounds : [];
+  const extra = rounds.filter((r) => r.part !== '3');   // 1·2부 라운드만 카드로
+  if (!extra.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const sum = (t && t.roundsSummary) || {};
+  const off = Number(t && t.dayOffset) || 0;
+  const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : '';
+  const tangW = sum.tang >= 3 ? '세 탕 · 54홀' : sum.tang === 2 ? '두 탕 · 36홀' : '';
+  const stripParts = rounds.map((r) => `${r.part}부`).join('·');
+  const strip = `<div class="rs-summary">${dayW} · <b>${stripParts}</b>${tangW ? ` <span class="rs-tang">${tangW}</span>` : ''}</div>`;
+  el.innerHTML = `<div class="rs-stack">${strip}${extra.map(roundCard).join('')}</div>`;
   el.hidden = false;
+}
+// 라운드 1장 카드 — 근무면 티오프·출발/도착/백대기, 스페어면 순번·대기 안내. 부별 색(1부 분홍·2부 하늘).
+function roundCard(r) {
+  const partKo = `${r.part}부`;
+  const isWork = r.kind === 'work';
+  const courseKo = r.course === 'IN' ? '인' : r.course === 'OUT' ? '아웃' : '';
+  const tee = r.teeTime ? `${r.teeTime}${courseKo ? `(${courseKo})` : ''}` : '미정';
+  const c = isWork ? (r.commute || null) : null;
+  if (isWork) {
+    const legs = (r.teeTime && c) ? `<div class="rc-legs"><span>🏠 ${c.leave}</span><span>📍 ${c.arrive}</span><span>⛳ ${c.standby}</span></div>` : '';
+    return `<div class="rc-card rc-work rc-p${r.part}">
+      <div class="rc-head"><span class="rc-part">${partKo}</span><span class="rc-tag rc-tag-work">근무</span></div>
+      <div class="rc-tee">⛳ 티오프 <b>${tee}</b></div>${legs}
+    </div>`;
+  }
+  const posTxt = r.myPosition ? `순번 ${r.myPosition}번` : '대기';
+  return `<div class="rc-card rc-spare rc-p${r.part}">
+    <div class="rc-head"><span class="rc-part">${partKo}</span><span class="rc-tag rc-tag-spare">스페어</span></div>
+    <div class="rc-note">${posTxt} — 팀이 차면 알려드릴게요.</div>
+  </div>`;
 }
 // 오른쪽(백대기 방향)을 향한 자동차 SVG. driving=true면 바퀴 회전·배기 연기·바람 라인 모션.
 function carSVG(driving) {
@@ -832,9 +852,10 @@ async function loadJournal() {
       const [cls, label] = KIND[d.kind] || ['off', '기타'];
       let detail;
       if (d.twoRounds && d.rounds) {
-        const legs = ['2', '3'].filter((p) => d.rounds[p] && d.rounds[p].kind === 'work' && d.rounds[p].teeTime)
+        const legs = ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].kind === 'work' && d.rounds[p].teeTime)
           .map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
-        detail = `<span class="jt">🔁 두 탕 · ${legs.join(' → ')}</span>`;
+        const tang = legs.length >= 3 ? '세 탕' : '두 탕';
+        detail = `<span class="jt">🔁 ${tang} · ${legs.join(' → ')}</span>`;
       } else if (d.kind === 'work' && d.teeTime) {
         detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
       } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
@@ -962,8 +983,10 @@ function wlCard(d, roundKm) {
     const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
     meta = `${ph}${odo}`;
   }
-  const tee = (d.twoRounds && d.rounds)
-    ? '🔁 두 탕 ' + ['2', '3'].filter((p) => d.rounds[p] && d.rounds[p].teeTime).map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ')
+  const teeLegs = (d.twoRounds && d.rounds) ? ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].teeTime) : [];
+  const tripBadge = (d.tripsManual ?? d.trips ?? 1) >= 2 ? ' · 왕복 2회' : '';
+  const tee = teeLegs.length
+    ? `🔁 ${teeLegs.length >= 3 ? '세 탕' : '두 탕'} ` + teeLegs.map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ') + tripBadge
     : d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
   const expandable = d.worked !== false;
   let panel = '';
