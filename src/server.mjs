@@ -742,10 +742,18 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     // ★정확도 안전망: 제목에 '전체(전부) 배치표'가 명시된 이미지는 boardTables 오탐(2부 표가 실제로 있는데
     //  없다고 읽는 경우)에 대비해 무조건 2부까지 판독한다. 전체 배치표는 하루 한두 번뿐 → 크레딧 영향 미미.
     const isFullBoard = /전체|전부/.test(full.subject || '');
-    const run2bu = isBoardImg && (has2buTable || isFullBoard);
+    // ★텍스트-only 2부 변동: 2부 당추·커트라인·티오프 변경이 '이미지 없이 글로만' 오는 경우(가끔 있음)를 잡는다.
+    //  오검출 방지 게이트 — 변동 키워드 + (‘2부’ 명시 또는 2부 창 시각(10~15시)). 3부 당추(‘1722’ 등)는 안 걸림.
+    const txt2 = `${full.subject || ''} ${full.text || ''}`;
+    const chg2buKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt2);
+    const has2buWord = /2\s*부/.test(txt2);
+    const has2buTime = /\b1[0-5]:[0-5]\d\b/.test(txt2) || /\b1[0-5][0-5]\d\b/.test(txt2) || /1[0-5]\s*시/.test(txt2);
+    const isText2bu = !isBoardImg && chg2buKw && (has2buWord || has2buTime);
+    const run2bu = (isBoardImg && (has2buTable || isFullBoard)) || isText2bu;
     if (isBoardImg && !run2bu) console.log(`·  [2부] 스킵 — 이 배치표엔 2부 표 없음(크레딧 절약): ${full.subject}`);
     if (run2bu) {
       if (!has2buTable && isFullBoard) console.log(`·  [2부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 2부 확인: ${full.subject}`);
+      if (isText2bu) console.log(`·  [2부] 텍스트 변동 감지 — 이미지 없이 글로 온 2부 변동 판독: ${full.subject}`);
       const m2p = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
       const out2 = await judge(full, loadToday(1, '2'), m2p);   // 공유 2부 판독(비싼 부분, board당 1회)
       // ★member 1도 다른 회원과 '동일하게' 2부 명단 기반으로 재해석 — 모델이 전체 배치표의 3부 섹션에 있는
@@ -943,13 +951,32 @@ async function processForMember2(userId, member, out, full, opts = {}) {
     else { title = '⛳ 2부 근무권!'; body = `${member.name}님, 오늘 2부 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.`; }
     push = 'high';
   }
+  // ── 2부 스페어 대기 진행 — 팀이 차서 확정선(teamCount)이 전진하면 '앞에 N명' 안내(3부와 동일 사고, 2부 문구). ──
+  //  아직 근무 배정 전 스페어일 때만. 두 탕을 노리는 회원이 2부 대기 상황을 미리 볼 수 있게.
+  if (push === 'low' && !v._uncertain && Number(v.teamCount) > 0) {
+    const myp2 = Number(n.myPosition) || 0;
+    const tc2 = Number(v.teamCount);
+    if (myp2 && myp2 > tc2) {
+      const ahead = Math.max(0, myp2 - tc2 - 1);
+      title = '🏌️ 2부 대기 현황';
+      body = ahead === 0
+        ? `현재 2부 ${tc2}팀 — ${member.name}님은 2부 스페어 1번이에요. 한 팀만 더 차면 2부 나가 두 탕이니 준비해두세요.`
+        : `현재 2부 ${tc2}팀 — ${member.name}님은 2부 스페어 ${ahead + 1}번, 앞에 ${ahead}명 남았어요.`;
+      const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
+      push = ahead === 0 ? 'high' : (ahead <= WATCH ? 'check' : 'low');
+    }
+  }
   if (push === 'low') {
     if (userId === 1) console.log(`·  [2부] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);
     return { pushed: false };
   }
   // 2부 전용 중복 억제(pushlog2.json) — 3부 pushlog과 분리.
+  //  ★근무·휴무 확정은 커트라인 무관(서명 제외), 스페어·대기는 커트라인 전진이 '내 앞 N명'에 직접 영향 → 포함.
   if (!opts.force && !change.reversal) {
-    const sig = `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.myPosition || ''}`;
+    const confirmed2 = ['assigned', 'work', 'your_turn', 'off'].includes(n.status);
+    const sig = confirmed2
+      ? `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.myPosition || ''}`
+      : `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.cutLine || ''}|${n.myPosition || ''}`;
     const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
     const now = Date.now();
     const log = loadUserJSON(userId, 'pushlog2.json', {});
