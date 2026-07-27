@@ -479,7 +479,7 @@ function renderToday(t) {
       $('heroTitle').textContent = '아직 오늘 정보가 없어요';
       $('heroSub').textContent = '배치표나 3부 소식이 올라오면 여기에 표시됩니다.';
     }
-    $('boardSlot').innerHTML = ''; return;
+    $('boardSlot').innerHTML = ''; renderRound2(null); return;
   }
   const s = t.state, st = s.status;
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
@@ -510,6 +510,24 @@ function renderToday(t) {
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
   renderBoard(t);
+  renderRound2(t.round2);
+}
+// 2부 라운드 카드("2,3 출근" 두 탕) — 2부 근무가 잡힌 날만 3부 히어로 위에 표시.
+function renderRound2(r2) {
+  const el = $('round2Slot');
+  if (!el) return;
+  if (!r2 || !['assigned', 'work', 'your_turn'].includes(r2.status)) { el.hidden = true; el.innerHTML = ''; return; }
+  const courseKo = r2.course === 'IN' ? '인' : r2.course === 'OUT' ? '아웃' : '';
+  const tee = r2.teeTime ? `${r2.teeTime}${courseKo ? `(${courseKo})` : ''}` : '미정';
+  const c = r2.commute || null;
+  const legs = (r2.teeTime && c) ? `<div class="r2-legs"><span>🏠 집 출발 ${c.leave}</span><span>📍 도착 ${c.arrive}</span><span>⛳ 백대기 ${c.standby}</span></div>` : '';
+  el.innerHTML = `<div class="r2-card">
+    <div class="r2-head"><span class="r2-badge">두 탕</span> 오늘 <b>2부</b>도 근무예요</div>
+    <div class="r2-tee">⛳ 2부 티오프 <b>${tee}</b></div>
+    ${legs}
+    <div class="r2-note">2부 뛰고 이어서 아래 3부까지 — 오늘 두 탕이에요.</div>
+  </div>`;
+  el.hidden = false;
 }
 // 오른쪽(백대기 방향)을 향한 자동차 SVG. driving=true면 바퀴 회전·배기 연기·바람 라인 모션.
 function carSVG(driving) {

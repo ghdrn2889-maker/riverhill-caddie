@@ -291,7 +291,21 @@ app.get('/api/today', (req, res) => {
   // 근무 대상일이 며칠 뒤인지(0=오늘, 1=내일…). 저녁에 뜬 '내일 배치표'를 오늘로 오인하지 않게.
   let dayOffset = 0;
   if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(todayISOKST())) / 86400000);
-  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute });
+
+  // ── 2부 라운드("2,3 출근") — 같은 날 2부 근무가 잡혔으면 함께 내려보냄(두 탕 표시용). ──
+  //  ★3부(state)는 그대로. 2부는 '근무 확정'이고 같은 날짜일 때만(스페어·타일자 2부는 표시 안 함).
+  let round2 = null;
+  const t2 = loadToday(req.user?.id || 1, '2');
+  if (t2 && ['assigned', 'work', 'your_turn'].includes(t2.status)) {
+    const t2ISO = worklog.labelToISO(t2.date);
+    if (!t2ISO || t2ISO === tISO || (!tISO && t2ISO >= todayISOKST())) {
+      round2 = {
+        status: t2.status, teeTime: t2.teeTime || '', course: t2.course || '', myPosition: t2.myPosition || null,
+        commute: t2.teeTime ? commuteInfo(t2.teeTime, prof.commute_min) : null,
+      };
+    }
+  }
+  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute, round2 });
 });
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
