@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
@@ -969,7 +969,8 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   const v = out.rawVerdict;
   if (!out.relevant || !v) return { pushed: false };
   const part = String(member.part || '2');
-  const label = `${part}부`;
+  // 1부는 캐디 은어로 '조출'(조기출근) — 번호와 함께 표기해 알아보기 쉽게.
+  const label = part === '1' ? '1부(조출)' : `${part}부`;
   const win = partWindow(part);
   const cur = loadToday(userId, part);
   // 해당 부와 무관한 회원(명단에 이름 없음 + 기존 상태도 없음)이면 슬롯 자체를 만들지 않음(잡음 방지).
@@ -1003,13 +1004,18 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   }
   const becameWork = chgs.some((c) => ['status', 'cutline', 'teamcount'].includes(c.field) && ['assigned', 'work', 'your_turn'].includes(c.to));
   let title = '', body = '', push = 'low';
+  // 전날 밤 뜨는 조출 배치표 대응 — '오늘/내일/모레'를 날짜 라벨로 정확히.
+  const dayW = dayWordFor(n.date) || '오늘';
   if (isWork && (teeChg || gotTee || becameWork)) {
     // 오늘 이 회원의 근무 라운드 조합 안내(두 탕/세 탕).
     const wparts = workRoundPartsForDay(userId, jIso);
-    const combo = wparts.length >= 2 ? ` — 오늘 ${wparts.join('·')}부 ${tangWord(wparts.length)}이에요.` : '';
-    if (teeChg) { title = `⚠️ ${label} 티오프 변경!`; body = `${member.name}님, ${label} 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
-    else if (n.teeTime) { title = `⛳ ${label} 근무 배정!`; body = `${member.name}님, 오늘 ${label} 근무예요. 티오프 ${n.teeTime}${n.course ? `(${n.course})` : ''}.${combo}`; }
-    else { title = `⛳ ${label} 근무권!`; body = `${member.name}님, 오늘 ${label} 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.`; }
+    const combo = wparts.length >= 2 ? ` — ${dayW} ${wparts.join('·')}부 ${tangWord(wparts.length)}이에요.` : '';
+    // 출발·백대기·도착 시각 — 특히 새벽 조출(1부)엔 '몇 시에 나가야 하나'가 핵심. 3부 배정 문구와 동일 형식.
+    const c0 = n.teeTime ? commuteInfo(n.teeTime, member.commuteMin) : null;
+    const sched = c0 ? `\n⛳ 티오프 ${c0.tee}${n.course ? ` (${String(n.course).toUpperCase()}코스)` : ''} · 백대기 ${c0.standby} · 도착 ${c0.arrive} · 집에서 ${c0.leave} 출발` : '';
+    if (teeChg) { title = `⚠️ ${label} 티오프 변경!`; body = `${member.name}님, ${label} 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.${sched}`; }
+    else if (n.teeTime) { title = `⛳ ${label} 근무 배정!`; body = `${member.name}님, ${dayW} ${label} 근무예요.${sched}${combo}`; }
+    else { title = `⛳ ${label} 근무권!`; body = `${member.name}님, ${dayW} ${label} 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.${combo}`; }
     push = 'high';
   }
   // ── 스페어 대기 진행 — 확정선(teamCount) 전진 시 '앞에 N명' 안내. 아직 근무 배정 전 스페어일 때만. ──
@@ -1172,7 +1178,7 @@ async function checkTimelineReminders() {
       const name = mem.board_name || '회원';
       // 3부(기본, 기존 키) + 1·2부(다중 라운드, p1-/p2- 키) — 각 라운드 독립적으로 출발/도착/티오프 알람.
       let changed = await fireRoundReminders(mem, name, loadToday(mem.id), '', '', store, nowMin, todayISO);
-      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '1'), 'p1-', '1부', store, nowMin, todayISO)) || changed;
+      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '1'), 'p1-', '조출', store, nowMin, todayISO)) || changed;
       changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '2'), 'p2-', '2부', store, nowMin, todayISO)) || changed;
       if (changed) saveUserJSON(mem.id, 'timeline-remind.json', store);
     }
