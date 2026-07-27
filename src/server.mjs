@@ -739,8 +739,13 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     // ★크레딧 절약: 방금 끝낸 3부 판독의 boardTables에 '2부 표'가 실제로 보일 때만 2부 판독을 돌린다.
     //  3부 전용 배치표(2부 섹션 없음)에선 2부 데이터가 없어 헛읽기 → 스킵(추가 비용 0, 이미 읽은 결과 재사용).
     const has2buTable = Array.isArray(out.rawVerdict?.boardTables) && out.rawVerdict.boardTables.some((t) => String(t?.part) === '2');
-    if (isBoardImg && !has2buTable) console.log(`·  [2부] 스킵 — 이 배치표엔 2부 표 없음(크레딧 절약): ${full.subject}`);
-    if (isBoardImg && has2buTable) {
+    // ★정확도 안전망: 제목에 '전체(전부) 배치표'가 명시된 이미지는 boardTables 오탐(2부 표가 실제로 있는데
+    //  없다고 읽는 경우)에 대비해 무조건 2부까지 판독한다. 전체 배치표는 하루 한두 번뿐 → 크레딧 영향 미미.
+    const isFullBoard = /전체|전부/.test(full.subject || '');
+    const run2bu = isBoardImg && (has2buTable || isFullBoard);
+    if (isBoardImg && !run2bu) console.log(`·  [2부] 스킵 — 이 배치표엔 2부 표 없음(크레딧 절약): ${full.subject}`);
+    if (run2bu) {
+      if (!has2buTable && isFullBoard) console.log(`·  [2부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 2부 확인: ${full.subject}`);
       const m2p = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
       const out2 = await judge(full, loadToday(1, '2'), m2p);   // 공유 2부 판독(비싼 부분, board당 1회)
       // ★member 1도 다른 회원과 '동일하게' 2부 명단 기반으로 재해석 — 모델이 전체 배치표의 3부 섹션에 있는
