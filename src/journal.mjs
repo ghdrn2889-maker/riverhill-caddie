@@ -17,16 +17,28 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return;
   const kind = dayKind(info.status);
   if (kind === 'unknown') return; // 미상 상태는 일지에 남기지 않음(확정 상태만)
+  const part = String(info.part || '3');
   const j = loadUserJSON(userId, FILE, {});
   const prev = j[dateISO] || {};
+  // ★"2,3 출근" 두 탕: rounds[부]에 부별 결과 보관. 대표 kind = 어느 라운드든 work면 work(둘 다 스페어면 spare).
+  const rounds = { ...(prev.rounds || {}) };
+  rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };
+  const kinds = Object.values(rounds).map((r) => r.kind);
+  const overall = kinds.includes('work') ? 'work' : kinds.includes('spare') ? 'spare' : kinds.includes('off') ? 'off' : kind;
+  // 대표 티오프: 근무 라운드 우선(3부>2부).
+  const primary = (rounds['3']?.kind === 'work' && rounds['3'].teeTime) ? rounds['3']
+    : Object.values(rounds).find((r) => r.kind === 'work' && r.teeTime) || null;
+  const workCount = Object.values(rounds).filter((r) => r.kind === 'work').length;
   j[dateISO] = {
     date: dateISO,
-    kind,
-    status: info.status || prev.status || '',
-    teeTime: (kind === 'work' ? (info.teeTime || prev.teeTime) : (info.teeTime || prev.teeTime)) || '',
-    course: info.course || prev.course || '',
-    myPosition: info.myPosition ?? prev.myPosition ?? null,
+    kind: overall,
+    status: (part === '3' ? info.status : prev.status) || info.status || prev.status || '',
+    teeTime: primary?.teeTime || (kind === 'work' ? info.teeTime : '') || prev.teeTime || '',
+    course: primary?.course || (kind === 'work' ? info.course : '') || prev.course || '',
+    myPosition: part === '3' ? (info.myPosition ?? prev.myPosition ?? null) : (prev.myPosition ?? info.myPosition ?? null),
     cutoffName: info.cutoffName || prev.cutoffName || '',
+    rounds,
+    twoRounds: workCount >= 2,
     updatedAt: Date.now(),
   };
   saveUserJSON(userId, FILE, j);

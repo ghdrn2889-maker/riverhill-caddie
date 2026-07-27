@@ -48,15 +48,23 @@ export function labelToISO(label, now = new Date()) {
 }
 
 // 근무 확정 자동 기록(임시, worked=null). 이미 확인(worked 지정)된 날은 덮어쓰지 않음.
+//  ★"2,3 출근" 두 탕: rounds[부] 에 부별 티오프를 각각 보관. 단 주행거리는 왕복 1회이므로 '하루 1건'은 그대로
+//   (두 탕이어도 집→골프장 한 번이라 근무일 수·거리 계산은 1일). 대표 티오프/코스는 3부 우선.
 export function recordWorkDay(dateISO, info = {}, userId = 1) {
   if (!dateISO) return null;
   const d = load(userId);
   const cur = d.days[dateISO] || { date: dateISO, worked: null, source: 'auto', detectedAt: Date.now() };
+  const part = String(info.part || '3');
+  const rounds = { ...(cur.rounds || {}) };
+  if (info.teeTime || info.course) rounds[part] = { part, teeTime: info.teeTime || '', course: info.course || '', articleId: info.articleId || '' };
+  const primary = rounds['3'] || rounds['2'] || rounds['1'] || null; // 대표(주된 라운드) = 3부 우선
   d.days[dateISO] = {
     ...cur, date: dateISO,
-    teeTime: info.teeTime || cur.teeTime || '',
-    course: info.course || cur.course || '',
+    teeTime: primary?.teeTime || info.teeTime || cur.teeTime || '',
+    course: primary?.course || info.course || cur.course || '',
     articleId: info.articleId || cur.articleId || '',
+    rounds,
+    twoRounds: Object.keys(rounds).length >= 2, // 하루 2라운드(두 탕) 여부
   };
   save(userId, d);
   return d.days[dateISO];

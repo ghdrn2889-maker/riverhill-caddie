@@ -830,9 +830,16 @@ async function loadJournal() {
       const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
       const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
       const [cls, label] = KIND[d.kind] || ['off', '기타'];
-      const detail = d.kind === 'work' && d.teeTime ? `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`
-        : d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
-      return `<div class="jday"><div><span class="jd">${md}</span>${detail}</div><span class="jk ${cls}">${label}</span></div>`;
+      let detail;
+      if (d.twoRounds && d.rounds) {
+        const legs = ['2', '3'].filter((p) => d.rounds[p] && d.rounds[p].kind === 'work' && d.rounds[p].teeTime)
+          .map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
+        detail = `<span class="jt">🔁 두 탕 · ${legs.join(' → ')}</span>`;
+      } else if (d.kind === 'work' && d.teeTime) {
+        detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
+      } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
+      const badge = d.twoRounds ? '<span class="jk work" style="margin-left:4px;">두탕</span>' : '';
+      return `<div class="jday"><div><span class="jd">${md}</span>${detail}</div><span class="jk ${cls}">${label}${badge ? '' : ''}</span>${badge}</div>`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
   } catch { $('jSummary').textContent = '불러오기 실패'; }
 }
@@ -955,7 +962,9 @@ function wlCard(d, roundKm) {
     const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
     meta = `${ph}${odo}`;
   }
-  const tee = d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
+  const tee = (d.twoRounds && d.rounds)
+    ? '🔁 두 탕 ' + ['2', '3'].filter((p) => d.rounds[p] && d.rounds[p].teeTime).map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ')
+    : d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
   const expandable = d.worked !== false;
   let panel = '';
   if (expandable) {

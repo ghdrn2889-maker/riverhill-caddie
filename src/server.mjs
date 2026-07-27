@@ -908,10 +908,24 @@ async function processForMember2(userId, member, out, full, opts = {}) {
   const n = merged.next, change = merged.change;
   const isWork2 = ['assigned', 'work', 'your_turn'].includes(n.status);
 
+  // ── 저널·세무 2탕: 2부 라운드 결과를 part='2'로 기록(하루 근무기록에 두 탕 반영). 주행거리는 하루 1건 유지. ──
+  const jIso2 = worklog.labelToISO(n.date);
+  if (jIso2 && !v._uncertain) {
+    journal.recordDayStatus(jIso2, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part: '2' }, userId);
+    if (isWork2) worklog.recordWorkDay(jIso2, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part: '2' }, userId);
+  }
+
   // 알림: 2부 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
   const chgs = change.changes || [];
   const teeChg = chgs.find((c) => c.field === 'tee');
   const gotTee = chgs.some((c) => c.field === 'tee_new');
+  // 2부 티오프가 바뀌면 2부 리마인더(p2-*)만 재무장 — 새 시각으로 다시 울리게(3부 리마인더는 건드리지 않음).
+  if (teeChg) {
+    try {
+      const st = loadUserJSON(userId, 'timeline-remind.json', {});
+      if (st.sent) { for (const k of Object.keys(st.sent)) if (k.startsWith('p2-')) delete st.sent[k]; saveUserJSON(userId, 'timeline-remind.json', st); }
+    } catch { /* 무해 */ }
+  }
   const becameWork = chgs.some((c) => ['status', 'cutline', 'teamcount'].includes(c.field) && ['assigned', 'work', 'your_turn'].includes(c.to));
   let title = '', body = '', push = 'low';
   if (isWork2 && (teeChg || gotTee || becameWork)) {
@@ -1023,35 +1037,45 @@ function rearmTimelineReminders(userId) {
   catch (e) { console.error('타임라인 재무장 오류:', e.message); }
 }
 
+// 한 라운드(3부=today.json 또는 2부=today2.json)의 출발/도착/티오프 리마인더 발송.
+//  prefix='' 는 3부(기존 키 그대로, 동작 무변화). prefix='p2-' + roundLabel='2부' 는 2부 라운드(두 탕).
+async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMin, todayISO) {
+  if (!t || !t.teeTime) return false;
+  if (!['assigned', 'work', 'your_turn'].includes(t.status)) return false;
+  const tISO = worklog.labelToISO(t.date);
+  if (tISO && tISO !== todayISO) return false;           // 오늘 근무만(내일 배치표는 제외)
+  const c = commuteInfo(t.teeTime, mem.commute_min);
+  if (!c) return false;
+  let rems = timelineReminders(c, name);
+  if (roundLabel) rems = rems.map((r) => ({ ...r, key: prefix + r.key, title: `${r.title} (${roundLabel})`, body: `${roundLabel} 라운드 — ${r.body}` }));
+  let changed = false;
+  for (const r of rems) {
+    if (r.at == null || store.sent[r.key]) continue;
+    if (nowMin >= r.at) {
+      if (nowMin - r.at <= REMIND_GRACE) {               // 임계값 직후에만 발송(늦으면 조용히 통과)
+        await broadcast({ title: r.title, body: r.body, url: '/', level: r.level }, mem.id);
+        console.log(`[타임라인${roundLabel ? '/' + roundLabel : ''}] 회원${mem.id} ${r.key} 발송 (예정 ${r.at}분, 현재 ${nowMin}분)`);
+      }
+      store.sent[r.key] = Date.now();
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 async function checkTimelineReminders() {
   try {
     const todayISO = todayISOKST();
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
     for (const mem of activeMembers()) {
-      const t = loadToday(mem.id);
-      if (!t || !t.teeTime) continue;
-      if (!['assigned', 'work', 'your_turn'].includes(t.status)) continue;
-      const tISO = worklog.labelToISO(t.date);
-      if (tISO && tISO !== todayISO) continue;           // 오늘 근무만(내일 배치표는 제외)
-      const c = commuteInfo(t.teeTime, mem.commute_min);
-      if (!c) continue;
-      const rems = timelineReminders(c, mem.board_name || '회원');
       const store = loadUserJSON(mem.id, 'timeline-remind.json', {});
       if (store.date !== todayISO) { store.date = todayISO; store.sent = {}; }
       store.sent = store.sent || {};
-      let changed = false;
-      for (const r of rems) {
-        if (r.at == null || store.sent[r.key]) continue;
-        if (nowMin >= r.at) {
-          if (nowMin - r.at <= REMIND_GRACE) {           // 임계값 직후에만 발송(늦으면 조용히 통과)
-            await broadcast({ title: r.title, body: r.body, url: '/', level: r.level }, mem.id);
-            console.log(`[타임라인] 회원${mem.id} ${r.key} 발송 (예정 ${r.at}분, 현재 ${nowMin}분)`);
-          }
-          store.sent[r.key] = Date.now();
-          changed = true;
-        }
-      }
+      const name = mem.board_name || '회원';
+      // 3부(기본, 기존 키) + 2부(두 탕, p2- 키) — 각 라운드 독립적으로 출발/도착/티오프 알람.
+      let changed = await fireRoundReminders(mem, name, loadToday(mem.id), '', '', store, nowMin, todayISO);
+      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '2'), 'p2-', '2부', store, nowMin, todayISO)) || changed;
       if (changed) saveUserJSON(mem.id, 'timeline-remind.json', store);
     }
   } catch (e) { console.error('타임라인 리마인더 오류:', e.message); }
