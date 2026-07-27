@@ -703,9 +703,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
 
   if (out.relevant) {
     if (isKakaoSource(full)) {
-      // 카톡發은 소식 피드에 원문·방이름 없이 '배치표 변동'으로만 남긴다(개인정보 보호). 푸시(아래 title/body)는 상세 유지.
-      saveRecentV2({ ...full, subject: '배치표가 변동됐어요', writer: '', menuName: '배치표', url: '/' },
-        { ...out, body: '카톡으로 배치표 변동이 감지됐어요. 앱에서 최신 상황을 확인하세요.' }, userId);
+      // 카톡發은 소식 피드에 아무것도 남기지 않는다 — 시스템 내부 감지·상황판 반영만(카톡 관련 항목은 소식에 노출 금지).
+      if (userId === 1) console.log(`·  (카톡 감지 → 소식 미표시, 상황판만 반영) ${full.subject}`);
     } else {
       saveRecentV2(full, out, userId);
     }

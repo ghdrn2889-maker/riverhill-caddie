@@ -399,6 +399,28 @@
     .hero.has-wx .hero-cheer { color:#3d5347; border-top-color:rgba(120,140,125,.28); }
     .hero.wx-night.has-wx .hero-cheer { color:#d3deea; border-top-color:rgba(160,185,220,.22); text-shadow:0 1px 3px rgba(0,0,0,.5); }
 
+    /* ===== 휴무 코스 일러스트(hero-off) — 하늘=기존 날씨 배경 재사용, 하단에 언덕+깃발 ===== */
+    .hero-off #heroTitle { font-size:18px; line-height:1.25; letter-spacing:-.3px; margin:4px 0 3px; }
+    .off-course { position:relative; height:132px; margin-top:12px; }
+    .oc-hills { position:absolute; inset:0; width:100%; height:100%; display:block; }
+    .oc-hills .hill-far { fill:#bfe3c9; }
+    .oc-hills .hill-near { fill:#7cc596; }
+    .hero.wx-night .oc-hills .hill-far { fill:#25493a; }
+    .hero.wx-night .oc-hills .hill-near { fill:#193629; }
+    .oc-flag { position:absolute; left:32%; bottom:46px; width:44px; height:58px; z-index:2; overflow:visible; }
+    .oc-flag .fp { stroke:#385645; }
+    .oc-flag .fpc { fill:#385645; }
+    .oc-flag .ftuft { fill:#5aa877; }
+    .hero.wx-night .oc-flag .fp { stroke:#9fd3b4; }
+    .hero.wx-night .oc-flag .fpc { fill:#9fd3b4; }
+    .hero.wx-night .oc-flag .ftuft { fill:#2f6a4c; }
+    /* 응원 한 줄 — 휴무엔 잔디 위로(겹침 방지) */
+    .hero-off #heroCheer { position:absolute; left:0; right:0; bottom:0; z-index:4; margin:0; padding:9px 15px 12px;
+      border-top:1px solid rgba(255,255,255,.3); color:#123a24; text-shadow:none; }
+    .hero-off #heroCheer .ic svg path:first-child { fill:#eef7f0; }
+    .hero-off #heroCheer .ic svg path:last-child { fill:#2e7149; }
+    .hero.wx-night.hero-off #heroCheer { color:#e2f0e8; border-top-color:rgba(200,230,210,.28); text-shadow:0 1px 2px rgba(0,0,0,.4); }
+
     /* 카트 점검 (기능용 최소 스타일 — 기존 토큰 재사용) */
     .cc-step { margin-top:15px; padding-top:13px; border-top:1px solid #eef1ec; }
     .cc-step.first { border-top:0; padding-top:2px; }

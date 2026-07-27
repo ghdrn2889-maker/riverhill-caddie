@@ -396,6 +396,25 @@ function pickCheer() {
 // 앱을 다시 볼 때마다 새 한마디(보는 도중엔 유지).
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadCheer(true); });
 
+// 휴무 코스 일러스트 — 언덕(좌우 풀폭) + 깃발(세 포즈 A→B→C→B 왕복, 1.2초/컷). 하늘은 기존 날씨 배경 재사용.
+const OFF_FLAG_A = 'M9 8 C16 10.5 24 8 33 5.5 L33 14.5 C24 17 16 19.5 9 17 Z';
+const OFF_FLAG_B = 'M9 8 C16 8 24 10.5 33 8 L33 17 C24 19.5 16 17 9 17 Z';
+const OFF_FLAG_C = 'M9 8 C16 5.5 24 8 33 10.5 L33 19.5 C24 17 16 14.5 9 17 Z';
+function offCourseHTML() {
+  return `<div class="off-course">
+    <svg class="oc-hills" viewBox="0 0 390 132" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-far" d="M0 54 Q100 30 200 44 T390 40 V132 H0 Z"/>
+      <path class="hill-near" d="M0 80 Q130 58 250 72 T390 66 V132 H0 Z"/>
+    </svg>
+    <svg class="oc-flag" viewBox="0 0 44 58" aria-hidden="true">
+      <line class="fp" x1="9" y1="8" x2="9" y2="54" stroke-width="2.6" stroke-linecap="round"/>
+      <circle class="fpc" cx="9" cy="9.5" r="1.8"/>
+      <path class="fcloth" fill="#c2564b"><animate attributeName="d" dur="4.8s" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" repeatCount="indefinite" values="${OFF_FLAG_A};${OFF_FLAG_B};${OFF_FLAG_C};${OFF_FLAG_B}"/></path>
+      <ellipse class="ftuft" cx="9" cy="54" rx="12" ry="3.4"/>
+    </svg>
+  </div>`;
+}
+
 function renderToday(t) {
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
@@ -420,13 +439,13 @@ function renderToday(t) {
   $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
     : isConfirmed ? `${dayW} 근무 확정`
     : isWork ? `${dayW} 근무 예정`
-    : st === 'off' ? `${dayW} 휴무`
+    : st === 'off' ? (off >= 1 ? `${dayW} 휴무예요` : '오늘 코스는 당신 없이도 잘 돌아가요')
     : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
     : (isWork && !s.teeTime) ? '순번상 근무권에 들었어요. 티오프가 매칭되면 시간을 알려드릴게요.'
     : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
-    : st === 'off' ? `${dayW}은 예정된 근무가 없어요. 편히 쉬세요.`
+    : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
   renderBoard(t);
@@ -480,6 +499,7 @@ function homeSVG() {
 function renderBoard(t) {
   const slot = $('boardSlot'); if (!slot) return;
   const s = t.state, st = s.status;
+  const heroEl = $('todayHero'); if (heroEl) heroEl.classList.toggle('hero-off', st === 'off'); // 휴무=코스 일러스트 모드
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const c = t.commute;
 
@@ -570,7 +590,7 @@ function renderBoard(t) {
     return;
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.
-  if (st === 'off') slot.innerHTML = `<div class="board-plain"><b>오늘은 예정된 근무가 없어요.</b> 편히 쉬세요. 새 소식이 오면 알려드릴게요.</div>`;
+  if (st === 'off') slot.innerHTML = offCourseHTML();
   else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s);
   else if (st === 'your_turn') slot.innerHTML = `<div class="board-plain"><b style="color:#bd312d">지금 바로 출근 준비하세요.</b> 티오프가 올라오면 시간 안내로 바뀝니다.</div>`;
   else slot.innerHTML = '';
