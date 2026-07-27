@@ -40,6 +40,13 @@ function blank(date) {
 const isWork = (s) => ['assigned', 'work', 'your_turn'].includes(s);
 const isWait = (s) => ['spare', 'waiting', 'near', 'unknown'].includes(s);
 
+// 날짜 라벨을 '월-일'로 정규화(같은 날인지 판단용). "7월 28일 화요일"·"2026년 7월 28일 화요일" 모두 "07-28".
+//  ★판독마다 라벨 형식이 달라도(연도 유무 등) 같은 날을 '새 날'로 오인해 상황판을 리셋하지 않게.
+function dayKey(label) {
+  const m = String(label || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+  return m ? `${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : String(label || '').trim();
+}
+
 // 티오프표를 '시각 오름차순(동시각이면 OUT→IN)'으로 정렬해 순번 1..N 재부여.
 //  ★당추(당일추가)로 예약이 중간에 끼면, 전체를 다시 시각순으로 세우고 순번을 다시 매긴다
 //   → 뒤 순번은 한 칸씩 이른 시간으로 당겨지고, 새 막차가 마지막 슬롯을 받는다(리버힐 운영 규칙).
@@ -102,7 +109,7 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   // 날짜가 바뀌면(=다음 날 배치표) 상황판을 새로 시작.
   let cur = prev;
   if (!cur) cur = blank(d);
-  else if (d && cur.date && d !== cur.date) cur = blank(d);
+  else if (d && cur.date && dayKey(d) !== dayKey(cur.date)) cur = blank(d);  // ★'월-일' 정규화 비교(형식차로 인한 오리셋 방지)
   else if (!cur.date && d) cur = { ...cur, date: d };
 
   const next = { ...cur, timeline: [...(cur.timeline || [])] };
