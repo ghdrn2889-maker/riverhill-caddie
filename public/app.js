@@ -518,7 +518,9 @@ function offCourseHTML() {
   </div>`;
 }
 
+let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
 function renderToday(t) {
+  if (!_heroEntered) { _heroEntered = true; document.body.classList.add('anim-play'); }
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';

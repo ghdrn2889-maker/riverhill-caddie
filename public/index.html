@@ -498,6 +498,23 @@
     .hero.wx-dawn .flake { color:#fff; opacity:.9; filter:blur(.5px); text-shadow:0 1px 3px rgba(70,80,120,.3); }
     .hero.wx-dawn .flash { background:#eef2ff; }
 
+    /* ===== 실행 등장 모션 — 전체 '부드러운 상승' · 메인 대시보드(히어로)만 '아이리스' ===== */
+    /*  body.anim-play 가 붙어야 재생 → JS 미동작 시 콘텐츠는 그대로 노출(안전). 움직임 최소화 설정 시 미재생. */
+    @media (prefers-reduced-motion: no-preference) {
+      body.anim-play .reveal { opacity:0; animation:enterRise .56s cubic-bezier(.22,.61,.36,1) both;
+        animation-delay:calc(var(--i,0) * 66ms); }
+      body.anim-play .nav.reveal { animation-name:enterNavUp; animation-timing-function:cubic-bezier(.2,.7,.3,1); }
+      /* 메인 대시보드: 우상단(해 위치)에서 원형으로 열리는 아이리스 */
+      body.anim-play #todayHero { animation:enterIris .72s cubic-bezier(.3,.7,.3,1) both; animation-delay:70ms; }
+      /* 히어로 내부 문구·명단은 카드가 열린 뒤 층층이 떠오름 */
+      body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .5s cubic-bezier(.22,.61,.36,1) both;
+        animation-delay:calc(360ms + var(--j,0) * 78ms); }
+    }
+    @keyframes enterRise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+    @keyframes enterRiseIn { from { opacity:0; transform:translateY(11px); } to { opacity:1; transform:none; } }
+    @keyframes enterNavUp { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
+    @keyframes enterIris { from { clip-path:circle(8% at 84% 20%); } to { clip-path:circle(150% at 84% 20%); } }
+
     /* ===== 응원 한 줄 — 히어로 맨 아래 사인오프(다정한 말풍선 아이콘 + 존댓말 한마디) ===== */
     .hero-cheer { margin-top:14px; padding-top:12px; border-top:1px solid rgba(120,140,125,.20);
       display:flex; gap:8px; align-items:flex-start; font-size:11.5px; line-height:1.55; font-weight:650; color:#5a7a67;
@@ -666,7 +683,7 @@
   </style>
 </head>
 <body>
-  <header class="top">
+  <header class="top reveal" style="--i:0">
     <div class="toprow">
       <span class="brand">RIVERHILL CADDIE</span>
       <div class="topright">
@@ -752,11 +769,11 @@
       <section class="hero" id="todayHero">
         <div class="fx" id="wxFx" aria-hidden="true"></div>
         <span class="wxref" id="wxRef" hidden></span>
-        <div class="label" id="heroLabel">오늘 내 상황</div>
-        <h3 id="heroTitle">—</h3>
-        <p class="sub" id="heroSub"></p>
-        <div id="boardSlot"></div>
-        <div class="hero-cheer" id="heroCheer" hidden></div>
+        <div class="label in" id="heroLabel" style="--j:0">오늘 내 상황</div>
+        <h3 id="heroTitle" class="in" style="--j:1">—</h3>
+        <p class="sub in" id="heroSub" style="--j:2"></p>
+        <div id="boardSlot" class="in" style="--j:3"></div>
+        <div class="hero-cheer in" id="heroCheer" style="--j:4" hidden></div>
       </section>
 
       <!-- 2부 라운드("2,3 출근" 두 탕) — 2부 근무가 잡힌 날만 3부 위에 카드로 -->
@@ -764,13 +781,13 @@
 
       <div id="notifyNudge" class="nudge" hidden></div>
 
-      <div class="health" id="health" aria-live="polite">
+      <div class="health reveal" id="health" style="--i:2" aria-live="polite">
         <span id="hWatch">일정 감시 확인 중…</span>
         <span id="hPush">알림 확인 중…</span>
       </div>
 
-      <div class="sect"><span>최근 일정 소식</span><button class="more" id="toNews">전체 보기 →</button></div>
-      <div id="todayNews"></div>
+      <div class="sect reveal" style="--i:3"><span>최근 일정 소식</span><button class="more" id="toNews">전체 보기 →</button></div>
+      <div id="todayNews" class="reveal" style="--i:4"></div>
     </section>
 
     <!-- 소식 -->
@@ -902,7 +919,7 @@
     </section>
   </main>
 
-  <nav class="nav" role="tablist" aria-label="주요 화면">
+  <nav class="nav reveal" style="--i:5" role="tablist" aria-label="주요 화면">
     <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">오늘</button>
     <button role="tab" id="tab-news" aria-selected="false" aria-controls="view-news" data-view="news">소식</button>
     <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
