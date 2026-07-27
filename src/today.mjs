@@ -6,9 +6,12 @@ import { loadUserJSON, saveUserJSON } from './store.mjs';
 
 const FILE = 'today.json';
 
-// 부(部)별 상황판 파일. 3부(기본)=today.json, 2부=today2.json (섬도/그림자 track).
+// 부(部)별 상황판 파일. 3부(기본)=today.json, 2부=today2.json, 1부=today1.json.
 //  ★part 인자 없으면 기존 그대로 today.json → 기존 호출부 무변화.
-function fileFor(part) { return String(part) === '2' ? 'today2.json' : FILE; }
+function fileFor(part) {
+  const p = String(part);
+  return p === '1' ? 'today1.json' : p === '2' ? 'today2.json' : FILE;
+}
 
 // ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화. part='2'면 2부 슬롯.
 export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, fileFor(part), null); }

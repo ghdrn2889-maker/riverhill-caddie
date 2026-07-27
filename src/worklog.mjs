@@ -47,9 +47,19 @@ export function labelToISO(label, now = new Date()) {
   return `${y}-${mo}-${da}`;
 }
 
+// 근무한 라운드(부) 조합 → 왕복(집↔골프장) 횟수. 붙은 라운드는 1회, 떨어지면(사이 부 거름) 2회.
+//  예: {3}·{2,3}·{1,2,3} → 1회(한 번 나가 연속), {1,3}(2부 거름) → 2회(사이 귀가). = 연속 구간(run) 수.
+export function tripsFromRounds(rounds) {
+  const parts = Object.keys(rounds || {}).map(Number).filter((n) => n >= 1 && n <= 3).sort((a, b) => a - b);
+  if (parts.length <= 1) return 1;
+  let runs = 1;
+  for (let i = 1; i < parts.length; i++) if (parts[i] !== parts[i - 1] + 1) runs++;
+  return runs;
+}
+
 // 근무 확정 자동 기록(임시, worked=null). 이미 확인(worked 지정)된 날은 덮어쓰지 않음.
-//  ★"2,3 출근" 두 탕: rounds[부] 에 부별 티오프를 각각 보관. 단 주행거리는 왕복 1회이므로 '하루 1건'은 그대로
-//   (두 탕이어도 집→골프장 한 번이라 근무일 수·거리 계산은 1일). 대표 티오프/코스는 3부 우선.
+//  ★다중 라운드(조출·두 탕·세 탕): rounds[부]에 부별 티오프 보관. 주행거리 왕복은 tripsFromRounds로 계산
+//   (붙으면 1회, {1,3}처럼 떨어지면 2회). 사용자가 tripsManual로 수정 가능. 대표 티오프/코스는 3부 우선.
 export function recordWorkDay(dateISO, info = {}, userId = 1) {
   if (!dateISO) return null;
   const d = load(userId);
@@ -64,10 +74,23 @@ export function recordWorkDay(dateISO, info = {}, userId = 1) {
     course: primary?.course || info.course || cur.course || '',
     articleId: info.articleId || cur.articleId || '',
     rounds,
-    twoRounds: Object.keys(rounds).length >= 2, // 하루 2라운드(두 탕) 여부
+    twoRounds: Object.keys(rounds).length >= 2, // 하루 2라운드 이상(두 탕·세 탕) 여부
+    trips: tripsFromRounds(rounds),             // 자동 산출 왕복 횟수(수정 전 기본값)
   };
   save(userId, d);
   return d.days[dateISO];
+}
+
+// 왕복 횟수 수동 보정(사용자가 실제 귀가 여부를 앎). null이면 자동값(trips)으로 복귀.
+export function setTrips(dateISO, n, userId = 1) {
+  if (!dateISO) return null;
+  const d = load(userId);
+  const cur = d.days[dateISO];
+  if (!cur) return null;
+  cur.tripsManual = (n == null || n === '') ? null : Math.max(1, Math.min(3, Number(n) || 1));
+  d.days[dateISO] = cur;
+  save(userId, d);
+  return cur;
 }
 
 // 실제 근무 여부 확인(예/아니오). 없던 날이면 수동 생성.
@@ -127,11 +150,12 @@ export function saveOdo(dateISO, odo = {}, userId = 1) {
   return cur;
 }
 
-// 그 날 실제 왕복거리: 계기판 숫자가 있으면 그걸로, 없으면 설정 편도×2.
+// 그 날 실제 왕복거리: 계기판 숫자가 있으면 그걸로, 없으면 설정 편도×2×왕복횟수(붙음1·떨어짐2, 수동보정 우선).
 function dayKm(day, settings) {
   const o = day.odo || {};
   if (o.start != null && o.home != null && o.home >= o.start) return o.home - o.start;
-  return (settings.homeGolfKmOneway || 0) * 2;
+  const trips = Number(day.tripsManual ?? day.trips ?? 1) || 1;
+  return (settings.homeGolfKmOneway || 0) * 2 * trips;
 }
 
 // 기록이 '비어있는' 근무일(사진·계기판 전혀 없음) → 리마인더 대상.

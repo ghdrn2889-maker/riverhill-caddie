@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
@@ -292,20 +292,33 @@ app.get('/api/today', (req, res) => {
   let dayOffset = 0;
   if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(todayISOKST())) / 86400000);
 
-  // ── 2부 라운드("2,3 출근") — 같은 날 2부 근무가 잡혔으면 함께 내려보냄(두 탕 표시용). ──
-  //  ★3부(state)는 그대로. 2부는 '근무 확정'이고 같은 날짜일 때만(스페어·타일자 2부는 표시 안 함).
-  let round2 = null;
-  const t2 = loadToday(req.user?.id || 1, '2');
-  if (t2 && ['assigned', 'work', 'your_turn'].includes(t2.status)) {
-    const t2ISO = worklog.labelToISO(t2.date);
-    if (!t2ISO || t2ISO === tISO || (!tISO && t2ISO >= todayISOKST())) {
-      round2 = {
-        status: t2.status, teeTime: t2.teeTime || '', course: t2.course || '', myPosition: t2.myPosition || null,
-        commute: t2.teeTime ? commuteInfo(t2.teeTime, prof.commute_min) : null,
-      };
-    }
+  // ── 다중 라운드(조출·2탕·세 탕) — 같은 날 1·2·3부 활성 라운드를 배열로 내려보냄(카드 스택·조합 요약용). ──
+  //  ★근무 라운드는 항상, 스페어(대기)는 순번이 있을 때만 카드로. 다른 날짜 슬롯은 제외.
+  const uid = req.user?.id || 1;
+  const rounds = [];
+  for (const pp of ['1', '2', '3']) {
+    const tp = pp === '3' ? t : loadToday(uid, pp);
+    if (!tp) continue;
+    const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);
+    const isSpare = ['spare', 'waiting', 'near'].includes(tp.status);
+    const hasPos = Number(tp.myPosition) > 0;
+    if (!isWork && !(isSpare && hasPos)) continue;
+    const tpISO = worklog.labelToISO(tp.date);
+    const sameDay = !tpISO || tpISO === tISO || (!tISO && tpISO >= todayISOKST());
+    if (!sameDay) continue;
+    rounds.push({
+      part: pp, kind: isWork ? 'work' : 'spare', status: tp.status,
+      teeTime: tp.teeTime || '', course: tp.course || '', myPosition: tp.myPosition || null,
+      cutLine: tp.cutLine || null,
+      commute: (isWork && tp.teeTime) ? commuteInfo(tp.teeTime, prof.commute_min) : null,
+    });
   }
-  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute, round2 });
+  const workParts = rounds.filter((r) => r.kind === 'work').map((r) => r.part);
+  const roundsSummary = { workParts, tang: workParts.length, holes: workParts.length * 18 };
+  // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
+  const r2 = rounds.find((r) => r.part === '2' && r.kind === 'work');
+  const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
+  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2 });
 });
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
@@ -731,45 +744,46 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   }
   rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
 
-  // ── 2부 감지("2, 3 출근") — 2부 배치표 창(10~16시)으로 board를 한 번 더 판독해 today2.json에 전 회원 반영. ──
-  //  ★위 3부 경로와 '완전 분리'된 평행 슬롯(today2.json). 배치표 이미지일 때만(비용: board당 판독 +1회).
-  //   2부 배치표에 이름이 뜬 회원만 상태가 잡히고, 근무 배정/티오프 변동 때만 2부 알림. 3부 코드는 일절 안 건드림.
+  // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
+  //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
+  //   + 텍스트-only(이미지 없이 글로 온 변동). 3부 판독의 boardTables 재사용 → "그 부 표가 있나" 판단은 추가 비용 0.
   try {
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
-    // ★크레딧 절약: 방금 끝낸 3부 판독의 boardTables에 '2부 표'가 실제로 보일 때만 2부 판독을 돌린다.
-    //  3부 전용 배치표(2부 섹션 없음)에선 2부 데이터가 없어 헛읽기 → 스킵(추가 비용 0, 이미 읽은 결과 재사용).
-    const has2buTable = Array.isArray(out.rawVerdict?.boardTables) && out.rawVerdict.boardTables.some((t) => String(t?.part) === '2');
-    // ★정확도 안전망: 제목에 '전체(전부) 배치표'가 명시된 이미지는 boardTables 오탐(2부 표가 실제로 있는데
-    //  없다고 읽는 경우)에 대비해 무조건 2부까지 판독한다. 전체 배치표는 하루 한두 번뿐 → 크레딧 영향 미미.
     const isFullBoard = /전체|전부/.test(full.subject || '');
-    // ★텍스트-only 2부 변동: 2부 당추·커트라인·티오프 변경이 '이미지 없이 글로만' 오는 경우(가끔 있음)를 잡는다.
-    //  오검출 방지 게이트 — 변동 키워드 + (‘2부’ 명시 또는 2부 창 시각(10~15시)). 3부 당추(‘1722’ 등)는 안 걸림.
-    const txt2 = `${full.subject || ''} ${full.text || ''}`;
-    const chg2buKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt2);
-    const has2buWord = /2\s*부/.test(txt2);
-    const has2buTime = /\b1[0-5]:[0-5]\d\b/.test(txt2) || /\b1[0-5][0-5]\d\b/.test(txt2) || /1[0-5]\s*시/.test(txt2);
-    const isText2bu = !isBoardImg && chg2buKw && (has2buWord || has2buTime);
-    const run2bu = (isBoardImg && (has2buTable || isFullBoard)) || isText2bu;
-    if (isBoardImg && !run2bu) console.log(`·  [2부] 스킵 — 이 배치표엔 2부 표 없음(크레딧 절약): ${full.subject}`);
-    if (run2bu) {
-      if (!has2buTable && isFullBoard) console.log(`·  [2부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 2부 확인: ${full.subject}`);
-      if (isText2bu) console.log(`·  [2부] 텍스트 변동 감지 — 이미지 없이 글로 온 2부 변동 판독: ${full.subject}`);
-      const m2p = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
-      const out2 = await judge(full, loadToday(1, '2'), m2p);   // 공유 2부 판독(비싼 부분, board당 1회)
-      // ★member 1도 다른 회원과 '동일하게' 2부 명단 기반으로 재해석 — 모델이 전체 배치표의 3부 섹션에 있는
-      //  본인(예: 김홍구 3부 22번)을 2부로 오검출하는 것을 차단(2부 명단에 없으면 순번 없음 = 2부 무관).
-      const m1out2 = interpretForMember(full, out2.rawVerdict, m2p, loadToday(1, '2'));
-      await processForMember2(1, m2p, m1out2, full, opts);
+    const txt = `${full.subject || ''} ${full.text || ''}`;
+    const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
+    const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
+    // 부별 텍스트 게이트: '{n}부' 명시(1부는 '조출' 포함) 또는 그 부 창 시각. (1부=5~9시, 2부=10~15시)
+    //  3부 시각(16시~)은 어느 게이트에도 안 걸림 → 3부 당추 텍스트가 1·2부 판독을 유발하지 않음.
+    const PARTS = [
+      { part: '1', word: /1\s*부|조출/.test(txt), time: /\b0?[5-9]:[0-5]\d\b/.test(txt) || /\b0?[5-9][0-5]\d\b/.test(txt) || /[5-9]\s*시/.test(txt) },
+      { part: '2', word: /2\s*부/.test(txt), time: /\b1[0-5]:[0-5]\d\b/.test(txt) || /\b1[0-5][0-5]\d\b/.test(txt) || /1[0-5]\s*시/.test(txt) },
+    ];
+    for (const cfg of PARTS) {
+      const p = cfg.part;
+      const hasTable = boardTables.some((t) => String(t?.part) === p);
+      const isText = !isBoardImg && chgKw && (cfg.word || cfg.time);
+      const run = (isBoardImg && (hasTable || isFullBoard)) || isText;
+      if (!run) { if (isBoardImg) console.log(`·  [${p}부] 스킵 — 이 배치표엔 ${p}부 표 없음(크레딧 절약): ${full.subject}`); continue; }
+      if (!hasTable && isFullBoard) console.log(`·  [${p}부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 ${p}부 확인: ${full.subject}`);
+      if (isText) console.log(`·  [${p}부] 텍스트 변동 감지 — 이미지 없이 글로 온 ${p}부 변동 판독: ${full.subject}`);
+      const win = partWindow(p);
+      const mp = { name: primary.name, part: p, commuteMin: primary.commuteMin, teeMin: win.min, teeMax: win.max };
+      const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
+      // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
+      //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
+      const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
+      await processForMemberPart(1, mp, m1outP, full, opts);
       for (const m of activeMembers()) {
         if (m.id === 1) continue;
         try {
-          const member2 = { name: m.board_name, part: '2', commuteMin: Number(m.commute_min), teeMin: 10, teeMax: 16 };
-          const mout2 = interpretForMember(full, out2.rawVerdict, member2, loadToday(m.id, '2'));
-          await processForMember2(m.id, member2, mout2, full, opts);
-        } catch (e) { console.error(`[회원 ${m.id} 2부 처리 오류]`, e.message); }
+          const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+          const moutP = interpretForMember(full, outP.rawVerdict, memberP, loadToday(m.id, p));
+          await processForMemberPart(m.id, memberP, moutP, full, opts);
+        } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
     }
-  } catch (e) { console.error('[2부 감지 오류]', e.message); }
+  } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
@@ -908,84 +922,105 @@ async function processForMember(userId, member, out, full, opts = {}) {
   return { pushed: true, ...ret };
 }
 
-// ── 2부 슬롯(today2.json) 전용 처리 — "2, 3 출근"의 2부 라운드. 3부(processForMember)와 완전 분리. ──
-//  ★2부 배치표에 이름이 뜬 회원만 상태가 잡힘. 근무 배정/티오프 변동 등 '의미있는 변동'일 때만 2부 알림.
-//   현재 단계: 상황판(today2) 갱신 + 알림. (저널·세무 2탕은 다음 단계에서 데이터모델 확장과 함께.)
-async function processForMember2(userId, member, out, full, opts = {}) {
+// 오늘 이 회원이 '근무'로 잡힌 라운드(부) 목록 — 조합(두 탕/세 탕) 문구·요약용. 1·2·3부 슬롯 전부 확인.
+function workRoundPartsForDay(userId, dayISO) {
+  const parts = [];
+  for (const p of ['1', '2', '3']) {
+    const tp = loadToday(userId, p);
+    if (!tp || !['assigned', 'work', 'your_turn'].includes(tp.status)) continue;
+    const iso = worklog.labelToISO(tp.date);
+    if (dayISO && iso && iso !== dayISO) continue;   // 같은 날 라운드만
+    parts.push(p);
+  }
+  return parts.sort();
+}
+function tangWord(n) { return n >= 3 ? '세 탕(54홀)' : n === 2 ? '두 탕(36홀)' : '한 탕'; }
+
+// ── 부(部)별 평행 슬롯 처리 — 1·2부 라운드(today1/today2.json). 3부(processForMember)와 완전 분리. ──
+//  ★member.part('1'|'2')로 슬롯·pushlog·리마인더 키·문구를 전부 파라미터화. 해당 부 배치표에 이름이 뜬
+//   회원만 상태가 잡히고, 근무 배정/티오프 변동 등 '의미있는 변동'일 때만 알림. 3부 코드는 일절 안 건드림.
+async function processForMemberPart(userId, member, out, full, opts = {}) {
   const v = out.rawVerdict;
   if (!out.relevant || !v) return { pushed: false };
-  const today2 = loadToday(userId, '2');
-  // 2부와 무관한 회원(2부 명단에 이름 없음 + 기존 2부 상태도 없음)이면 슬롯 자체를 만들지 않음(잡음 방지).
-  const hadState = !!(today2 && (today2.myPosition || today2.teeTime || (today2.status && today2.status !== 'unknown')));
+  const part = String(member.part || '2');
+  const label = `${part}부`;
+  const win = partWindow(part);
+  const cur = loadToday(userId, part);
+  // 해당 부와 무관한 회원(명단에 이름 없음 + 기존 상태도 없음)이면 슬롯 자체를 만들지 않음(잡음 방지).
+  const hadState = !!(cur && (cur.myPosition || cur.teeTime || (cur.status && cur.status !== 'unknown')));
   const hasNow = Number(v.myPosition) > 0;
   if (!hadState && !hasNow) return { pushed: false };
 
-  const merged = applyVerdict(today2, v, full, { teeMin: 10, teeMax: 16 });
-  saveToday(merged.next, userId, '2');
+  const merged = applyVerdict(cur, v, full, { teeMin: win.min, teeMax: win.max });
+  saveToday(merged.next, userId, part);
   const n = merged.next, change = merged.change;
-  const isWork2 = ['assigned', 'work', 'your_turn'].includes(n.status);
+  const isWork = ['assigned', 'work', 'your_turn'].includes(n.status);
 
-  // ── 저널·세무 2탕: 2부 라운드 결과를 part='2'로 기록(하루 근무기록에 두 탕 반영). 주행거리는 하루 1건 유지. ──
-  const jIso2 = worklog.labelToISO(n.date);
-  if (jIso2 && !v._uncertain) {
-    journal.recordDayStatus(jIso2, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part: '2' }, userId);
-    if (isWork2) worklog.recordWorkDay(jIso2, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part: '2' }, userId);
+  // ── 저널·세무 다탕: 이 부 결과를 part로 기록. 주행거리 왕복은 worklog에서 계산(붙음 1회·떨어짐 2회). ──
+  const jIso = worklog.labelToISO(n.date);
+  if (jIso && !v._uncertain) {
+    journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part }, userId);
+    if (isWork) worklog.recordWorkDay(jIso, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part }, userId);
   }
 
-  // 알림: 2부 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
+  // 알림: 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
   const chgs = change.changes || [];
   const teeChg = chgs.find((c) => c.field === 'tee');
   const gotTee = chgs.some((c) => c.field === 'tee_new');
-  // 2부 티오프가 바뀌면 2부 리마인더(p2-*)만 재무장 — 새 시각으로 다시 울리게(3부 리마인더는 건드리지 않음).
+  // 이 부 티오프가 바뀌면 이 부 리마인더(p{part}-*)만 재무장 — 다른 부 리마인더는 건드리지 않음.
+  const rprefix = `p${part}-`;
   if (teeChg) {
     try {
       const st = loadUserJSON(userId, 'timeline-remind.json', {});
-      if (st.sent) { for (const k of Object.keys(st.sent)) if (k.startsWith('p2-')) delete st.sent[k]; saveUserJSON(userId, 'timeline-remind.json', st); }
+      if (st.sent) { for (const k of Object.keys(st.sent)) if (k.startsWith(rprefix)) delete st.sent[k]; saveUserJSON(userId, 'timeline-remind.json', st); }
     } catch { /* 무해 */ }
   }
   const becameWork = chgs.some((c) => ['status', 'cutline', 'teamcount'].includes(c.field) && ['assigned', 'work', 'your_turn'].includes(c.to));
   let title = '', body = '', push = 'low';
-  if (isWork2 && (teeChg || gotTee || becameWork)) {
-    if (teeChg) { title = '⚠️ 2부 티오프 변경!'; body = `${member.name}님, 2부 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
-    else if (n.teeTime) { title = '⛳ 2부 근무 배정!'; body = `${member.name}님, 오늘 2부 근무예요. 티오프 ${n.teeTime}${n.course ? `(${n.course})` : ''} — 2부 뛰고 이어서 3부까지 두 탕이에요.`; }
-    else { title = '⛳ 2부 근무권!'; body = `${member.name}님, 오늘 2부 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.`; }
+  if (isWork && (teeChg || gotTee || becameWork)) {
+    // 오늘 이 회원의 근무 라운드 조합 안내(두 탕/세 탕).
+    const wparts = workRoundPartsForDay(userId, jIso);
+    const combo = wparts.length >= 2 ? ` — 오늘 ${wparts.join('·')}부 ${tangWord(wparts.length)}이에요.` : '';
+    if (teeChg) { title = `⚠️ ${label} 티오프 변경!`; body = `${member.name}님, ${label} 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
+    else if (n.teeTime) { title = `⛳ ${label} 근무 배정!`; body = `${member.name}님, 오늘 ${label} 근무예요. 티오프 ${n.teeTime}${n.course ? `(${n.course})` : ''}.${combo}`; }
+    else { title = `⛳ ${label} 근무권!`; body = `${member.name}님, 오늘 ${label} 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.`; }
     push = 'high';
   }
-  // ── 2부 스페어 대기 진행 — 팀이 차서 확정선(teamCount)이 전진하면 '앞에 N명' 안내(3부와 동일 사고, 2부 문구). ──
-  //  아직 근무 배정 전 스페어일 때만. 두 탕을 노리는 회원이 2부 대기 상황을 미리 볼 수 있게.
+  // ── 스페어 대기 진행 — 확정선(teamCount) 전진 시 '앞에 N명' 안내. 아직 근무 배정 전 스페어일 때만. ──
   if (push === 'low' && !v._uncertain && Number(v.teamCount) > 0) {
-    const myp2 = Number(n.myPosition) || 0;
-    const tc2 = Number(v.teamCount);
-    if (myp2 && myp2 > tc2) {
-      const ahead = Math.max(0, myp2 - tc2 - 1);
-      title = '🏌️ 2부 대기 현황';
+    const myp = Number(n.myPosition) || 0;
+    const tc = Number(v.teamCount);
+    if (myp && myp > tc) {
+      const ahead = Math.max(0, myp - tc - 1);
+      title = `🏌️ ${label} 대기 현황`;
       body = ahead === 0
-        ? `현재 2부 ${tc2}팀 — ${member.name}님은 2부 스페어 1번이에요. 한 팀만 더 차면 2부 나가 두 탕이니 준비해두세요.`
-        : `현재 2부 ${tc2}팀 — ${member.name}님은 2부 스페어 ${ahead + 1}번, 앞에 ${ahead}명 남았어요.`;
+        ? `현재 ${label} ${tc}팀 — ${member.name}님은 ${label} 스페어 1번이에요. 한 팀만 더 차면 ${label} 나가니 준비해두세요.`
+        : `현재 ${label} ${tc}팀 — ${member.name}님은 ${label} 스페어 ${ahead + 1}번, 앞에 ${ahead}명 남았어요.`;
       const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
       push = ahead === 0 ? 'high' : (ahead <= WATCH ? 'check' : 'low');
     }
   }
   if (push === 'low') {
-    if (userId === 1) console.log(`·  [2부] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);
+    if (userId === 1) console.log(`·  [${label}] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);
     return { pushed: false };
   }
-  // 2부 전용 중복 억제(pushlog2.json) — 3부 pushlog과 분리.
+  // 부 전용 중복 억제(pushlog{part}.json) — 부별·3부 pushlog과 분리.
   //  ★근무·휴무 확정은 커트라인 무관(서명 제외), 스페어·대기는 커트라인 전진이 '내 앞 N명'에 직접 영향 → 포함.
   if (!opts.force && !change.reversal) {
-    const confirmed2 = ['assigned', 'work', 'your_turn', 'off'].includes(n.status);
-    const sig = confirmed2
+    const confirmed = ['assigned', 'work', 'your_turn', 'off'].includes(n.status);
+    const sig = confirmed
       ? `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.myPosition || ''}`
       : `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.cutLine || ''}|${n.myPosition || ''}`;
     const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
     const now = Date.now();
-    const log = loadUserJSON(userId, 'pushlog2.json', {});
+    const pf = `pushlog${part}.json`;
+    const log = loadUserJSON(userId, pf, {});
     for (const k of Object.keys(log)) if (now - log[k] > WINDOW) delete log[k];
-    if (log[sig] != null) { saveUserJSON(userId, 'pushlog2.json', log); return { pushed: false }; }
-    log[sig] = now; saveUserJSON(userId, 'pushlog2.json', log);
+    if (log[sig] != null) { saveUserJSON(userId, pf, log); return { pushed: false }; }
+    log[sig] = now; saveUserJSON(userId, pf, log);
   }
   await broadcast({ title, body, url: full.url, level: push }, userId);
-  console.log(`🔔 [회원${userId}·2부${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
+  console.log(`🔔 [회원${userId}·${label}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true };
 }
 
@@ -1109,8 +1144,9 @@ async function checkTimelineReminders() {
       if (store.date !== todayISO) { store.date = todayISO; store.sent = {}; }
       store.sent = store.sent || {};
       const name = mem.board_name || '회원';
-      // 3부(기본, 기존 키) + 2부(두 탕, p2- 키) — 각 라운드 독립적으로 출발/도착/티오프 알람.
+      // 3부(기본, 기존 키) + 1·2부(다중 라운드, p1-/p2- 키) — 각 라운드 독립적으로 출발/도착/티오프 알람.
       let changed = await fireRoundReminders(mem, name, loadToday(mem.id), '', '', store, nowMin, todayISO);
+      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '1'), 'p1-', '1부', store, nowMin, todayISO)) || changed;
       changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '2'), 'p2-', '2부', store, nowMin, todayISO)) || changed;
       if (changed) saveUserJSON(mem.id, 'timeline-remind.json', store);
     }
