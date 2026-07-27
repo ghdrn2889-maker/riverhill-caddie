@@ -261,19 +261,30 @@ export async function analyzeSchedule(article) {
 // ── 3) 본배치표에서 'N부 순번/이름 목록'만 집중 판독 ─────────────
 //  통합 판독은 한 번에 너무 많은 걸 읽어 명단을 자주 놓친다(타임아웃·부분). 명단만 따로 뽑으면
 //  또렷한 인쇄 글씨라 순번 순서대로 안정적으로 읽힌다 → 스페어 대시보드의 '순번별 이름'의 근거.
+// 부(部)별 표 배경색 이름 (리버힐: 1부=분홍, 2부=하늘색, 3부=보라).
+function partColorName(part) {
+  const p = String(part);
+  return p === '1' ? '연분홍(분홍)' : p === '2' ? '하늘색' : '보라';
+}
 function buildRosterPrompt(part) {
+  const p = String(part);
+  const color = partColorName(p);
+  const others = ['1', '2', '3'].filter((x) => x !== p)
+    .map((x) => `${x}부(${partColorName(x)})`).join('·');
   return `당신은 골프장 배치표 이미지를 정확히 옮겨적는 도우미입니다.
-이미지에서 "${part}부 순번/이름 목록"을 찾으세요.
-- 이 목록은 "OUT ${part}부 IN" 티오프 시간표의 '왼쪽'에 있으며, 각 줄이 "순번(숫자) + 이름" 형태입니다.
+이미지에서 "${p}부 순번/이름 목록"을 찾으세요.
+- ★${p}부 섹션은 헤더가 "OUT ${p}부 IN"이고, 그 표의 배경색이 **${color}**입니다. 오직 이 ${color} ${p}부 섹션만 읽으세요.
+- 이 목록은 "OUT ${p}부 IN" 티오프 시간표의 '왼쪽'에 있으며, 각 줄이 "순번(숫자) + 이름" 형태입니다.
 - 순번 1번부터 마지막 번호까지 한 명도 빠뜨리지 말고 순서대로 전부 옮기세요(근무·스페어 모두 포함).
 - 이름 옆 괄호 표기((54), (1,3), (2,3) 등)가 있으면 이름에 그대로 붙여 적으세요.
 - 목록이 두 개의 세로단으로 나뉘어 있으면(예: 왼쪽 1~20, 오른쪽 21~) 두 단을 순번 순서대로 이어붙이세요.
 - 순번 숫자는 이름 왼쪽에 분명히 적혀 있습니다. 그 숫자를 pos 로 쓰세요(임의로 매기지 말 것).
-- ${part}부가 아닌 1부/2부 목록은 절대 섞지 마세요.
+- ★${others} 섹션은 절대 섞지 마세요. 오직 ${p}부(${color})만.
+- ★같은 이름을 두 번 넣지 마세요. 명단 끝을 넘어 순번을 지어내지 마세요(실제 인쇄된 마지막 순번에서 멈춤).
 
 반드시 JSON "하나만" 출력(설명 금지):
-{ "part": ${part}, "roster": [ {"pos": 1, "name": "정유경(54)"}, {"pos": 2, "name": "표승완(54)"} ] }
-${part}부 목록을 못 찾으면 {"part": ${part}, "roster": []}.`;
+{ "part": ${p}, "roster": [ {"pos": 1, "name": "정유경(54)"}, {"pos": 2, "name": "표승완(54)"} ] }
+${p}부 목록을 못 찾으면 {"part": ${p}, "roster": []}.`;
 }
 
 // 반환: [{pos:number, name:string}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
@@ -282,10 +293,21 @@ export async function analyzeRoster(article, part = '3') {
   const model = process.env.GEMINI_BOARD_MODEL || undefined; // 명단은 더 좋은 board 모델로
   const out = await callGeminiJSON(buildRosterPrompt(part), article.images[0], model);
   const rows = Array.isArray(out?.roster) ? out.roster : [];
-  return rows
+  const cleaned = rows
     .map((r) => ({ pos: Number(r?.pos), name: String(r?.name || '').trim() }))
     .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
     .sort((a, b) => a.pos - b.pos);
+  // ★꼬리 중복 제거: 같은 이름이 뒤 순번에 다시 나오면 환각(모델이 명단 끝에서 앞 이름을 반복) → 첫 등장만 유지.
+  //  (괄호 표기는 무시하고 순수 이름으로 비교. 실제 배치표는 한 사람이 한 번만 나옴.)
+  const seen = new Set();
+  const deduped = [];
+  for (const r of cleaned) {
+    const key = r.name.replace(/\(.*?\)/g, '').replace(/\s+/g, '').trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(r);
+  }
+  return deduped;
 }
 
 // ── 4) 오른쪽 '조 배치표'(전체 캐디 명부) 판독 ────────────────
