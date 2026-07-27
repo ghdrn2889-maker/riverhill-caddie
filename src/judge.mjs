@@ -666,16 +666,21 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
   if (isBoard && verdict) {
     try {
-      // 순번 목록(순서)·조 배치표(전원 명부)를 병렬 판독. 조 명부는 이미 수확한 이미지면 건너뜀(사용량 절약).
+      // ★몰림 방지: 명단 판독과 조 배치표 판독을 '동시(Promise.all)'로 쏘던 것을 '순차'로 —
+      //  무거운 board 판독이 겹쳐 429/타임아웃으로 명단이 빈값(0명) 오던 문제 완화.
+      //  명단이 비거나 불완전(buildPositionalRoster가 null)하면 1회 재시도(일시 몰림 대비). 조 명부는 이미 수확한 이미지면 건너뜀.
       const imgKey = article.images?.[0] || '';
       const doCrew = !!imgKey && !alreadyHarvested(imgKey);
-      const [ordered, crews] = await Promise.all([
-        analyzeRoster(article, member.part),
-        doCrew ? analyzeCrews(article) : Promise.resolve([]),
-      ]);
+      let ordered = await analyzeRoster(article, member.part);
+      let built = buildPositionalRoster(ordered, verdict);
+      if (!built) {                                   // 빈값·불완전 → 몰림/일시 실패로 보고 1회 재시도
+        console.log(`↻ [roster] ${member.part}부 명단 재시도(1차 ${ordered.length}행)`);
+        ordered = await analyzeRoster(article, member.part);
+        built = buildPositionalRoster(ordered, verdict);
+      }
+      const crews = doCrew ? await analyzeCrews(article) : [];
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
       if (crews.length) { const n = learnCrews(crews); markHarvested(imgKey); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
-      const built = buildPositionalRoster(ordered, verdict);
       if (built) {
         // ★캐디 사전으로 순번 이름 후처리 보정 + 축적(오탈자 되돌림). 위치(빈칸)는 보존.
         verdict.part3Roster = correctAndLearn(built.roster);
