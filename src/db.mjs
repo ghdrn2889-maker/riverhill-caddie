@@ -73,6 +73,7 @@ function migrate(d) {
   // 기존 DB(김홍구 등)에 새 컬럼 안전 추가 — 없을 때만 ALTER.
   addColumn(d, 'profiles', 'commute_min', 'INTEGER NOT NULL DEFAULT 60');
   addColumn(d, 'users', 'google_id', 'TEXT');
+  addColumn(d, 'users', 'block_reason', 'TEXT');   // 차단 사유(roster|other) — disabled일 때만 채움
   d.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_id);'); // NULL은 서로 중복 허용
 }
 

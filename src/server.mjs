@@ -49,6 +49,7 @@ app.get('/api/me', (req, res) => {
   const needsOnboarding = !prof.board_name;
   const pending = req.user.status !== 'active'; // 승인 대기/차단 → 프론트가 '승인 대기' 화면 표시
   res.json({ ...base, authed: true, pending, status: req.user.status,
+    blockReason: req.user.status === 'disabled' ? (req.user.block_reason || 'other') : null,
     user: { id: req.user.id, role: req.user.role },
     profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
@@ -158,12 +159,13 @@ app.get('/api/admin/members', requireAdmin, (req, res) => {
 app.post('/api/admin/user-status', requireAdmin, (req, res) => {
   const id = Number(req.body?.id);
   const status = String(req.body?.status || '');
+  const reason = String(req.body?.reason || '') || null;   // 차단 사유(roster|other)
   if (!id || !['active', 'pending', 'disabled'].includes(status)) return res.status(400).json({ ok: false, error: 'id·status(active|pending|disabled) 필요' });
   if (id === req.user.id) return res.status(400).json({ ok: false, error: '본인 계정 상태는 바꿀 수 없어요.' });
-  const u = setUserStatus(id, status);
+  const u = setUserStatus(id, status, reason);
   if (!u) return res.status(404).json({ ok: false, error: '회원을 찾을 수 없어요.' });
-  console.log(`👤 [admin] 회원 #${id} 상태 → ${status} (by #${req.user.id})`);
-  res.json({ ok: true, id, status });
+  console.log(`👤 [admin] 회원 #${id} 상태 → ${status}${status === 'disabled' ? `(${u.block_reason})` : ''} (by #${req.user.id})`);
+  res.json({ ok: true, id, status, blockReason: u.block_reason || null });
 });
 
 // 외부 메시지 수신(카톡 단톡방 등) → 카페 글과 동일한 judge 파이프라인으로 처리.

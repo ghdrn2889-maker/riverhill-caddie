@@ -1318,6 +1318,8 @@ async function loadMe() {
   // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
   hideLogin();
+  // ★차단(disabled): '승인 대기'가 아니라 별도 '차단됨' 화면 + 사유 + 관리자 문의 안내.
+  if (meState && meState.status === 'disabled') { hidePending(); renderAccount(); showBlocked(meState.blockReason); return; }
   // ★가입 승인 대기(pending): 이름부터 입력(온보딩) → 이후엔 '승인 대기' 화면. 앱 데이터는 게이트에서 잠김.
   if (meState && meState.pending) {
     renderAccount();
@@ -1339,6 +1341,15 @@ function showPending() {
   $('pendingOv').hidden = false;
 }
 function hidePending() { $('pendingOv').hidden = true; }
+// 차단됨 화면 — 사유(명부없음/기타) + 관리자 문의 안내.
+function showBlocked(reason) {
+  hideSplash();
+  const txt = reason === 'roster'
+    ? '리버힐 캐디 명부에 없는 이름으로 확인되었습니다.'
+    : '관리자에 의해 이용이 제한되었습니다.';
+  $('blockedReason').textContent = '사유 · ' + txt;
+  $('blockedOv').hidden = false;
+}
 // ── 회원 관리(관리자 전용) ──
 async function openAdmin() {
   $('adminOv').hidden = false;
@@ -1348,12 +1359,15 @@ async function openAdmin() {
     renderAdminList((r && r.members) || []);
   } catch { $('adminList').innerHTML = '<p style="text-align:center;color:#c33;padding:16px;">불러오기 실패</p>'; }
 }
+const ADM_BSTYLE = 'flex:1;padding:8px;border:1px solid #ccc;border-radius:8px;background:#f7f7f7;font-weight:600;cursor:pointer;font-size:13px;';
+const BLOCK_REASON_KO = { roster: '명부에 없는 이름', other: '기타' };
 function renderAdminList(members) {
   const STAT = { active: ['활성', '#2e7d32', '#e6f4ea'], pending: ['대기', '#b26a00', '#fff3e0'], disabled: ['차단', '#b3261e', '#fdecea'] };
-  const bstyle = 'flex:1;padding:8px;border:1px solid #ccc;border-radius:8px;background:#f7f7f7;font-weight:600;cursor:pointer;font-size:13px;';
+  const bstyle = ADM_BSTYLE;
   $('adminList').innerHTML = (members.map((m) => {
     const [sl, sc, sb] = STAT[m.status] || ['?', '#666', '#eee'];
     const known = m.boardName ? (m.nameKnown ? '<span style="color:#2e7d32;font-weight:700;">✅ 명부일치</span>' : '<span style="color:#c33;font-weight:700;">⚠️ 명부없음</span>') : '<span style="color:#999;">이름 미입력</span>';
+    const blocked = (m.status === 'disabled' && m.blockReason) ? ` · <span style="color:#b3261e;font-weight:700;">차단 사유: ${BLOCK_REASON_KO[m.blockReason] || '기타'}</span>` : '';
     const btns = m.role === 'admin' ? '<span style="color:#888;font-size:12px;">관리자 계정</span>' :
       `<button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="active">승인</button>
        <button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="pending">대기</button>
@@ -1363,15 +1377,33 @@ function renderAdminList(members) {
         <b>#${m.id} ${esc(m.boardName || '(이름 없음)')}</b><small>${m.part ? esc(m.part) + '부' : ''}</small>
         <span style="margin-left:auto;background:${sb};color:${sc};border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;">${sl}</span>
       </div>
-      <div style="font-size:12px;margin:4px 0 8px;">${known}</div>
-      <div style="display:flex;gap:6px;">${btns}</div>
+      <div style="font-size:12px;margin:4px 0 8px;">${known}${blocked}</div>
+      <div class="adm-btns" data-mid="${m.id}" style="display:flex;gap:6px;flex-wrap:wrap;">${btns}</div>
     </div>`;
   }).join('')) || '<p style="text-align:center;color:#888;padding:16px;">회원이 없어요.</p>';
-  $('adminList').querySelectorAll('.adm-b').forEach((b) => { b.onclick = () => setMemberStatus(Number(b.dataset.id), b.dataset.s); });
+  $('adminList').querySelectorAll('.adm-b').forEach((b) => {
+    b.onclick = () => {
+      const id = Number(b.dataset.id), s = b.dataset.s;
+      if (s === 'disabled') showBlockReason(id);   // 차단은 사유 먼저 선택
+      else setMemberStatus(id, s);
+    };
+  });
 }
-async function setMemberStatus(id, status) {
+// 차단 사유 선택 UI — 해당 회원 카드의 버튼 줄을 사유 버튼으로 교체.
+function showBlockReason(id) {
+  const box = $('adminList').querySelector(`.adm-btns[data-mid="${id}"]`);
+  if (!box) return;
+  box.innerHTML = `<div style="width:100%;font-size:12px;color:#b3261e;font-weight:700;margin-bottom:2px;">차단 사유를 선택하세요</div>
+    <button class="adm-r" style="${ADM_BSTYLE}" data-id="${id}" data-r="roster">명부에 없는 이름</button>
+    <button class="adm-r" style="${ADM_BSTYLE}" data-id="${id}" data-r="other">기타</button>
+    <button class="adm-r" style="${ADM_BSTYLE};flex:0 0 auto;background:#eee;" data-id="${id}" data-r="cancel">취소</button>`;
+  box.querySelectorAll('.adm-r').forEach((b) => {
+    b.onclick = () => { const r = b.dataset.r; if (r === 'cancel') { openAdmin(); return; } setMemberStatus(id, 'disabled', r); };
+  });
+}
+async function setMemberStatus(id, status, reason) {
   try {
-    const r = await postJSON('/api/admin/user-status', { id, status });
+    const r = await postJSON('/api/admin/user-status', { id, status, reason });
     if (!r || !r.ok) throw new Error((r && r.error) || '변경 실패');
     openAdmin();
   } catch (e) { alert(e.message || '변경 실패'); }
@@ -1466,6 +1498,7 @@ function initAccount() {
   $('adminOv').addEventListener('click', (e) => { if (e.target === $('adminOv')) $('adminOv').hidden = true; });
   $('pendReload').onclick = () => location.reload();
   $('pendLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
+  $('blockedLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
 }
 
 /* ── 부팅 ── */

@@ -801,6 +801,19 @@
     </div>
   </div>
 
+  <!-- 계정 차단됨 (disabled) -->
+  <div class="ov" id="blockedOv" hidden>
+    <div class="ov-card" style="text-align:center;">
+      <div class="ov-badge" style="margin:0 auto 14px;">🚫</div>
+      <h2 class="ov-title">계정이 차단되었습니다</h2>
+      <p class="ov-desc" id="blockedReason" style="text-align:center;"></p>
+      <p class="ov-desc" style="text-align:center;">이용에 문제가 있거나 오해가 있었다면 <b>관리자에게 따로 문의</b>해 주세요.</p>
+      <div class="ov-actions" style="justify-content:center;">
+        <button class="ov-ghost" id="blockedLogout">로그아웃</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 회원 관리(관리자 전용) -->
   <div class="ov" id="adminOv" hidden>
     <div class="ov-card">

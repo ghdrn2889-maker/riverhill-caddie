@@ -21,9 +21,11 @@ export function createUser({ naverId = null, googleId = null, role = 'member', s
 }
 
 // 회원 상태 변경(관리자 승인/보류/차단). status ∈ 'active'|'pending'|'disabled'.
-export function setUserStatus(id, status) {
+export function setUserStatus(id, status, reason = null) {
   if (!['active', 'pending', 'disabled'].includes(status)) return null;
-  run('UPDATE users SET status = ? WHERE id = ?', status, id);
+  // 차단(disabled)일 때만 사유 저장(roster|other). 승인·대기로 바꾸면 사유 비움.
+  const br = status === 'disabled' ? (['roster', 'other'].includes(reason) ? reason : 'other') : null;
+  run('UPDATE users SET status = ?, block_reason = ? WHERE id = ?', status, br, id);
   return getUser(id);
 }
 
@@ -173,11 +175,12 @@ export function caddieNameKnown(name) {
 
 // 관리자 회원관리 화면용 — 전체 회원 + 상태 + 명부 일치 여부.
 export function listMembersForAdmin() {
-  const rows = all(`SELECT u.id, u.role, u.status, u.created_at, u.last_login, p.board_name, p.part
+  const rows = all(`SELECT u.id, u.role, u.status, u.created_at, u.last_login, u.block_reason, p.board_name, p.part
                     FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.status='pending' DESC, u.id`);
   return rows.map((r) => ({
     id: r.id, role: r.role, status: r.status, createdAt: r.created_at, lastLogin: r.last_login,
     boardName: r.board_name || '', part: r.part || '', nameKnown: caddieNameKnown(r.board_name),
+    blockReason: r.block_reason || '',
   }));
 }
 
