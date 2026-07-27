@@ -411,6 +411,52 @@
     .wx-night.w-storm .drop { background:linear-gradient(to bottom, rgba(180,200,230,0), rgba(190,210,238,.9)); }
     .wx-night.w-storm .flash { background:#cdd9ff; }
 
+    /* ===== 배경 전환 크로스페이드(시간대·날씨 변화 시 부드럽게) ===== */
+    /* ★ .hero.has-wx > *:not(.fx){z-index:2;position:relative} 규칙을 이기도록 특이도·순서 확보 */
+    .hero.has-wx .sky-xfade { position:absolute; inset:0; z-index:1; border-radius:19px; pointer-events:none;
+      opacity:1; transition:opacity 1s ease; background-size:cover; background-position:center; }
+
+    /* ===== 노을(wx-dusk, 18~19시) — 붉은 주황 · 흐릿한 해 · 지면 없음 ===== */
+    .hero.wx-dusk .oc-hills { display:none; }
+    /* 맑음: 따뜻한 주황 + 우측 상단 해 빛무리 */
+    .hero.wx-dusk.has-wx.w-clear { background:
+      radial-gradient(58% 52% at 84% 16%, #fff3cb 0%, #ffd889 16%, rgba(255,178,104,.55) 38%, rgba(255,150,110,.16) 60%, rgba(255,150,120,0) 76%),
+      linear-gradient(180deg, #f4b088 0%, #f0966a 32%, #ee885d 58%, #f2925b 80%, #f9a962 100%); }
+    /* 흐림·비·눈: 구름 낀 노을(뿌옇고 차분) / 뇌우: 더 어둑 */
+    .hero.wx-dusk.has-wx.w-cloud, .hero.wx-dusk.has-wx.w-rain, .hero.wx-dusk.has-wx.w-snow {
+      background:linear-gradient(180deg,#ddaa93 0%,#d9937b 34%,#d6866c 60%,#de9471 84%,#e8aa80 100%); }
+    .hero.wx-dusk.has-wx.w-storm { background:linear-gradient(180deg,#c69a8a 0%,#bf8472 40%,#bc7c67 70%,#c88c72 100%); }
+    /* 노을 글자 — 밝은 하늘이라 어두운 따뜻한 색 */
+    .hero.wx-dusk.has-wx .label { color:#8c4630; text-shadow:none; }
+    .hero.wx-dusk.has-wx h3 { color:#4c2015; text-shadow:0 1px 1px rgba(255,240,224,.4); }
+    .hero.wx-dusk.has-wx .sub { color:#6a3421; text-shadow:none; }
+    .hero.wx-dusk.has-wx .hero-cheer { color:#7a3f2c; border-top-color:rgba(140,70,48,.24); text-shadow:none; }
+    /* 흐릿하게 번지는 해(맑음만) — 우측 상단 */
+    .hero.wx-dusk .sun { top:2px; right:6px; left:auto; width:120px; height:120px;
+      background:radial-gradient(circle, rgba(255,248,222,.96) 0%, rgba(255,224,142,.72) 30%, rgba(255,192,116,.36) 54%, rgba(255,176,112,.13) 74%, rgba(255,172,112,0) 92%);
+      filter:blur(4px); animation:wx-sunglow 6s ease-in-out infinite; }
+    @keyframes wx-sunglow { 0%,100%{ opacity:.9; transform:scale(1) } 50%{ opacity:1; transform:scale(1.04) } }
+    /* 떠다니는 노을 구름 — 흐림·비·눈·뇌우 공통(색만 다름) */
+    .hero.wx-dusk .cloud { position:absolute; border-radius:50%; filter:blur(2px); }
+    .hero.wx-dusk .c1 { width:126px; height:46px; top:14px; left:-46px; animation:wx-drift 30s linear infinite; }
+    .hero.wx-dusk .c2 { width:92px; height:34px; top:70px; left:-34px; opacity:.9; animation:wx-drift 42s linear infinite; animation-delay:-12s; }
+    .hero.wx-dusk.w-cloud .cloud { background:#e7a68c; }
+    .hero.wx-dusk.w-cloud .c1 { box-shadow:42px 8px 0 6px #edb69c, 84px -6px 0 0 #e39c82; }
+    .hero.wx-dusk.w-cloud .c2 { box-shadow:36px 6px 0 4px #dd9a80; }
+    .hero.wx-dusk.w-rain .cloud { background:#cf9179; }
+    .hero.wx-dusk.w-rain .c1 { box-shadow:42px 8px 0 6px #cf9179, 84px -6px 0 0 #d89f86; }
+    .hero.wx-dusk.w-rain .c2 { box-shadow:36px 6px 0 4px #c68872; }
+    .hero.wx-dusk.w-snow .cloud { background:#d8a691; }
+    .hero.wx-dusk.w-snow .c1 { box-shadow:42px 8px 0 6px #dfae99, 84px -6px 0 0 #d29d87; }
+    .hero.wx-dusk.w-snow .c2 { box-shadow:36px 6px 0 4px #cd9783; }
+    .hero.wx-dusk.w-storm .cloud { background:#b8836b; }
+    .hero.wx-dusk.w-storm .c1 { box-shadow:42px 8px 0 6px #b8836b, 84px -6px 0 0 #c28e76; }
+    .hero.wx-dusk.w-storm .c2 { box-shadow:36px 6px 0 4px #ad7a62; }
+    /* 노을 비·눈·번개 — 따뜻한 톤 */
+    .hero.wx-dusk .drop { background:linear-gradient(to bottom, rgba(255,236,214,0), rgba(255,240,222,.9)); }
+    .hero.wx-dusk .flake { color:#fff; opacity:.88; filter:blur(.6px); text-shadow:0 1px 3px rgba(150,80,50,.35); }
+    .hero.wx-dusk .flash { background:#fff3d8; }
+
     /* ===== 응원 한 줄 — 히어로 맨 아래 사인오프(다정한 말풍선 아이콘 + 존댓말 한마디) ===== */
     .hero-cheer { margin-top:14px; padding-top:12px; border-top:1px solid rgba(120,140,125,.20);
       display:flex; gap:8px; align-items:flex-start; font-size:11.5px; line-height:1.55; font-weight:650; color:#5a7a67;
