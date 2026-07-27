@@ -736,7 +736,11 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //   2부 배치표에 이름이 뜬 회원만 상태가 잡히고, 근무 배정/티오프 변동 때만 2부 알림. 3부 코드는 일절 안 건드림.
   try {
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
-    if (isBoardImg) {
+    // ★크레딧 절약: 방금 끝낸 3부 판독의 boardTables에 '2부 표'가 실제로 보일 때만 2부 판독을 돌린다.
+    //  3부 전용 배치표(2부 섹션 없음)에선 2부 데이터가 없어 헛읽기 → 스킵(추가 비용 0, 이미 읽은 결과 재사용).
+    const has2buTable = Array.isArray(out.rawVerdict?.boardTables) && out.rawVerdict.boardTables.some((t) => String(t?.part) === '2');
+    if (isBoardImg && !has2buTable) console.log(`·  [2부] 스킵 — 이 배치표엔 2부 표 없음(크레딧 절약): ${full.subject}`);
+    if (isBoardImg && has2buTable) {
       const m2p = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
       const out2 = await judge(full, loadToday(1, '2'), m2p);   // 공유 2부 판독(비싼 부분, board당 1회)
       // ★member 1도 다른 회원과 '동일하게' 2부 명단 기반으로 재해석 — 모델이 전체 배치표의 3부 섹션에 있는
