@@ -506,9 +506,9 @@
       body.anim-play .nav.reveal { animation-name:enterNavUp; animation-timing-function:cubic-bezier(.2,.7,.3,1); }
       /* 메인 대시보드: 우상단(해 위치)에서 원형으로 열리는 아이리스 — 1.2초 */
       body.anim-play #todayHero { animation:enterIris 1.2s cubic-bezier(.28,.62,.24,1) both; animation-delay:70ms; }
-      /* 히어로 내부 문구·명단은 카드가 충분히 열린 뒤 층층이 떠오름(1.2초 아이리스에 맞춰) */
-      body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .5s cubic-bezier(.22,.61,.36,1) both;
-        animation-delay:calc(700ms + var(--j,0) * 78ms); }
+      /* 히어로 내부 문구·명단은 아이리스가 열리는 동안 딸려 들어와 카드와 함께 마무리(꼬리 딜레이 제거) */
+      body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .46s cubic-bezier(.22,.61,.36,1) both;
+        animation-delay:calc(360ms + var(--j,0) * 64ms); }
     }
     @keyframes enterRise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
     @keyframes enterRiseIn { from { opacity:0; transform:translateY(11px); } to { opacity:1; transform:none; } }
