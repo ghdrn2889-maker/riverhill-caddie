@@ -1030,12 +1030,12 @@ function wlCard(d, roundKm) {
   const nPhoto = d.photos ? Object.keys(d.photos).length : 0;
   let right, meta;
   if (d.worked == null) {
-    right = `<button class="wl-btn wl-yes" data-w="1" data-d="${d.date}">예</button><button class="wl-btn wl-no" data-w="0" data-d="${d.date}">아니오</button>`;
+    right = `<div class="wl-right"><button class="wl-btn wl-yes" data-w="1" data-d="${d.date}">예</button><button class="wl-btn wl-no" data-w="0" data-d="${d.date}">아니오</button></div>`;
     meta = `<span>근무 확정 감지 · 근무하셨나요?</span>`;
   } else if (d.worked === false) {
-    right = `<span class="wl-chip x">안 함</span>`; meta = `<span>근무 안 한 날</span>`;
+    right = `<div class="wl-right"><span class="wl-chip x">안 함</span><button class="wl-change" data-d="${d.date}">변경</button></div>`; meta = `<span>근무 안 한 날</span>`;
   } else {
-    right = `<span class="wl-chip ok">✓ 근무</span>`;
+    right = `<div class="wl-right"><span class="wl-chip ok">✓ 근무</span><button class="wl-change" data-d="${d.date}">변경</button></div>`;
     const ph = nPhoto > 0 ? `<span class="ph">📷 ${nPhoto}장</span>` : `<span class="ph miss">📷 사진 미입력</span>`;
     const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
     meta = `${ph}${odo}`;
@@ -1073,6 +1073,15 @@ function wlCard(d, roundKm) {
     </div>${panel}</div>`;
 }
 
+// 예/아니오 선택 배선 — 최초 카드와 '변경' 후 재선택 모두에 공용. 취소는 원래 확정값으로 복원.
+function wlBindChoice(scope) {
+  scope.querySelectorAll('button[data-w]').forEach((b) => {
+    b.onclick = async (e) => { e.stopPropagation(); await postJSON('/api/worklog/confirm', { date: b.dataset.d, worked: b.dataset.w === '1' }); reloadWorklog(); };
+  });
+  scope.querySelectorAll('.wl-cancel').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); reloadWorklog(); };
+  });
+}
 function wlBind() {
   // 카드 펼침/접힘(버튼 클릭은 제외)
   $('wlDays').querySelectorAll('.wl-card').forEach((el) => {
@@ -1085,9 +1094,16 @@ function wlBind() {
       el.classList.toggle('open');
     };
   });
-  // 예/아니오
-  $('wlDays').querySelectorAll('button[data-w]').forEach((b) => {
-    b.onclick = async () => { await postJSON('/api/worklog/confirm', { date: b.dataset.d, worked: b.dataset.w === '1' }); reloadWorklog(); };
+  // 예/아니오 (최초 선택 + 재선택 공용)
+  wlBindChoice($('wlDays'));
+  // 확정 후 '변경' → 그 자리에서 예/아니오 다시 고르기(취소하면 원래대로 복원)
+  $('wlDays').querySelectorAll('.wl-change').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const box = b.closest('.wl-right'); if (!box) return;
+      box.innerHTML = `<button class="wl-btn wl-yes" data-w="1" data-d="${b.dataset.d}">예</button><button class="wl-btn wl-no" data-w="0" data-d="${b.dataset.d}">아니오</button><button class="wl-cancel" data-d="${b.dataset.d}">취소</button>`;
+      wlBindChoice(box);
+    };
   });
   // 계기판 사진 업로드
   $('wlDays').querySelectorAll('input[type=file][data-leg]').forEach((inp) => {
