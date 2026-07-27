@@ -504,11 +504,11 @@
       body.anim-play .reveal { opacity:0; animation:enterRise .56s cubic-bezier(.22,.61,.36,1) both;
         animation-delay:calc(var(--i,0) * 66ms); }
       body.anim-play .nav.reveal { animation-name:enterNavUp; animation-timing-function:cubic-bezier(.2,.7,.3,1); }
-      /* 메인 대시보드: 우상단(해 위치)에서 원형으로 열리는 아이리스 */
-      body.anim-play #todayHero { animation:enterIris .72s cubic-bezier(.3,.7,.3,1) both; animation-delay:70ms; }
-      /* 히어로 내부 문구·명단은 카드가 열린 뒤 층층이 떠오름 */
-      body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .5s cubic-bezier(.22,.61,.36,1) both;
-        animation-delay:calc(360ms + var(--j,0) * 78ms); }
+      /* 메인 대시보드: 우상단(해 위치)에서 원형으로 열리는 아이리스 — 2초에 걸쳐 천천히 */
+      body.anim-play #todayHero { animation:enterIris 2s cubic-bezier(.28,.62,.24,1) both; animation-delay:70ms; }
+      /* 히어로 내부 문구·명단은 카드가 충분히 열린 뒤 층층이 떠오름(2초 아이리스에 맞춰 뒤로) */
+      body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .52s cubic-bezier(.22,.61,.36,1) both;
+        animation-delay:calc(1180ms + var(--j,0) * 92ms); }
     }
     @keyframes enterRise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
     @keyframes enterRiseIn { from { opacity:0; transform:translateY(11px); } to { opacity:1; transform:none; } }
