@@ -515,6 +515,48 @@
     @keyframes enterNavUp { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
     @keyframes enterIris { from { clip-path:circle(8% at 84% 20%); } to { clip-path:circle(150% at 84% 20%); } }
 
+    /* ===== 대기(스플래시) 화면 — 골프공 바운스. 실행/새로고침 로딩 동안 노출 후 페이드아웃 ===== */
+    .ldg-screen { position:fixed; inset:0; z-index:1200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+      background:radial-gradient(120% 80% at 50% 18%, #f2f8f5 0%, #e6efea 60%, #dde9e3 100%);
+      transition:opacity .45s ease, visibility .45s ease; }
+    .ldg-screen.hide { opacity:0; visibility:hidden; pointer-events:none; }
+    .ldg-stage { position:relative; width:80px; height:96px; }
+    .ldg-ball { position:absolute; left:14px; top:0; width:52px; height:52px; border-radius:50%;
+      background:
+        radial-gradient(4px 4px at 34% 32%, rgba(150,170,160,.35), transparent 60%),
+        radial-gradient(4px 4px at 56% 30%, rgba(150,170,160,.30), transparent 60%),
+        radial-gradient(4px 4px at 44% 46%, rgba(150,170,160,.30), transparent 60%),
+        radial-gradient(4px 4px at 66% 50%, rgba(150,170,160,.28), transparent 60%),
+        radial-gradient(4px 4px at 30% 58%, rgba(150,170,160,.26), transparent 60%),
+        radial-gradient(4px 4px at 52% 64%, rgba(150,170,160,.24), transparent 60%),
+        radial-gradient(circle at 38% 32%, #ffffff 0%, #f0f3f2 58%, #d9e2dd 100%);
+      box-shadow:inset -4px -5px 9px rgba(90,110,100,.22); animation:ldg-bounce 1.1s cubic-bezier(.5,0,.5,1) infinite; }
+    .ldg-shadow { position:absolute; left:20px; bottom:0; width:40px; height:9px; border-radius:50%;
+      background:radial-gradient(closest-side, rgba(40,70,55,.28), rgba(40,70,55,0)); animation:ldg-shadow 1.1s cubic-bezier(.5,0,.5,1) infinite; }
+    @keyframes ldg-bounce { 0%,100%{ transform:translateY(0) scaleY(.92) scaleX(1.05); } 12%{ transform:translateY(0) scaleY(1) scaleX(1); } 50%{ transform:translateY(-40px) scaleY(1.03) scaleX(.98); } 88%{ transform:translateY(0) scaleY(1); } }
+    @keyframes ldg-shadow { 0%,100%{ transform:scale(1); opacity:.5 } 50%{ transform:scale(.6); opacity:.22 } }
+    .ldg-brand { text-align:center; }
+    .ldg-wm { font-size:13px; font-weight:800; letter-spacing:.2em; color:#2c463b; }
+    .ldg-sub { font-size:11px; color:#5f7a6e; margin-top:5px; }
+    .ldg-sub::after { content:'···'; animation:ldg-dots 1.4s steps(4) infinite; }
+    @keyframes ldg-dots { 0%{content:''} 25%{content:'·'} 50%{content:'··'} 75%,100%{content:'···'} }
+    @media (prefers-color-scheme:dark) {
+      .ldg-screen { background:radial-gradient(120% 80% at 50% 18%, #16211b 0%, #101913 60%, #0c120e 100%); }
+      .ldg-wm { color:#cfe0d6; } .ldg-sub { color:#8ba596; }
+      .ldg-ball { background:
+        radial-gradient(4px 4px at 34% 32%, rgba(60,80,70,.5), transparent 60%),
+        radial-gradient(4px 4px at 56% 30%, rgba(60,80,70,.42), transparent 60%),
+        radial-gradient(4px 4px at 44% 46%, rgba(60,80,70,.42), transparent 60%),
+        radial-gradient(4px 4px at 66% 50%, rgba(60,80,70,.40), transparent 60%),
+        radial-gradient(4px 4px at 30% 58%, rgba(60,80,70,.38), transparent 60%),
+        radial-gradient(4px 4px at 52% 64%, rgba(60,80,70,.36), transparent 60%),
+        radial-gradient(circle at 38% 32%, #f4f7f5 0%, #dfe6e1 58%, #b9c6bd 100%);
+        box-shadow:inset -4px -5px 9px rgba(20,35,26,.35); }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      .ldg-ball, .ldg-shadow, .ldg-sub::after { animation:none; } .ldg-sub::after { content:'…'; }
+    }
+
     /* ===== 응원 한 줄 — 히어로 맨 아래 사인오프(다정한 말풍선 아이콘 + 존댓말 한마디) ===== */
     .hero-cheer { margin-top:14px; padding-top:12px; border-top:1px solid rgba(120,140,125,.20);
       display:flex; gap:8px; align-items:flex-start; font-size:11.5px; line-height:1.55; font-weight:650; color:#5a7a67;
@@ -683,6 +725,12 @@
   </style>
 </head>
 <body>
+  <!-- 대기(스플래시) 화면 — 실행/새로고침 로딩 동안 노출, 준비되면 페이드아웃. JS가 .hide 부여 -->
+  <div id="splash" class="ldg-screen" aria-hidden="true">
+    <div class="ldg-stage"><div class="ldg-ball"></div><div class="ldg-shadow"></div></div>
+    <div class="ldg-brand"><div class="ldg-wm">RIVERHILL CADDIE</div><div class="ldg-sub">일정 불러오는 중</div></div>
+  </div>
+
   <header class="top reveal" style="--i:0">
     <div class="toprow">
       <span class="brand">RIVERHILL CADDIE</span>

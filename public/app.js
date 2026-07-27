@@ -518,9 +518,11 @@ function offCourseHTML() {
   </div>`;
 }
 
+// 대기(스플래시) 화면 감추기 — 준비되면 페이드아웃. 여러 곳에서 불려도 무해(idempotent).
+function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
 function renderToday(t) {
-  if (!_heroEntered) { _heroEntered = true; document.body.classList.add('anim-play'); }
+  if (!_heroEntered) { _heroEntered = true; hideSplash(); document.body.classList.add('anim-play'); }
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';
@@ -1332,6 +1334,7 @@ async function loadMe() {
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
 }
 function showPending() {
+  hideSplash();
   $('pendName').textContent = (meState.profile && meState.profile.boardName) || '회원';
   $('pendingOv').hidden = false;
 }
@@ -1388,6 +1391,7 @@ window.addEventListener('popstate', () => {
   if (ovIsOpen() && ovDismissable) { $('ov').hidden = true; ovDismissable = false; }
 });
 function showLogin() {
+  hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
   $('loginOv').hidden = false;
@@ -1408,6 +1412,7 @@ function fillProfileForm() {
   $('obCar').value = p.carNo || '';
 }
 function openOnboarding() {
+  hideSplash();
   $('ovTitle').textContent = '가입을 완성해주세요';
   $('ovDesc').innerHTML = '근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.';
   $('obSubmit').textContent = '가입 완료';
@@ -1472,6 +1477,7 @@ async function main() {
   await refreshPushHealth();
   loadMe();
   loadToday(); loadWatchHealth(); loadRecent();
+  setTimeout(hideSplash, 3500);   // 안전장치: 어떤 이유로든 3.5초 뒤엔 대기화면 해제(무한 대기 방지)
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
   setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
 }
