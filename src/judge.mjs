@@ -671,12 +671,17 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       //  명단이 비거나 불완전(buildPositionalRoster가 null)하면 1회 재시도(일시 몰림 대비). 조 명부는 이미 수확한 이미지면 건너뜀.
       const imgKey = article.images?.[0] || '';
       const doCrew = !!imgKey && !alreadyHarvested(imgKey);
-      let ordered = await analyzeRoster(article, member.part);
-      let built = buildPositionalRoster(ordered, verdict);
-      if (!built) {                                   // 빈값·불완전 → 몰림/일시 실패로 보고 1회 재시도
-        console.log(`↻ [roster] ${member.part}부 명단 재시도(1차 ${ordered.length}행)`);
-        ordered = await analyzeRoster(article, member.part);
-        built = buildPositionalRoster(ordered, verdict);
+      // 대상 회원이 명단에 있어야 그 부(部) 명단이 맞다 — 없으면 다른 부 섹션을 오독한 것(공백 무시 부분일치).
+      //  ★단, 메인 판독이 실제로 내 순번을 찾았을 때만(myPos>0) 이 검사를 건다 — 내가 그 부에 아예 없는 날(순번 없음)엔
+      //   명단에 내가 없는 게 정상이라 헛 재시도(크레딧 낭비)를 피한다.
+      const nameKey = String(member.name || '').replace(/\s/g, '');
+      const myPos = Number(verdict?.myPosition) || 0;
+      const hasMe = (b) => (b ? b.roster.some((n) => String(n).replace(/\s/g, '').includes(nameKey)) : false);
+      let built = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
+      if (!built || (nameKey && myPos > 0 && !hasMe(built))) {   // 빈값·불완전·또는 (순번 있는데 명단에 내가 없음=다른 부 오독) → 1회 재시도
+        console.log(`↻ [roster] ${member.part}부 명단 재시도 (1차 내포함=${built ? hasMe(built) : 'null'})`);
+        const built2 = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
+        if (built2 && (hasMe(built2) || !built)) built = built2; // 재시도가 나를 포함하면 채택(다른 부 교정), 1차 실패면 재시도 사용
       }
       const crews = doCrew ? await analyzeCrews(article) : [];
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
