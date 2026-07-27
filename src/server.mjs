@@ -95,7 +95,7 @@ app.post('/api/telemetry', requireAuth, (req, res) => {
 //  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
 //  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
-const OPEN_API = ['/config', '/health', '/ingest', '/auth', '/me', '/logout'];
+const OPEN_API = ['/config', '/health', '/ingest', '/simulate', '/auth', '/me', '/logout'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   if (req.user || OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
@@ -197,6 +197,11 @@ app.get('/api/ingest', handleIngest); // 폰 브라우저·간단 포워더용(�
 app.post('/api/simulate', async (req, res) => {
   const id = req.body?.id || req.query.id;
   if (!id) return res.status(400).json({ error: 'id 필요 (예: /api/simulate?id=26231)' });
+  // 인증: 로그인 세션(관리자) 또는 INGEST_TOKEN(자동화·관리자 재처리 트리거). /api/ingest와 동일 보안.
+  const token = req.get('x-token') || req.query.token || req.body?.token;
+  if (!req.user && process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
+    return res.status(401).json({ error: '인증 실패(로그인 또는 토큰 필요)' });
+  }
   try {
     const full = await fetchArticle(id);
     const out = await notifyForArticle(full, { hits: [], priority: 'high' }, { force: true });
