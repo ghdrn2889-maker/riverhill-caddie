@@ -683,7 +683,9 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       const myPos = Number(verdict?.myPosition) || 0;
       const hasMe = (b) => (b ? b.roster.some((n) => String(n).replace(/\s/g, '').includes(nameKey)) : false);
       let built = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
-      if (!built || (nameKey && myPos > 0 && !hasMe(built))) {   // 빈값·불완전·또는 (순번 있는데 명단에 내가 없음=다른 부 오독) → 1회 재시도
+      // ★hasMe 재시도는 회원이 그 부 배치표에 '반드시 있는' 부(3부=김홍구 홈)에서만 유효.
+      //  2부처럼 회원이 대개 명단에 없는 부에선 역효과(정상인데 재시도, 오히려 3부로 잘못 읽히면 이름이 있어 재시도 안 함) → 3부 한정.
+      if (!built || (member.part === '3' && nameKey && myPos > 0 && !hasMe(built))) {   // 빈값·불완전·또는 (3부에서 순번 있는데 명단에 내가 없음=다른 부 오독) → 1회 재시도
         console.log(`↻ [roster] ${member.part}부 명단 재시도 (1차 내포함=${built ? hasMe(built) : 'null'})`);
         const built2 = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
         if (built2 && (hasMe(built2) || !built)) built = built2; // 재시도가 나를 포함하면 채택(다른 부 교정), 1차 실패면 재시도 사용

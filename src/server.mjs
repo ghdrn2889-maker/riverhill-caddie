@@ -717,29 +717,28 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   }
   rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
 
-  // ── 섬도(그림자) 2부 감지 — "2, 3 출근"의 1단계. 정확도 검증 전용. ──
-  //  ★알림/피드/저널/근무일지 일절 없음. 같은 board를 2부 창(10~16시)으로 한 번 더 판독해
-  //   today2.json + shadow-part2.jsonl 에만 기록. env(SHADOW_PART2=1) + 1번 회원 + 배치표 이미지 한정.
-  if (process.env.SHADOW_PART2 === '1') {
-    try {
-      const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
-      if (isBoardImg) {
-        const m2 = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
-        const out2 = await judge(full, loadToday(1, '2'), m2);
-        const v2 = out2.rawVerdict;
-        let nx = loadToday(1, '2');
-        if (v2) { const merged2 = applyVerdict(loadToday(1, '2'), v2, full, { teeMin: 10, teeMax: 16 }); nx = merged2.next; saveToday(nx, 1, '2'); }
-        appendJSONL('shadow-part2.jsonl', {
-          at: Date.now(), articleId: full.id, subject: full.subject || '',
-          relevant: !!out2.relevant, part: v2?.part || null,
-          myStatus: v2?.myStatus || null, myPosition: v2?.myPosition ?? null,
-          teeTime: nx?.teeTime || null, course: nx?.course || null, status: nx?.status || null,
-          confidence: v2?.confidence ?? null, boardTables: v2?.boardTables || null, uncertain: v2?._uncertain || null,
-        });
-        console.log(`🕵️  [섬도 2부] ${full.subject} → relevant=${out2.relevant} status=${nx?.status || '-'} tee=${nx?.teeTime || '-'} pos=${nx?.myPosition ?? '-'} part=${v2?.part || '-'}`);
+  // ── 2부 감지("2, 3 출근") — 2부 배치표 창(10~16시)으로 board를 한 번 더 판독해 today2.json에 전 회원 반영. ──
+  //  ★위 3부 경로와 '완전 분리'된 평행 슬롯(today2.json). 배치표 이미지일 때만(비용: board당 판독 +1회).
+  //   2부 배치표에 이름이 뜬 회원만 상태가 잡히고, 근무 배정/티오프 변동 때만 2부 알림. 3부 코드는 일절 안 건드림.
+  try {
+    const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
+    if (isBoardImg) {
+      const m2p = { name: primary.name, part: '2', commuteMin: primary.commuteMin, teeMin: 10, teeMax: 16 };
+      const out2 = await judge(full, loadToday(1, '2'), m2p);   // 공유 2부 판독(비싼 부분, board당 1회)
+      // ★member 1도 다른 회원과 '동일하게' 2부 명단 기반으로 재해석 — 모델이 전체 배치표의 3부 섹션에 있는
+      //  본인(예: 김홍구 3부 22번)을 2부로 오검출하는 것을 차단(2부 명단에 없으면 순번 없음 = 2부 무관).
+      const m1out2 = interpretForMember(full, out2.rawVerdict, m2p, loadToday(1, '2'));
+      await processForMember2(1, m2p, m1out2, full, opts);
+      for (const m of activeMembers()) {
+        if (m.id === 1) continue;
+        try {
+          const member2 = { name: m.board_name, part: '2', commuteMin: Number(m.commute_min), teeMin: 10, teeMax: 16 };
+          const mout2 = interpretForMember(full, out2.rawVerdict, member2, loadToday(m.id, '2'));
+          await processForMember2(m.id, member2, mout2, full, opts);
+        } catch (e) { console.error(`[회원 ${m.id} 2부 처리 오류]`, e.message); }
       }
-    } catch (e) { console.error('[섬도 2부 오류]', e.message); }
-  }
+    }
+  } catch (e) { console.error('[2부 감지 오류]', e.message); }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
@@ -876,6 +875,54 @@ async function processForMember(userId, member, out, full, opts = {}) {
   await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
+}
+
+// ── 2부 슬롯(today2.json) 전용 처리 — "2, 3 출근"의 2부 라운드. 3부(processForMember)와 완전 분리. ──
+//  ★2부 배치표에 이름이 뜬 회원만 상태가 잡힘. 근무 배정/티오프 변동 등 '의미있는 변동'일 때만 2부 알림.
+//   현재 단계: 상황판(today2) 갱신 + 알림. (저널·세무 2탕은 다음 단계에서 데이터모델 확장과 함께.)
+async function processForMember2(userId, member, out, full, opts = {}) {
+  const v = out.rawVerdict;
+  if (!out.relevant || !v) return { pushed: false };
+  const today2 = loadToday(userId, '2');
+  // 2부와 무관한 회원(2부 명단에 이름 없음 + 기존 2부 상태도 없음)이면 슬롯 자체를 만들지 않음(잡음 방지).
+  const hadState = !!(today2 && (today2.myPosition || today2.teeTime || (today2.status && today2.status !== 'unknown')));
+  const hasNow = Number(v.myPosition) > 0;
+  if (!hadState && !hasNow) return { pushed: false };
+
+  const merged = applyVerdict(today2, v, full, { teeMin: 10, teeMax: 16 });
+  saveToday(merged.next, userId, '2');
+  const n = merged.next, change = merged.change;
+  const isWork2 = ['assigned', 'work', 'your_turn'].includes(n.status);
+
+  // 알림: 2부 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
+  const chgs = change.changes || [];
+  const teeChg = chgs.find((c) => c.field === 'tee');
+  const gotTee = chgs.some((c) => c.field === 'tee_new');
+  const becameWork = chgs.some((c) => ['status', 'cutline', 'teamcount'].includes(c.field) && ['assigned', 'work', 'your_turn'].includes(c.to));
+  let title = '', body = '', push = 'low';
+  if (isWork2 && (teeChg || gotTee || becameWork)) {
+    if (teeChg) { title = '⚠️ 2부 티오프 변경!'; body = `${member.name}님, 2부 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
+    else if (n.teeTime) { title = '⛳ 2부 근무 배정!'; body = `${member.name}님, 오늘 2부 근무예요. 티오프 ${n.teeTime}${n.course ? `(${n.course})` : ''} — 2부 뛰고 이어서 3부까지 두 탕이에요.`; }
+    else { title = '⛳ 2부 근무권!'; body = `${member.name}님, 오늘 2부 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.`; }
+    push = 'high';
+  }
+  if (push === 'low') {
+    if (userId === 1) console.log(`·  [2부] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);
+    return { pushed: false };
+  }
+  // 2부 전용 중복 억제(pushlog2.json) — 3부 pushlog과 분리.
+  if (!opts.force && !change.reversal) {
+    const sig = `${n.status}|${n.teeTime || ''}|${n.course || ''}|${n.myPosition || ''}`;
+    const WINDOW = Number(process.env.PUSH_DEDUP_HOURS ?? 8) * 3600 * 1000;
+    const now = Date.now();
+    const log = loadUserJSON(userId, 'pushlog2.json', {});
+    for (const k of Object.keys(log)) if (now - log[k] > WINDOW) delete log[k];
+    if (log[sig] != null) { saveUserJSON(userId, 'pushlog2.json', log); return { pushed: false }; }
+    log[sig] = now; saveUserJSON(userId, 'pushlog2.json', log);
+  }
+  await broadcast({ title, body, url: full.url, level: push }, userId);
+  console.log(`🔔 [회원${userId}·2부${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
+  return { pushed: true };
 }
 
 // 근무일 차량기록 리마인더: 저녁(기본 22시) 이후, 기록 비어있는 근무일이 있으면 상기 푸시.
