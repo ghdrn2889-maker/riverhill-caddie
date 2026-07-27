@@ -266,15 +266,36 @@ function todayISOKST() {
 
 // 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
 app.get('/api/today', (req, res) => {
-  const t = loadToday(req.user?.id || 1);
+  const uid = req.user?.id || 1;
+  const nowISO = todayISOKST();
+  let t = loadToday(uid);            // 3부(홈 베이스) 우선
+  let primaryPart = '3';
+  const t3ISO = t ? worklog.labelToISO(t.date) : null;
+  const t3Usable = t && !(t3ISO && t3ISO < nowISO);   // 3부가 있고 낡지 않음(휴무·스페어·근무 전부 포함)
+  // ★순수 '1부만/2부만' 날: 3부 슬롯이 비었거나 낡았으면 1·2부에서 대표 라운드를 골라 히어로로 쓴다.
+  //  (3부가 멀쩡하면 이 블록은 건너뜀 → 기존 3부 동작 100% 보존.)
+  if (!t3Usable) {
+    const cands = [];
+    for (const pp of ['1', '2']) {
+      const s = loadToday(uid, pp);
+      if (!s) continue;
+      const iso = worklog.labelToISO(s.date);
+      if (iso && iso < nowISO) continue;                 // 과거(낡음) 제외
+      const work = ['assigned', 'work', 'your_turn'].includes(s.status);
+      const spare = ['spare', 'waiting', 'near'].includes(s.status) && Number(s.myPosition) > 0;
+      if (!work && !spare) continue;
+      cands.push({ part: pp, s, work });
+    }
+    if (cands.length) {
+      cands.sort((a, b) => (a.work ? 0 : 1) - (b.work ? 0 : 1) || Number(a.part) - Number(b.part)); // 근무 먼저, 그다음 1→2
+      t = cands[0].s; primaryPart = cands[0].part;
+    }
+  }
   if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
 
-  // ── 낡은 상태 가드 ──
-  //  today.json의 날짜(=근무 대상일)가 '오늘'보다 과거면, 새 배치표를 아직 못 읽어
-  //  어제(그제)의 확정값이 남아 있는 것. 이 낡은 티오프를 오늘 것처럼 보이면 안 됨.
-  //  (다음날 배치표는 전날 올라오므로 date가 미래인 건 정상 → 그건 그대로 표시.)
+  // ── 낡은 상태 가드 ── (대표가 3부일 때만; 1·2부 대표는 위에서 이미 낡음 제외)
   const tISO = worklog.labelToISO(t.date);
-  if (tISO && tISO < todayISOKST()) {
+  if (primaryPart === '3' && tISO && tISO < nowISO) {
     return res.json({
       ok: true, empty: true, stale: true, staleDate: t.date,
       message: '오늘 배치표를 아직 확보하지 못했어요. (마지막 확인: ' + t.date + ')',
@@ -286,18 +307,17 @@ app.get('/api/today', (req, res) => {
   p.push(statusKo(t.status));
   if (t.teeTime) p.push(`티오프 ${t.teeTime}${t.course ? `(${t.course})` : ''}`);
   if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
-  const prof = getProfile(req.user?.id || 1) || {};
+  const prof = getProfile(uid) || {};
   const commute = t.teeTime ? commuteInfo(t.teeTime, prof.commute_min) : null;
   // 근무 대상일이 며칠 뒤인지(0=오늘, 1=내일…). 저녁에 뜬 '내일 배치표'를 오늘로 오인하지 않게.
   let dayOffset = 0;
-  if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(todayISOKST())) / 86400000);
+  if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(nowISO)) / 86400000);
 
   // ── 다중 라운드(조출·2탕·세 탕) — 같은 날 1·2·3부 활성 라운드를 배열로 내려보냄(카드 스택·조합 요약용). ──
   //  ★근무 라운드는 항상, 스페어(대기)는 순번이 있을 때만 카드로. 다른 날짜 슬롯은 제외.
-  const uid = req.user?.id || 1;
   const rounds = [];
   for (const pp of ['1', '2', '3']) {
-    const tp = pp === '3' ? t : loadToday(uid, pp);
+    const tp = (pp === primaryPart) ? t : loadToday(uid, pp);
     if (!tp) continue;
     const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);
     const isSpare = ['spare', 'waiting', 'near'].includes(tp.status);
@@ -318,7 +338,7 @@ app.get('/api/today', (req, res) => {
   // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
   const r2 = rounds.find((r) => r.part === '2' && r.kind === 'work');
   const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
-  res.json({ ok: true, date: t.date, dayOffset, summary: `${t.name} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2 });
+  res.json({ ok: true, date: t.date, dayOffset, primaryPart, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2 });
 });
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.

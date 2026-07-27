@@ -485,6 +485,9 @@ function renderToday(t) {
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const isSpare = st === 'spare' || st === 'waiting' || st === 'near';
   const posTxt = s.myPosition ? ` · ${s.myPosition}번째` : '';
+  // 대표 라운드(히어로가 담당하는 부) — 보통 3부지만, 순수 1부만/2부만 날엔 그 부가 히어로.
+  const heroPart = t.primaryPart ? `${t.primaryPart}부` : (s.part || '3부');
+  const heroPfx = (t.primaryPart && t.primaryPart !== '3') ? `${heroPart} ` : ''; // 비3부 대표면 제목에 부 표기
   // 근무 대상일(0=오늘, 1=내일, 2=모레…). 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
   const off = Number(t.dayOffset) || 0;
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
@@ -497,10 +500,10 @@ function renderToday(t) {
   } else {
     stopOffTitle();
     $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
-      : isConfirmed ? `${dayW} 근무 확정`
-      : isWork ? `${dayW} 근무 예정`
+      : isConfirmed ? `${dayW} ${heroPfx}근무 확정`
+      : isWork ? `${dayW} ${heroPfx}근무 예정`
       : st === 'off' ? `${dayW} 휴무예요`
-      : isSpare ? `${dayW} ${s.part || '3부'} 스페어${posTxt}` : '대기 중';
+      : isSpare ? `${dayW} ${heroPart} 스페어${posTxt}` : '대기 중';
   }
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
     : (isWork && !s.teeTime) ? '순번상 근무권에 들었어요. 티오프가 매칭되면 시간을 알려드릴게요.'
@@ -509,7 +512,8 @@ function renderToday(t) {
     : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
-  renderBoard(t);
+  // 3부 순번 리스트(보드 상세)는 3부가 대표일 때만 — 순수 1·2부 날엔 3부 대기명단이 무의미.
+  if ((t.primaryPart || '3') === '3') renderBoard(t); else $('boardSlot').innerHTML = '';
   renderRoundsStack(t);
 }
 // 라운드 카드 스택(다중 라운드: 조출·두 탕·세 탕) — 요약 스트립 + 1·2부 라운드 카드를 3부 히어로 위에.
@@ -518,7 +522,8 @@ function renderRoundsStack(t) {
   const el = $('round2Slot');
   if (!el) return;
   const rounds = Array.isArray(t && t.rounds) ? t.rounds : [];
-  const extra = rounds.filter((r) => r.part !== '3');   // 1·2부 라운드만 카드로
+  const heroPart = (t && t.primaryPart) || '3';          // 히어로가 담당하는 부는 카드에서 제외(중복 방지)
+  const extra = rounds.filter((r) => r.part !== heroPart);
   if (!extra.length) { el.hidden = true; el.innerHTML = ''; return; }
   const sum = (t && t.roundsSummary) || {};
   const off = Number(t && t.dayOffset) || 0;
