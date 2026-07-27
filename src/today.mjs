@@ -63,7 +63,8 @@ function parseAddedTees(article) {
 function parseCutoff(article) {
   const t = `${article?.subject || ''} ${article?.text || ''}`;
   // 이름(2~4자 한글) + (님) 까지 … 근무/일됩니다/나갑니다/콜/배정/출근. 이름 앞 "N번"이 있으면 순번으로.
-  const m = t.match(/(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님?\s*까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/);
+  //  ★'님' 필수 — "오늘까지 근무" 같은 비인명 오탐 방지(마샬 글은 항상 "○○님까지").
+  const m = t.match(/(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님\s*까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/);
   if (!m) return null;
   return { name: m[2], pos: m[1] ? Number(m[1]) : null };
 }
