@@ -142,6 +142,7 @@ ${postedLine}
 - ★약어(캐디 은어, 오독 주의): **"당추"="당일추가"** — 그날 갑자기 팀이 더 생겨 근무 커트라인이 뒤로 밀린다(=더 많은 사람이 근무). "당직"과 절대 혼동 금지. "조출"=조기출근, "후출"=후발출근, "노쇼"=예약 불참.
 - ★표기: **"인코스/아웃(코스) HHMM"**(네 자리 숫자)=코스(IN/OUT)+티오프 시각(예 "인코스 1722"→IN코스 17:22, "아웃 1735"→OUT 17:35). 이 티오프 시각이 ${part}부 시간대(${wdesc})면 부 표시가 없어도 ${part}부 글입니다.
 - ★**"N번 ○○님까지"의 N(숫자+'번')은 대기 순번입니다(홀 번호·시각 아님).** 예: "당추 17번 조하빈님까지 근무입니다"=순번 17번 조하빈님까지 근무 확정 → cutoffName="조하빈", cutoffPosition=17, cutoffAnnounced=true, relevant=true. 이런 커트라인/당추 글은 "${name}"의 순번과 직접 관련되니 절대 무관(relevant=false)으로 버리지 마세요.
+- ★당추(당일추가)로 **새 예약이 끼워진 티오프 시각**이 글에 있으면 addedTees 에 {time,course}로 넣으세요. 예 "인코스 1722 당추…" → addedTees=[{"time":"17:22","course":"IN"}], "아웃 1735 당추" → [{"time":"17:35","course":"OUT"}]. 여러 개면 모두. 당추로 삽입된 시각이 아니면 [].
 - 순번 교환: 이름 옆에 (54)/(2,3)이 아닌 '다른 사람 이름'이 붙으면 두 사람이 자리를 맞바꾼 것. 그 자리의 진짜 대기자는 '바뀐 사람'. "${name}"의 진짜 순번은 "${name}"이 실제 들어간 자리로 판단.
 - 스페어 = 대기(당일 근무로 바뀔 수 있음, 휴무 아님). "가배치/임시배치"는 참고용이니 relevant=false 로.
 
@@ -209,6 +210,7 @@ ${postedLine}
   "cutoffAnnounced": true 또는 false (텍스트에 '○○까지' 명시 여부),
   "cutoffName": "명시된 커트라인 이름, 없으면 빈칸",
   "cutoffPosition": 정수 또는 null,
+  "addedTees": [{ "time": "HH:MM", "course": "OUT 또는 IN" }],
   "teamCount": "현재 ${part}부 예약 팀 수 정수 (예: '현재 3부 16팀'·'3부 16팀 운영' → 16). = 순번 그 번호까지 근무 확정을 뜻함. 다른 부 수치이거나 팀 수 언급 없으면 null",
   "teeTime": "${name} 본인 배정 티오프 HH:MM(${wdesc}·본인 자리일 때만). 남의 시간이거나 시간대 밖이면 null",
   "course": "OUT 또는 IN 또는 빈칸",
@@ -816,6 +818,7 @@ export function interpretForMember(article, shared, member, today = null) {
     cutoffAnnounced: shared.cutoffAnnounced,
     cutoffName: shared.cutoffName,
     cutoffPosition: shared.cutoffPosition,
+    addedTees: shared.addedTees,
     teamCount: shared.teamCount,
     teeGrid: shared.teeGrid,
     part3Roster: shared.part3Roster,

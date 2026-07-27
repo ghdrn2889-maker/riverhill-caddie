@@ -37,6 +37,36 @@ function blank(date) {
 const isWork = (s) => ['assigned', 'work', 'your_turn'].includes(s);
 const isWait = (s) => ['spare', 'waiting', 'near', 'unknown'].includes(s);
 
+// 티오프표를 '시각 오름차순(동시각이면 OUT→IN)'으로 정렬해 순번 1..N 재부여.
+//  ★당추(당일추가)로 예약이 중간에 끼면, 전체를 다시 시각순으로 세우고 순번을 다시 매긴다
+//   → 뒤 순번은 한 칸씩 이른 시간으로 당겨지고, 새 막차가 마지막 슬롯을 받는다(리버힐 운영 규칙).
+//   course(OUT/IN)는 슬롯마다 보존(사용자 티오프 코스 표기용).
+// 당추(당일추가) 글 텍스트에서 '새로 끼워진 예약'의 티오프 시각을 결정적으로 파싱.
+//  예 "인코스 1722 당추 …" → [{time:'17:22',course:'IN'}], "아웃 1735 당추" → [{time:'17:35',course:'OUT'}].
+//  ★'당추/당일추가' 키워드가 있을 때만(오탐 방지). LLM 추출(verdict.addedTees)이 놓쳐도 이걸로 보완.
+function parseAddedTees(article) {
+  const t = `${article?.subject || ''} ${article?.text || ''}`;
+  if (!/당추|당일\s*추가/.test(t)) return [];
+  const out = [];
+  const re = /(인코스|아웃코스|인|아웃|out|in)\s*(\d{1,2}):?(\d{2})\b/gi;
+  let m;
+  while ((m = re.exec(t))) {
+    const c = /in|인/i.test(m[1]) ? 'IN' : 'OUT';
+    const h = Number(m[2]), mi = Number(m[3]);
+    if (h < 24 && mi < 60) out.push({ time: `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`, course: c });
+  }
+  return out;
+}
+
+function renumberGrid(slots) {
+  const clean = (slots || [])
+    .map((s) => ({ time: (String(s?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(s?.course) ? 'IN' : 'OUT' }))
+    .filter((s) => s.time);
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  clean.sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === b.course ? 0 : a.course === 'OUT' ? -1 : 1));
+  return clean.map((s, i) => ({ pos: i + 1, time: s.time, course: s.course }));
+}
+
 // judge 에게 넘길 '오늘 지금까지 상황' 한 단락 (맥락 주입 → 이 글이 뭘 바꾸는지 판단).
 export function todayContext(today) {
   if (!today) return '';
@@ -135,6 +165,38 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
       .map((g) => ({ pos: Number(g.pos), time: String(g.time), course: g.course || '' }));
   }
 
+  // ── ★당추(당일추가) 티오프 삽입 → 순번↔시각 전체 재매칭 ──
+  //  텍스트 당추 글("인코스 1722 당추…")은 배치표 이미지가 없어 grid를 못 갱신한다.
+  //  기존 티오프표(next.teeGrid)에 당추 시각을 시각순 삽입 후 순번 1..N 을 다시 매긴다.
+  //  ★배치표 이미지가 이번에 새로 온 경우(verdict.teeGrid 있음)엔 그게 이미 최신이라 건드리지 않는다.
+  const freshGrid = Array.isArray(verdict.teeGrid) && verdict.teeGrid.length;
+  //  당추 시각 = LLM 추출(verdict.addedTees) + 텍스트 정규식 파싱, 합쳐서 중복 제거(정규식이 더 확실).
+  const addedRaw = [
+    ...(Array.isArray(verdict.addedTees) ? verdict.addedTees : []),
+    ...parseAddedTees(article),
+  ];
+  const addedSeen = new Set();
+  const addedTees = addedRaw
+    .map((a) => ({ time: (String(a?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(a?.course) ? 'IN' : 'OUT' }))
+    .filter((a) => {
+      if (!a.time) return false;
+      const h = Number(a.time.split(':')[0]);
+      if (!(h >= TEE_MIN && h < TEE_MAX)) return false;
+      const k = `${a.time}|${a.course}`;
+      if (addedSeen.has(k)) return false;
+      addedSeen.add(k);
+      return true;
+    });
+  if (!freshGrid && addedTees.length && Array.isArray(next.teeGrid) && next.teeGrid.length) {
+    const base = next.teeGrid.map((g) => ({ time: g.time, course: g.course || 'OUT' }));
+    let inserted = 0;
+    for (const a of addedTees) {
+      // 같은 (시각·코스) 슬롯이 이미 있으면 중복 삽입 금지(재처리 멱등).
+      if (!base.some((b) => b.time === a.time && b.course === a.course)) { base.push(a); inserted++; }
+    }
+    if (inserted) next.teeGrid = renumberGrid(base);
+  }
+
   // ── ★"현재 3부 N팀" → 확정선 즉시 갱신 + 내 순번과 비교해 근무↔스페어 재계산 ──
   //  N팀 = 순번 N번까지 근무 (거의) 확정. 내 순번이 N 안에 들면 근무 준비, 벗어나면 스페어.
   //  예약이 늘면(스페어→근무 "준비 시작"), 취소로 줄면(근무→스페어 "대기 전환") 양방향 반영.
@@ -152,6 +214,37 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
           : `현재 ${cur.part || '3부'} ${tc}팀 — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - tc - 1)}명)` });
       next.status = newStatus;
       if (!nowWork) { next.teeTime = ''; next.course = ''; } // 스페어로 내려가면 임시 티오프 해제
+    }
+  }
+
+  // ── ★텍스트 커트라인/당추 → cutLine 기준 근무·스페어 승격 + 티오프 재매칭 ──
+  //  배치표 색을 못 읽는 텍스트 글이라도, 명시된 커트라인 안에 내 순번이 들면 근무권으로 올린다.
+  //  (커트라인에 딱 걸린 회원이 스페어 대시보드에 머무는 문제 해결 + 당추로 밀린 티오프 반영.)
+  //  teamCount(현재 N팀) 블록이 이미 처리한 경우엔 건너뛴다(그쪽이 더 권위 있음).
+  if (!(Number.isFinite(tc) && tc > 0) && verdict.cutoffAnnounced && myp > 0) {
+    const cut = Number(next.cutLine) || 0;
+    if (cut > 0) {
+      const slot = Array.isArray(next.teeGrid) ? next.teeGrid.find((g) => Number(g.pos) === myp) : null;
+      const slotTee = slot ? (String(slot.time).match(/\d{1,2}:\d{2}/) || [''])[0] : '';
+      const slotHr = slotTee ? Number(slotTee.split(':')[0]) : null;
+      const slotOk = slotTee && slotHr != null && slotHr >= TEE_MIN && slotHr < TEE_MAX;
+      const nowWork = myp <= cut;
+      const newStatus = nowWork ? (slotOk ? 'assigned' : 'work') : 'spare';
+      // 당추로 순번↔시각이 밀려 티오프가 바뀔 수 있음 — 변경/신규 배정 감지(출발·리마인더 갱신용).
+      if (nowWork && slotOk) {
+        if (next.teeTime && next.teeTime !== slotTee)
+          changes.push({ field: 'tee', from: next.teeTime, to: slotTee, reversal: true, msg: `티오프 ${next.teeTime}→${slotTee}` });
+        else if (!next.teeTime)
+          changes.push({ field: 'tee_new', to: slotTee, reversal: false, msg: `티오프 ${slotTee}(${slot.course}) 배정` });
+        next.teeTime = slotTee; next.course = slot.course || next.course || '';
+      }
+      if (newStatus !== next.status) {
+        const reversal = (isWait(next.status) && isWork(newStatus)) || (isWork(next.status) && isWait(newStatus));
+        changes.push({ field: 'cutline', from: next.status, to: newStatus, reversal,
+          msg: nowWork ? `순번 ${myp}번 근무권 진입(커트라인 ${cut}번)` : `순번 ${myp}번 스페어(커트라인 ${cut}번)` });
+        next.status = newStatus;
+        if (!nowWork) { next.teeTime = ''; next.course = ''; }
+      }
     }
   }
 
