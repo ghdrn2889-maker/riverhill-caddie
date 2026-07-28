@@ -106,6 +106,17 @@ function commuteLine(teeTime, course, commuteMin) {
 }
 
 // ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
+// 배치표 글에 달린 '대기 순번 교환(대기바꿈/대바)' 댓글만 골라 원문을 시간순으로 모은다.
+//  이걸 판독 프롬프트에 함께 넣어, 명단(part3Roster)을 교환이 끝난 '현재' 순서로 출력하게 한다.
+function collectSwapComments(article) {
+  const cs = Array.isArray(article?.comments) ? article.comments : [];
+  const kw = /바꿈|대바|순번/;
+  return cs
+    .map((c) => String(c?.content || '').replace(/\s+/g, ' ').trim())
+    .filter((t) => t && kw.test(t))
+    .slice(0, 15);
+}
+
 function buildPrompt(article, member = memberFromEnv()) {
   const { name, part } = member;
   const wdesc = partWindowDesc(member);   // 이 회원(부) 티오프 시간대 서술 — 3부면 "16시 이후(저녁까지)"
@@ -116,6 +127,17 @@ function buildPrompt(article, member = memberFromEnv()) {
   const postedLine = postedHour != null
     ? `- 게시 시각: ${postedHour}시 (${postedHour >= 12 ? '정오 이후' : '정오 이전'})`
     : '';
+  const swapCmts = hasImg ? collectSwapComments(article) : [];
+  const swapBlock = swapCmts.length ? `
+
+[★댓글 — 대기 순번 교환(대기바꿈/대바) — 반드시 명단에 반영]:
+아래는 이 배치표에 달린 '대기 순번 교환' 댓글입니다(위=먼저, 시간순). part3Roster·myPosition 등 순번 판단에 이 교환을 **모두 적용**해, 교환이 끝난 '현재' 순번 순서로 명단을 출력하세요. 이미지의 원래 순서보다 이 댓글 교환이 우선입니다.
+- "조하빈17번 최수원27번" = 조하빈을 17번 자리, 최수원을 27번 자리로(서로 맞바꿈).
+- "A B 대기바꿈"·"A ㅡ B 바꿈" = A와 B의 대기 순번을 맞바꿈.
+- "A(B)"(괄호 안 사람) = 그 자리 실제 주인은 괄호 안 B.
+- "당일대바 A 3순번 B 20순번" = A를 3번, B를 20번 자리로.
+- 위에서 아래로 순서대로 누적 적용. 이름이 "${name}"과 무관해도 순번이 밀리면 반영하세요.
+${swapCmts.map((c, i) => `${i + 1}) ${c}`).join('\n')}` : '';
   const isKakao = /카톡|카카오/.test(article.menuName || '');
   const kakaoNote = isKakao ? `
 
@@ -131,7 +153,7 @@ function buildPrompt(article, member = memberFromEnv()) {
 - 작성자: ${article.writer || ''}
 ${postedLine}
 - 본문: ${(article.text || '').slice(0, 600)}
-- 첨부 이미지: ${hasImg ? '있음 — 배치표/번호표(순번·이름 목록 + 티오프 시간표)일 수 있으니 반드시 읽으세요.' : '없음 — 제목/본문 텍스트로만 판단.'}${kakaoNote}
+- 첨부 이미지: ${hasImg ? '있음 — 배치표/번호표(순번·이름 목록 + 티오프 시간표)일 수 있으니 반드시 읽으세요.' : '없음 — 제목/본문 텍스트로만 판단.'}${kakaoNote}${swapBlock}
 
 [배경지식]
 - 리버힐 캐디는 1·2·3부로 나뉘고 각 부는 완전 독립. "${name}"은 ${part}부만 관련(다른 부 내용은 무관).
