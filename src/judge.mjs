@@ -117,6 +117,70 @@ function collectSwapComments(article) {
     .slice(0, 15);
 }
 
+// ── 대바(대기바꿈) 결정적 적용 ─────────────────────────────────
+//  모델은 '인쇄된 원본 순번'만 안정적으로 읽으면 되고(강한 모델로 안정화), 교환은 코드가 못박는다.
+//  댓글 예: "당일대바합니다. 연승준 3순번 / 정진영님 20순번 / 서동환님 14순번" → [{연승준,3},{정진영,20},{서동환,14}].
+//  의미: 각 사람이 그 순번 '자리'로 이동(그 자리에 있던 사람과 맞교환). 위→아래 순서대로 누적 적용.
+export function parseSwapAssignments(comments) {
+  const arr = Array.isArray(comments) ? comments : [];
+  const ops = [];
+  for (const c of arr) {
+    const t = String(c?.content ?? c ?? '');
+    if (!/대바|대기\s*바꿈|바꿈|순번/.test(t)) continue;   // 교환 댓글만 (잡담 오탐 방지)
+    const re = /([가-힣]{2,4})\s*(?:님)?\s*(\d{1,2})\s*(?:순번|번)/g;
+    let m;
+    while ((m = re.exec(t)) !== null) {
+      const name = m[1].replace(/님$/, '').trim();   // 이름 그룹이 '님'까지 흡수했으면 제거
+      const pos = Number(m[2]);
+      if (name.length >= 2 && pos >= 1 && pos <= 60) ops.push({ name, pos });
+    }
+  }
+  return ops;
+}
+
+// 명단(순번순 배열, index=순번-1)에 대바 재배치를 적용. 각 op는 name↔그 pos 점유자 맞교환.
+//  이름 매칭은 괄호 교환("A(B)")이면 실제 점유자 B 기준(normRosterName). 명단/순번 밖·미발견은 건너뜀(오손 방지).
+//  반환: { roster:교환후배열, applied:["연승준→3", ...] }.
+export function applySwapAssignments(roster, ops) {
+  if (!Array.isArray(roster) || !roster.length || !Array.isArray(ops) || !ops.length) {
+    return { roster: Array.isArray(roster) ? roster.slice() : [], applied: [] };
+  }
+  const arr = roster.slice();
+  const key = (s) => normRosterName(s).name.replace(/\s/g, '');
+  const applied = [];
+  for (const op of ops) {
+    const target = op.pos - 1;
+    if (target < 0 || target >= arr.length) continue;
+    const cur = arr.findIndex((c) => key(c) === op.name.replace(/\s/g, ''));
+    if (cur < 0 || cur === target) continue;          // 명단에 없거나 이미 그 자리면 통과
+    const tmp = arr[target]; arr[target] = arr[cur]; arr[cur] = tmp;   // 맞교환
+    applied.push(`${op.name}→${op.pos}`);
+  }
+  return { roster: arr, applied };
+}
+
+// 교차검증된 명단으로 회원 본인 순번·상태를 최종 확정(명단 대조 우선). consensus·대바적용 두 곳에서 공용.
+//  LLM이 자기 순번을 오독하거나 대바로 자리가 밀렸을 때, 명단에서 이름으로 순번을 확정하고
+//  근무 상한(팀수/티오프표 최대순번/커트라인) 밖이면 구조적으로 스페어 확정(색·표결보다 우선).
+function fixMemberPosByRoster(v, member = memberFromEnv()) {
+  if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
+  const rp = rosterPosOf(v.part3Roster, member.name);
+  if (rp <= 0) return;
+  const prevPos = Number(v.myPosition) || 0;
+  const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
+  const annCut = Number(v.cutoffPosition) > 0 ? Number(v.cutoffPosition) : 0;
+  const workLimit = Number(v.teamCount) > 0 ? Number(v.teamCount) : Math.max(gridMax, annCut); // 팀수(텍스트) 우선
+  if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
+  v.myPosition = rp;
+  if (workLimit > 0 && rp > workLimit) {
+    v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
+    v._teeSource = 'roster-beyond-cut';
+    delete v._uncertain;
+  } else if (rp !== prevPos) {
+    resolveTeeByGrid(v, member); // 근무 범위 안 + 순번 교정 → 티오프표 재해석
+  }
+}
+
 function buildPrompt(article, member = memberFromEnv()) {
   const { name, part } = member;
   const wdesc = partWindowDesc(member);   // 이 회원(부) 티오프 시간대 서술 — 3부면 "16시 이후(저녁까지)"
@@ -640,24 +704,7 @@ export function consensusFromReads(reads, member = memberFromEnv()) {
   //  남의 티오프가 매칭된다. 교차검증된 대기명단에서 이름으로 순번을 확정하고, 근무 상한(팀수/티오프표 최대순번)
   //  밖이면 구조적으로 스페어 확정 — 표결(오독 순번 기반)보다 구조를 우선한다.
   //  (사용자 원칙: "스페어면 매칭할 티오프 예약이 없다".) 다른 회원(interpretForMember)은 이미 명단 기반이라 무관.
-  if (Array.isArray(v.part3Roster) && v.part3Roster.length) {
-    const rp = rosterPosOf(v.part3Roster, member.name);
-    if (rp > 0) {
-      const prevPos = Number(v.myPosition) || 0;
-      const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
-      const workLimit = Number(v.teamCount) > 0 ? Number(v.teamCount) : gridMax; // 팀수(텍스트) 우선, 없으면 티오프표
-      if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
-      v.myPosition = rp;
-      if (workLimit > 0 && rp > workLimit) {
-        // 근무 상한 밖 → 스페어 확정(티오프 제거). 색·표결이 근무여도 구조가 맞다.
-        v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
-        v._teeSource = 'roster-beyond-cut';
-        delete v._uncertain;
-      } else if (rp !== prevPos) {
-        resolveTeeByGrid(v, member); // 근무 범위 안 + 순번 교정됨 → 티오프표 재해석
-      }
-    }
-  }
+  fixMemberPosByRoster(v, member);
 
   v._reads = rs.length;
   return v;
@@ -793,6 +840,37 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       && Array.isArray(today?.roster3) && today.roster3.length) {
     const idx = today.roster3.findIndex((n) => String(n).includes(verdict.cutoffName));
     if (idx >= 0) verdict.cutoffPosition = idx + 1;
+  }
+  // ★대바(대기바꿈) 결정적 반영 — 모델은 원본 순번만 읽고, 교환은 코드가 명단에 못박는다.
+  //  · 배치표 글: 방금 하베스트한 '깨끗한 원본 명단'(rosterReliable)에 적용 → 매번 동일(멱등).
+  //  · 당일변동 글(26750 등): 명단을 새로 안 읽으므로 저장된 today.roster3를 근거로 적용.
+  //    같은 댓글이 재처리로 두 번 적용(자리 되돌림)되지 않도록 swapKey로 멱등 보장.
+  if (verdict) {
+    const ops = parseSwapAssignments(article.comments);
+    if (ops.length) {
+      const swapKey = `${article.id || ''}:${ops.map((o) => `${o.name}${o.pos}`).join('|')}`;
+      const fresh = !!verdict.rosterReliable && Array.isArray(verdict.part3Roster) && verdict.part3Roster.length;
+      const alreadyApplied = today?.swapKey && today.swapKey === swapKey;
+      const base = fresh ? verdict.part3Roster
+        : (Array.isArray(today?.roster3) && today.roster3.length ? today.roster3 : []);
+      if (base.length) {
+        if (fresh || !alreadyApplied) {
+          const { roster: swapped, applied } = applySwapAssignments(base, ops);
+          if (applied.length) {
+            verdict.part3Roster = swapped;
+            verdict.crossPartNames = Array.isArray(verdict.crossPartNames) && verdict.crossPartNames.length
+              ? verdict.crossPartNames : (Array.isArray(today?.crossPart3) ? today.crossPart3 : []);
+            verdict._swaps = applied;
+            verdict._swapKey = swapKey;
+            fixMemberPosByRoster(verdict, member);
+          }
+        } else {
+          verdict.part3Roster = base.slice();   // 이미 반영된 저장 명단 그대로 사용(재적용 금지)
+          verdict._swapKey = swapKey;
+          fixMemberPosByRoster(verdict, member);
+        }
+      }
+    }
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터

@@ -187,6 +187,9 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
     next.roster3 = verdict.part3Roster.slice();   // ★위치정렬 보존(빈칸 유지) — 순번 = index+1
     next.crossPart3 = (verdict.crossPartNames || []).filter(Boolean);
     next.rosterAt = Date.now();
+    // ★대바(대기바꿈) 멱등키 — 이 명단에 반영된 교환 서명. 같은 댓글 재처리 시 자리 되돌림(이중적용) 방지.
+    //  새 명단엔 이 판독의 swapKey만 따라간다(교환 없이 새로 읽힌 명단이면 '' 로 리셋).
+    next.swapKey = verdict._swapKey || '';
   }
 
   // ── 티오프표(순번→시각) 저장 — 스페어 대시보드에서 확정자 티오프를 이름 옆에 표기하기 위함 ──
