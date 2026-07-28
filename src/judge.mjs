@@ -201,9 +201,14 @@ function fixMemberPosByRoster(v, member = memberFromEnv()) {
   const prevPos = Number(v.myPosition) || 0;
   const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
   const annCut = (v.cutoffAnnounced && Number(v.cutoffPosition) > 0) ? Number(v.cutoffPosition) : 0;
-  // 근무 상한 우선순위: 명시 커트라인("○○까지 근무") > 팀수("N팀") > 티오프표 최대순번.
-  //  ★"16팀"과 "송민지(박준서=18번)까지"가 어긋날 땐 사람을 콕 집은 커트라인이 진짜 경계(교차부 인원 등).
-  const workLimit = annCut > 0 ? annCut : (Number(v.teamCount) > 0 ? Number(v.teamCount) : gridMax);
+  const intern = Number(v.internCount) > 0 ? Number(v.internCount) : 0;
+  const team = Number(v.teamCount) > 0 ? Number(v.teamCount) : 0;
+  // 근무 상한(정규 캐디 근무선) 우선순위:
+  //  1) 명시 커트라인("○○까지 근무") — 사람을 콕 집음, 최우선.
+  //  2) 티오프표 번호 최대순번(gridMax) — '번호 매겨진' 정규 매칭만. 인턴(노란칸)은 번호가 없어 자동 제외 → 정확.
+  //  3) 팀수("N팀") − 인턴수 — 최후 보루. "N팀"은 배치표마다 인턴 포함 여부가 달라 인턴수를 빼 정규만 남김.
+  //  ★인턴 캐디는 정규 순번을 차지하지 않으므로 정규 스페어 계산에 영향 없음(gridMax가 인턴을 이미 배제).
+  const workLimit = annCut > 0 ? annCut : (gridMax > 0 ? gridMax : Math.max(0, team - intern));
   if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
   v.myPosition = rp;
   if (workLimit > 0 && rp > workLimit) {
@@ -288,6 +293,7 @@ ${postedLine}
 - ★절대 맨 위 행부터 1,2,3,4…로 순번을 지어내지 마세요. OUT 순번과 IN 순번은 **각각 별개의 띄엄띄엄한 수열**입니다(예: OUT=1,3,6,10,13 … / IN=2,7,9,11 …). 대부분 행은 순번이 없습니다.
 - 시간은 위→아래로 일정 간격 증가(예: 16:32,16:39,16:46,16:53,17:00,17:07,17:14,17:21,17:28…). 순번이 인쇄된 행을 찾아 그 행의 시간과 정확히 짝지으세요.
 - ${name}의 티오프는 코드가 이 표에서 ${name} 순번(myPosition)으로 찾습니다 — 표만 정확히 옮기고 myPosition만 정확히 읽으면 됩니다.
+- ★★인턴 캐디(노란색 칸): OUT/IN칸이 **순번 숫자 없이 노란색으로 채워진 칸**은 '인턴 캐디'가 배정된 팀입니다(그날그날 섭외되는 임시 캐디, 정규 순번 아님). **이 노란 칸은 절대 teeGrid에 순번(pos)으로 넣지 마세요**(정규 순번 오염 방지). 대신 internTees 배열에 {"time":시간,"course":"OUT/IN"}로 따로 적고, internCount=노란 칸 개수. 노란 칸이 없으면 internTees=[], internCount=0.
 
 ★★ 배치표의 '부(部) 이중 표시' — 가장 확실한 근거 (환각 방지 이중검증):
 - 각 부(部) 티오프 표에는 부를 알려주는 **두 가지 확실한 표시**가 있습니다: (1)맨 위 헤더 [OUT | N부 | IN]의 가운데 "N부" 글자, (2)표 전체의 **고유 배경색**(부마다 다름).
@@ -322,6 +328,8 @@ ${postedLine}
   "crossPartNames": ["명단 중 여러 부 중복 표기((2,3)/(54)) 붙은 이름들, 없으면 []"],
   "subjectNames": ["이 소식의 핵심 인물 이름들, 없으면 []"],
   "teeGrid": [{ "pos": 정수, "time": "HH:MM", "course": "OUT 또는 IN" }],
+  "internTees": [{ "time": "HH:MM", "course": "OUT 또는 IN" }],
+  "internCount": "노란색으로 채워진 티오프 칸(인턴 캐디 배정) 개수, 없으면 0",
   "category": "배치표|번호표|변동|추가|취소|시간조정|공지|개인근태|가배치|기타",
   "myCellColor": "white|colored|gray|unknown (${name} 이름칸 배경색 — 근무/스페어 판정 최우선 근거)",
   "myStatus": "work|assigned|your_turn|waiting|spare|off|unknown",
@@ -704,6 +712,11 @@ export function consensusFromReads(reads, member = memberFromEnv()) {
   if (withCut) { v.cutoffAnnounced = true; v.cutoffName = withCut.cutoffName; v.cutoffPosition = withCut.cutoffPosition; }
   const withTeam = rs.find((r) => Number(r?.teamCount) > 0);
   if (withTeam) v.teamCount = withTeam.teamCount;
+  // 인턴(노란칸) 수는 여러 판독의 다수결(구조적이라 안정적) — 정규 근무선 계산·표시에 사용.
+  const internVotes = rs.map((r) => Number(r?.internCount)).filter((x) => Number.isFinite(x) && x >= 0);
+  if (internVotes.length) v.internCount = modeOf(internVotes).value;
+  const withInternTees = rs.find((r) => Array.isArray(r?.internTees) && r.internTees.length);
+  if (withInternTees) v.internTees = withInternTees.internTees;
   // 부 표(boardTables: 헤더+색)는 구조적이라 안정적 — 표를 가장 많이(완전히) 읽은 판독 채택.
   const bt = rs.map((r) => (Array.isArray(r?.boardTables) ? r.boardTables : []))
     .reduce((best, cur) => (cur.length > best.length ? cur : best), []);

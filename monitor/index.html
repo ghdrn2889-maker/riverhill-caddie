@@ -247,15 +247,20 @@
     }).join('');
     var swaps = (lb.swaps||[]).map(function(x){ return '<span class="chip swap">🔄 '+esc(x)+'</span>'; }).join('');
     var mdl = esc(String(lb.model||'').replace('gemini-','').replace('-latest',''));
+    var interns = (lb.internTees||[]).map(function(t){ return esc(t.time)+(t.course?(' '+esc(t.course)):''); }).join(', ');
     var badges =
-      '<span class="chip acc">근무 '+n(lb.workCount)+'</span>'+
+      '<span class="chip acc">정규 근무 '+n(lb.workCount)+'</span>'+
       '<span class="chip">스페어 '+n(lb.spareCount)+'</span>'+
+      (lb.internCount? '<span class="chip" style="color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent)" title="'+esc(interns)+'">🟡 인턴 '+lb.internCount+'팀</span>':'')+
       (lb.cutoffName? '<span class="chip">컷 '+esc(lb.cutoffName)+(lb.cutoffPosition?('('+lb.cutoffPosition+'번)'):'')+'</span>':'')+
-      (lb.teamCount? '<span class="chip">'+lb.teamCount+'팀</span>':'')+
+      (lb.teamCount? '<span class="chip" title="제목 표기 팀수(인턴 포함 여부는 배치표마다 다름)">제목 '+lb.teamCount+'팀</span>':'')+
       '<span class="chip">🤖 '+mdl+'</span>'+ swaps;
     var img = lb.image
       ? '<a href="'+esc(lb.url||lb.image)+'" target="_blank" rel="noopener"><img src="'+esc(lb.image)+'" alt="배치표 원본"/></a>'
       : '<div class="noimg">원본 이미지 없음</div>';
+    var internNote = lb.internCount
+      ? '<div class="bd-comments"><b>🟡 인턴 캐디 '+lb.internCount+'팀</b><div class="c" style="border-left-color:var(--warn)">티오프 매칭표의 노란칸('+esc(interns)+')은 그날 섭외된 인턴 캐디입니다. 정규 순번이 아니라 정규 캐디 스페어 계산엔 영향이 없습니다. → 정규 근무 '+n(lb.workCount)+'팀 + 인턴 '+lb.internCount+'팀 = 총 '+(lb.workCount+lb.internCount)+'팀 티오프 매칭.</div></div>'
+      : '';
     var cmts = (lb.comments||[]).length
       ? '<div class="bd-comments"><b>원문 댓글 (대바 반영 확인용)</b>'+lb.comments.map(function(c){ return '<div class="c">'+esc(c)+'</div>'; }).join('')+'</div>'
       : '';
@@ -265,7 +270,7 @@
         '<span class="bd-meta">'+(lb.dateLabel?esc(lb.dateLabel)+' · ':'')+(lb.writer?esc(lb.writer)+' · ':'')+'판독 '+clock(lb.at)+'</span></div>'+
       '<div class="bd-badges">'+badges+'</div>'+ unc +
       '<div class="bd-cols"><div class="bd-imgbox">'+img+'</div>'+
-      '<div><div class="roster">'+grid+'</div>'+cmts+'</div></div>';
+      '<div><div class="roster">'+grid+'</div>'+internNote+cmts+'</div></div>';
     if($('boardDesc')) $('boardDesc').textContent =
       '원문과 나란히 대조 — 순번·근무/스페어·티오프·대바 · '+(lb.reliable?'명단 신뢰 판독':'부분 판독')+' · 총 '+n(lb.total||0)+'명';
   }

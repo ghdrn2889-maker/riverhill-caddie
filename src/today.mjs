@@ -207,6 +207,17 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
       .map((g) => ({ pos: Number(g.pos), time: String(g.time), course: g.course || '' }));
   }
 
+  // ── 인턴 캐디(노란칸) — 그날그날 섭외되는 임시 캐디. 정규 순번엔 없지만 팀수엔 포함되기도 함 ──
+  //  (배치표 판독일 때만 갱신. 텍스트 소식엔 없음 → 기존 유지)
+  if (Number.isFinite(Number(verdict.internCount))) {
+    next.internCount = Number(verdict.internCount) || 0;
+    if (Array.isArray(verdict.internTees)) {
+      next.internTees = verdict.internTees
+        .filter((g) => /\d{1,2}:\d{2}/.test(String(g?.time || '')))
+        .map((g) => ({ time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: g.course || '' }));
+    }
+  }
+
   // ── ★당추(당일추가) 티오프 삽입 → 순번↔시각 전체 재매칭 ──
   //  텍스트 당추 글("인코스 1722 당추…")은 배치표 이미지가 없어 grid를 못 갱신한다.
   //  기존 티오프표(next.teeGrid)에 당추 시각을 시각순 삽입 후 순번 1..N 을 다시 매긴다.

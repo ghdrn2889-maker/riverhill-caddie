@@ -117,6 +117,9 @@ function buildLatestBoard() {
     cutoffName: v.cutoffName || t1.cutoffName || '',
     cutoffPosition: cutoffPos || null,
     teamCount,
+    internCount: Number(v.internCount) > 0 ? Number(v.internCount) : (Number(t1.internCount) > 0 ? Number(t1.internCount) : 0),
+    internTees: (Array.isArray(v.internTees) && v.internTees.length) ? v.internTees
+      : (Array.isArray(t1.internTees) ? t1.internTees : []),
     swaps: Array.isArray(v._swaps) ? v._swaps : [],
     uncertain: v._uncertain || '',
     reliable: !!v.rosterReliable,
