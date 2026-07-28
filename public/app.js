@@ -1053,7 +1053,7 @@ function wlCard(d, roundKm) {
       const has = d.photos && d.photos[leg];
       const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '📷';
       return `<label class="wl-slot"><span class="box${has ? ' done' : ''}">${inner}</span><span class="lab">${lab}</span>
-        <input type="file" accept="image/*" capture="environment" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
+        <input type="file" accept="image/*" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
     }).join('');
     panel = `<div class="wl-panel">
       <div class="wl-slots">${slots}</div>
