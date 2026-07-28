@@ -61,7 +61,7 @@ app.get('/api/me', (req, res) => {
 // 접속 하트비트 — 앱이 열려 있는 동안 주기적으로 호출. 마지막 활동 시각만 갱신(운영 모니터의 접속중/나감 판별).
 //  게이트 앞에 둬서 로그인만 돼 있으면(대기 회원 포함) 접속 상태가 잡힌다. 비로그인은 그냥 통과.
 app.post('/api/ping', (req, res) => {
-  if (req.user) recordPresence(req.user.id);
+  if (req.user) recordPresence(req.user.id, { leaving: !!req.query.leave }); // ?leave=1 → 앱 닫힘(즉시 나감)
   res.json({ ok: true });
 });
 // 프로필 저장(온보딩·수정). 로그인 필수(솔로 모드에선 1번 회원).

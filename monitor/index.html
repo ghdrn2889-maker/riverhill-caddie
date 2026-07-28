@@ -159,7 +159,7 @@
 
 <script>
 (function(){
-  var REFRESH_MS = 30000, timer = null;
+  var REFRESH_MS = 10000, timer = null;
   var $ = function(id){ return document.getElementById(id); };
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function n(v){ return (v==null?0:v).toLocaleString('ko-KR'); }
@@ -205,7 +205,7 @@
     // 상태 점
     var h = s.health||{}; var failed = (h.failStreak||0)>0; var stale = h.lastOkAt && (Date.now()-h.lastOkAt > 20*60000);
     var dot = $('statusDot'); dot.className = 'dot' + (failed?' bad':(stale?' warn':''));
-    $('updated').textContent = '업데이트 ' + rel(s.generatedAt) + ' · 자동 30초';
+    $('updated').textContent = '업데이트 ' + rel(s.generatedAt) + ' · 자동 10초';
 
     // KPI
     var b = s.board||{}, v = s.visits||{}, m = s.members||{}, sg = s.signups||{}, pr = s.presence||{};
@@ -255,7 +255,7 @@
 
     // 회원 현황(접속 상태)
     var prm = pr.members||[];
-    if ($('presDesc')) $('presDesc').textContent = '접속 중 '+n(pr.onlineNow||0)+'명 · 전체 '+n(m.total)+'명 · 최근 '+(pr.windowMin||2)+'분 활동 = 접속 중';
+    if ($('presDesc')) $('presDesc').textContent = '접속 중 '+n(pr.onlineNow||0)+'명 · 전체 '+n(m.total)+'명 · 실시간(닫으면 즉시 · 강제종료는 최대 '+(pr.staleSec||90)+'초 뒤 나감)';
     $('presence').innerHTML = prm.length? prm.map(function(u){
       var last = u.lastSeen||u.lastLogin;
       var state = u.online ? '<span class="pr-state on">방문 중</span>'

@@ -75,6 +75,7 @@ function migrate(d) {
   addColumn(d, 'users', 'google_id', 'TEXT');
   addColumn(d, 'users', 'block_reason', 'TEXT');   // 차단 사유(roster|other) — disabled일 때만 채움
   addColumn(d, 'users', 'last_seen', 'INTEGER');   // 마지막 활동(하트비트) — 접속중/나감 판별용(운영 모니터)
+  addColumn(d, 'users', 'left_at', 'INTEGER');     // 앱을 닫은/가린 시각 — '나감' 즉시 반영(last_seen보다 뒤면 오프라인)
   d.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_id);'); // NULL은 서로 중복 허용
 }
 

@@ -25,11 +25,14 @@ export function recordBoardRead(rec = {}) {
   appendJSONL('board-reads.jsonl', { at: Date.now(), ...rec });
 }
 
-// 접속 하트비트 — 회원이 앱을 보고 있는 동안 주기적으로 호출(스로틀 없음, 가벼운 UPDATE).
-//  '접속 중/나감'과 '마지막 방문 시각' 판별에 쓰인다. 실패해도 조용.
-export function recordPresence(userId) {
+// 접속 하트비트/이탈 — 회원이 앱을 보는 동안 주기 호출(활동시각 갱신), 닫으면 leaving=true(즉시 나감).
+//  last_seen=마지막 활동(=마지막 방문 시각, 보존). left_at=마지막 이탈. last_seen>left_at 이면 접속 중.
+export function recordPresence(userId, { leaving = false } = {}) {
   if (!userId) return;
-  try { run('UPDATE users SET last_seen = ? WHERE id = ?', Date.now(), userId); } catch { /* noop */ }
+  try {
+    if (leaving) run('UPDATE users SET left_at = ? WHERE id = ?', Date.now(), userId);
+    else run('UPDATE users SET last_seen = ? WHERE id = ?', Date.now(), userId);
+  } catch { /* noop */ }
 }
 
 // ── 읽기 유틸 ──────────────────────────────────────────
@@ -77,7 +80,7 @@ export function computeStats(now = Date.now()) {
   const days30 = lastDays(30, now), days14 = lastDays(14, now), days7 = lastDays(7, now);
 
   // 회원(users) + 프로필
-  const users = all(`SELECT u.id, u.naver_id, u.google_id, u.created_at, u.last_login, u.last_seen, u.role, u.status,
+  const users = all(`SELECT u.id, u.naver_id, u.google_id, u.created_at, u.last_login, u.last_seen, u.left_at, u.role, u.status,
                             p.board_name, p.part
                      FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.id`) || [];
   const active = users.filter((u) => u.status === 'active');
@@ -145,16 +148,17 @@ export function computeStats(now = Date.now()) {
   };
 
   // 회원 현황(접속 상태) — 전 회원 각자 지금 접속 중인지/나갔는지 + 마지막 방문 시각.
-  //  online = 마지막 활동(하트비트)이 ONLINE_WINDOW 이내(기본 2.5분, 60초 핑 한 번 놓쳐도 유지).
-  const ONLINE_MS = Number(process.env.ONLINE_WINDOW_MS || 120000);
+  //  online = 앱을 닫은 뒤(left_at) 이후로 활동이 있고(last_seen>left_at) + 활동이 STALE 이내(크래시 대비 폴백).
+  //   → 정상 종료 시 즉시 오프라인, 강제종료/네트워크 끊김이면 STALE(기본 90초) 지나 자동 오프라인.
+  const ONLINE_MS = Number(process.env.ONLINE_WINDOW_MS || 90000);
   const presenceRows = users.map((u) => ({
     id: u.id, name: u.board_name || '(이름미설정)', part: u.part || '', role: u.role, status: u.status,
     lastSeen: u.last_seen || null, lastLogin: u.last_login || null,
-    online: !!(u.last_seen && (now - u.last_seen) < ONLINE_MS),
+    online: !!(u.last_seen && (now - u.last_seen) < ONLINE_MS && u.last_seen > (u.left_at || 0)),
   }));
   presenceRows.sort((a, b) => (Number(b.online) - Number(a.online))
     || ((b.lastSeen || b.lastLogin || 0) - (a.lastSeen || a.lastLogin || 0)) || a.id - b.id);
-  const presence = { onlineNow: presenceRows.filter((r) => r.online).length, windowMin: Math.round(ONLINE_MS / 60000), members: presenceRows };
+  const presence = { onlineNow: presenceRows.filter((r) => r.online).length, staleSec: Math.round(ONLINE_MS / 1000), members: presenceRows };
   // (호환) 최근 접속 회원 — 마지막 방문/로그인 순 상위
   const recentLogins = presenceRows.slice(0, 20).map((u) => ({ id: u.id, name: u.name, part: u.part,
     role: u.role, status: u.status, lastLogin: u.lastSeen || u.lastLogin }));
