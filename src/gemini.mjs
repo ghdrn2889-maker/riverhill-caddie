@@ -312,6 +312,30 @@ export async function analyzeRoster(article, part = '3') {
   return deduped;
 }
 
+// ── 3.5) 인턴 캐디(티오프표 노란칸) 전용 판독 ─────────────────
+//  통합 판독은 인턴 감지가 흔들려(오탐) → 노란칸만 집중해서 또렷이 센다(flash 안정).
+function buildInternPrompt(part = '3') {
+  const p = String(part);
+  return `당신은 골프장 배치표의 '${p}부 티오프 매칭표'(헤더 [OUT | ${p}부 | IN])를 정확히 보는 도우미입니다.
+각 시간 행의 OUT칸·IN칸은 셋 중 하나입니다: (1)순번 숫자가 인쇄됨, (2)빈칸, (3)★숫자 없이 '노란색'으로만 채워진 칸.
+(3)의 '노란색 칸'만 골라 배열로 옮기세요. 이건 그날 섭외된 '인턴 캐디' 팀입니다(정규 순번 아님).
+- 노란색이 아닌 칸(숫자 있음/빈칸)은 절대 넣지 마세요. 색을 지어내지 말고 실제 노란 칸만.
+반드시 JSON "하나만"(설명 금지):
+{ "internTees": [ {"time":"HH:MM","course":"OUT 또는 IN"} ], "internCount": 노란칸 개수 }
+노란 칸이 없으면 {"internTees": [], "internCount": 0}.`;
+}
+// 반환: {internTees:[{time,course}], internCount} — 실패 시 null.
+export async function analyzeInterns(article, part = '3') {
+  if (!article.images?.length) return null;
+  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+  const out = await callGeminiJSON(buildInternPrompt(part), article.images[0], model);
+  if (!out) return null;
+  const tees = (Array.isArray(out.internTees) ? out.internTees : [])
+    .map((g) => ({ time: (String(g?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(String(g?.course)) ? 'IN' : 'OUT' }))
+    .filter((g) => g.time);
+  return { internTees: tees, internCount: Number.isFinite(Number(out.internCount)) ? Number(out.internCount) : tees.length };
+}
+
 // ── 4) 오른쪽 '조 배치표'(전체 캐디 명부) 판독 ────────────────
 //  1~4조 × (이름·근무·카트) = 그날 소속 캐디 전원(총원). 이름 사전(오탈자 보정용) + 부·신분 태그의 원천.
 function buildCrewsPrompt() {

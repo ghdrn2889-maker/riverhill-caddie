@@ -2,7 +2,7 @@
 //  글 하나(제목+본문+이미지) + 내 프로필 + 오늘 기준표 → 구조화된 판정 '하나'.
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
-import { callGeminiJSON, analyzeRoster, analyzeCrews } from './gemini.mjs';
+import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 
@@ -860,6 +860,9 @@ export async function judge(article, today = null, member = memberFromEnv()) {
         const built2 = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
         if (built2 && (hasMe(built2) || !built)) built = built2; // 재시도가 나를 포함하면 채택(다른 부 교정), 1차 실패면 재시도 사용
       }
+      // ★인턴(노란칸) 전용 판독으로 통합판독의 오탐을 교정(표시 정확도). 실패하면 통합판독값 유지.
+      const interns = await analyzeInterns(article, member.part);
+      if (interns) { verdict.internCount = interns.internCount; verdict.internTees = interns.internTees; }
       const crews = doCrew ? await analyzeCrews(article) : [];
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
       if (crews.length) { const n = learnCrews(crews); markHarvested(imgKey); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
