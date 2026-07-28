@@ -74,9 +74,10 @@ function parseCutoff(article) {
   const t = `${article?.subject || ''} ${article?.text || ''}`;
   // 이름(2~4자 한글) + (님) 까지 … 근무/일됩니다/나갑니다/콜/배정/출근. 이름 앞 "N번"이 있으면 순번으로.
   //  ★'님' 필수 — "오늘까지 근무" 같은 비인명 오탐 방지(마샬 글은 항상 "○○님까지").
-  const m = t.match(/(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님\s*까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/);
+  //  ★"송민지님(박준서)까지" = 괄호 안 점유자(박준서)가 그 자리 실제 주인 → 위치는 holder 기준.
+  const m = t.match(/(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/);
   if (!m) return null;
-  return { name: m[2], pos: m[1] ? Number(m[1]) : null };
+  return { name: m[2], holder: m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
 }
 
 function renumberGrid(slots) {
@@ -120,7 +121,13 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   if (!verdict.cutoffAnnounced) {
     const pc = parseCutoff(article);
     if (pc) {
-      const posFromRoster = (cur.roster3 || []).findIndex((n) => String(n).replace(/\s/g, '').includes(pc.name)) + 1;
+      const hk = String(pc.holder).replace(/\s/g, '');
+      const posFromRoster = (cur.roster3 || []).findIndex((n) => {
+        const cell = String(n).replace(/\s/g, '');
+        const mm = cell.match(/\(([^)]+)\)/);
+        const occ = mm ? mm[1] : cell.replace(/\(.*$/, ''); // 셀도 괄호 점유자 기준
+        return occ === hk || cell === hk;
+      }) + 1;
       verdict = { ...verdict, cutoffAnnounced: true, cutoffName: pc.name,
         cutoffPosition: pc.pos != null ? pc.pos : (posFromRoster || null) };
     }

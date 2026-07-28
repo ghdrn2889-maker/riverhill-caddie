@@ -162,14 +162,48 @@ export function applySwapAssignments(roster, ops) {
 // 교차검증된 명단으로 회원 본인 순번·상태를 최종 확정(명단 대조 우선). consensus·대바적용 두 곳에서 공용.
 //  LLM이 자기 순번을 오독하거나 대바로 자리가 밀렸을 때, 명단에서 이름으로 순번을 확정하고
 //  근무 상한(팀수/티오프표 최대순번/커트라인) 밖이면 구조적으로 스페어 확정(색·표결보다 우선).
+// "○○님까지 근무" 커트라인 텍스트 파싱 — 괄호 점유자 우선("송민지님(박준서)까지" → 실제 컷 사람=박준서).
+//  사용자 원칙: 괄호 안 이름이 그 자리의 실제 주인. display(표기 이름)와 holder(위치 기준 사람)를 분리.
+const CUTOFF_RE = /(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/;
+function parseCutoffText(article) {
+  const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
+  const m = t.match(CUTOFF_RE);
+  if (!m) return null;
+  return { display: m[2], holder: m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
+}
+
+// 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
+//  · 표기 이름은 그대로 두되(예: "송민지님까지" 문구), 위치는 실제 주인(박준서=18) 자리로.
+function resolveCutoff(verdict, article, today = null) {
+  if (!verdict) return;
+  const roster = (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length)
+    ? verdict.part3Roster
+    : (Array.isArray(today?.roster3) ? today.roster3 : []);
+  const pc = parseCutoffText(article);
+  if (pc) {
+    verdict.cutoffAnnounced = true;
+    if (!verdict.cutoffName) verdict.cutoffName = pc.display;        // 표기 이름 보존
+    if (roster.length) {
+      const cpos = rosterPosOf(roster, pc.holder);                  // 괄호 점유자 자리 = 진짜 컷
+      if (cpos > 0) verdict.cutoffPosition = cpos;
+      else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
+    } else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
+  } else if (verdict.cutoffAnnounced && verdict.cutoffName && roster.length && !(Number(verdict.cutoffPosition) > 0)) {
+    const cpos = rosterPosOf(roster, normRosterName(verdict.cutoffName).name);
+    if (cpos > 0) verdict.cutoffPosition = cpos;
+  }
+}
+
 function fixMemberPosByRoster(v, member = memberFromEnv()) {
   if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
   const rp = rosterPosOf(v.part3Roster, member.name);
   if (rp <= 0) return;
   const prevPos = Number(v.myPosition) || 0;
   const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
-  const annCut = Number(v.cutoffPosition) > 0 ? Number(v.cutoffPosition) : 0;
-  const workLimit = Number(v.teamCount) > 0 ? Number(v.teamCount) : Math.max(gridMax, annCut); // 팀수(텍스트) 우선
+  const annCut = (v.cutoffAnnounced && Number(v.cutoffPosition) > 0) ? Number(v.cutoffPosition) : 0;
+  // 근무 상한 우선순위: 명시 커트라인("○○까지 근무") > 팀수("N팀") > 티오프표 최대순번.
+  //  ★"16팀"과 "송민지(박준서=18번)까지"가 어긋날 땐 사람을 콕 집은 커트라인이 진짜 경계(교차부 인원 등).
+  const workLimit = annCut > 0 ? annCut : (Number(v.teamCount) > 0 ? Number(v.teamCount) : gridMax);
   if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
   v.myPosition = rp;
   if (workLimit > 0 && rp > workLimit) {
@@ -862,15 +896,19 @@ export async function judge(article, today = null, member = memberFromEnv()) {
               ? verdict.crossPartNames : (Array.isArray(today?.crossPart3) ? today.crossPart3 : []);
             verdict._swaps = applied;
             verdict._swapKey = swapKey;
-            fixMemberPosByRoster(verdict, member);
           }
         } else {
           verdict.part3Roster = base.slice();   // 이미 반영된 저장 명단 그대로 사용(재적용 금지)
           verdict._swapKey = swapKey;
-          fixMemberPosByRoster(verdict, member);
         }
       }
     }
+  }
+  // ★커트라인 위치를 (교환 후) 명단에서 괄호 점유자 기준으로 확정 → 본인 순번·근무/스페어 최종 재확정.
+  //  명단이 있으면(배치표/대바) authoritative. 없으면 no-op(기존 판독 유지).
+  if (verdict) {
+    resolveCutoff(verdict, article, today);
+    fixMemberPosByRoster(verdict, member);
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
