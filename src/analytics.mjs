@@ -73,6 +73,62 @@ function seriesByDay(items, days, tsFn = (x) => x.at) {
   return days.map((d) => ({ date: d, count: c.get(d) }));
 }
 
+// ── 시스템이 판독한 '최신 배치표' — 매일 실제 배치표와 대조 검증용 ─────────
+//  lastboard.json(원문+판독결과) + 1번 회원 today.json(명단/컷/티오프) 을 합쳐 순번별로 재구성.
+//  원문 이미지 링크를 함께 줘서, 관리자가 실제 배치표와 나란히 눈으로 대조할 수 있게 한다.
+function buildLatestBoard() {
+  const lb = loadJSON('lastboard.json', null);
+  const t1 = loadUserJSON(1, 'today.json', null) || {};
+  const v = (lb && lb.rawVerdict) ? lb.rawVerdict : {};
+  const roster = (Array.isArray(v.part3Roster) && v.part3Roster.length) ? v.part3Roster
+    : (Array.isArray(t1.roster3) ? t1.roster3 : []);
+  if (!roster.length) return null;
+  const cutoffPos = Number(v.cutoffPosition) > 0 ? Number(v.cutoffPosition)
+    : (Number(t1.cutoffPosition) > 0 ? Number(t1.cutoffPosition) : 0);
+  const teamCount = Number(v.teamCount) > 0 ? Number(v.teamCount) : null;
+  const teeGrid = (Array.isArray(v.teeGrid) && v.teeGrid.length) ? v.teeGrid
+    : (Array.isArray(t1.teeGrid) ? t1.teeGrid : []);
+  const teeByPos = new Map(teeGrid.map((g) => [Number(g.pos), g]));
+  const workLimit = cutoffPos || teamCount || 0;   // 근무 확정선(없으면 티오프표 유무로)
+  const rows = roster.map((cell, i) => {
+    const pos = i + 1;
+    const g = teeByPos.get(pos);
+    const work = workLimit > 0 ? pos <= workLimit : !!g;
+    return {
+      pos, name: String(cell || ''),
+      work,
+      spareRank: (!work && workLimit > 0) ? (pos - workLimit) : null,
+      tee: g ? (String(g.time || '').match(/\d{1,2}:\d{2}/) || [''])[0] : '',
+      course: g ? String(g.course || '') : '',
+      isCut: workLimit > 0 && pos === workLimit,
+    };
+  });
+  const art = (lb && lb.article) || {};
+  return {
+    at: (lb && lb.at) || null,
+    articleId: (lb && lb.id) || v.articleId || '',
+    subject: art.subject || '',
+    writer: art.writer || '',
+    writeDate: art.writeDate || null,
+    dateLabel: v.dateLabel || (lb && lb.dateLabel) || '',
+    image: (Array.isArray(art.images) && art.images[0]) || '',
+    url: art.url || '',
+    model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    cutoffName: v.cutoffName || t1.cutoffName || '',
+    cutoffPosition: cutoffPos || null,
+    teamCount,
+    swaps: Array.isArray(v._swaps) ? v._swaps : [],
+    uncertain: v._uncertain || '',
+    reliable: !!v.rosterReliable,
+    comments: (Array.isArray(art.comments) ? art.comments : [])
+      .map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+    workCount: rows.filter((r) => r.work).length,
+    spareCount: rows.filter((r) => !r.work).length,
+    total: rows.length,
+    rows,
+  };
+}
+
 // ── 집계(모니터 사이트에서 호출) ─────────────────────────
 export function computeStats(now = Date.now()) {
   const startToday = new Date(dayKey(now) + 'T00:00:00').getTime();
@@ -246,5 +302,7 @@ export function computeStats(now = Date.now()) {
     byMember: memberRows,
   };
 
-  return { generatedAt: now, members, signups, sessions: sessInfo, visits, presence, recentLogins, board, devices, health, feed, pushes };
+  const latestBoard = buildLatestBoard();
+
+  return { generatedAt: now, members, signups, sessions: sessInfo, visits, presence, recentLogins, board, devices, health, feed, pushes, latestBoard };
 }

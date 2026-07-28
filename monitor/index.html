@@ -110,6 +110,31 @@
   .pr-part{ font-size:10.5px; color:var(--tx3); font-weight:600; }
   .pr-state{ margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums; color:var(--tx2); white-space:nowrap; }
   .pr-state.on{ color:var(--good); font-weight:800; }
+
+  /* 판독한 최신 배치표 (대조 검증) */
+  .bd-top{ display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; margin-bottom:4px; }
+  .bd-subj{ font-size:14.5px; font-weight:800; color:var(--tx); letter-spacing:-.01em; }
+  .bd-meta{ font-size:11px; color:var(--tx3); font-variant-numeric:tabular-nums; }
+  .bd-badges{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:11px 0; }
+  .chip{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--panel2); border:1px solid var(--bord2); color:var(--tx2); white-space:nowrap; }
+  .chip.acc{ color:var(--acc); border-color:color-mix(in srgb,var(--acc) 40%,transparent); background:color-mix(in srgb,var(--acc) 10%,transparent); }
+  .chip.swap{ color:var(--info); border-color:color-mix(in srgb,var(--info) 40%,transparent); background:color-mix(in srgb,var(--info) 10%,transparent); }
+  .bd-cols{ display:grid; grid-template-columns:minmax(220px,340px) 1fr; gap:16px; align-items:start; }
+  @media(max-width:760px){ .bd-cols{ grid-template-columns:1fr; } }
+  .bd-imgbox{ border:1px solid var(--bord); border-radius:12px; overflow:auto; background:var(--panel2); max-height:560px; }
+  .bd-imgbox img{ width:100%; display:block; }
+  .bd-imgbox .noimg{ padding:48px 12px; text-align:center; color:var(--tx3); font-size:12px; }
+  .roster{ display:grid; grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); gap:5px; align-content:start; }
+  .brow{ display:flex; align-items:center; gap:8px; padding:5px 9px; border-radius:8px; background:var(--panel2); border:1px solid var(--bord); font-size:12.5px; }
+  .brow.work{ background:color-mix(in srgb,var(--good) 9%,transparent); border-color:color-mix(in srgb,var(--good) 24%,transparent); }
+  .brow.cut{ border-color:var(--acc); box-shadow:inset 0 0 0 1px var(--acc); }
+  .brow .bp{ font-size:10.5px; font-weight:800; color:var(--tx3); min-width:19px; text-align:right; font-variant-numeric:tabular-nums; }
+  .brow .bn{ font-weight:700; color:var(--tx); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .brow .bs{ font-size:10.5px; font-weight:800; white-space:nowrap; }
+  .brow.work .bs{ color:var(--good); } .brow .bs.sp{ color:var(--warn); }
+  .bd-comments{ margin-top:13px; font-size:11px; }
+  .bd-comments b{ color:var(--tx3); font-size:10.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+  .bd-comments .c{ padding:6px 10px; background:var(--panel2); border-left:2px solid var(--info); border-radius:0 6px 6px 0; margin-top:5px; color:var(--tx2); white-space:pre-wrap; }
 </style>
 </head>
 <body>
@@ -125,6 +150,13 @@
 <div class="wrap">
   <div id="err"></div>
   <div class="kpis" id="kpis"></div>
+
+  <div class="sectlab">판독 검증 · 매일 대조</div>
+  <div class="panel full" id="boardPanel">
+    <h2>시스템이 판독한 최신 배치표</h2>
+    <p class="desc" id="boardDesc">원문 이미지와 나란히 대조하세요 — 순번·근무/스페어·티오프·대바 반영</p>
+    <div id="latestBoard"></div>
+  </div>
 
   <div class="grid">
     <div class="panel"><h2>가입자 추이</h2><p class="desc">최근 30일 신규 가입(일별)</p><div id="signupChart"></div>
@@ -201,7 +233,45 @@
   }
   function statusTag(st){ var m={active:['g','활성'],pending:['w','대기'],disabled:['b','차단']}; var x=m[st]||['','?']; return '<span class="tag '+x[0]+'">'+x[1]+'</span>'; }
 
+  function renderBoard(lb){
+    var el = $('latestBoard'); if(!el) return;
+    if(!lb){ el.innerHTML = '<div class="muted">아직 판독된 배치표가 없습니다. 배치표 글이 올라오면 자동으로 표시됩니다.</div>'; return; }
+    var rows = lb.rows||[];
+    var grid = rows.map(function(r){
+      var right = r.work
+        ? '<span class="bs">'+(r.tee? (esc(r.tee)+(r.course?(' '+esc(r.course)):'')) : '근무')+'</span>'
+        : '<span class="bs sp">스페어'+(r.spareRank!=null?(' '+r.spareRank+'번'):'')+'</span>';
+      return '<div class="brow'+(r.work?' work':'')+(r.isCut?' cut':'')+'">'+
+        '<span class="bp num">'+r.pos+'</span><span class="bn">'+esc(r.name)+'</span>'+right+
+        (r.isCut?'<span class="bs" style="color:var(--acc)">◀컷</span>':'')+'</div>';
+    }).join('');
+    var swaps = (lb.swaps||[]).map(function(x){ return '<span class="chip swap">🔄 '+esc(x)+'</span>'; }).join('');
+    var mdl = esc(String(lb.model||'').replace('gemini-','').replace('-latest',''));
+    var badges =
+      '<span class="chip acc">근무 '+n(lb.workCount)+'</span>'+
+      '<span class="chip">스페어 '+n(lb.spareCount)+'</span>'+
+      (lb.cutoffName? '<span class="chip">컷 '+esc(lb.cutoffName)+(lb.cutoffPosition?('('+lb.cutoffPosition+'번)'):'')+'</span>':'')+
+      (lb.teamCount? '<span class="chip">'+lb.teamCount+'팀</span>':'')+
+      '<span class="chip">🤖 '+mdl+'</span>'+ swaps;
+    var img = lb.image
+      ? '<a href="'+esc(lb.url||lb.image)+'" target="_blank" rel="noopener"><img src="'+esc(lb.image)+'" alt="배치표 원본"/></a>'
+      : '<div class="noimg">원본 이미지 없음</div>';
+    var cmts = (lb.comments||[]).length
+      ? '<div class="bd-comments"><b>원문 댓글 (대바 반영 확인용)</b>'+lb.comments.map(function(c){ return '<div class="c">'+esc(c)+'</div>'; }).join('')+'</div>'
+      : '';
+    var unc = lb.uncertain? '<div class="err" style="margin:8px 0 2px">⚠️ '+esc(lb.uncertain)+'</div>' : '';
+    el.innerHTML =
+      '<div class="bd-top"><span class="bd-subj">'+esc(lb.subject||'(제목 없음)')+'</span>'+
+        '<span class="bd-meta">'+(lb.dateLabel?esc(lb.dateLabel)+' · ':'')+(lb.writer?esc(lb.writer)+' · ':'')+'판독 '+clock(lb.at)+'</span></div>'+
+      '<div class="bd-badges">'+badges+'</div>'+ unc +
+      '<div class="bd-cols"><div class="bd-imgbox">'+img+'</div>'+
+      '<div><div class="roster">'+grid+'</div>'+cmts+'</div></div>';
+    if($('boardDesc')) $('boardDesc').textContent =
+      '원문과 나란히 대조 — 순번·근무/스페어·티오프·대바 · '+(lb.reliable?'명단 신뢰 판독':'부분 판독')+' · 총 '+n(lb.total||0)+'명';
+  }
+
   function render(s){
+    renderBoard(s.latestBoard);
     // 상태 점
     var h = s.health||{}; var failed = (h.failStreak||0)>0; var stale = h.lastOkAt && (Date.now()-h.lastOkAt > 20*60000);
     var dot = $('statusDot'); dot.className = 'dot' + (failed?' bad':(stale?' warn':''));
