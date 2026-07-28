@@ -164,12 +164,13 @@ export function applySwapAssignments(roster, ops) {
 //  근무 상한(팀수/티오프표 최대순번/커트라인) 밖이면 구조적으로 스페어 확정(색·표결보다 우선).
 // "○○님까지 근무" 커트라인 텍스트 파싱 — 괄호 점유자 우선("송민지님(박준서)까지" → 실제 컷 사람=박준서).
 //  사용자 원칙: 괄호 안 이름이 그 자리의 실제 주인. display(표기 이름)와 holder(위치 기준 사람)를 분리.
-const CUTOFF_RE = /(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*님\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/;
+//  괄호는 "이름(점유자)님까지"·"이름님(점유자)까지" 두 위치 다 허용 → holder(점유자) 우선.
+const CUTOFF_RE = /(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/;
 function parseCutoffText(article) {
   const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
   const m = t.match(CUTOFF_RE);
   if (!m) return null;
-  return { display: m[2], holder: m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
+  return { display: m[2], holder: m[4] || m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
 }
 
 // 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
@@ -182,15 +183,19 @@ function resolveCutoff(verdict, article, today = null) {
   const pc = parseCutoffText(article);
   if (pc) {
     verdict.cutoffAnnounced = true;
-    if (!verdict.cutoffName) verdict.cutoffName = pc.display;        // 표기 이름 보존
+    verdict.cutoffName = pc.holder;                                 // 실제 그 자리 주인(괄호 점유자)으로 표기
     if (roster.length) {
       const cpos = rosterPosOf(roster, pc.holder);                  // 괄호 점유자 자리 = 진짜 컷
       if (cpos > 0) verdict.cutoffPosition = cpos;
       else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
     } else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
-  } else if (verdict.cutoffAnnounced && verdict.cutoffName && roster.length && !(Number(verdict.cutoffPosition) > 0)) {
-    const cpos = rosterPosOf(roster, normRosterName(verdict.cutoffName).name);
-    if (cpos > 0) verdict.cutoffPosition = cpos;
+  } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
+    const holder = normRosterName(verdict.cutoffName).name;         // "연승준(서동환)" → 서동환
+    verdict.cutoffName = holder;
+    if (roster.length && !(Number(verdict.cutoffPosition) > 0)) {
+      const cpos = rosterPosOf(roster, holder);
+      if (cpos > 0) verdict.cutoffPosition = cpos;
+    }
   }
 }
 
