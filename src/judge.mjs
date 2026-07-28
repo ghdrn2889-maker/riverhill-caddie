@@ -768,11 +768,13 @@ async function readBoardConsensus(article, member) {
 //  · "(사람이름)" 이면 = 순번 교환 → 그 자리 실제 점유자는 괄호 안 사람.
 function normRosterName(raw) {
   const s = String(raw || '').trim();
-  const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*(.*)$/);   // "이름(속)나머지" — 나머지(tail)까지 포착
   if (!m) return { name: s, cross: false };
-  const base = m[1].trim(), inner = m[2].trim();
-  if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true };  // 부/근무 구분
-  return { name: inner || base, cross: false };                       // 순번 교환 → 실제 점유자
+  const base = m[1].trim(), inner = m[2].trim(), tail = m[3].trim();
+  // "최수원(1,3)연승준" — 괄호 뒤에 이름이 더 있으면 그게 실제 점유자(괄호 속은 부/근무 태그).
+  if (tail && /[가-힣]/.test(tail)) return { name: tail, cross: /^[\d,\s.]+$/.test(inner) };
+  if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true };  // "표승완(54)" 부/근무 구분
+  return { name: inner || base, cross: false };                       // "정진영(조하빈)" 순번 교환 → 점유자
 }
 
 // 전용 명단 판독([{pos,name}]) → { roster:위치정렬(index=순번-1,빈칸=''), cross:[부중복 본명] }.
@@ -801,7 +803,15 @@ function buildPositionalRoster(ordered, verdict) {
 
 export async function judge(article, today = null, member = memberFromEnv()) {
   const img = article.images?.[0] || null;
-  const isBoard = !!img && /배치표|시간표|번호표/.test(article.subject || '');
+  //  ★board(전체 명단 이미지) 판정 — 명단 harvest(괄호 교환 해석)를 태울지 결정.
+  //   "배치표/번호표" 키워드뿐 아니라 "N팀"·"○○님까지 근무" 컷 공지도 전체 순번판이 붙어 오므로 포함.
+  //   (이걸 놓치면 이미지의 괄호 교환 "정진영(조하빈)"이 해석 안 돼 회원에게 교환 전 순번이 나감.)
+  const subj = article.subject || '';
+  const isBoard = !!img && (
+    /배치표|시간표|번호표/.test(subj)
+    || /\d+\s*팀/.test(subj)                                   // "3부 17팀"
+    || /[가-힣]{2,4}\s*님\s*(?:\([^)]*\)\s*)?까지\s*(?:근무|일)/.test(subj)  // "○○님(□□)까지 근무"
+  );
   // ★배치표(이미지)는 여러 번 읽어 '표결'(신뢰도↑·정직한 불확실). 텍스트/카톡/일반 글은 1회(기본 모델).
   let verdict = isBoard
     ? await readBoardConsensus(article, member)

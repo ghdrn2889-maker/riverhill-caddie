@@ -290,7 +290,9 @@ ${p}부 목록을 못 찾으면 {"part": ${p}, "roster": []}.`;
 // 반환: [{pos:number, name:string}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
 export async function analyzeRoster(article, part = '3') {
   if (!article.images?.length) return [];
-  const model = process.env.GEMINI_BOARD_MODEL || undefined; // 명단은 더 좋은 board 모델로
+  // ★명단은 '구조화 JSON 리스트'라 flash가 더 안정적(pro는 긴 40행 명단에서 JSON 파싱 실패 잦음).
+  //  괄호 교환("정진영(조하빈)")도 flash가 또렷이 포착 → 점유자 해석은 코드(normRosterName)가 결정적으로.
+  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
   const out = await callGeminiJSON(buildRosterPrompt(part), article.images[0], model);
   const rows = Array.isArray(out?.roster) ? out.roster : [];
   const cleaned = rows
@@ -328,7 +330,7 @@ function buildCrewsPrompt() {
 // 반환: [{jo:number, name:string, duty:string}] — 실패/미검출이면 [].
 export async function analyzeCrews(article) {
   if (!article.images?.length) return [];
-  const model = process.env.GEMINI_BOARD_MODEL || undefined;
+  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
   const out = await callGeminiJSON(buildCrewsPrompt(), article.images[0], model);
   const rows = Array.isArray(out?.crews) ? out.crews : [];
   return rows
