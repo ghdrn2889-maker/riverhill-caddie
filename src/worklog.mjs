@@ -81,6 +81,36 @@ export function recordWorkDay(dateISO, info = {}, userId = 1) {
   return d.days[dateISO];
 }
 
+// 근무로 자동 기록됐던 날이 이후 '스페어/취소/오프'로 번복되면 자동 기록을 되돌린다.
+//  ★사용자가 손댄 날(수동확인·수동추가·사진·계기판)은 절대 건드리지 않는다 — 자동 스텁만 정리.
+//  part 지정 시 그 부만 rounds에서 빼고, 남은 근무 라운드가 없으면 그날 기록을 통째 삭제.
+export function unrecordWorkDay(dateISO, part = null, userId = 1) {
+  if (!dateISO) return null;
+  const d = load(userId);
+  const cur = d.days[dateISO];
+  if (!cur) return null;
+  const touched = cur.source !== 'auto' || cur.worked === true || cur.confirmedAt
+    || (cur.photos && Object.keys(cur.photos).length) || (cur.odo && Object.keys(cur.odo).length);
+  if (touched) return cur; // 사용자 데이터 보존
+  if (part && cur.rounds && Object.keys(cur.rounds).length) {
+    const rounds = { ...cur.rounds };
+    delete rounds[String(part)];
+    if (Object.keys(rounds).length > 0) { // 다른 근무 라운드가 남음 → 그 부만 제거
+      const primary = rounds['3'] || rounds['2'] || rounds['1'] || null;
+      d.days[dateISO] = {
+        ...cur, rounds,
+        teeTime: primary?.teeTime || '', course: primary?.course || '',
+        twoRounds: Object.keys(rounds).length >= 2, trips: tripsFromRounds(rounds),
+      };
+      save(userId, d);
+      return d.days[dateISO];
+    }
+  }
+  delete d.days[dateISO]; // 남은 근무 라운드 없음 → 자동 스텁 삭제
+  save(userId, d);
+  return null;
+}
+
 // 왕복 횟수 수동 보정(사용자가 실제 귀가 여부를 앎). null이면 자동값(trips)으로 복귀.
 export function setTrips(dateISO, n, userId = 1) {
   if (!dateISO) return null;

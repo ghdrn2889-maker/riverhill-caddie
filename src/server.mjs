@@ -17,6 +17,7 @@ import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
+import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin } from './users.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
 
@@ -45,6 +46,8 @@ app.post('/api/logout', logout);
 app.get('/api/me', (req, res) => {
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
   if (!req.user) return res.json({ ...base, authed: false });
+  recordVisit(req.user.id, { role: req.user.role, status: req.user.status }); // 방문(앱 오픈) 기록 — 10분 스로틀
+  recordPresence(req.user.id); // 접속 상태(마지막 활동) 갱신
   const prof = getProfile(req.user.id) || {};
   const needsOnboarding = !prof.board_name;
   const pending = req.user.status !== 'active'; // 승인 대기/차단 → 프론트가 '승인 대기' 화면 표시
@@ -54,6 +57,12 @@ app.get('/api/me', (req, res) => {
     profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
     needsOnboarding });
+});
+// 접속 하트비트 — 앱이 열려 있는 동안 주기적으로 호출. 마지막 활동 시각만 갱신(운영 모니터의 접속중/나감 판별).
+//  게이트 앞에 둬서 로그인만 돼 있으면(대기 회원 포함) 접속 상태가 잡힌다. 비로그인은 그냥 통과.
+app.post('/api/ping', (req, res) => {
+  if (req.user) recordPresence(req.user.id);
+  res.json({ ok: true });
 });
 // 프로필 저장(온보딩·수정). 로그인 필수(솔로 모드에선 1번 회원).
 app.post('/api/profile', requireAuth, (req, res) => {
@@ -892,10 +901,18 @@ async function processForMember(userId, member, out, full, opts = {}) {
     }
   }
 
-  if (merged && v && !v._uncertain && ['assigned', 'work', 'your_turn'].includes(merged.next.status)) {
+  if (merged && v && !v._uncertain) {
     const iso = worklog.labelToISO(merged.next.date) || new Date().toISOString().slice(0, 10);
-    worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id }, userId);
+    if (['assigned', 'work', 'your_turn'].includes(merged.next.status))
+      worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id }, userId);
+    // ★근무→스페어/취소/오프 번복: 자동 기록된 세무 근무일을 되돌린다(스페어로 끝난 날 '근무했냐' 알림 방지).
+    else if (['spare', 'waiting', 'near', 'off', 'cancelled', 'canceled'].includes(merged.next.status))
+      worklog.unrecordWorkDay(iso, '3', userId);
   }
+  // 판독 모니터링: 배치표 글의 판독 1건 기록(시스템 이해도 집계용). 카톡/잡담은 제외.
+  if (v && !isKakaoSource(full)) recordBoardRead({ uid: userId, part: member.part, articleId: full.id,
+    subject: full.subject, status: out.status, category: v.category || null,
+    confidence: v.confidence ?? null, uncertain: !!v._uncertain, relevant: !!out.relevant });
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
     category: v?.category || null, change: change.message || null, reversal: change.reversal };
@@ -990,7 +1007,13 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   if (jIso && !v._uncertain) {
     journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part }, userId);
     if (isWork) worklog.recordWorkDay(jIso, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part }, userId);
+    // ★이 부가 근무→스페어/취소로 번복되면 그 부 자동 기록만 되돌림(다른 부 근무는 유지).
+    else if (['spare', 'waiting', 'near', 'off', 'cancelled', 'canceled'].includes(n.status)) worklog.unrecordWorkDay(jIso, part, userId);
   }
+  // 판독 모니터링: 이 부 배치표 판독 1건 기록(시스템 이해도 집계용).
+  if (v && !isKakaoSource(full)) recordBoardRead({ uid: userId, part, articleId: full.id,
+    subject: full.subject, status: n.status, category: v.category || null,
+    confidence: v.confidence ?? null, uncertain: !!v._uncertain, relevant: !!v.relevant });
 
   // 알림: 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
   const chgs = change.changes || [];
@@ -1058,11 +1081,12 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   return { pushed: true };
 }
 
-// 근무일 차량기록 리마인더: 저녁(기본 22시) 이후, 기록 비어있는 근무일이 있으면 상기 푸시.
+// 근무일 차량기록 리마인더: 저녁(기본 20시) 이후, 기록 비어있는 근무일이 있으면 상기 푸시.
+//  ★조용시간(22~07시) 전에 보내야 하므로 기본 20시 — 라운드는 끝난 뒤라 안전.
 async function checkWorklogReminders() {
   try {
     const hour = new Date().getHours();
-    if (hour < Number(process.env.REMIND_HOUR ?? 22)) return;
+    if (hour < Number(process.env.REMIND_HOUR ?? 20)) return;
     for (const day of worklog.dueReminders()) {
       const md = `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8, 10))}`;
       await broadcast({ title: '🚗 근무 기록 잊지 마세요', body: `${md} 근무하셨나요? 계기판 사진(집출발·직장도착·집복귀)을 앱에 등록해주세요.`, url: '/' });
@@ -1161,6 +1185,8 @@ async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMi
   if (tISO && tISO !== todayISO) return false;           // 오늘 근무만(내일 배치표는 제외)
   const c = commuteInfo(t.teeTime, mem.commute_min);
   if (!c) return false;
+  // ★조출(1부) 근무 알림만 조용시간(22~07시) 예외로 통과 — 새벽 출발이라 안 울리면 지각 위험.
+  const bypassQuiet = prefix === 'p1-';
   let rems = timelineReminders(c, name);
   if (roundLabel) rems = rems.map((r) => ({ ...r, key: prefix + r.key, title: `${r.title} (${roundLabel})`, body: `${roundLabel} 라운드 — ${r.body}` }));
   let changed = false;
@@ -1168,7 +1194,7 @@ async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMi
     if (r.at == null || store.sent[r.key]) continue;
     if (nowMin >= r.at) {
       if (nowMin - r.at <= REMIND_GRACE) {               // 임계값 직후에만 발송(늦으면 조용히 통과)
-        await broadcast({ title: r.title, body: r.body, url: '/', level: r.level }, mem.id);
+        await broadcast({ title: r.title, body: r.body, url: '/', level: r.level, bypassQuiet }, mem.id);
         console.log(`[타임라인${roundLabel ? '/' + roundLabel : ''}] 회원${mem.id} ${r.key} 발송 (예정 ${r.at}분, 현재 ${nowMin}분)`);
       }
       store.sent[r.key] = Date.now();

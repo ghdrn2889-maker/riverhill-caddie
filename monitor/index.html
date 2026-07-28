@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>리버힐 캐디 · 운영 모니터</title>
+<style>
+  :root{
+    --bg:#eef1f5; --bg2:#f0f3f7; --panel:#ffffff; --panel2:#f5f8fb; --bord:#e3e8ef; --bord2:#d4dbe4;
+    --tx:#1f2833; --tx2:#5b6775; --tx3:#8a96a4; --acc:#2f8f66; --acc2:#43b483;
+    --good:#2f8f66; --warn:#c1871c; --bad:#d1544f; --info:#3a7bc0; --grid:#e9edf2;
+    --shadow:0 4px 16px rgba(31,40,51,.06);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--tx); }
+  body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif; -webkit-font-smoothing:antialiased; padding:0 0 48px; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 18px; }
+  .num{ font-variant-numeric:tabular-nums; }
+
+  /* 헤더 */
+  header{ position:sticky; top:0; z-index:10; background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(255,255,255,.84)); backdrop-filter:blur(8px); border-bottom:1px solid var(--bord); }
+  .hrow{ max-width:1180px; margin:0 auto; padding:13px 18px; display:flex; align-items:center; gap:12px; }
+  .brand{ font-size:16px; font-weight:800; letter-spacing:-.02em; }
+  .brand .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--good); margin-right:7px; box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 26%,transparent); vertical-align:middle; }
+  .brand .dot.bad{ background:var(--bad); box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 26%,transparent); }
+  .brand .dot.warn{ background:var(--warn); box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 26%,transparent); }
+  .spacer{ flex:1; }
+  .updated{ font-size:11.5px; color:var(--tx3); }
+  .btn{ appearance:none; border:1px solid var(--bord2); background:var(--panel2); color:var(--tx2); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:9px; cursor:pointer; }
+  .btn:hover{ color:var(--tx); border-color:var(--acc); }
+
+  /* KPI */
+  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:11px; margin:18px 0; }
+  @media(max-width:900px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
+  @media(max-width:560px){ .kpis{ grid-template-columns:repeat(2,1fr); } }
+  .kpi{ background:var(--panel); border:1px solid var(--bord); border-radius:14px; padding:13px 14px; position:relative; overflow:hidden; box-shadow:var(--shadow); }
+  .kpi .lab{ font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--tx3); text-transform:uppercase; }
+  .kpi .v{ font-size:29px; font-weight:800; letter-spacing:-.03em; margin-top:5px; line-height:1; }
+  .kpi .v small{ font-size:14px; font-weight:700; color:var(--tx2); margin-left:2px; }
+  .kpi .sub{ font-size:11px; color:var(--tx2); margin-top:6px; }
+  .kpi .strip{ position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--acc); }
+  .kpi.good .strip{ background:var(--good); } .kpi.warn .strip{ background:var(--warn); } .kpi.bad .strip{ background:var(--bad); } .kpi.info .strip{ background:var(--info); }
+  .pill{ display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px; }
+  .pill.good{ background:color-mix(in srgb,var(--good) 18%,transparent); color:var(--good); }
+  .pill.warn{ background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn); }
+  .pill.bad{ background:color-mix(in srgb,var(--bad) 18%,transparent); color:var(--bad); }
+  .pill.info{ background:color-mix(in srgb,var(--info) 18%,transparent); color:var(--info); }
+
+  /* 패널 그리드 */
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media(max-width:820px){ .grid{ grid-template-columns:1fr; } }
+  .panel{ background:var(--panel); border:1px solid var(--bord); border-radius:15px; padding:15px 16px; box-shadow:var(--shadow); }
+  .panel h2{ font-size:13px; font-weight:800; margin:0 0 3px; letter-spacing:-.01em; }
+  .panel .desc{ font-size:11px; color:var(--tx3); margin:0 0 13px; }
+  .panel.full{ grid-column:1/-1; }
+
+  /* 막대 차트 */
+  .bars{ display:flex; align-items:flex-end; gap:2px; height:96px; }
+  .bars .b{ flex:1; background:linear-gradient(180deg,var(--acc2),var(--acc)); border-radius:3px 3px 0 0; min-height:2px; position:relative; transition:.2s; opacity:.9; }
+  .bars .b:hover{ opacity:1; } .bars .b.zero{ background:var(--grid); opacity:.5; }
+  .bars .b .tip{ display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); white-space:nowrap; background:#2a333f; color:#fff; font-size:10px; padding:3px 6px; border-radius:5px; margin-bottom:4px; box-shadow:0 2px 8px rgba(0,0,0,.18); }
+  .bars .b:hover .tip{ display:block; }
+  .xax{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--tx3); margin-top:6px; }
+
+  /* 수평 분포 바 */
+  .hbar{ margin:8px 0; } .hbar .top{ display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px; } .hbar .top b{ color:var(--tx); font-weight:700; } .hbar .top span{ color:var(--tx2); }
+  .track{ height:8px; background:var(--grid); border-radius:5px; overflow:hidden; } .track i{ display:block; height:100%; border-radius:5px; background:var(--acc); }
+  .track i.info{ background:var(--info); } .track i.warn{ background:var(--warn); } .track i.bad{ background:var(--bad); } .track i.good{ background:var(--good); }
+
+  /* 게이지(도넛) */
+  .gauge{ display:flex; align-items:center; gap:16px; }
+  .gauge .val{ font-size:34px; font-weight:800; letter-spacing:-.03em; } .gauge .val small{ font-size:15px; color:var(--tx2); }
+  .gauge .meta{ font-size:11.5px; color:var(--tx2); line-height:1.7; }
+
+  /* 표 */
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th{ text-align:left; font-size:10px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--tx3); padding:6px 8px; border-bottom:1px solid var(--bord); }
+  td{ padding:8px; border-bottom:1px solid var(--bg2); color:var(--tx2); }
+  tr:last-child td{ border-bottom:0; } td.tx{ color:var(--tx); font-weight:600; }
+  .tag{ font-size:10px; font-weight:700; padding:2px 7px; border-radius:6px; background:var(--panel2); color:var(--tx2); border:1px solid var(--bord2); }
+  .tag.g{ color:var(--good); border-color:color-mix(in srgb,var(--good) 40%,transparent); }
+  .tag.w{ color:var(--warn); border-color:color-mix(in srgb,var(--warn) 40%,transparent); }
+  .tag.b{ color:var(--bad); border-color:color-mix(in srgb,var(--bad) 40%,transparent); }
+  .tag.i{ color:var(--info); border-color:color-mix(in srgb,var(--info) 40%,transparent); }
+  .muted{ color:var(--tx3); font-size:11.5px; padding:14px 4px; text-align:center; }
+  .note{ font-size:10.5px; color:var(--tx3); margin-top:10px; line-height:1.6; }
+  .sectlab{ font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--tx3); margin:26px 2px 12px; }
+  .err{ background:color-mix(in srgb,var(--bad) 14%,transparent); border:1px solid color-mix(in srgb,var(--bad) 40%,transparent); color:var(--bad); padding:12px 14px; border-radius:12px; font-size:12.5px; margin:16px 0; }
+  /* 회원별 발송 알림 */
+  .mpush{ border:1px solid var(--bord); border-radius:12px; padding:10px 12px; margin-bottom:9px; background:var(--panel2); }
+  .mpush.silent{ opacity:.7; }
+  .mp-head{ display:flex; align-items:center; gap:8px; }
+  .mp-name{ font-size:13px; font-weight:800; color:var(--tx); }
+  .mp-part{ font-size:10.5px; color:var(--tx2); font-weight:700; }
+  .mp-cnt{ margin-left:auto; font-size:10.5px; font-weight:800; color:var(--acc); background:color-mix(in srgb,var(--acc) 14%,transparent); border-radius:999px; padding:2px 10px; }
+  .mp-cnt.zero{ color:var(--tx3); background:var(--grid); }
+  .mp-items{ margin-top:9px; display:flex; flex-direction:column; gap:8px; }
+  .mp-item{ border-left:2px solid var(--bord2); padding:1px 0 1px 10px; }
+  .mp-line{ display:flex; align-items:center; gap:7px; font-size:11.5px; }
+  .mp-t{ color:var(--tx2); font-weight:700; white-space:nowrap; }
+  .mp-ttl{ color:var(--tx); font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mp-body{ font-size:11px; color:var(--tx2); margin-top:3px; line-height:1.5; }
+  .mp-empty{ font-size:11px; color:var(--tx3); margin-top:7px; }
+  /* 회원 현황(접속 상태) */
+  .pr-row{ display:flex; align-items:center; gap:9px; padding:8px 3px; border-bottom:1px solid var(--bg2); }
+  .pr-row:last-child{ border-bottom:0; }
+  .pr-dot{ width:9px; height:9px; border-radius:50%; background:var(--tx3); flex:0 0 auto; opacity:.55; }
+  .pr-dot.on{ background:var(--good); opacity:1; box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 24%,transparent); }
+  .pr-name{ font-weight:700; color:var(--tx); font-size:12.5px; }
+  .pr-part{ font-size:10.5px; color:var(--tx3); font-weight:600; }
+  .pr-state{ margin-left:auto; font-size:11px; font-variant-numeric:tabular-nums; color:var(--tx2); white-space:nowrap; }
+  .pr-state.on{ color:var(--good); font-weight:800; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="brand"><span class="dot" id="statusDot"></span>리버힐 캐디 · 운영 모니터</div>
+    <div class="spacer"></div>
+    <div class="updated" id="updated">불러오는 중…</div>
+    <button class="btn" id="refreshBtn">새로고침</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="err"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <div class="panel"><h2>가입자 추이</h2><p class="desc">최근 30일 신규 가입(일별)</p><div id="signupChart"></div>
+      <div style="margin-top:14px" id="signupBreak"></div></div>
+    <div class="panel"><h2>방문 · 접속 추이</h2><p class="desc" id="visitDesc">최근 30일 앱 오픈(일별)</p><div id="visitChart"></div>
+      <div style="margin-top:14px" id="visitBreak"></div></div>
+
+    <div class="panel"><h2>배치표 이해도</h2><p class="desc">시스템이 배치표를 얼마나 정확히 읽었나 (불확실 판독 기준)</p><div id="boardGauge"></div>
+      <div style="margin-top:14px" id="boardBuckets"></div></div>
+    <div class="panel"><h2>불확실 판독 사유</h2><p class="desc">헷갈린 케이스의 원인 분포 — 여기를 줄이는 게 목표</p><div id="reasons"></div></div>
+  </div>
+
+  <div class="sectlab">회원 · 접속</div>
+  <div class="grid">
+    <div class="panel"><h2>회원 현황 · 접속 상태</h2><p class="desc" id="presDesc">접속 중 · 나감 · 마지막 방문</p><div id="presence"></div></div>
+    <div class="panel"><h2>기기 · 시스템</h2><p class="desc">플랫폼 분포 · 크롤러 상태</p><div id="devices"></div></div>
+  </div>
+
+  <div class="sectlab">판독 로그</div>
+  <div class="grid">
+    <div class="panel full"><h2>최근 불확실 판독</h2><p class="desc">시스템이 확신하지 못한 최근 케이스</p><div id="uncertainTbl"></div></div>
+    <div class="panel full"><h2>최근 판독 피드</h2><p class="desc">최근 처리된 글(예시: 1번 회원 기준)</p><div id="feedTbl"></div></div>
+  </div>
+
+  <div class="sectlab">알림 발송</div>
+  <div class="grid">
+    <div class="panel full"><h2>회원별 발송 알림 · 어제~오늘</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+  </div>
+
+  <p class="note" id="footnote"></p>
+</div>
+
+<script>
+(function(){
+  var REFRESH_MS = 30000, timer = null;
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function n(v){ return (v==null?0:v).toLocaleString('ko-KR'); }
+  function rel(ts){ if(!ts) return '—'; var s=(Date.now()-ts)/1000; if(s<60) return '방금'; if(s<3600) return Math.floor(s/60)+'분 전'; if(s<86400) return Math.floor(s/3600)+'시간 전'; var d=Math.floor(s/86400); if(d<30) return d+'일 전'; return new Date(ts).toLocaleDateString('ko-KR'); }
+  function clock(ts){ if(!ts) return '—'; var d=new Date(ts), wd=['일','월','화','수','목','금','토'][d.getDay()], t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); return (d.getMonth()+1)+'/'+d.getDate()+'('+wd+') '+t; }
+  function md(dstr){ var p=String(dstr).split('-'); return p.length===3? (Number(p[1])+'/'+Number(p[2])) : dstr; }
+
+  async function loadStats(){
+    if (window.SAMPLE_STATS) return window.SAMPLE_STATS;
+    var k = new URLSearchParams(location.search).get('k') || '';
+    var r = await fetch('/api/stats' + (k ? ('?k=' + encodeURIComponent(k)) : ''), { cache:'no-store' });
+    var j = await r.json();
+    if (!j.ok) throw new Error(j.error || '집계 실패');
+    return j;
+  }
+
+  function barChart(series, color){
+    var max = Math.max(1, ...series.map(function(x){return x.count||x.uniq||0;}));
+    var bars = series.map(function(x){
+      var v = x.count!=null? x.count : x.uniq;
+      var h = Math.round((v/max)*100);
+      return '<div class="b'+(v?'':' zero')+'" style="height:'+Math.max(2,h)+'%'+(color?';background:'+color:'')+'"><span class="tip">'+md(x.date)+' · '+v+'</span></div>';
+    }).join('');
+    var f = series[0], l = series[series.length-1];
+    return '<div class="bars">'+bars+'</div><div class="xax"><span>'+md(f.date)+'</span><span>'+md(l.date)+'</span></div>';
+  }
+  function hbar(label, val, total, cls){
+    var pct = total? Math.round((val/total)*100) : 0;
+    return '<div class="hbar"><div class="top"><b>'+esc(label)+'</b><span>'+n(val)+(total?' · '+pct+'%':'')+'</span></div>'+
+      '<div class="track"><i class="'+(cls||'')+'" style="width:'+pct+'%"></i></div></div>';
+  }
+  function donut(pct, color){
+    pct = Math.max(0, Math.min(100, pct||0));
+    var R=42, C=2*Math.PI*R, off=C*(1-pct/100);
+    return '<svg width="104" height="104" viewBox="0 0 104 104">'+
+      '<circle cx="52" cy="52" r="'+R+'" fill="none" stroke="var(--grid)" stroke-width="11"/>'+
+      '<circle cx="52" cy="52" r="'+R+'" fill="none" stroke="'+(color||'var(--acc)')+'" stroke-width="11" stroke-linecap="round" '+
+      'stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 52 52)"/></svg>';
+  }
+  function statusTag(st){ var m={active:['g','활성'],pending:['w','대기'],disabled:['b','차단']}; var x=m[st]||['','?']; return '<span class="tag '+x[0]+'">'+x[1]+'</span>'; }
+
+  function render(s){
+    // 상태 점
+    var h = s.health||{}; var failed = (h.failStreak||0)>0; var stale = h.lastOkAt && (Date.now()-h.lastOkAt > 20*60000);
+    var dot = $('statusDot'); dot.className = 'dot' + (failed?' bad':(stale?' warn':''));
+    $('updated').textContent = '업데이트 ' + rel(s.generatedAt) + ' · 자동 30초';
+
+    // KPI
+    var b = s.board||{}, v = s.visits||{}, m = s.members||{}, sg = s.signups||{}, pr = s.presence||{};
+    var understood = b.understoodRate;
+    var kpi = [
+      { cls:'good', lab:'전체 가입자', v:n(m.total), sub:'활성 '+n(m.active)+(m.pending?(' · <span class="pill warn">대기 '+m.pending+'</span>'):'')+(m.disabled?(' · <span class="pill bad">차단 '+m.disabled+'</span>'):'') },
+      { cls:'', lab:'오늘 가입', v:n(sg.today), sub:'이번 주 '+n(sg.week)+' · 30일 '+n(sg.month) },
+      { cls:(pr.onlineNow?'good':''), lab:'접속 중', v:n(pr.onlineNow), sub:'전체 '+n(m.total)+'명 중 · '+(v.source==='visits'?'오늘 방문 ':'오늘 접속 ')+n(v.today) },
+      { cls:'', lab:'재접속률', v:(v.visitedUsers? v.returningRate+'<small>%</small>':'—'), sub: v.visitedUsers? (v.returningUsers+'/'+v.visitedUsers+'명 2일+ 방문') : '수집 시작 후 표시' },
+      { cls:(understood==null?'':(understood>=90?'good':understood>=75?'warn':'bad')), lab:'배치표 이해도', v:(understood==null? '—' : understood+'<small>%</small>'), sub:(b.hasReadLog? ('불확실 '+n(b.uncertain)+' / 판독 '+n(b.totalReads)) : '불확실 '+n(b.uncertain)+'건(분모 수집중)') },
+      { cls:(failed?'bad':stale?'warn':'good'), lab:'시스템 상태', v:(failed?'이상':stale?'지연':'정상'), sub:(h.lastOkAt? '마지막 정상 '+rel(h.lastOkAt) : '헬스 데이터 없음') },
+    ];
+    $('kpis').innerHTML = kpi.map(function(k){ return '<div class="kpi '+k.cls+'"><i class="strip"></i><div class="lab">'+k.lab+'</div><div class="v num">'+k.v+'</div><div class="sub">'+k.sub+'</div></div>'; }).join('');
+
+    // 가입 추이 + 분포
+    $('signupChart').innerHTML = barChart(sg.daily||[]);
+    var totM = m.total||1;
+    $('signupBreak').innerHTML =
+      hbar('활성', m.active, totM, 'good') + hbar('승인 대기', m.pending, totM, 'warn') + hbar('차단', m.disabled, totM, 'bad') +
+      '<div style="height:6px"></div>' + hbar('네이버', m.naver, totM, 'good') + hbar('구글', m.google, totM, 'info');
+
+    // 방문 추이 + DAU
+    $('visitDesc').textContent = v.source==='visits' ? '최근 30일 앱 오픈(일별)' : '최근 30일 로그인 세션(방문 로그 수집 전 — 추정)';
+    $('visitChart').innerHTML = barChart(v.daily||[], 'linear-gradient(180deg,#7fc4ff,var(--info))');
+    var dauMax = Math.max(1, ...(v.dau||[]).map(function(x){return x.uniq;}));
+    var dauRows = (v.dau||[]).map(function(x){ return '<div class="hbar"><div class="top"><b>'+md(x.date)+'</b><span>'+x.uniq+'명</span></div><div class="track"><i class="info" style="width:'+Math.round(x.uniq/dauMax*100)+'%"></i></div></div>'; }).join('');
+    var sess = s.sessions||{};
+    $('visitBreak').innerHTML = '<div style="font-size:11px;color:var(--tx3);font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">최근 7일 순 방문자(DAU)</div>' +
+      (v.dau && v.dau.some(function(x){return x.uniq;}) ? dauRows : '<div class="muted">방문 로그 수집 시작 후 표시됩니다.</div>') +
+      '<div class="note">활성 세션 '+n(sess.activeNow)+' · 24시간 로그인 '+n(sess.last24h)+' · 누적 세션 '+n(sess.total)+'</div>';
+
+    // 배치표 이해도 게이지 + confidence 버킷
+    var gcol = understood==null?'var(--tx3)':(understood>=90?'var(--good)':understood>=75?'var(--warn)':'var(--bad)');
+    $('boardGauge').innerHTML = '<div class="gauge">'+donut(understood||0, gcol)+
+      '<div><div class="val num" style="color:'+gcol+'">'+(understood==null?'—':understood+'<small>%</small>')+'</div>'+
+      '<div class="meta">30일 판독 '+n(b.totalReads)+'건<br>불확실 '+n(b.uncertain)+'건'+(b.uncertainRate!=null?' ('+b.uncertainRate+'%)':'')+'<br>평균 확신도 '+(b.avgConfidence!=null?b.avgConfidence:'—')+'</div></div></div>';
+    var cb = b.confBuckets||[]; var cbTot = cb.reduce(function(a,x){return a+x.count;},0);
+    $('boardBuckets').innerHTML = cbTot? ('<div style="font-size:11px;color:var(--tx3);font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">확신도 분포</div>'+
+      cb.map(function(x,i){ return hbar(x.k, x.count, cbTot, ['good','good','warn','bad'][i]); }).join('')) :
+      '<div class="muted">판독 로그 수집 시작 후 확신도 분포가 표시됩니다.</div>';
+
+    // 사유
+    var rs = b.byReason||[]; var rTot = rs.reduce(function(a,x){return a+x.count;},0);
+    $('reasons').innerHTML = rs.length? rs.map(function(x){ return hbar(x.k, x.count, rTot, 'warn'); }).join('') +
+      '<div class="note">부별: ' + (b.byPart||[]).map(function(p){return esc(p.k)+' '+p.count;}).join(' · ') + '</div>'
+      : '<div class="muted">불확실 판독이 없습니다. 👍</div>';
+
+    // 회원 현황(접속 상태)
+    var prm = pr.members||[];
+    if ($('presDesc')) $('presDesc').textContent = '접속 중 '+n(pr.onlineNow||0)+'명 · 전체 '+n(m.total)+'명 · 최근 '+(pr.windowMin||2)+'분 활동 = 접속 중';
+    $('presence').innerHTML = prm.length? prm.map(function(u){
+      var last = u.lastSeen||u.lastLogin;
+      var state = u.online ? '<span class="pr-state on">방문 중</span>'
+        : '<span class="pr-state" title="'+(last?new Date(last).toLocaleString('ko-KR'):'')+'">'+(last? rel(last)+' 나감' : '방문 없음')+'</span>';
+      return '<div class="pr-row"><span class="pr-dot'+(u.online?' on':'')+'"></span>'+
+        '<span class="pr-name">'+esc(u.name)+'</span>'+(u.part?'<span class="pr-part">'+esc(u.part)+'부</span>':'')+
+        (u.role==='admin'?' <span class="tag i">관리자</span>':'')+(u.status&&u.status!=='active'?' '+statusTag(u.status):'')+
+        state+'</div>';
+    }).join('') : '<div class="muted">회원이 없습니다.</div>';
+
+    // 기기·시스템
+    var d = s.devices||{}; var pl = d.platforms||[]; var plTot = pl.reduce(function(a,x){return a+x.count;},0);
+    $('devices').innerHTML =
+      (pl.length? pl.map(function(x){ return hbar(x.k||'기타', x.count, plTot, 'info'); }).join('') : '<div class="muted">기기 텔레메트리 없음</div>') +
+      '<div class="note">구독 기기 '+n(d.subsInDb)+'대 · 홈화면 설치 '+n(d.standalone)+' · 알림 구독 '+n(d.subscribed)+' / 보고 '+n(d.reported)+'</div>' +
+      '<div class="note">크롤러: '+(h.lastPollAt? '마지막 폴링 '+rel(h.lastPollAt):'—')+(h.lastError? ' · <span style="color:var(--bad)">오류: '+esc(h.lastError)+'</span>':' · 오류 없음')+'</div>';
+
+    // 최근 불확실 판독
+    var un = b.recentUncertain||[];
+    $('uncertainTbl').innerHTML = un.length? ('<table><thead><tr><th>시각</th><th>부</th><th>제목</th><th>사유</th><th>확신도</th></tr></thead><tbody>'+
+      un.map(function(u){ return '<tr><td class="num">'+rel(u.at)+'</td><td>'+(u.part?esc(u.part)+'부':'—')+'</td><td class="tx">'+esc(u.subject).slice(0,40)+'</td><td>'+esc(u.reason).slice(0,44)+'</td><td class="num">'+(u.confidence!=null?u.confidence:'—')+'</td></tr>'; }).join('')+
+      '</tbody></table>') : '<div class="muted">불확실 판독 로그가 없습니다.</div>';
+
+    // 피드
+    var fd = s.feed||[];
+    $('feedTbl').innerHTML = fd.length? ('<table><thead><tr><th>시각</th><th>상태</th><th>제목</th><th>메시지</th></tr></thead><tbody>'+
+      fd.map(function(f){ var st = f.status||'—'; var cls = st==='assigned'||st==='work'?'g':(st==='spare'||st==='waiting'?'i':(st==='off'?'b':'')); return '<tr><td class="num">'+rel(f.at)+'</td><td><span class="tag '+cls+'">'+esc(st)+'</span></td><td class="tx">'+esc(f.subject).slice(0,36)+'</td><td>'+esc((f.aiMessage||'').split('\n')[0]).slice(0,46)+'</td></tr>'; }).join('')+
+      '</tbody></table>') : '<div class="muted">피드가 없습니다.</div>';
+
+    // 회원별 발송 알림(어제~오늘)
+    var pk = s.pushes || {};
+    var pm = pk.byMember || [];
+    if ($('pushRange')) $('pushRange').textContent = '어제~오늘 · 어제 ' + n(pk.sentYesterday||0) + '건 · 오늘 ' + n(pk.sentToday||0) + '건 · 각 회원에게 간 알림 문구(발송 없는 회원도 표시)';
+    $('pushTbl').innerHTML = pm.length ? pm.map(function(mrow){
+      var head = '<div class="mp-head"><span class="mp-name">'+esc(mrow.name)+'</span>'+(mrow.part?'<span class="mp-part">'+esc(mrow.part)+'부</span>':'')+
+        (mrow.status&&mrow.status!=='active'?' '+statusTag(mrow.status):'')+
+        '<span class="mp-cnt'+(mrow.count?'':' zero')+'">'+(mrow.count?mrow.count+'건':'발송 없음')+'</span></div>';
+      var body = mrow.count ? '<div class="mp-items">'+mrow.items.map(function(p){
+        var lv = ({ high:['b','긴급'], check:['w','확인'], normal:['i','일반'], low:['','조용'] })[p.level] || ['i','일반'];
+        var dv = (p.devices==null)?'—':(p.sent+'/'+p.devices);
+        var dcls = (p.devices==null||p.devices===0)?'':(p.sent>0?'g':'b');
+        return '<div class="mp-item"><div class="mp-line"><span class="mp-t num">'+clock(p.at)+'</span>'+
+          '<span class="tag '+lv[0]+'">'+lv[1]+'</span><span class="mp-ttl">'+esc(p.title)+'</span>'+
+          '<span class="tag '+dcls+'" style="margin-left:auto" title="도달/구독 기기">'+dv+'</span></div>'+
+          '<div class="mp-body">'+esc(p.body)+'</div></div>';
+      }).join('')+'</div>' : '<div class="mp-empty">이 기간 발송된 알림 없음</div>';
+      return '<div class="mpush'+(mrow.count?'':' silent')+'">'+head+body+'</div>';
+    }).join('') : '<div class="muted">발송된 알림 로그가 아직 없습니다. (수집 시작 후 표시)</div>';
+
+    $('footnote').innerHTML = '가입·회원·세션·기기는 실데이터입니다. ' +
+      (v.source==='visits'?'':'· <b style="color:var(--warn)">방문/재접속은 아직 로그인 세션으로 추정</b> — 방문 로그가 쌓이면 실제 앱 오픈 기준으로 바뀝니다. ') +
+      (b.hasReadLog?'':'· <b style="color:var(--warn)">배치표 이해도 분모(전체 판독)는 수집 시작 직후부터</b> 채워집니다.');
+    $('err').innerHTML = '';
+  }
+
+  async function tick(){
+    try{ render(await loadStats()); }
+    catch(e){ $('err').innerHTML = '<div class="err">집계를 불러오지 못했습니다: '+esc(e.message)+'</div>'; $('updated').textContent='오류'; $('statusDot').className='dot bad'; }
+  }
+  $('refreshBtn').addEventListener('click', tick);
+  function loop(){ clearInterval(timer); timer=setInterval(tick, REFRESH_MS); }
+  tick(); loop();
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) tick(); });
+})();
+</script>
+</body>
+</html>

@@ -74,6 +74,7 @@ function migrate(d) {
   addColumn(d, 'profiles', 'commute_min', 'INTEGER NOT NULL DEFAULT 60');
   addColumn(d, 'users', 'google_id', 'TEXT');
   addColumn(d, 'users', 'block_reason', 'TEXT');   // 차단 사유(roster|other) — disabled일 때만 채움
+  addColumn(d, 'users', 'last_seen', 'INTEGER');   // 마지막 활동(하트비트) — 접속중/나감 판별용(운영 모니터)
   d.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_id);'); // NULL은 서로 중복 허용
 }
 

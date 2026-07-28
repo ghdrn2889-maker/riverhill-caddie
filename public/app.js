@@ -1529,5 +1529,15 @@ async function main() {
   setTimeout(hideSplash, 3500);   // 안전장치: 어떤 이유로든 3.5초 뒤엔 대기화면 해제(무한 대기 방지)
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
   setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
+  startHeartbeat();
+}
+
+// 접속 하트비트 — 앱이 화면에 떠 있는 동안 60초마다 가벼운 핑(운영 모니터의 접속중/나감 표시용).
+//  화면이 가려지면(백그라운드) 보내지 않아, '보고 있는 중'만 접속중으로 잡힌다.
+function startHeartbeat() {
+  const ping = () => { if (document.hidden) return; fetch('/api/ping', { method: 'POST', keepalive: true }).catch(() => {}); };
+  ping();
+  setInterval(ping, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) ping(); });
 }
 main();

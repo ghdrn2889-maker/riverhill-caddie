@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/server.mjs",
+    "monitor": "node src/monitor.mjs",
     "gen-vapid": "node scripts/gen-vapid.mjs",
     "gen-icons": "node scripts/gen-icons.mjs",
     "spike": "node spike/read-cafe.mjs",
