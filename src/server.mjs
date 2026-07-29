@@ -501,10 +501,9 @@ app.get('/api/ledger', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
   const uid = req.user?.id || 1;
-  res.json({ ok: true, summary: ledger.summary({ year, month }, uid), settings: ledger.getSettings(uid) });
-});
-app.post('/api/ledger/settings', (req, res) => {
-  res.json({ ok: true, settings: ledger.setSettings(req.body || {}, req.user?.id || 1) });
+  const wl = worklog.getSettings(uid);
+  const profile = { name: wl.driverName || '', workplace: wl.workplace || '리버힐CC' };
+  res.json({ ok: true, summary: ledger.summary({ year, month }, uid), profile });
 });
 app.post('/api/ledger/tip', (req, res) => {
   const { date, amount } = req.body || {};

@@ -1320,218 +1320,423 @@ function initWorklogButtons() {
 }
 
 /* ── 정산 (수익·팁·지출·수익계산서) ── */
-let lgYear = null, lgMonth = null, lgData = null;
-let lgPartEdit = null;    // 부 조합 수정 중인 날짜
-let lgExpEdit = null;     // 지출 편집 폼 상태 { id?, date, category, amount, method, vendor, memo, photoData? }
-let lgDateFilter = '';    // 근무 수입·팁 날짜 필터(YYYY-MM-DD), 빈값=이 달 전체
+let lgYear = null, lgMonth = null, lgData = null, lgProfile = { name: '', workplace: '리버힐CC' };
+let lgOpenDate = null;    // 펼쳐진 날짜 단락
+let lgExpForm = null;     // 지출 입력 폼 { id?, date, category, amount, vendor, method, photoData?, scanned?, _scanned? }
+let lgPage = 0;           // 7일 페이지네이션(0 = 최근 7일)
+let lgDocPeriod = 'month'; // 문서 대상: 'month' | 'year'
+let lgDocCtx = null;      // 미리보기/문서 컨텍스트
+let lgDayList = [];       // 이 달 날짜 목록(근무 or 지출) — 최신순
+const lgTipDirty = new Set();
+const LG_PAGE = 7;
 const wonKo = (n) => `${(Number(n) || 0).toLocaleString('ko-KR')}원`;
 const manKo = (n) => { const v = Number(n) || 0; return v >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만` : v.toLocaleString('ko-KR'); };
-const EXP_CATS = ['주유', '톨비', '식대', '주차', '기타'];
-const EXP_METHODS = ['카드', '현금영수증', '현금', '세금계산서', '간이영수증'];
+const lgFEES = () => (lgData && lgData.fees) || { 1: 140000, 2: 140000, 3: 150000 };
+const lgDow = (iso) => WD[new Date(iso + 'T00:00:00').getDay()];
+const lgMD = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
+const lgTang = (parts) => parts.length >= 3 ? '54(1·2·3부)' : (parts.length ? parts.map((p) => p + '부').join('·') : '근무없음');
+const lgExpSumOf = (d) => d.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+const lgNetOf = (d) => (Number(d.revenue) || 0) + (Number(d.tip) || 0) - lgExpSumOf(d);
 
 async function loadLedger() {
   const now = new Date();
   if (lgYear == null) { lgYear = now.getFullYear(); lgMonth = now.getMonth() + 1; }
   try {
     const r = await (await fetch(`/api/ledger?year=${lgYear}&month=${lgMonth}`)).json();
-    lgData = r.summary; lgData.settings = r.settings;
+    lgData = r.summary; lgProfile = r.profile || { name: '', workplace: '리버힐CC' };
   } catch { $('lgMLabel').textContent = '불러오기 실패'; return; }
   renderLedger();
 }
+async function lgFlushTips() {
+  if (!lgTipDirty.size) return;
+  const dates = [...lgTipDirty]; lgTipDirty.clear();
+  await Promise.all(dates.map((dt) => { const d = lgDayList.find((x) => x.date === dt); return postJSON('/api/ledger/tip', { date: dt, amount: d ? d.tip : 0 }); }));
+}
+async function lgReload() { await lgFlushTips(); await loadLedger(); }
+
+// 근무 rows + 지출을 날짜별로 합침
+function lgBuildDays() {
+  const map = new Map();
+  (lgData.rows || []).forEach((r) => map.set(r.date, { date: r.date, parts: r.parts.slice(), revenue: r.revenue, tip: r.tip || 0, worked: true, expenses: [] }));
+  (lgData.expenses || []).forEach((e) => {
+    let d = map.get(e.date);
+    if (!d) { d = { date: e.date, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] }; map.set(e.date, d); }
+    d.expenses.push(e);
+  });
+  return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+}
 
 function renderLedger() {
+  if (!lgData) return;
+  lgDayList = lgBuildDays();
   const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
-  const s = lgData; const st = s.settings || {};
   $('lgMLabel').textContent = `${lgYear}년 ${lgMonth}월`;
   const isNow = lgYear === realY && lgMonth === realM;
   $('lgMSub').textContent = isNow ? '이번 달' : '지난 기록';
   $('lgThisMo').hidden = isNow;
   $('lgNext').disabled = (lgYear > realY) || (lgYear === realY && lgMonth >= realM);
-  $('lgSc1').textContent = $('lgSc2').textContent = `${lgMonth}월`;
-
-  $('lgRevTotal').textContent = wonKo(s.revenueTotal);
-  const hasExp = s.expTotal > 0;
-  $('lgNetWrap').hidden = !hasExp;
-  $('lgNet').textContent = wonKo(s.netProfit);
-  $('lgWorkRev').textContent = manKo(s.workRevenue);
-  $('lgTip').textContent = manKo(s.tipTotal);
-  $('lgExp').textContent = manKo(s.expTotal);
-
-  // 부별 수익
-  $('lgParts').innerHTML = ['1', '2', '3'].filter((p) => s.byPart[p].days > 0)
-    .map((p) => `<span class="lg-pill">${p}부 ${s.byPart[p].days}일 · ${manKo(s.byPart[p].amount)}</span>`).join('')
-    || '<span class="lg-pill" style="background:#f2f4f1;color:#9aa49c;">확정된 근무가 아직 없어요</span>';
-  $('lgPend').hidden = !s.pendingDays;
-  if (s.pendingDays) $('lgPend').innerHTML = `확인 대기 ${s.pendingDays}일 (예상 ${manKo(s.pendingRevenue)}) — 근무 기록에서 '예'로 확정하면 합산돼요.`;
-
-  // 근무 수입 · 팁 목록 (날짜 필터 적용)
-  $('lgDateSel').value = lgDateFilter || '';
-  $('lgDateClear').hidden = !lgDateFilter;
-  const dayRows = lgDateFilter ? s.rows.filter((r) => r.date === lgDateFilter) : s.rows;
-  $('lgDays').innerHTML = dayRows.length ? dayRows.map((r) => {
-    const dow = WD[new Date(r.date + 'T00:00:00').getDay()];
-    const md = `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}(${dow})`;
-    const tang = r.parts.length >= 3 ? '54' : r.parts.map((p) => p + '부').join('·');
-    const editor = lgPartEdit === r.date ? `<div class="lg-partedit">
-      ${['1', '2', '3'].map((p) => `<button class="lg-pe${r.parts.includes(p) ? ' on' : ''}" data-ped="${r.date}" data-p="${p}">${p}부</button>`).join('')}
-    </div>` : '';
-    return `<div class="lgd" data-row="${r.date}">
-      <span class="d">${md}</span>
-      <button class="pb" data-pb="${r.date}">${tang} · ${manKo(r.revenue)}</button>
-      <span class="rev">캐디피 ${wonKo(r.revenue)}</span></div>
-      <div class="tiprow" style="display:flex;justify-content:flex-end;padding:0 0 8px;"><span class="tipbox"><span class="u">팁</span><input type="number" inputmode="numeric" placeholder="0" data-tip="${r.date}" value="${r.tip || ''}"><span class="u">원</span></span></div>
-      ${editor}`;
-  }).join('') : `<div class="lg-empty">${lgDateFilter ? '이 날짜에 확정된 근무가 없어요.' : '이 달 확정 근무가 없어요. 근무 기록에서 근무를 확정하면 수입이 자동 계산돼요.'}</div>`;
-
-  // 지출 목록
-  const expForm = lgExpEdit ? expFormHTML(lgExpEdit) : '';
-  $('lgExpenses').innerHTML = expForm + (s.expenses.length ? s.expenses.map(expRowHTML).join('')
-    : (lgExpEdit ? '' : '<div class="lg-empty">등록된 지출이 없어요. 영수증을 올리거나 직접 입력하세요.</div>'));
-
+  refreshLgTotals();
+  renderLgList();
   updateDocDesc();
-  // 설정 입력칸
-  if (document.activeElement !== $('lgFee1')) $('lgFee1').value = st.fee1 ?? 140000;
-  if (document.activeElement !== $('lgFee2')) $('lgFee2').value = st.fee2 ?? 140000;
-  if (document.activeElement !== $('lgFee3')) $('lgFee3').value = st.fee3 ?? 150000;
-  bindLedger();
 }
 
-function expRowHTML(e) {
-  const dow = WD[new Date(e.date + 'T00:00:00').getDay()];
-  const md = `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8, 10))}(${dow})`;
-  const photo = e.photo ? `<img class="ephoto" src="/api/ledger/photo/${e.photo}?t=${e.at || 0}" alt="영수증">` : '';
-  const sub = [e.vendor, e.method].filter(Boolean).join(' · ');
-  return `<div class="lg-exp" data-exp="${e.id}">
-    <span class="ec">${esc(e.category)}</span>
-    <div class="einfo"><div class="et">${md} · ${wonKo(e.amount)}</div>${sub ? `<div class="es">${esc(sub)}</div>` : ''}</div>
-    ${photo}
-    <button class="edit-e" data-ee="${e.id}" style="font-size:11px;background:none;border:0;color:#5a8;cursor:pointer;">수정</button>
-    <button class="edel" data-del="${e.id}">✕</button></div>`;
+function refreshLgTotals() {
+  const workRev = lgDayList.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
+  const tipSum = lgDayList.reduce((s, d) => s + (Number(d.tip) || 0), 0);
+  const expSum = lgDayList.reduce((s, d) => s + lgExpSumOf(d), 0);
+  $('lgNet').textContent = wonKo(workRev + tipSum - expSum);
+  $('lgInc').textContent = wonKo(workRev + tipSum);
+  $('lgExpSum').textContent = wonKo(expSum);
+  $('lgWorkRev').textContent = manKo(workRev);
+  $('lgTipSum').textContent = manKo(tipSum);
+  $('lgExp').textContent = manKo(expSum);
+  const F = lgFEES(), byPart = { 1: { days: 0, amt: 0 }, 2: { days: 0, amt: 0 }, 3: { days: 0, amt: 0 } };
+  lgDayList.forEach((d) => d.parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amt += F[p]; } }));
+  $('lgParts').innerHTML = ['3', '2', '1'].filter((p) => byPart[p].days).map((p) => `<span class="lg-pill">${p}부 ${byPart[p].days}일 · ${manKo(byPart[p].amt)}</span>`).join('')
+    || '<span class="lg-pill none">이 달 확정 근무가 아직 없어요</span>';
+  const pend = lgData.pendingDays || 0;
+  $('lgPend').hidden = !pend;
+  if (pend) $('lgPend').innerHTML = `확인 대기 ${pend}일 (예상 ${manKo(lgData.pendingRevenue || 0)}) — 근무 기록에서 '예'로 확정하면 합산돼요.`;
 }
 
-function expFormHTML(f) {
-  const cats = EXP_CATS.map((c) => `<button class="cat${f.category === c ? ' on' : ''}" data-ecat="${c}">${c}</button>`).join('');
-  const methods = ['', ...EXP_METHODS].map((m) => `<option value="${m}"${f.method === m ? ' selected' : ''}>${m || '결제수단'}</option>`).join('');
-  const photoPrev = f.photoData ? `<img src="${f.photoData}" style="width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid #ddd;">`
-    : (f.photo ? `<img src="/api/ledger/photo/${f.photo}" style="width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid #ddd;">` : '');
-  return `<div class="lg-eform">
-    <div class="cats">${cats}</div>
-    <div class="r"><input type="date" id="lgeDate" value="${f.date || ''}">
-      <input class="amt" type="number" inputmode="numeric" id="lgeAmt" placeholder="금액" value="${f.amount || ''}"><span style="font-size:11px;color:#9aa49c;">원</span></div>
-    <div class="r"><input type="text" id="lgeVendor" placeholder="사용처(선택)" value="${esc(f.vendor || '')}" style="flex:1;">
-      <select id="lgeMethod">${methods}</select></div>
-    <div class="r"><label class="lg-scan" style="flex:1;padding:8px;">📷 영수증 사진<input type="file" accept="image/*" id="lgePhoto" hidden></label>${photoPrev}</div>
-    <div class="foot"><button class="wl-btn" id="lgeCancel">취소</button><button class="wl-btn wl-yes" id="lgeSave">저장</button></div>
+function lgBrkText(d) { return `${lgTang(d.parts)} 캐디피 ${manKo(d.revenue)} · 팁 ${manKo(d.tip)} · 지출 ${manKo(lgExpSumOf(d))}`; }
+
+function renderLgList() {
+  const pages = Math.max(1, Math.ceil(lgDayList.length / LG_PAGE));
+  if (lgPage > pages - 1) lgPage = pages - 1;
+  if (lgPage < 0) lgPage = 0;
+  const shown = lgDayList.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
+  $('lgList').innerHTML = shown.length ? shown.map(lgAccHTML).join('') : '<div class="lg-listempty">이 달 근무·지출 기록이 없어요.</div>';
+  shown.forEach((d) => { if (d._saved) delete d._saved; });
+  const first = shown[0], last = shown[shown.length - 1];
+  const range = first ? `${lgMD(first.date)}(${lgDow(first.date)}) ~ ${lgMD(last.date)}(${lgDow(last.date)})` : '기록 없음';
+  $('lgPager').innerHTML = `<button data-pg="prev" ${lgPage <= 0 ? 'disabled' : ''}>‹ 이전 7일</button>
+    <div class="pinfo">${lgPage + 1} / ${pages}<span>${range}</span></div>
+    <button data-pg="next" ${lgPage >= pages - 1 ? 'disabled' : ''}>다음 7일 ›</button>`;
+  bindLg();
+}
+
+function lgAccHTML(d) {
+  const open = d.date === lgOpenDate;
+  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}" id="lgAcc-${d.date}">
+    <div class="lg-ahead" data-tog="${d.date}">
+      <div class="lg-cal"><span class="md">${lgMD(d.date)}</span><span class="dw">${lgDow(d.date)}</span></div>
+      <div class="lg-amid"><div class="lg-anet" id="lgNetR-${d.date}">순수입 ${wonKo(lgNetOf(d))}</div>
+        <div class="lg-abrk" id="lgBrk-${d.date}">${lgBrkText(d)}</div></div>
+      <div class="lg-chev"><span class="lg-hint">${open ? '닫기' : '수정'}</span><span class="lg-car">▾</span></div>
+    </div>${open ? lgBodyHTML(d) : ''}</div>`;
+}
+
+function lgBodyHTML(d) {
+  const F = lgFEES();
+  let head;
+  if (d.worked) {
+    const chips = ['1', '2', '3'].map((p) => `<span class="lg-pchip${d.parts.includes(p) ? ' on' : ''}" data-part="${d.date}|${p}">${p}부</span>`).join('');
+    const calc = d.parts.length ? d.parts.map((p) => `${p}부 ${manKo(F[p])}`).join(' + ') + ` = <b>${manKo(d.revenue)}</b>` : '부를 하나 이상 선택하세요';
+    head = `<div class="lg-asub">근무 · 캐디피 <span class="dim">(고정단가 · 자동합산)</span></div>
+      <div class="lg-arow"><span class="lbl">부 조합</span>${chips}<span class="lg-val" id="lgRevR-${d.date}">${wonKo(d.revenue)}</span>
+        <div class="lg-calc">${calc} <span style="color:#9aa49c;">· 1·2부 14만 / 3부 15만 고정</span></div></div>
+      <div class="lg-asub">팁 <span class="dim">(만원 단위 · 입력 즉시 반영)</span></div>
+      <div class="lg-arow"><span class="lbl">받은 팁</span>
+        <span class="lg-tipin"><input id="lgTipI-${d.date}" inputmode="decimal" placeholder="0" value="${d.tip ? d.tip / 10000 : ''}"><span class="u">만원</span></span></div>`;
+  } else {
+    head = `<div class="lg-daynote">이 날은 근무 확정이 없어요 — 지출만 기록됩니다. (근무는 '근무 기록'에서 확정)</div>`;
+  }
+  const exps = d.expenses.length ? d.expenses.map((e) => lgExpRow(e, d.date)).join('') : '<div class="lg-empty">이 날 지출이 아직 없어요.</div>';
+  const showForm = lgExpForm && lgExpForm.date === d.date;
+  const msg = showForm && lgExpForm._scanned ? `<div class="lg-scanmsg">사진 자동 스캔 완료 · 로컬 판독(크레딧 0) — 이 날짜(${lgMD(d.date)})로 자동 기록. 값이 틀리면 고치세요.</div>` : '';
+  const addBtns = showForm ? '' : `<div class="lg-expadd">
+      <label class="lg-scan" id="lgScanLbl-${d.date}"><svg class="lg-ico"><use href="#ic-cam"/></svg> 사진 자료 자동 스캔<input type="file" accept="image/*" id="lgScanIn-${d.date}" hidden></label>
+      <button class="lg-manual" data-manual="${d.date}">＋ 사진 없이 직접 입력 <small>(스캔 대신 수동)</small></button>
+    </div>`;
+  return `<div class="lg-abody">
+    ${head}
+    <div class="lg-asub">지출 · 영수증</div>
+    ${exps}${msg}${addBtns}${showForm ? lgFormHTML(d) : ''}
+    <div class="lg-savebar"><button class="lg-savebtn" data-save="${d.date}">저장하고 닫기</button>
+      <div class="lg-savehint">저장하면 이 칸이 접히고 위 합계에 바로 반영돼요.</div></div>
   </div>`;
 }
 
-function updateDocDesc() {
-  const rev = $('lgOptRev').checked, tip = $('lgOptTip').checked, exp = $('lgOptExp').checked;
-  let name; if (rev && exp) name = '수입·지출 정산서(순이익 포함)'; else if (rev) name = '수입 정산서'; else if (exp) name = '지출 정산서'; else name = '(항목을 하나 이상 선택하세요)';
-  const bits = [];
-  if (rev) bits.push('부별 수익' + (tip ? '+팁' : ''));
-  if (exp) bits.push('지출 내역' + ($('lgOptPhoto').checked ? '+영수증 사진' : ''));
-  $('lgDocDesc').textContent = `${name}${bits.length ? ' — ' + bits.join(' · ') : ''}`;
+function lgExpRow(e, date) {
+  const sub = [e.vendor, e.method].filter(Boolean).join(' · ');
+  const photo = e.photo ? `<img class="ephoto" src="/api/ledger/photo/${e.photo}?t=${e.at || 0}" alt="영수증">` : '';
+  return `<div class="lg-exp"><span class="ec">${esc(e.category)}</span>
+    <div class="einfo"><div class="et">${wonKo(e.amount)}</div>${sub ? `<div class="es">${esc(sub)}</div>` : ''}</div>
+    ${photo}
+    <button class="edit-e" data-ee="${date}|${e.id}" style="font-size:11px;background:none;border:0;color:#5a8;cursor:pointer;">수정</button>
+    <button class="edel" data-del="${e.id}">✕</button></div>`;
 }
 
-function docQuery() {
-  const p = new URLSearchParams({ year: lgYear, month: lgMonth });
-  if ($('lgOptRev').checked) p.set('rev', '1');
-  if ($('lgOptTip').checked) p.set('tips', '1');
-  if ($('lgOptExp').checked) p.set('exp', '1');
-  if ($('lgOptPhoto').checked) p.set('photos', '1');
-  return p.toString();
+function lgFormHTML(d) {
+  const f = lgExpForm;
+  const cats = ['주유', '톨비', '식대', '주차', '기타'].map((c) => `<span class="cat${f.category === c ? ' on' : ''}" data-cat="${c}">${c}</span>`).join('');
+  const methods = ['', '카드', '현금영수증', '현금', '세금계산서', '간이영수증'].map((m) => `<option value="${m}"${f.method === m ? ' selected' : ''}>${m || '결제수단'}</option>`).join('');
+  return `<div class="lg-eform">
+    <div class="eh">${f._scanned ? '스캔 결과 — 확인 후 추가' : (f.id ? '지출 수정' : '지출 직접 입력')}</div>
+    <div class="cats">${cats}</div>
+    <div class="r"><input class="amt" id="lgeAmt" inputmode="numeric" placeholder="금액" value="${f.amount || ''}"><span style="font-size:11px;color:#9aa49c;">원</span>
+      <input class="vd" id="lgeVendor" placeholder="사용처(선택)" value="${esc(f.vendor || '')}"></div>
+    <div class="r"><select id="lgeMethod" style="flex:1;">${methods}</select></div>
+    ${(f.photoData || f.photo) ? `<div style="font-size:11px;color:#2c6b45;">사진 첨부됨 · ${lgMD(d.date)}(${lgDow(d.date)})로 기록</div>` : ''}
+    <div class="foot"><button class="cx" data-efcx>취소</button><button class="ok" data-efok="${d.date}">${f.id ? '저장' : '추가'}</button></div>
+  </div>`;
 }
 
-function bindLedger() {
-  // 팁 입력
-  $('lgDays').querySelectorAll('input[data-tip]').forEach((inp) => {
-    inp.onchange = async () => { await postJSON('/api/ledger/tip', { date: inp.dataset.tip, amount: inp.value }); loadLedger(); };
+function lgPatchDay(date) {
+  const d = lgDayList.find((x) => x.date === date); if (!d) return;
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('lgNetR-' + date, '순수입 ' + wonKo(lgNetOf(d)));
+  set('lgBrk-' + date, lgBrkText(d));
+  set('lgRevR-' + date, wonKo(d.revenue));
+}
+function lgCommitTip(date) {
+  const el = document.getElementById('lgTipI-' + date), d = lgDayList.find((x) => x.date === date);
+  if (el && d) { d.tip = Math.max(0, Math.round((parseFloat(String(el.value).replace(/[^\d.]/g, '')) || 0) * 10000)); lgTipDirty.add(date); }
+}
+function lgSyncForm() {
+  if (!lgExpForm) return;
+  const a = document.getElementById('lgeAmt'), v = document.getElementById('lgeVendor'), m = document.getElementById('lgeMethod');
+  if (a) lgExpForm.amount = a.value; if (v) lgExpForm.vendor = v.value; if (m) lgExpForm.method = m.value;
+}
+
+async function lgScan(inp) {
+  if (!inp.files || !inp.files[0]) return;
+  const date = inp.id.replace('lgScanIn-', '');
+  const lbl = document.getElementById('lgScanLbl-' + date);
+  if (lbl) { lbl.classList.add('busy'); lbl.innerHTML = '<svg class="lg-ico"><use href="#ic-cam"/></svg> 스캔 중…'; }
+  try {
+    const image = await compressImage(inp.files[0], 1400, 0.75);
+    const r = await postJSON('/api/ledger/scan', { image });
+    if (r.ok && r.parsed) lgExpForm = { date, category: r.parsed.category || '기타', amount: r.parsed.amount || '', vendor: r.parsed.vendor || '', method: r.parsed.method || '', photoData: image, scanned: true, _scanned: true };
+    else lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '', photoData: image };
+  } catch { lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '' }; }
+  inp.value = '';
+  renderLgList();
+}
+
+async function lgSaveExpense(date) {
+  lgSyncForm();
+  const amt = Math.max(0, Number(String(lgExpForm.amount).replace(/[^\d]/g, '')) || 0);
+  if (!amt) { alert('금액을 입력하세요.'); return; }
+  const body = { date, category: lgExpForm.category || '기타', amount: amt, vendor: lgExpForm.vendor || '', method: lgExpForm.method || '', scanned: !!lgExpForm.scanned };
+  let id = lgExpForm.id;
+  if (id) await postJSON('/api/ledger/expense/' + id, body);
+  else { const r = await postJSON('/api/ledger/expense', body); id = r.expense && r.expense.id; }
+  if (id && lgExpForm.photoData) await postJSON('/api/ledger/expense/' + id + '/photo', { image: lgExpForm.photoData });
+  lgExpForm = null;
+  lgReload();
+}
+
+function bindLg() {
+  // 단락 열고 닫기
+  document.querySelectorAll('#lgList [data-tog]').forEach((h) => h.onclick = async () => {
+    const date = h.dataset.tog;
+    if (lgOpenDate && lgOpenDate !== date) lgCommitTip(lgOpenDate);
+    lgOpenDate = lgOpenDate === date ? null : date; lgExpForm = null;
+    renderLgList(); refreshLgTotals(); await lgFlushTips();
   });
-  // 부 조합 열기
-  $('lgDays').querySelectorAll('.pb').forEach((b) => {
-    b.onclick = () => { lgPartEdit = lgPartEdit === b.dataset.pb ? null : b.dataset.pb; renderLedger(); };
+  // 부 조합 토글(낙관적 반영 후 저장)
+  document.querySelectorAll('#lgList [data-part]').forEach((c) => c.onclick = () => {
+    const [date, p] = c.dataset.part.split('|'), d = lgDayList.find((x) => x.date === date); if (!d) return;
+    const set = new Set(d.parts); set.has(p) ? set.delete(p) : set.add(p);
+    if (set.size === 0) return;
+    d.parts = [...set].sort();
+    const F = lgFEES(); d.revenue = d.parts.reduce((s, q) => s + F[q], 0);
+    renderLgList(); refreshLgTotals();
+    postJSON('/api/ledger/dayparts', { date, parts: d.parts });
   });
-  // 부 조합 토글
-  $('lgDays').querySelectorAll('.lg-pe').forEach((b) => {
-    b.onclick = async () => {
-      const date = b.dataset.ped, row = lgData.rows.find((r) => r.date === date);
-      const cur = new Set(row.parts);
-      if (cur.has(b.dataset.p)) cur.delete(b.dataset.p); else cur.add(b.dataset.p);
-      const parts = [...cur].sort();
-      if (!parts.length) return; // 최소 1개
-      await postJSON('/api/ledger/dayparts', { date, parts });
-      await loadLedger();
+  // 팁 실시간 반영(포커스 유지)
+  const tipEl = lgOpenDate && document.getElementById('lgTipI-' + lgOpenDate);
+  if (tipEl) {
+    tipEl.oninput = () => {
+      const d = lgDayList.find((x) => x.date === lgOpenDate); if (!d) return;
+      d.tip = Math.max(0, Math.round((parseFloat(String(tipEl.value).replace(/[^\d.]/g, '')) || 0) * 10000));
+      lgTipDirty.add(lgOpenDate); lgPatchDay(lgOpenDate); refreshLgTotals();
     };
+    tipEl.onblur = () => { lgCommitTip(lgOpenDate); lgFlushTips(); };
+  }
+  // 지출 스캔 / 직접입력
+  document.querySelectorAll('#lgList [id^="lgScanIn-"]').forEach((inp) => inp.onchange = () => lgScan(inp));
+  document.querySelectorAll('#lgList [data-manual]').forEach((b) => b.onclick = () => { lgExpForm = { date: b.dataset.manual, category: '기타', amount: '', vendor: '', method: '' }; renderLgList(); });
+  document.querySelectorAll('#lgList [data-cat]').forEach((c) => c.onclick = () => { lgSyncForm(); lgExpForm.category = c.dataset.cat; renderLgList(); });
+  document.querySelectorAll('#lgList [data-efcx]').forEach((b) => b.onclick = () => { lgExpForm = null; renderLgList(); });
+  document.querySelectorAll('#lgList [data-efok]').forEach((b) => b.onclick = () => lgSaveExpense(b.dataset.efok));
+  document.querySelectorAll('#lgList [data-ee]').forEach((b) => b.onclick = () => {
+    const [date, id] = b.dataset.ee.split('|'), d = lgDayList.find((x) => x.date === date), e = d && d.expenses.find((x) => String(x.id) === id);
+    if (e) { lgExpForm = { id: e.id, date, category: e.category, amount: e.amount, vendor: e.vendor || '', method: e.method || '' }; renderLgList(); }
   });
-  // 지출 삭제
-  $('lgExpenses').querySelectorAll('.edel').forEach((b) => {
-    b.onclick = async () => { if (!confirm('이 지출을 삭제할까요?')) return; await fetch('/api/ledger/expense/' + b.dataset.del, { method: 'DELETE' }); loadLedger(); };
+  document.querySelectorAll('#lgList [data-del]').forEach((b) => b.onclick = async () => { if (!confirm('이 지출을 삭제할까요?')) return; await fetch('/api/ledger/expense/' + b.dataset.del, { method: 'DELETE' }); lgReload(); });
+  // 저장하고 닫기
+  document.querySelectorAll('#lgList [data-save]').forEach((b) => b.onclick = async () => {
+    lgCommitTip(b.dataset.save); await lgFlushTips();
+    const d = lgDayList.find((x) => x.date === b.dataset.save); if (d) d._saved = true;
+    lgOpenDate = null; lgExpForm = null; renderLgList(); refreshLgTotals();
   });
-  // 지출 수정 열기
-  $('lgExpenses').querySelectorAll('.edit-e').forEach((b) => {
-    b.onclick = () => { const e = lgData.expenses.find((x) => x.id === b.dataset.ee); lgExpEdit = { ...e }; renderLedger(); };
+  // 페이지네이션
+  $('lgPager').querySelectorAll('[data-pg]').forEach((b) => b.onclick = async () => {
+    if (b.disabled) return;
+    if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips();
+    lgPage += b.dataset.pg === 'next' ? 1 : -1; lgOpenDate = null; lgExpForm = null;
+    renderLgList();
   });
-  bindExpForm();
 }
 
-function bindExpForm() {
-  if (!lgExpEdit) return;
-  $('lgExpenses').querySelectorAll('.cat').forEach((b) => {
-    b.onclick = () => { lgExpEdit.category = b.dataset.ecat; renderLedger(); };
-  });
-  const photoInp = $('lgePhoto');
-  if (photoInp) photoInp.onchange = async () => {
-    if (!photoInp.files || !photoInp.files[0]) return;
-    lgExpEdit.date = $('lgeDate').value; lgExpEdit.amount = $('lgeAmt').value; lgExpEdit.vendor = $('lgeVendor').value; lgExpEdit.method = $('lgeMethod').value;
-    try { lgExpEdit.photoData = await compressImage(photoInp.files[0]); renderLedger(); } catch { /* noop */ }
-  };
-  $('lgeCancel').onclick = () => { lgExpEdit = null; renderLedger(); };
-  $('lgeSave').onclick = async () => {
-    const body = { date: $('lgeDate').value, category: lgExpEdit.category || '기타', amount: $('lgeAmt').value, vendor: $('lgeVendor').value, method: $('lgeMethod').value, scanned: !!lgExpEdit.scanned };
-    if (!body.date || !(Number(body.amount) > 0)) { alert('날짜와 금액을 입력하세요.'); return; }
-    let id = lgExpEdit.id;
-    if (id) await postJSON('/api/ledger/expense/' + id, body);
-    else { const r = await postJSON('/api/ledger/expense', body); id = r.expense?.id; }
-    if (id && lgExpEdit.photoData) await postJSON('/api/ledger/expense/' + id + '/photo', { image: lgExpEdit.photoData });
-    lgExpEdit = null; loadLedger();
-  };
+/* ── 수익계산서 문서 ── */
+function lgDocOpts() { return { rev: $('lgORev').checked, tip: $('lgOTip').checked, exp: $('lgOExp').checked }; }
+function updateDocDesc() {
+  const o = lgDocOpts();
+  let name = o.rev && o.exp ? '수입·지출 정산서(순이익 포함)' : o.rev ? '수입 정산서' : o.exp ? '지출 정산서' : '(항목을 하나 이상 선택)';
+  const bits = []; if (o.rev) bits.push('부별 수익' + (o.tip ? '+팁' : '')); if (o.exp) bits.push('지출 내역');
+  $('lgDocDesc').textContent = name + (bits.length ? ' — ' + bits.join(' · ') : '');
+  $('lgDocScope').textContent = lgDocPeriod === 'year' ? `${lgYear}년 전체(월별 요약)` : `${lgYear}년 ${lgMonth}월`;
+}
+
+// 문서 본문(head/style 제외) — 미리보기·PDF·Word 공용
+function lgReportInner(o, S, opts) {
+  const rows = (S.rows || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const period = opts.period, isYear = opts.isYear, profile = opts.profile || { name: '', workplace: '리버힐CC' };
+  const title = o.rev && o.exp ? '수입·지출 정산서' : o.rev ? '수입 정산서' : '지출 정산서';
+  const F = S.fees || { 1: 140000, 2: 140000, 3: 150000 };
+  const byPart = { 1: { days: 0, amt: 0, fee: F[1] }, 2: { days: 0, amt: 0, fee: F[2] }, 3: { days: 0, amt: 0, fee: F[3] } };
+  rows.forEach((r) => r.parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amt += F[p]; } }));
+  const workRev = rows.reduce((s, r) => s + r.revenue, 0), tipTot = rows.reduce((s, r) => s + (r.tip || 0), 0);
+  const w = (n) => wonKo(n), tk = (parts) => parts.length >= 3 ? '54(1·2·3부)' : parts.map((p) => p + '부').join('·');
+
+  let revBlock = '';
+  if (o.rev) {
+    let detTitle, detHead, detBody;
+    if (isYear) {
+      const bm = {}; rows.forEach((r) => { const mk = r.date.slice(0, 7); (bm[mk] = bm[mk] || { days: 0, rev: 0, tip: 0 }); bm[mk].days++; bm[mk].rev += r.revenue; bm[mk].tip += (r.tip || 0); });
+      const keys = Object.keys(bm).sort();
+      detTitle = '월별 요약';
+      detHead = `<tr><th>월</th><th>근무일</th><th>캐디피</th>${o.tip ? '<th>팁</th>' : ''}</tr>`;
+      detBody = keys.length ? keys.map((k) => `<tr><td>${Number(k.slice(5, 7))}월</td><td class="num">${bm[k].days}일</td><td class="num st">${w(bm[k].rev)}</td>${o.tip ? `<td class="num">${bm[k].tip ? w(bm[k].tip) : '-'}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${o.tip ? 4 : 3}" class="mid">확정된 근무가 없습니다.</td></tr>`;
+    } else {
+      detTitle = '근무일별 내역';
+      detHead = `<tr><th>No</th><th>근무일</th><th>근무(부)</th><th>캐디피</th>${o.tip ? '<th>팁</th>' : ''}</tr>`;
+      detBody = rows.length ? rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.date}(${lgDow(r.date)})</td><td>${tk(r.parts)}</td><td class="num st">${w(r.revenue)}</td>${o.tip ? `<td class="num">${r.tip ? w(r.tip) : '-'}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${o.tip ? 5 : 4}" class="mid">확정된 근무가 없습니다.</td></tr>`;
+    }
+    const partRows = ['1', '2', '3'].filter((p) => byPart[p].days).map((p) => `<tr><td>${p}부</td><td class="num">${byPart[p].days}일</td><td class="num">${w(byPart[p].fee)}</td><td class="num st">${w(byPart[p].amt)}</td></tr>`).join('') || `<tr><td colspan="4" class="mid">-</td></tr>`;
+    const totalRev = o.tip ? workRev + tipTot : workRev;
+    revBlock = `<h2>1. 수입</h2><h3>${detTitle}</h3>
+      <table class="log"><thead>${detHead}</thead><tbody>${detBody}</tbody></table>
+      <h3>부별 요약</h3>
+      <table class="log"><thead><tr><th>구분</th><th>근무일</th><th>캐디피(1회)</th><th>금액</th></tr></thead><tbody>${partRows}</tbody>
+      <tfoot><tr class="sub"><td colspan="3">근무 수입 소계</td><td class="num st">${w(workRev)}</td></tr>
+      ${o.tip ? `<tr class="sub"><td colspan="3">팁 합계</td><td class="num st">${w(tipTot)}</td></tr>` : ''}
+      <tr class="tot"><td colspan="3">수입 합계</td><td class="num">${w(totalRev)}</td></tr></tfoot></table>`;
+  }
+  let expBlock = '';
+  if (o.exp) {
+    const exps = (S.expenses || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const byCat = {}; exps.forEach((e) => { const c = e.category || '기타'; byCat[c] = (byCat[c] || 0) + (Number(e.amount) || 0); });
+    const expTot = exps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const catRows = Object.keys(byCat).length ? Object.entries(byCat).map(([c, a]) => `<tr><td>${esc(c)}</td><td class="num st">${w(a)}</td></tr>`).join('') : `<tr><td colspan="2" class="mid">등록된 지출이 없습니다.</td></tr>`;
+    const detRows = exps.length ? exps.map((e, i) => `<tr><td>${i + 1}</td><td>${e.date}(${lgDow(e.date)})</td><td>${esc(e.category)}</td><td>${esc(e.vendor || '')}</td><td>${esc(e.method || '')}</td><td class="num st">${w(e.amount)}</td></tr>`).join('') : `<tr><td colspan="6" class="mid">—</td></tr>`;
+    expBlock = `<h2>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
+      <table class="log half"><thead><tr><th>항목</th><th>금액</th></tr></thead><tbody>${catRows}</tbody><tfoot><tr class="tot"><td>지출 합계</td><td class="num">${w(expTot)}</td></tr></tfoot></table>
+      <h3>지출 상세(증빙)</h3>
+      <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>`;
+  }
+  let netBlock = '';
+  if (o.rev && o.exp) {
+    const inc = o.tip ? workRev + tipTot : workRev, expTot = (S.expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    netBlock = `<table class="net"><tbody><tr><td>수입 합계</td><td class="num">${w(inc)}</td></tr><tr><td>지출 합계</td><td class="num">− ${w(expTot)}</td></tr><tr class="tot"><td>순이익</td><td class="num">${w(inc - expTot)}</td></tr></tbody></table>`;
+  }
+  return `<h1>${title}</h1><div class="sub">대상 기간: ${period} · 사업소득(캐디) 종합소득세 참고자료</div>
+    <table class="meta"><tr><td class="k">성명</td><td>${esc(profile.name || '(설정에서 입력)')}</td><td class="k">사업장</td><td>${esc(profile.workplace || '리버힐CC')}</td></tr>
+    <tr><td class="k">확정 근무</td><td>${rows.length}일</td><td class="k">작성 구분</td><td>${title}</td></tr></table>
+    ${revBlock}${expBlock}${netBlock}
+    <div class="note">※ ${o.rev ? '수입은 확정 근무일 × 부별 캐디피(1·2부 14만원, 3부 15만원) 자동 합산입니다. ' : ''}${o.exp ? '지출의 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서이며, 본 문서는 이를 정리한 소명자료입니다. 세무사 상담을 권장합니다.' : ''}</div>`;
+}
+
+const LG_WORD_CSS = `body{font-family:-apple-system,"Malgun Gothic",sans-serif;color:#1a201d;margin:0;padding:24px;background:#fff;font-size:12.5px;}
+h1{font-size:21px;margin:0 0 3px;} .sub{color:#666;font-size:12px;margin-bottom:16px;}
+h2{font-size:15px;border-top:2px solid #0b5d34;padding-top:11px;margin:20px 0 8px;} h3{font-size:12.5px;color:#0b5d34;margin:13px 0 6px;}
+table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+table.meta td{border:1px solid #ccc;padding:6px 9px;font-size:12px;} table.meta .k{background:#f4f6f5;font-weight:700;width:84px;}
+table.log{font-size:12px;} table.log.half{width:64%;}
+table.log th,table.log td{border:1px solid #bbb;padding:5px 8px;text-align:left;} table.log th{background:#0b5d34;color:#fff;font-size:11.5px;}
+td.num{text-align:right;} td.st{font-weight:700;} td.mid{text-align:center;color:#999;}
+table.log tfoot td{background:#eef2f0;font-weight:700;} table.log tfoot tr.tot td{background:#0b5d34;color:#fff;font-size:13px;}
+table.net{width:64%;} table.net td{border:1px solid #bbb;padding:8px 10px;font-size:13px;} table.net td.num{text-align:right;font-weight:700;} table.net tr.tot td{background:#0b5d34;color:#fff;font-size:14px;}
+.note{font-size:10.5px;color:#777;margin-top:14px;line-height:1.65;}
+.bar{position:sticky;top:0;background:#0b5d34;padding:10px;text-align:center;margin:-24px -24px 18px;} .bar button{font-size:14px;font-weight:700;padding:9px 18px;border:0;border-radius:8px;background:#fff;color:#0b5d34;}
+@media print{.bar{display:none;}}`;
+
+function lgFullDoc(forWord) {
+  const { o, S, period, isYear, profile } = lgDocCtx;
+  const title = o.rev && o.exp ? '수입·지출 정산서' : o.rev ? '수입 정산서' : '지출 정산서';
+  const mso = forWord ? '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->' : '';
+  const bar = forWord ? '' : '<div class="bar"><button onclick="window.print()">인쇄 / PDF로 저장</button></div>';
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title} ${period}</title>${mso}<style>${LG_WORD_CSS}</style></head><body>${bar}${lgReportInner(o, S, { period, isYear, profile })}</body></html>`;
+}
+
+async function lgOpenDoc(kind) {
+  const o = lgDocOpts();
+  if (!o.rev && !o.exp) { alert('수익 또는 지출 중 하나는 선택하세요.'); return; }
+  let S = lgData, period = `${lgYear}년 ${lgMonth}월`, isYear = false, profile = lgProfile;
+  if (lgDocPeriod === 'year') {
+    try { const r = await (await fetch(`/api/ledger?year=${lgYear}`)).json(); S = r.summary; profile = r.profile || lgProfile; }
+    catch { alert('연 자료를 불러오지 못했어요.'); return; }
+    period = `${lgYear}년 전체`; isYear = true;
+  }
+  lgDocCtx = { o, S, period, isYear, profile, kind };
+  $('lgMFrame').innerHTML = '<div class="lgdoc">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
+  $('lgMTitle').textContent = (kind === 'pdf' ? 'PDF 미리보기 · ' : 'Word 미리보기 · ') + period;
+  $('lgMNote').textContent = '인쇄 = 등록 프린터로 출력(그 창에서 "PDF로 저장"도 가능). 저장·공유 = 파일로 저장하거나 카톡 등으로 공유.';
+  $('lgMSaveLbl').textContent = kind === 'word' ? 'Word(.doc) 저장·공유' : 'PDF 저장·공유';
+  $('lgMSave').onclick = kind === 'word' ? lgSaveWord : lgSavePdf;
+  $('lgModal').hidden = false;
+  $('lgMFrame').scrollTop = 0;
+}
+
+function lgPrintDoc() {
+  const html = lgFullDoc(false);
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  const doc = f.contentWindow.document; doc.open(); doc.write(html); doc.close();
+  setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { /* noop */ } setTimeout(() => f.remove(), 2000); }, 350);
+}
+
+async function lgDeliver(blob, name, mime) {
+  try {
+    const file = new File([blob], name, { type: mime });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+  } catch (e) { /* 취소/미지원 → 다운로드 */ }
+  try {
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 600);
+  } catch (e) { alert('이 환경에선 저장이 지원되지 않아요.'); }
+}
+function lgDocName(ext) { return `정산서_${lgDocCtx.isYear ? lgYear : (lgYear + '-' + String(lgMonth).padStart(2, '0'))}.${ext}`; }
+async function lgSaveWord() {
+  const blob = new Blob(['﻿' + lgFullDoc(true)], { type: 'application/msword' });
+  await lgDeliver(blob, lgDocName('doc'), 'application/msword');
+}
+async function lgSavePdf() {
+  const el = $('lgMFrame').querySelector('.lgdoc'); if (!el) return;
+  const name = lgDocName('pdf');
+  if (typeof html2pdf === 'undefined') { lgPrintDoc(); return; }
+  const opt = { margin: [8, 8, 8, 8], filename: name, image: { type: 'jpeg', quality: 0.96 }, html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+  try { const blob = await html2pdf().set(opt).from(el).outputPdf('blob'); await lgDeliver(blob, name, 'application/pdf'); }
+  catch (e) { try { await html2pdf().set(opt).from(el).save(); } catch (_) { lgPrintDoc(); } }
 }
 
 function initLedgerButtons() {
-  $('lgPrev').onclick = () => { lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
-  $('lgNext').onclick = () => { if ($('lgNext').disabled) return; lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
-  $('lgJump').onclick = () => { const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
-  // 날짜 필터 — 고른 날짜의 근무만 보이기(다른 달이면 그 달로 이동).
-  $('lgDateSel').onchange = () => {
-    const v = $('lgDateSel').value; if (!v) { lgDateFilter = ''; renderLedger(); return; }
-    lgDateFilter = v;
-    const y = Number(v.slice(0, 4)), m = Number(v.slice(5, 7));
-    if (y !== lgYear || m !== lgMonth) { lgYear = y; lgMonth = m; loadLedger(); } else renderLedger();
-  };
-  $('lgDateClear').onclick = () => { lgDateFilter = ''; renderLedger(); };
-  // AI 영수증 판독
-  $('lgScanInput').onchange = async () => {
-    const inp = $('lgScanInput'); if (!inp.files || !inp.files[0]) return;
-    const msg = $('lgScanMsg'); msg.hidden = false; msg.textContent = '📷 영수증 분석 중…'; $('lgScanLabel').classList.add('busy');
-    try {
-      const image = await compressImage(inp.files[0], 1400, 0.75);
-      const r = await (await fetch('/api/ledger/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) })).json();
-      if (r.ok && r.parsed) {
-        lgExpEdit = { date: r.parsed.date || new Date().toISOString().slice(0, 10), amount: r.parsed.amount || '', vendor: r.parsed.vendor || '', category: r.parsed.category || '기타', method: r.parsed.method || '', photoData: image, scanned: true };
-        msg.textContent = (r.source === 'local' ? '✓ 로컬 AI 판독 완료 · 크레딧 0' : '✓ AI 판독 완료') + ' — 확인 후 저장하세요. 틀린 값은 직접 고치면 돼요.';
-      } else { lgExpEdit = { date: new Date().toISOString().slice(0, 10), photoData: image, category: '기타' }; msg.textContent = '판독이 어려웠어요 — 직접 입력해 주세요(사진은 첨부됨).'; }
-    } catch { msg.textContent = '분석 실패 — 직접 입력해 주세요.'; }
-    $('lgScanLabel').classList.remove('busy'); inp.value = '';
-    renderLedger();
-  };
-  $('lgAddManual').onclick = () => { lgExpEdit = { date: (lgYear === new Date().getFullYear() && lgMonth === new Date().getMonth() + 1) ? new Date().toISOString().slice(0, 10) : `${lgYear}-${String(lgMonth).padStart(2, '0')}-01`, category: '기타' }; $('lgScanMsg').hidden = true; renderLedger(); };
-  // 문서 옵션
-  ['lgOptRev', 'lgOptTip', 'lgOptExp', 'lgOptPhoto'].forEach((id) => { $(id).onchange = updateDocDesc; });
-  $('lgPdf').onclick = () => { if (!$('lgOptRev').checked && !$('lgOptExp').checked) { alert('수익 또는 지출 중 하나는 선택하세요.'); return; } window.open(`/api/ledger/report?${docQuery()}`, '_blank'); };
-  $('lgWord').onclick = () => { if (!$('lgOptRev').checked && !$('lgOptExp').checked) { alert('수익 또는 지출 중 하나는 선택하세요.'); return; } window.location.href = `/api/ledger/report?${docQuery()}&fmt=doc`; };
-  // 단가 저장
-  $('lgFeeSave').onclick = async () => { await postJSON('/api/ledger/settings', { fee1: $('lgFee1').value, fee2: $('lgFee2').value, fee3: $('lgFee3').value }); loadLedger(); };
+  $('lgPrev').onclick = async () => { await lgFlushTips(); lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
+  $('lgNext').onclick = async () => { if ($('lgNext').disabled) return; await lgFlushTips(); lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
+  $('lgJump').onclick = async () => { await lgFlushTips(); const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
+  $('lgSeg').querySelectorAll('button').forEach((b) => b.onclick = () => { lgDocPeriod = b.dataset.per; $('lgSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); updateDocDesc(); });
+  ['lgORev', 'lgOTip', 'lgOExp'].forEach((id) => $(id).addEventListener('change', updateDocDesc));
+  $('lgPdf').onclick = () => lgOpenDoc('pdf');
+  $('lgWord').onclick = () => lgOpenDoc('word');
+  $('lgMPrint').onclick = lgPrintDoc;
+  $('lgMClose').onclick = () => { $('lgModal').hidden = true; };
+  $('lgModal').onclick = (e) => { if (e.target.id === 'lgModal') $('lgModal').hidden = true; };
 }
 
 /* ── 카트 점검 ── */

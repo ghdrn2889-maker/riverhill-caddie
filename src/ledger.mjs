@@ -10,13 +10,15 @@ import { loadUserJSON, saveUserJSON, userPhotoDir } from './store.mjs';
 import * as worklog from './worklog.mjs';
 
 const FILE = 'ledger.json';
-const FEE_DEFAULTS = { fee1: 140000, fee2: 140000, fee3: 150000, defaultPart: '3' };
+// 캐디피 단가 — 고정값(로직에 박음, 설정에서 변경 불가). 1·2부 14만, 3부 15만.
+//   조합은 자동 합산: 1·3부 = 14+15 = 29만, 54(1·2·3부) = 14+14+15 = 43만.
+const FEES = { 1: 140000, 2: 140000, 3: 150000 };
+const DEFAULT_PART = '3'; // 부를 알 수 없을 때 가정하는 기본부(3부 스페어).
 const EXP_CATS = ['주유', '톨비', '식대', '주차', '기타'];
 const EXP_METHODS = ['카드', '현금영수증', '현금', '세금계산서', '간이영수증', ''];
 
 function load(userId = 1) {
   const d = loadUserJSON(userId, FILE, null) || {};
-  d.settings = { ...FEE_DEFAULTS, ...(d.settings || {}) };
   d.tips = d.tips || {};        // { 'YYYY-MM-DD': 금액 }
   d.dayParts = d.dayParts || {}; // { 'YYYY-MM-DD': ['2','3'] }  수동 부 보정
   d.expenses = d.expenses || []; // [{ id, date, category, amount, method, vendor, memo, photo, scanned }]
@@ -24,27 +26,16 @@ function load(userId = 1) {
 }
 function save(userId, d) { saveUserJSON(userId, FILE, d); }
 
-export function getSettings(userId = 1) { return load(userId).settings; }
-export function setSettings(patch = {}, userId = 1) {
-  const d = load(userId);
-  const c = {};
-  for (const k of ['fee1', 'fee2', 'fee3']) if (patch[k] != null) c[k] = Math.max(0, Math.round(Number(patch[k]) || 0));
-  if (patch.defaultPart && ['1', '2', '3'].includes(String(patch.defaultPart))) c.defaultPart = String(patch.defaultPart);
-  d.settings = { ...d.settings, ...c };
-  save(userId, d);
-  return d.settings;
-}
-
 // 그날 근무한 부 배열 — 수동 보정(dayParts) 우선, 없으면 근무일지 rounds, 그것도 없으면 기본부(3부).
 function partsForDay(day, d) {
   const ov = d.dayParts[day.date];
   if (Array.isArray(ov) && ov.length) return ov.slice().sort();
   const r = day.rounds && Object.keys(day.rounds).filter((p) => ['1', '2', '3'].includes(p));
   if (r && r.length) return r.slice().sort();
-  return [d.settings.defaultPart || '3'];
+  return [DEFAULT_PART];
 }
-function feeOf(part, s) { return Number(s['fee' + part]) || 0; }
-function dayRevenue(parts, s) { return parts.reduce((sum, p) => sum + feeOf(p, s), 0); }
+function feeOf(part) { return FEES[part] || 0; }
+function dayRevenue(parts) { return parts.reduce((sum, p) => sum + feeOf(p), 0); } // 부 조합 자동 합산(1·3부=29만 등)
 
 const inPeriod = (dateISO, year, month) => {
   if (!dateISO) return false;
@@ -57,23 +48,22 @@ const PART_KO = { 1: '1부', 2: '2부', 3: '3부' };
 // 월(또는 연) 정산 집계 + 일자별 내역.
 export function summary({ year, month } = {}, userId = 1) {
   const d = load(userId);
-  const s = d.settings;
   const all = worklog.listDays({ year, month }, userId);
   const worked = all.filter((x) => x.worked === true);       // 확정 근무일 → 수익 산정 대상
   const pending = all.filter((x) => x.worked == null);        // 확인 대기(확정하면 합산)
 
-  const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1', s) }, 2: { days: 0, amount: 0, fee: feeOf('2', s) }, 3: { days: 0, amount: 0, fee: feeOf('3', s) } };
+  const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1') }, 2: { days: 0, amount: 0, fee: feeOf('2') }, 3: { days: 0, amount: 0, fee: feeOf('3') } };
   let workRevenue = 0;
   const rows = worked.map((day) => {
     const parts = partsForDay(day, d);
-    const rev = dayRevenue(parts, s);
-    parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amount += feeOf(p, s); } });
+    const rev = dayRevenue(parts);
+    parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amount += feeOf(p); } });
     workRevenue += rev;
     const tip = Math.max(0, Number(d.tips[day.date]) || 0);
     return { date: day.date, parts, tang: parts.length >= 3 ? '54' : parts.join('/'), revenue: rev, tip };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  const pendingRevenue = pending.reduce((sum, day) => sum + dayRevenue(partsForDay(day, d), s), 0);
+  const pendingRevenue = pending.reduce((sum, day) => sum + dayRevenue(partsForDay(day, d)), 0);
   const tipTotal = rows.reduce((a, r) => a + r.tip, 0);
   const expenses = d.expenses.filter((e) => inPeriod(e.date, year, month)).sort((a, b) => (a.date < b.date ? 1 : -1));
   const expTotal = expenses.reduce((a, e) => a + (Math.max(0, Number(e.amount) || 0)), 0);
@@ -81,7 +71,7 @@ export function summary({ year, month } = {}, userId = 1) {
   for (const e of expenses) { const c = EXP_CATS.includes(e.category) ? e.category : '기타'; expByCat[c] = (expByCat[c] || 0) + (Math.max(0, Number(e.amount) || 0)); }
 
   return {
-    settings: s,
+    fees: FEES,
     byPart, partKo: PART_KO,
     workedDays: worked.length, pendingDays: pending.length,
     workRevenue, pendingRevenue,
@@ -280,7 +270,7 @@ export function incomeReportHTML(opts = {}, userId = 1) {
   }
 
   const noteBits = [];
-  if (showRev) noteBits.push('수입은 확정 근무일 × 부별 캐디피(설정값) 자동 합산입니다.');
+  if (showRev) noteBits.push('수입은 확정 근무일 × 부별 캐디피(1·2부 14만원, 3부 15만원) 자동 합산입니다.');
   if (showExp) noteBits.push('지출은 업무를 위한 실제 경비이며, 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서입니다. 본 문서는 이를 정리·집계한 소명자료로, 신고 방식(장부작성 여부)에 따라 공제 범위가 다르므로 세무사 상담을 권장합니다.');
 
   const mso = opts.forWord ? `<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->` : '';
