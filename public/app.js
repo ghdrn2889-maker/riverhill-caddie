@@ -60,6 +60,18 @@ function iosInfo() {
 }
 // iOS 공유 아이콘(네모+위화살표) 인라인 SVG — 사파리 안내 문구에 그대로 삽입.
 const SHARE_SVG = '<span class="ib-share"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7"/></svg></span>';
+// ── 이모지 대체용 인라인 SVG(스트로크·currentColor). 크기는 .eic 등 CSS로. ──
+const svgIc = (p, sw = 2) => `<svg class="eic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const BELL_SVG = svgIc('<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>');
+const CLOCK_SVG = svgIc('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>');
+const CHECK_SVG = svgIc('<polyline points="4 12 10 18 20 6"/>', 3);
+const WARN_SVG = svgIc('<path d="M12 3.2 1.8 20.8h20.4z"/><path d="M12 9.5v5"/><path d="M12 17.6h.01"/>');
+const CAM_SVG = svgIc('<path d="M4 8.5h3l1.3-1.8h7.4L17 8.5h3v9.5H4z"/><circle cx="12" cy="13" r="3"/>', 1.9);
+const FLAG_SVG = svgIc('<path d="M6 21V4"/><path d="M6 5h11l-2.2 3.1L17 11.4H6"/>');
+const HOUSE_SVG = svgIc('<path d="M4 11 12 4l8 7"/><path d="M6 10.2V19h12v-8.8"/>');
+const PIN_SVG = svgIc('<path d="M12 21s-6.3-5.7-6.3-10.4a6.3 6.3 0 0 1 12.6 0C18.3 15.3 12 21 12 21z"/><circle cx="12" cy="10.4" r="2.2"/>');
+const COFFEE_SVG = svgIc('<path d="M4 9h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/><path d="M17 10h2.4a2.4 2.4 0 0 1 0 4.8H17"/><path d="M8 3v2.4M12 3v2.4"/>');
+const REFRESH_SVG = svgIc('<path d="M20.5 12a8.5 8.5 0 1 1-2.4-6"/><path d="M20.5 4v5h-5"/>');
 let deferredInstall = null;
 function initInstallPrompt() {
   const bar = $('installBar'), txt = $('installText'), cta = $('installCta'), x = $('installClose');
@@ -208,7 +220,7 @@ function renderNotifyNudge() {
     cta = '알림 켜기';
   }
   el.innerHTML = `<div class="nudge-x" id="nudgeX" role="button" aria-label="닫기">✕</div>`
-    + `<div class="nudge-ic">🔔</div>`
+    + `<div class="nudge-ic">${BELL_SVG}</div>`
     + `<div class="nudge-tx"><b>${title}</b><span>${body}</span></div>`
     + (cta ? `<button class="nudge-cta" id="nudgeCta">${cta}</button>` : '');
   el.hidden = false;
@@ -292,20 +304,6 @@ async function loadToday() {
   loadWeather();
   loadCheer();
 }
-// WMO 날씨코드 → 이모지(주간/야간 구분).
-function wmoEmoji(code, day) {
-  if (code === 0) return day ? '☀️' : '🌙';
-  if (code === 1) return day ? '🌤️' : '🌙';
-  if (code === 2) return '⛅';
-  if (code === 3) return '☁️';
-  if (code === 45 || code === 48) return '🌫️';
-  if (code >= 51 && code <= 57) return '🌦️';
-  if (code >= 61 && code <= 67) return '🌧️';
-  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) return '🌨️';
-  if (code >= 80 && code <= 82) return '🌦️';
-  if (code >= 95) return '⛈️';
-  return '☁️';
-}
 // WMO 코드 → 배경 카테고리 / 한글 설명.
 function wmoCategory(code) {
   if (code === 0 || code === 1) return 'clear';
@@ -355,7 +353,7 @@ function wxFxHTML(cat, mode) {
   if (cat === 'snow') {
     if (soft) s += '<div class="cloud c1"></div><div class="cloud c2"></div>';          // 노을·새벽 눈엔 구름 추가(더 흐릿하게)
     for (let i = 0; i < 26; i++) { const l = Math.random() * 100, sz = (8 + Math.random() * 10).toFixed(0), d = (3 + Math.random() * 3).toFixed(2), dl = (Math.random() * 4).toFixed(2);
-      s += `<span class="flake" style="left:${l}%;font-size:${sz}px;animation-duration:${d}s;animation-delay:${dl}s">❄</span>`; }
+      s += `<span class="flake" style="left:${l}%;font-size:${sz}px;animation-duration:${d}s;animation-delay:${dl}s"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M20.7 7L3.3 17M12 5.5 9.6 3.9M12 5.5l2.4-1.6M12 18.5l-2.4 1.6M12 18.5l2.4 1.6M4.6 8.7 4.9 5.9M4.6 8.7 1.9 8.4M19.4 15.3l.3 2.8M19.4 15.3l2.7.3"/></svg></span>`; }
     return s;
   }
   return '';
@@ -545,7 +543,7 @@ function removedBoardHTML(s) {
     <div class="rm-card">
       <div class="rm-h">오늘 배치에서 빠졌어요 <span class="rm-tag">근무 없음</span></div>
       <div class="rm-line">${line}</div>
-      <div class="rm-foot"><span>🔄</span><span>배치표에 이름이 다시 오르면 근무 화면으로 바로 돌아와요.</span></div>
+      <div class="rm-foot"><span class="rm-fi">${REFRESH_SVG}</span><span>배치표에 이름이 다시 오르면 근무 화면으로 바로 돌아와요.</span></div>
     </div>
   </div>`;
 }
@@ -681,7 +679,7 @@ function renderRoundsStack(t) {
     const cur = i === curIdx;
     const sp = r.kind === 'spare';
     const tee = sp ? '대기' : (r.teeTime || '미정');
-    mini += `<div class="df-node${done ? ' done' : ''}${cur ? ' cur' : ''}${sp ? ' sp' : ''}"><span class="df-dot">${done ? '✓' : (i + 1)}</span><span class="df-lbl"><span class="pc${r.part}">${PART_KO[r.part] || ''}</span> ${esc(tee)}</span></div>`;
+    mini += `<div class="df-node${done ? ' done' : ''}${cur ? ' cur' : ''}${sp ? ' sp' : ''}"><span class="df-dot">${done ? CHECK_SVG : (i + 1)}</span><span class="df-lbl"><span class="pc${r.part}">${PART_KO[r.part] || ''}</span> ${esc(tee)}</span></div>`;
     if (i < rounds.length - 1) {
       const gm = roundOrd(rounds[i + 1]) - roundEnd(r);
       mini += `<span class="df-link${done ? ' done' : ''}${gm >= 180 ? ' free' : ' onsite'}"></span>`;
@@ -697,8 +695,8 @@ function renderRoundsStack(t) {
     if (eng != null && now >= roundEnd(prev) && now < eng) {
       const gm = roundOrd(cur) - roundEnd(prev), free = gm >= 180, left = eng - now;
       between = free
-        ? `<div class="df-gap free"><span class="df-gi">☕</span><div class="df-gt"><b>자유시간 · 공백 ${durKo(gm)}</b><span>집에 다녀오거나 근처에서 볼 일 보세요 · 복귀 목표 ${esc(hhmm(eng))}</span></div><div class="df-gc">복귀까지<b>${durKo(left)}</b></div></div>`
-        : `<div class="df-gap onsite"><span class="df-gi">🏌️</span><div class="df-gt"><b>골프장에서 백대기하며 대기</b><span>${PART_KO[prev.part]} 끝 · 바로 이어서 ${PART_KO[cur.part]} · 공백 ${durKo(gm)}</span></div><div class="df-gc">백대기까지<b>${durKo(left)}</b></div></div>`;
+        ? `<div class="df-gap free"><span class="df-gi">${COFFEE_SVG}</span><div class="df-gt"><b>자유시간 · 공백 ${durKo(gm)}</b><span>집에 다녀오거나 근처에서 볼 일 보세요 · 복귀 목표 ${esc(hhmm(eng))}</span></div><div class="df-gc">복귀까지<b>${durKo(left)}</b></div></div>`
+        : `<div class="df-gap onsite"><span class="df-gi">${FLAG_SVG}</span><div class="df-gt"><b>골프장에서 백대기하며 대기</b><span>${PART_KO[prev.part]} 끝 · 바로 이어서 ${PART_KO[cur.part]} · 공백 ${durKo(gm)}</span></div><div class="df-gc">백대기까지<b>${durKo(left)}</b></div></div>`;
     }
   }
 
@@ -715,8 +713,8 @@ function roundCard(r) {
     const c = r.commute || null;
     const crsKo = r.course === 'IN' ? '인' : r.course === 'OUT' ? '아웃' : '';
     const crs = crsKo ? `<span class="df-crs">${crsKo}코스</span>` : '';
-    const legs = (r.teeTime && c) ? `<div class="df-legs"><span>🏠 ${esc(c.leave)}</span><span>📍 ${esc(c.arrive)}</span><span>⛳ ${esc(c.standby)}</span></div>` : '';
-    return `<div class="df-card"><div class="df-ch">${partHtml}<span class="df-tag work">근무</span></div><div class="df-tee">⛳ 티오프 <b>${esc(r.teeTime || '미정')}</b> ${crs}</div>${legs}</div>`;
+    const legs = (r.teeTime && c) ? `<div class="df-legs"><span>${HOUSE_SVG} ${esc(c.leave)}</span><span>${PIN_SVG} ${esc(c.arrive)}</span><span>${FLAG_SVG} ${esc(c.standby)}</span></div>` : '';
+    return `<div class="df-card"><div class="df-ch">${partHtml}<span class="df-tag work">근무</span></div><div class="df-tee">티오프 <b>${esc(r.teeTime || '미정')}</b> ${crs}</div>${legs}</div>`;
   }
   const pos = Number(r.myPosition) || 0, cut = Number(r.cutLine) || 0;
   const sparePos = (cut && pos > cut) ? (pos - cut) : pos;
@@ -823,7 +821,7 @@ function renderBoard(bd) {
     const homeHtml = phase === 0 ? `<span class="ricon home" style="left:0%">${homeSVG()}</span>` : '';
     const carHtml = phase === 1 ? `<span class="ricon car" style="left:${pct}%">${carSVG(true)}</span>` : '';
     const bagHtml = (phase === 2 || phase === 3) ? `<span class="ricon prep" style="left:${phase === 2 ? 50 : pct}%">${golfBagSVG()}</span>` : '';
-    const golferHtml = phase === 4 ? `<span class="ricon golfer" style="left:100%">🏌️</span>` : '';
+    const golferHtml = phase === 4 ? `<span class="ricon golfer" style="left:100%">${golfBagSVG()}</span>` : '';
     const filling = animate ? ' filling' : '';
     const alert = phase === 0 ? [`${off >= 1 ? dayW + ' ' : ''}${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, off >= 1 ? '출발 전' : '10분 전']
       : phase === 1 ? [`곧 골프장 도착 예정(${c.arrive})`, '이동 중']
@@ -927,10 +925,10 @@ function renderSpareBoard(s, partLabel = '3부') {
   // 명단에서 내 이름을 못 찾고(정확 우선 미충족), 서버 순번으로도 신뢰 못하면 → 숫자 요약 폴백.
   if (myIdx < 0 && !trustByPos) {
     const mp = Number(s.myPosition) || 0;
-    if (!mp) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
+    if (!mp) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
     const ahead = (cut && mp > cut) ? Math.max(0, mp - cut - 1) : 0;
     if (!cut || mp <= cut) {
-      return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span>🕒</span>` +
+      return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span>` +
         `<span>아직 <b>근무 확정 전</b>이에요 · 순번 <b>${mp}번</b>. 확정선 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div></div>`;
     }
     return `<div class="sp-board">
@@ -938,7 +936,7 @@ function renderSpareBoard(s, partLabel = '3부') {
         <div><div class="lbl">${partLabel} 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
         <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
       </div>
-      <div class="sp-foot" style="border-top:0"><span>🕒</span><span>내 순번 <b>${mp}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
+      <div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span><span>내 순번 <b>${mp}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
     </div>`;
   }
 
@@ -982,7 +980,7 @@ function renderSpareBoard(s, partLabel = '3부') {
       <div class="sp-ahead"><b>${myPos}</b><span>내 순번</span></div>
     </div>
     <div class="sp-list">${rows.join('')}</div>
-    <div class="sp-foot"><span>🕒</span><span>확정선(“○○님까지”) 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div>
+    <div class="sp-foot"><span class="sp-fi">${CLOCK_SVG}</span><span>확정선(“○○님까지”) 소식이 오면 앞으로 몇 명 남았는지 계산해 알려드릴게요.</span></div>
   </div>`;
 }
 
@@ -1038,35 +1036,27 @@ async function loadJournal() {
       const [cls, label] = jKindMeta(d);
       const isWork = d.kind === 'work' && !d.excluded;
       const eff = isWork ? (d.effParts || null) : null;   // 근무일 유효 조합(정산과 동일 소스)
-      let detail;
-      if (d.excluded) {
-        detail = d.prevPosition ? `<span class="jt">순번 ${d.prevPosition} → 배치표에서 제외</span>` : `<span class="jt">근무 없음</span>`;
-      } else if (isWork && eff && eff.length >= 2) {
-        const legs = eff.filter((p) => d.rounds && d.rounds[p] && d.rounds[p].teeTime).map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
-        detail = `<span class="jt">🔁 ${jTang(eff)} · ${legs.length ? legs.join(' → ') : eff.map((p) => p + '부').join('·')}</span>`;
-      } else if (isWork && d.teeTime) {
-        detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
-      } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
-      const combo = (isWork && eff) ? `<span class="jcombo">${jCombo(eff)}</span>` : '';
-      // 자동 감지된 1·2부 포함 조합 + 아직 사용자 확인(수동보정) 안 함 → '확인?' 넛지(유령 2부 대비).
-      const needsCheck = isWork && eff && !d.partsOverride && (eff.includes('1') || eff.includes('2'));
-      const checkBadge = needsCheck ? '<span class="jcheck">확인?</span>' : '';
-      const tang = (isWork && eff && eff.length >= 2) ? `<span class="jk work jtang">${jTang(eff)}</span>` : '';
-      const manual = d.userKind ? '<span class="jman">직접 지정</span>' : (d.partsOverride ? '<span class="jman">부 확인됨</span>' : '');
+      // 근무일 = 부 조합 배지 1개(그 자체가 '근무'를 뜻함). 조합 2개↑는 살짝 진한 톤(multi).
+      //  비근무일은 분류 배지(스페어/휴무/휴가/순번 제외). 확인 넛지·티오프 브레이크다운·'탕' 표현 없음.
+      const badge = isWork
+        ? `<span class="jk work${eff && eff.length >= 2 ? ' multi' : ''}">${eff ? jCombo(eff) : '근무'}</span>`
+        : `<span class="jk ${cls}">${label}</span>`;
+      const manual = d.userKind ? '<span class="jman">직접 지정</span>' : '';
       const chip = (k, lab, c) => `<button class="jkbtn ${c}${jSel(d, k) ? ' on' : ''}" data-jd="${d.date}" data-jk="${k}">${lab}</button>`;
       const partsEdit = isWork ? `<div class="jparts">
         <span class="jplabel">부 조합</span>
         ${['1', '2', '3'].map((p) => `<button class="jpchip${eff && eff.includes(p) ? ' on' : ''}" data-pd="${d.date}" data-pp="${p}">${p === '1' ? '1부' : p + '부'}</button>`).join('')}
-        ${d.partsOverride ? `<button class="jpchip jpauto" data-pd="${d.date}" data-pp="reset">↺ 자동</button>` : ''}
-        <div class="jphint">그날 실제 조합으로 눌러 고치면 정산 수익에 바로 반영돼요.</div>
+        ${d.partsOverride ? `<button class="jpchip jpauto" data-pd="${d.date}" data-pp="reset">자동으로</button>` : ''}
+        <div class="jphint">그날 실제 조합으로 눌러 고치면 정산 수입에 바로 반영돼요.</div>
       </div>` : '';
       const editor = `<div class="jedit">
-        <div class="jkinds">${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}${d.userKind ? `<button class="jkbtn jauto" data-jd="${d.date}" data-jk="auto">↺ 자동</button>` : ''}</div>
+        <div class="jkinds">${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}${d.userKind ? `<button class="jkbtn jauto" data-jd="${d.date}" data-jk="auto">자동으로</button>` : ''}</div>
         ${partsEdit}
       </div>`;
+      // 펼치기 화살표: 접힘=아래(⌄), 펼침=위(⌃). 탭하면 CSS 오버슈트 전환으로 빠르게 회전.
       return `<div class="jday" data-card="${d.date}">
-        <div class="jrow"><div><span class="jd">${md}</span>${detail}${manual}</div>
-          <div style="display:flex;align-items:center;gap:4px;">${combo}${checkBadge}<span class="jk ${cls}">${label}</span>${tang}<span class="jecar">✎</span></div></div>
+        <div class="jrow"><div><span class="jd">${md}</span>${manual}</div>
+          <div class="jbadges">${badge}<svg class="jchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div></div>
         ${editor}</div>`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
     bindJournalEdit();
@@ -1088,9 +1078,8 @@ function jSel(d, k) {
   if (k === 'off') return d.kind === 'off' && !d.excluded && d.offType !== 'vacation';
   return d.kind === k && !d.excluded;
 }
-// 부 조합 라벨: 3부 이상=54, 아니면 2·3부 식. 탕수: 서로 다른 부 수.
-function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.length >= 3) return '54'; return parts.map((p) => p + '부').join('·'); }
-function jTang(parts) { const n = parts ? parts.length : 0; return n >= 3 ? '세 탕' : n === 2 ? '두 탕' : '한 탕'; }
+// 부 조합 배지 라벨: 3부↑=54, 2개=1·3/2·3(부 생략), 1개=3부. (근무 횟수/탕 표현은 쓰지 않음)
+function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.length >= 3) return '54'; if (parts.length === 2) return parts.join('·'); return parts[0] + '부'; }
 function bindJournalEdit() {
   // 행 탭 → 수정 패널 열기/닫기
   $('jDays').querySelectorAll('.jday').forEach((el) => {
@@ -1206,10 +1195,10 @@ function renderWorklog() {
   $('wlCAll').textContent = monthDays.length; $('wlCAsk').textContent = nAsk; $('wlCPhoto').textContent = nPhoto;
   const tidy = $('wlTidy');
   if (nAsk + nPhoto === 0) {
-    tidy.className = 'wl-tidy ok'; tidy.querySelector('.ic').textContent = '✓';
+    tidy.className = 'wl-tidy ok'; tidy.querySelector('.ic').innerHTML = CHECK_SVG;
     $('wlTidyTxt').textContent = '모두 정리됐어요';
   } else {
-    tidy.className = 'wl-tidy warn'; tidy.querySelector('.ic').textContent = '⚠️';
+    tidy.className = 'wl-tidy warn'; tidy.querySelector('.ic').innerHTML = WARN_SVG;
     const parts = []; if (nAsk) parts.push(`확인 대기 ${nAsk}일`); if (nPhoto) parts.push(`사진 미입력 ${nPhoto}일`);
     $('wlTidyTxt').innerHTML = parts.join(' · ') + `<span class="go">아래에서 정리 ↓</span>`;
   }
@@ -1223,7 +1212,7 @@ function renderWorklog() {
   wlBind();
 }
 
-const WL_LEG = [['start', '🏠 집출발'], ['work', '⛳ 직장도착'], ['home', '🏠 집복귀']];
+const WL_LEG = [['start', '집출발'], ['work', '직장도착'], ['home', '집복귀']];
 function wlCard(d, roundKm) {
   const dt = new Date(d.date + 'T00:00:00'), day = Number(d.date.slice(8, 10)), dow = dt.getDay();
   const wc = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';
@@ -1239,8 +1228,8 @@ function wlCard(d, roundKm) {
   } else if (d.worked === false) {
     right = `<div class="wl-right"><span class="wl-chip x">안 함</span><button class="wl-change" data-d="${d.date}">변경</button></div>`; meta = `<span>근무 안 한 날</span>`;
   } else {
-    right = `<div class="wl-right"><span class="wl-chip ok">✓ 근무</span><button class="wl-change" data-d="${d.date}">변경</button></div>`;
-    const ph = nPhoto > 0 ? `<span class="ph">📷 ${nPhoto}장</span>` : `<span class="ph miss">📷 사진 미입력</span>`;
+    right = `<div class="wl-right"><span class="wl-chip ok">근무</span><button class="wl-change" data-d="${d.date}">변경</button></div>`;
+    const ph = nPhoto > 0 ? `<span class="ph">사진 ${nPhoto}장</span>` : `<span class="ph miss">사진 미입력</span>`;
     const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
     meta = `${ph}${odo}`;
   }
@@ -1249,7 +1238,7 @@ function wlCard(d, roundKm) {
   const tee = d.excluded
     ? (d.prevPosition ? `순번 ${d.prevPosition}번 → 배치표에서 제외` : '순번 제외 · 근무 없음')
     : teeLegs.length
-      ? `🔁 ${teeLegs.length >= 3 ? '세 탕' : '두 탕'} ` + teeLegs.map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ') + tripBadge
+      ? teeLegs.map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ') + tripBadge
       : d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
   const expandable = d.worked !== false && !d.excluded;
   let panel = '';
@@ -1257,7 +1246,7 @@ function wlCard(d, roundKm) {
     const odo = d.odo || {};
     const slots = WL_LEG.map(([leg, lab]) => {
       const has = d.photos && d.photos[leg];
-      const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '📷';
+      const inner = has ? `<img src="/api/worklog/photo/${d.photos[leg]}?t=${d.confirmedAt || 0}">` : '<svg class="wl-camic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h3l1.3-1.8h7.4L17 8.5h3v9.5H4z"/><circle cx="12" cy="13" r="3"/></svg>';
       return `<label class="wl-slot"><span class="box${has ? ' done' : ''}">${inner}</span><span class="lab">${lab}</span>
         <input type="file" accept="image/*" data-d="${d.date}" data-leg="${leg}" hidden></label>`;
     }).join('');
@@ -1779,10 +1768,10 @@ let ccDate = null;
 let ccEditMode = false;
 const ccCounts = { intake: 0, exit: 0, club_pre: 0, club_post: 0 }; // 각 구간 저장 사진 수 — 다중 업로드 10장 상한
 const CC_LABELS = {
-  intake:    { box: 'ccIntakeThumbs', lbl: 'ccIntakeLbl', alt: '카트 상태', idle: '📷 사진 올리기', add: '📷 사진 추가' },
-  exit:      { box: 'ccExitThumbs',   lbl: 'ccExitLbl',   alt: '빈 카트',   idle: "📷 '비운 카트' 사진", add: '📷 사진 추가' },
-  club_pre:  { box: 'clPreThumbs',    lbl: 'clPreLbl',    alt: '라운드 전 클럽', idle: '📷 라운드 전 사진', add: '📷 사진 추가' },
-  club_post: { box: 'clPostThumbs',   lbl: 'clPostLbl',   alt: '라운드 후 클럽', idle: '📷 라운드 후 사진', add: '📷 사진 추가' },
+  intake:    { box: 'ccIntakeThumbs', lbl: 'ccIntakeLbl', alt: '카트 상태', idle: '사진 올리기', add: '사진 추가' },
+  exit:      { box: 'ccExitThumbs',   lbl: 'ccExitLbl',   alt: '빈 카트',   idle: "'비운 카트' 사진", add: '사진 추가' },
+  club_pre:  { box: 'clPreThumbs',    lbl: 'clPreLbl',    alt: '라운드 전 클럽', idle: '라운드 전 사진', add: '사진 추가' },
+  club_post: { box: 'clPostThumbs',   lbl: 'clPostLbl',   alt: '라운드 후 클럽', idle: '라운드 후 사진', add: '사진 추가' },
 };
 // 카트 상태(intake)·빈 카트(exit) — 공통: 여러 장 썸네일 + 각 삭제 버튼. 갤러리에서 여러 장 추가됨.
 function ccRenderThumbs(leg, list) {
@@ -1827,7 +1816,7 @@ async function loadRcStrip() {
     const dow = dt.getUTCDay();
     const rec = recDays.get(date);
     const md = `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
-    const mark = rec ? (rec.done ? '✓' : (rec.nPhoto ? '📷' : '·')) : '';
+    const mark = rec ? (rec.done ? CHECK_SVG : (rec.nPhoto ? CAM_SVG : '·')) : '';
     const cls = [dow === 0 ? 'sun' : (dow === 6 ? 'sat' : ''), date === ccDate ? 'sel' : '', date === todayISO ? 'today' : ''].filter(Boolean).join(' ');
     html += `<button class="rc-day ${cls}" data-date="${date}"><span class="dn">${md}</span><span class="dw">${RC_WD[dow]}</span><span class="dm">${mark}</span></button>`;
   }
@@ -1839,7 +1828,7 @@ async function loadRcStrip() {
 function ccRenderList(items, checklist, progress) {
   const list = $('ccList'), prog = $('ccProg'), editBtn = $('ccEdit');
   if (ccEditMode) {
-    editBtn.textContent = '✓ 편집 완료';
+    editBtn.textContent = '편집 완료';
     prog.textContent = '항목 편집 중'; prog.classList.remove('done');
     list.innerHTML =
       items.map((it) => `<div class="cc-edit-item"><input value="${esc(it.label)}" data-key="${it.key}" aria-label="항목 이름"><button class="cc-del" data-del="${it.key}" title="삭제">✕</button></div>`).join('') +
@@ -1855,14 +1844,14 @@ function ccRenderList(items, checklist, progress) {
     $('ccNewItem').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('ccAddItem').click(); } };
     $('ccResetItems').onclick = async () => { await postJSON('/api/cartcheck/items/recommend', {}); loadCartCheck(ccDate); };
   } else {
-    editBtn.textContent = '✎ 항목 편집';
+    editBtn.textContent = '항목 편집';
     list.innerHTML = items.length
-      ? items.map((it) => { const on = !!checklist[it.key]; return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? '✓' : ''}</span><span>${esc(it.label)}</span></div>`; }).join('')
-      : `<div class="wl-sub">항목이 없어요. ‘✎ 항목 편집’에서 추가하세요.</div>`;
+      ? items.map((it) => { const on = !!checklist[it.key]; return `<div class="cc-item ${on ? 'on' : ''}" data-key="${it.key}"><span class="box">${on ? CHECK_SVG : ''}</span><span>${esc(it.label)}</span></div>`; }).join('')
+      : `<div class="wl-sub">항목이 없어요. ‘항목 편집’에서 추가하세요.</div>`;
     list.querySelectorAll('.cc-item').forEach((el) => {
       el.onclick = async () => { const on = el.classList.contains('on'); await postJSON('/api/cartcheck/check', { date: ccDate, key: el.dataset.key, done: !on }); loadCartCheck(ccDate); };
     });
-    prog.textContent = `${progress.checked}/${progress.total}${progress.done ? ' ✓ 완료' : ''}`;
+    prog.textContent = `${progress.checked}/${progress.total}${progress.done ? ' 완료' : ''}`;
     prog.classList.toggle('done', !!progress.done);
   }
 }
@@ -1901,7 +1890,7 @@ async function ccUpload(leg, inp) {
   const orig = lbl.firstChild ? lbl.firstChild.textContent : '';
   try {
     for (let i = 0; i < pick.length; i++) {
-      if (lbl.firstChild) lbl.firstChild.textContent = `⏳ 올리는 중 ${i + 1}/${pick.length}`;
+      if (lbl.firstChild) lbl.firstChild.textContent = `올리는 중 ${i + 1}/${pick.length}`;
       const image = await compressImage(pick[i]);
       await postJSON('/api/cartcheck/photo', { date: ccDate, leg, image });
     }

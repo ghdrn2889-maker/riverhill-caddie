@@ -180,7 +180,7 @@ async function broadcastAdmins(msg) {
 
 // 테스트용(관리자 전용): 관리자 폰으로 알림 한 번 쏴보기
 app.post('/api/test', requireAdmin, async (req, res) => {
-  await broadcastAdmins({ title: '🏌️ 테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
+  await broadcastAdmins({ title: '테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
   res.json({ ok: true });
 });
 
@@ -767,14 +767,14 @@ const SCHEDULE_MENU_ID = process.env.SCHEDULE_MENU_ID || '2';  // 배치 시간�
 // AI가 판단한 상태(status)에 맞춰 알림 제목을 정한다.
 function titleForStatus(status) {
   switch (status) {
-    case 'your_turn': return '🚨 지금 출근 순번!';
-    case 'near':      return '🔔 곧 출근 순번!';
-    case 'assigned':  return '✅ 오늘 근무 배정됨';
-    case 'waiting':   return '🏌️ 3부 대기 현황';
-    case 'work':      return '✅ 출근 확정!';
-    case 'spare':     return '🏌️ 스페어(대기)';
-    case 'off':       return '😴 근무 없음';
-    default:          return '🏌️ 새 소식';
+    case 'your_turn': return '지금 출근 순번!';
+    case 'near':      return '곧 출근 순번!';
+    case 'assigned':  return '오늘 근무 배정됨';
+    case 'waiting':   return '3부 대기 현황';
+    case 'work':      return '출근 확정!';
+    case 'spare':     return '스페어(대기)';
+    case 'off':       return '근무 없음';
+    default:          return '새 소식';
   }
 }
 
@@ -976,11 +976,11 @@ async function processForMember(userId, member, out, full, opts = {}) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
       if (teeChg) {
         // 티오프 시각 변경 → 출발·도착·백대기 전부 바뀜. 변경 사실 + 확인 요청 + 갱신된 전체 시각.
-        title = '⚠️ 티오프 시간 변경!';
+        title = '티오프 시간 변경!';
         body = `${member.name}님, 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 바뀌었으니 확인해주세요.\n${out.body}`;
         rearmTimelineReminders(userId); // 새 시각으로 타임라인 리마인더 다시 울리게
       } else {
-        title = '⚠️ 변경됐어요!';
+        title = '변경됐어요!';
         body = `${change.message}\n${out.body}`;
       }
       out.push = 'high';
@@ -992,7 +992,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
       if (myp && myp > tc) {
         const ahead = Math.max(0, myp - tc - 1);
         const part = merged.next.part || `${member.part}부`;
-        title = `🏌️ ${member.part}부 대기 현황`;
+        title = `${member.part}부 대기 현황`;
         // 스페어 1번(내 앞 0명)은 '출근 확정' 아니라 '언제든 나갈 1순위'로 구분해 안내.
         body = ahead === 0
           ? `현재 ${part} ${tc}팀 — ${member.name}님은 스페어 1번이에요. 팀이 하나만 더 차면 바로 출근이니 준비해두세요.`
@@ -1011,7 +1011,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
   if (isKakaoSource(full)) {
     if (out.relevant && change.reversal) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
-      title = '⚠️ 업무 시간 변동';
+      title = '업무 시간 변동';
       body = teeChg
         ? `${member.name}님, 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변동됐어요. 출발·백대기 시각도 확인해주세요.`
         : `${member.name}님, 업무에 변동이 있어요 — ${change.message}.`;
@@ -1102,7 +1102,6 @@ function workRoundPartsForDay(userId, dayISO) {
   }
   return parts.sort();
 }
-function tangWord(n) { return n >= 3 ? '세 탕(54홀)' : n === 2 ? '두 탕(36홀)' : '한 탕'; }
 
 // ── 부(部)별 평행 슬롯 처리 — 1·2부 라운드(today1/today2.json). 3부(processForMember)와 완전 분리. ──
 //  ★member.part('1'|'2')로 슬롯·pushlog·리마인더 키·문구를 전부 파라미터화. 해당 부 배치표에 이름이 뜬
@@ -1192,15 +1191,15 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   // 전날 밤 뜨는 조출 배치표 대응 — '오늘/내일/모레'를 날짜 라벨로 정확히.
   const dayW = dayWordFor(n.date) || '오늘';
   if (isWork && (teeChg || gotTee || becameWork)) {
-    // 오늘 이 회원의 근무 라운드 조합 안내(두 탕/세 탕).
+    // 오늘 이 회원의 근무 라운드 조합 안내(예: 2·3부 · 36홀).
     const wparts = workRoundPartsForDay(userId, jIso);
-    const combo = wparts.length >= 2 ? ` — ${dayW} ${wparts.join('·')}부 ${tangWord(wparts.length)}이에요.` : '';
+    const combo = wparts.length >= 2 ? ` — ${dayW} ${wparts.join('·')}부 근무예요(${wparts.length * 18}홀).` : '';
     // 출발·백대기·도착 시각 — 특히 새벽 조출(1부)엔 '몇 시에 나가야 하나'가 핵심. 3부 배정 문구와 동일 형식.
     const c0 = n.teeTime ? commuteInfo(n.teeTime, member.commuteMin) : null;
-    const sched = c0 ? `\n⛳ 티오프 ${c0.tee}${n.course ? ` (${String(n.course).toUpperCase()}코스)` : ''} · 백대기 ${c0.standby} · 도착 ${c0.arrive} · 집에서 ${c0.leave} 출발` : '';
-    if (teeChg) { title = `⚠️ ${label} 티오프 변경!`; body = `${member.name}님, ${label} 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.${sched}`; }
-    else if (n.teeTime) { title = `⛳ ${label} 근무 배정!`; body = `${member.name}님, ${dayW} ${label} 근무예요.${sched}${combo}`; }
-    else { title = `⛳ ${label} 근무권!`; body = `${member.name}님, ${dayW} ${label} 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.${combo}`; }
+    const sched = c0 ? `\n티오프 ${c0.tee}${n.course ? ` (${String(n.course).toUpperCase()}코스)` : ''} · 백대기 ${c0.standby} · 도착 ${c0.arrive} · 집에서 ${c0.leave} 출발` : '';
+    if (teeChg) { title = `${label} 티오프 변경!`; body = `${member.name}님, ${label} 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.${sched}`; }
+    else if (n.teeTime) { title = `${label} 근무 배정!`; body = `${member.name}님, ${dayW} ${label} 근무예요.${sched}${combo}`; }
+    else { title = `${label} 근무권!`; body = `${member.name}님, ${dayW} ${label} 근무권에 들었어요. 티오프가 잡히면 바로 알려드릴게요.${combo}`; }
     push = 'high';
   }
   // ── 스페어 대기 진행 — 확정선(teamCount) 전진 시 '앞에 N명' 안내. 아직 근무 배정 전 스페어일 때만. ──
@@ -1209,7 +1208,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
     const tc = Number(v.teamCount);
     if (myp && myp > tc) {
       const ahead = Math.max(0, myp - tc - 1);
-      title = `🏌️ ${label} 대기 현황`;
+      title = `${label} 대기 현황`;
       body = ahead === 0
         ? `현재 ${label} ${tc}팀 — ${member.name}님은 ${label} 스페어 1번이에요. 한 팀만 더 차면 ${label} 나가니 준비해두세요.`
         : `현재 ${label} ${tc}팀 — ${member.name}님은 ${label} 스페어 ${ahead + 1}번, 앞에 ${ahead}명 남았어요.`;
@@ -1279,7 +1278,7 @@ async function checkWorklogReminders() {
     if (hour < Number(process.env.REMIND_HOUR ?? 20)) return;
     for (const day of worklog.dueReminders()) {
       const md = `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8, 10))}`;
-      await broadcast({ title: '🚗 근무 기록 잊지 마세요', body: `${md} 근무하셨나요? 계기판 사진(집출발·직장도착·집복귀)을 앱에 등록해주세요.`, url: '/' });
+      await broadcast({ title: '근무 기록 잊지 마세요', body: `${md} 근무하셨나요? 계기판 사진(집출발·직장도착·집복귀)을 앱에 등록해주세요.`, url: '/' });
       worklog.markReminded(day.date);
       console.log(`[리마인더] ${day.date} 차량기록 상기 발송`);
     }
@@ -1314,7 +1313,7 @@ async function checkCartReminders() {
       if (!cartcheck.needsExitCheck(todayISO, mem.id)) continue;   // 이미 점검 완료 → 조용
       const rec = cartcheck.getDay(todayISO, mem.id);
       if (rec.remindedAt && Date.now() - rec.remindedAt < 6 * 3600 * 1000) continue; // 6h내 재알림 억제
-      await broadcast({ title: '🛒 카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' }, mem.id);
+      await broadcast({ title: '카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' }, mem.id);
       cartcheck.markReminded(todayISO, mem.id);
       console.log(`[카트리마인더] 회원${mem.id} ${todayISO} 종료 점검 상기 발송`);
     }
@@ -1353,10 +1352,10 @@ function timelineReminders(c, name) {
   const L = toMinOfDay(c.leave), A = toMinOfDay(c.arrive), T = toMinOfDay(c.tee);
   if (L == null || A == null || T == null) return [];
   return [
-    { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '🚗 곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발이에요. 준비하세요.` },
-    { key: 'leave',   at: L,                       level: 'high',  title: '🚗 출발 시간', body: `${name}님, 지금 출발하세요! 도착 ${c.arrive} · 티오프 ${c.tee}.` },
-    { key: 'arrive',  at: A,                       level: 'check', title: '⛳ 도착·백대기', body: `${name}님, 골프장 도착 시간이에요. 백대기 ${c.standby}까지 준비하세요.` },
-    { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '🏌️ 곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프예요. 코스로 이동하세요.` },
+    { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발이에요. 준비하세요.` },
+    { key: 'leave',   at: L,                       level: 'high',  title: '출발 시간', body: `${name}님, 지금 출발하세요! 도착 ${c.arrive} · 티오프 ${c.tee}.` },
+    { key: 'arrive',  at: A,                       level: 'check', title: '도착·백대기', body: `${name}님, 골프장 도착 시간이에요. 백대기 ${c.standby}까지 준비하세요.` },
+    { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프예요. 코스로 이동하세요.` },
   ];
 }
 
@@ -1427,7 +1426,7 @@ startCrawler({
     } catch (e) {
       console.error('본문 분석 실패, 제목으로 알림:', e.message);
       saveRecent(article, result, null);
-      const title = result.priority === 'high' ? '🔔 일정 소식' : '🏌️ 새 소식';
+      const title = result.priority === 'high' ? '일정 소식' : '새 소식';
       await broadcast({ title, body: article.subject, url: article.url });
     }
   },
@@ -1456,7 +1455,7 @@ startCrawler({
   onCafeError: async () => {
     // 운영성 알림 → 관리자(김홍구)에게만. 일반 회원(테스터)에게는 보내지 않는다.
     await broadcastAdmins({
-      title: '⚠️ 네이버 쿠키 만료',
+      title: '네이버 쿠키 만료',
       body: '카페 감시가 멈췄어요. .env 의 쿠키를 새로 갱신해주세요.',
       url: '/',
     });

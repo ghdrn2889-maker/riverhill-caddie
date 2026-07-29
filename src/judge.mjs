@@ -129,7 +129,7 @@ function commuteLine(teeTime, course, commuteMin) {
   const c = commuteInfo(teeTime, commuteMin);
   if (!c) return '';
   const crs = course ? ` (${String(course).toUpperCase()}코스)` : '';
-  return `\n⛳ 티오프 ${c.tee}${crs} · 백대기 ${c.standby} · 도착 ${c.arrive} · 집에서 ${c.leave} 출발`;
+  return `\n티오프 ${c.tee}${crs} · 백대기 ${c.standby} · 도착 ${c.arrive} · 집에서 ${c.leave} 출발`;
 }
 
 // ── Gemini 판정 프롬프트 (stateless: 이 글만 편견 없이 읽는다) ──
@@ -492,14 +492,14 @@ ${postedLine}
 // ── 최종 알림 문구/제목/푸시강도 결정 (산수는 코드가) ──────
 function titleFor(status) {
   switch (status) {
-    case 'your_turn': return '🚨 지금 출근 순번!';
-    case 'near':      return '🔔 스페어 상위 — 곧 차례!';
-    case 'assigned':  return '✅ 오늘 근무 배정됨';
-    case 'work':      return '✅ 출근 확정!';
-    case 'waiting':   return '🏌️ 3부 대기 현황';
-    case 'spare':     return '🏌️ 스페어(대기)';
-    case 'off':       return '😴 근무 없음';
-    default:          return '🏌️ 3부 소식';
+    case 'your_turn': return '지금 출근 순번!';
+    case 'near':      return '스페어 상위 — 곧 차례!';
+    case 'assigned':  return '오늘 근무 배정됨';
+    case 'work':      return '출근 확정!';
+    case 'waiting':   return '3부 대기 현황';
+    case 'spare':     return '스페어(대기)';
+    case 'off':       return '근무 없음';
+    default:          return '3부 소식';
   }
 }
 
@@ -513,7 +513,7 @@ export function decide(article, verdict, member = memberFromEnv()) {
     const blob = `${article.subject || ''} ${article.text || ''}`;
     if (cheapRelevance(blob, member) !== 'other' && scheduleHint(blob)) {
       return { relevant: true, push: 'check', status: 'unknown', verdict: null,
-        title: '🏌️ 새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
+        title: '새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
     }
     // 일정 단서 없음(사진/광고/잡담) → 피드에만, 푸시 안 함.
     return { relevant: false, push: 'low', status: 'unknown', verdict: null,
@@ -601,13 +601,13 @@ export function decide(article, verdict, member = memberFromEnv()) {
       : `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
   }
 
-  if (verdict.note && String(verdict.note).trim()) body += `\n⚠️ ${String(verdict.note).trim()}`;
+  if (verdict.note && String(verdict.note).trim()) body += `\n${String(verdict.note).trim()}`;
 
   // 확신도 낮거나 교차검증 불일치면 '확인필요'로 낮춤(틀린 단정 방지, 그래도 알림은 감).
   let push = (Number(verdict.confidence) || 0) < 0.4 ? 'check' : 'high';
   // ★불확실이면 '구체적인 이유'를 그대로 보여준다(막연한 "판독 불확실"보다 불안이 덜하고 행동이 명확).
-  if (verdict._uncertain) { push = 'check'; body = `⚠️ ${verdict._uncertain}\n${body}`; }
-  const title = push === 'check' ? '🏌️ 3부 소식 — 확인' : titleFor(status);
+  if (verdict._uncertain) { push = 'check'; body = `${verdict._uncertain}\n${body}`; }
+  const title = push === 'check' ? '3부 소식 — 확인' : titleFor(status);
   return { relevant: true, push, status, verdict, title, body };
 }
 

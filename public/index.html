@@ -298,19 +298,32 @@
     .jday { padding:8px 0; border-bottom:1px solid #eef1ec; font-size:12px; }
     .jday:last-child { border-bottom:0; }
     .jrow { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
-    .jday .jd { font-weight:700; }
-    .jday .jt { font-size:10px; color:#79847d; margin-left:6px; }
-    .jman { font-size:9px; color:#9aa49c; margin-left:6px; background:#f2f4f1; padding:1px 6px; border-radius:99px; }
-    .jecar { font-size:11px; color:#c8d0c8; }
-    .jk { font-size:10px; font-weight:800; padding:3px 10px; border-radius:99px; white-space:nowrap; }
+    .jday .jd { font-weight:700; font-size:12.5px; }
+    .jman { font-size:9px; color:#9aa49c; margin-left:7px; background:#f2f4f1; padding:1px 6px; border-radius:99px; }
+    .jbadges { display:flex; align-items:center; gap:7px; }
+    .jk { font-size:10.5px; font-weight:800; padding:3px 12px; border-radius:99px; white-space:nowrap; }
     .jk.work { background:#e8f3eb; color:#1d6740; }
+    .jk.multi { background:#d6ecdd; color:#0d5f34; }       /* 두·세 라운드 조합(2·3·54) · 살짝 진한 초록 */
     .jk.spare { background:#fdf3df; color:#8a5d14; }
     .jk.off { background:#ffe985; color:#7a5a00; }        /* 휴무 · 밝은 노란색 */
     .jk.vac { background:#c3e39a; color:#33610f; }        /* 휴가 · 진한 연두색 */
     .jk.removed { background:#eceef0; color:#8a97a0; }    /* 순번 제외 · 무채색 */
-    .jcombo { font-size:10px; font-weight:800; padding:3px 8px; border-radius:7px; background:#eef3ec; color:#33552f; white-space:nowrap; }
-    .jcheck { font-size:9px; font-weight:800; padding:2px 6px; border-radius:99px; background:#fff3d6; color:#96690c; border:1px solid #f0dca6; white-space:nowrap; }
-    .jk.jtang { background:#e6f0fb; color:#22528a; }       /* 두 탕/세 탕 배지 · 파란톤 */
+    /* 펼치기 화살표 — 접힘=아래(⌄), 펼침=위(⌃). 탭 시 오버슈트 이징으로 순간적으로 빠르게 회전. */
+    .jchev { width:15px; height:15px; color:#c2cbc2; flex-shrink:0; transition: transform .28s cubic-bezier(.34,1.56,.64,1); }
+    .jday.editing .jchev { transform: rotate(180deg); color:#8aa596; }
+    @media (prefers-reduced-motion: reduce) { .jchev { transition: transform .12s linear; } }
+    .wl-slot .box .wl-camic { width:22px; height:22px; color:#b8c0b8; }
+    /* 이모지 대체 인라인 SVG 공통 크기 */
+    .eic { width:1.05em; height:1.05em; vertical-align:-.15em; display:inline-block; flex-shrink:0; }
+    .ov-badge svg { width:44px; height:44px; display:block; margin:0 auto; }
+    .nudge-ic svg { width:26px; height:26px; }
+    .df-gi svg { width:15px; height:15px; }
+    .df-legs svg, .df-tee svg { width:12px; height:12px; vertical-align:-1px; }
+    .sp-fi svg, .rm-fi svg { width:14px; height:14px; vertical-align:-2px; color:#9aa49c; }
+    .wl-tidy .ic svg { width:12px; height:12px; vertical-align:-1px; }
+    .rc-day .dm svg { width:11px; height:11px; }
+    .cc-item .box svg { width:13px; height:13px; }
+    .ib-ico svg { width:20px; height:20px; }
     .jedit { display:none; flex-direction:column; gap:9px; margin-top:9px; padding-top:9px; border-top:1px dashed #e6ebe4; }
     .jday.editing .jedit { display:flex; }
     .jkinds { display:flex; gap:6px; flex-wrap:wrap; }
@@ -928,7 +941,7 @@
       <span class="brand">RIVERHILL CADDIE</span>
       <div class="topright">
         <span class="date" id="date">—</span>
-        <button class="acct" id="acctBtn" hidden>👤 <span id="acctName">회원</span></button>
+        <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
       </div>
     </div>
   </header>
@@ -936,7 +949,7 @@
   <!-- 설치 안내 배너 (iOS 사파리 미설치 안내 / 안드로이드 설치 버튼) — JS가 상황 판단해 노출 -->
   <div id="installBar" hidden>
     <div class="ib-inner">
-      <span class="ib-ico">📲</span>
+      <span class="ib-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M5 20h14"/></svg></span>
       <div class="ib-txt" id="installText"></div>
       <button class="ib-cta" id="installCta" hidden>설치</button>
       <button class="ib-x" id="installClose" aria-label="닫기">✕</button>
@@ -946,7 +959,7 @@
   <!-- 가입/프로필 · 계정 오버레이 -->
   <div class="ov" id="ov" hidden>
     <div class="ov-card">
-      <div class="ov-badge">🏌️</div>
+      <div class="ov-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#0b5d34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 5h11l-2.2 3.1L17 11.4H6"/></svg></div>
       <h2 class="ov-title" id="ovTitle">가입을 완성해주세요</h2>
       <p class="ov-desc" id="ovDesc">근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.</p>
       <label class="ov-field"><span>실명 (배치표 이름) <b class="req">*</b></span><input id="obName" type="text" placeholder="예: 홍길동" maxlength="20"></label>
@@ -970,7 +983,7 @@
   <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) -->
   <div class="ov" id="loginOv" hidden>
     <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;">🏌️</div>
+      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#0b5d34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 5h11l-2.2 3.1L17 11.4H6"/></svg></div>
       <h2 class="ov-title">리버힐 캐디 일정</h2>
       <p class="ov-desc" style="text-align:center;">근무·스페어 알림을 받으려면 로그인하세요.</p>
       <a class="ov-submit google" id="googleLoginBtn" href="/api/auth/google"><span class="glogo" aria-hidden="true"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span> Google로 로그인</a>
@@ -982,10 +995,10 @@
   <!-- 가입 승인 대기 (pending) -->
   <div class="ov" id="pendingOv" hidden>
     <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;">⏳</div>
+      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#8a5d14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10"/><path d="M7 3c0 4 4 5 5 6 1-1 5-2 5-6"/><path d="M7 21c0-4 4-5 5-6 1 1 5 2 5 6"/></svg></div>
       <h2 class="ov-title">가입 승인 대기 중</h2>
       <p class="ov-desc" style="text-align:center;"><b id="pendName">회원</b>님, 리버힐 캐디 본인 확인 후 <b>관리자가 승인</b>하면 바로 이용할 수 있어요. 승인되면 이 화면이 자동으로 넘어갑니다.</p>
-      <button class="ov-notify" id="pendEnableBtn">🔔 승인 알림 받기</button>
+      <button class="ov-notify" id="pendEnableBtn">승인 알림 받기</button>
       <div class="ov-notify-msg" id="pendEnableMsg" style="text-align:center;">알림을 켜두면 <b>승인되는 즉시</b> 폰으로 알려드려요.</div>
       <button class="ov-submit" id="pendReload" style="margin-top:12px;">승인됐어요 · 새로고침</button>
       <div class="ov-actions" style="justify-content:center;">
@@ -997,7 +1010,7 @@
   <!-- 계정 차단됨 (disabled) -->
   <div class="ov" id="blockedOv" hidden>
     <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;">🚫</div>
+      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#b3261e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div>
       <h2 class="ov-title">계정이 차단되었습니다</h2>
       <p class="ov-desc" id="blockedReason" style="text-align:center;"></p>
       <p class="ov-desc" style="text-align:center;">이용에 문제가 있거나 오해가 있었다면 <b>관리자에게 따로 문의</b>해 주세요.</p>
@@ -1044,14 +1057,14 @@
 
     <!-- 근무 기록 -->
     <section class="view body" id="view-worklog" role="tabpanel" aria-labelledby="tab-worklog" hidden>
-      <div class="sect"><span>🗓️ 일일 근무 일지</span></div>
+      <div class="sect"><span>일일 근무 일지</span></div>
       <section class="hero">
         <div id="jSummary" class="wl-sum">불러오는 중…</div>
         <div id="jSub" class="wl-sub"></div>
         <div id="jDays"></div>
       </section>
 
-      <div class="sect"><span>📋 세무·차량 기록</span></div>
+      <div class="sect"><span>세무·차량 기록</span></div>
       <section class="hero">
         <div class="wl-monthnav">
           <button id="wlPrev" aria-label="이전 달">‹</button>
@@ -1072,7 +1085,7 @@
             <div class="wl-stat" id="wlStat3"><div class="k" id="wlS3k">증빙 사진</div><div class="v" id="wlS3v">0</div><div class="u" id="wlS3u">일</div></div>
           </div>
           <div class="wl-assume" id="wlAssume" hidden></div>
-          <div class="wl-tidy ok" id="wlTidy"><span class="ic">✓</span><span id="wlTidyTxt">모두 정리됐어요</span></div>
+          <div class="wl-tidy ok" id="wlTidy"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;vertical-align:-1px"><polyline points="4 12 10 18 20 6"/></svg></span><span id="wlTidyTxt">모두 정리됐어요</span></div>
         </div>
 
         <div class="wl-seg" id="wlSeg">
@@ -1085,12 +1098,12 @@
         <div id="wlDays"></div>
 
         <div class="wl-export">
-          <button id="wlReport" class="wl-exp pdf">📑 증빙 문서(사진 포함) 인쇄·PDF<span class="scope" id="wlSc1"></span></button>
-          <button id="wlExport" class="wl-exp csv">📄 운행일지 CSV<span class="scope" id="wlSc2"></span></button>
+          <button id="wlReport" class="wl-exp pdf">증빙 문서(사진 포함) 인쇄·PDF<span class="scope" id="wlSc1"></span></button>
+          <button id="wlExport" class="wl-exp csv">운행일지 CSV<span class="scope" id="wlSc2"></span></button>
         </div>
 
         <details class="wl-settings">
-          <summary>⚙︎ 설정 (거리·성명·차량번호) <span class="car">▾</span></summary>
+          <summary>설정 (거리·성명·차량번호) <span class="car">▾</span></summary>
           <div class="wl-setbody">
             <div class="wl-row"><span>집→골프장 편도</span><input id="wlKm" type="number" min="0" step="1" inputmode="numeric" aria-label="편도 거리(km)" /><span>km · 왕복 ×2</span></div>
             <div class="wl-row"><span>성명</span><input id="wlName" type="text" style="width:82px;" placeholder="김홍구" aria-label="성명" /><span>차량</span><input id="wlCar" type="text" style="width:98px;" placeholder="12가3456" aria-label="차량번호" /><button id="wlSave" class="wl-btn wl-no">저장</button></div>
@@ -1150,7 +1163,7 @@
 
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
-      <div class="sect"><span>🏌️ 라운드 점검</span></div>
+      <div class="sect"><span>라운드 점검</span></div>
 
       <!-- 상단 날짜 선택바 (최근 N일 롤링) -->
       <div class="rc-datebar">
@@ -1169,16 +1182,16 @@
           <div class="cc-step-h">① 라운드 전 · 카트 상태</div>
           <div class="wl-row"><span>카트번호</span><input id="ccCart" type="text" style="width:90px;" placeholder="예: 12" aria-label="카트번호"><button id="ccCartSave" class="wl-btn wl-no">저장</button></div>
           <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="ccIntakeLbl">📷 사진 올리기 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccIntake" type="file" accept="image/*" multiple hidden></label>
+            <label class="cc-photo" id="ccIntakeLbl">사진 올리기 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccIntake" type="file" accept="image/*" multiple hidden></label>
             <div id="ccIntakeThumbs" class="cc-thumbs"></div>
           </div>
         </div>
 
         <div class="cc-step">
-          <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">✎ 항목 편집</button></div>
+          <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">항목 편집</button></div>
           <div id="ccList"></div>
           <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="ccExitLbl">📷 '비운 카트' 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccExit" type="file" accept="image/*" multiple hidden></label>
+            <label class="cc-photo" id="ccExitLbl">'비운 카트' 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccExit" type="file" accept="image/*" multiple hidden></label>
             <div id="ccExitThumbs" class="cc-thumbs"></div>
           </div>
         </div>
@@ -1188,13 +1201,13 @@
 
       <!-- 클럽 점검 (라운드 전/후 사진 비교) -->
       <section class="hero" style="margin-top:14px;">
-        <div class="wl-sum">🏑 클럽 점검</div>
+        <div class="wl-sum">클럽 점검</div>
         <div class="wl-sub">라운드 전·후를 각각 찍어두면 클럽 개수·파손을 비교·증명할 수 있어요.</div>
 
         <div class="cc-step first">
           <div class="cc-step-h">① 라운드 전 · 클럽 상태</div>
           <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="clPreLbl">📷 라운드 전 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPre" type="file" accept="image/*" multiple hidden></label>
+            <label class="cc-photo" id="clPreLbl">라운드 전 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPre" type="file" accept="image/*" multiple hidden></label>
             <div id="clPreThumbs" class="cc-thumbs"></div>
           </div>
         </div>
@@ -1202,7 +1215,7 @@
         <div class="cc-step">
           <div class="cc-step-h">② 라운드 후 · 클럽 상태</div>
           <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="clPostLbl">📷 라운드 후 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPost" type="file" accept="image/*" multiple hidden></label>
+            <label class="cc-photo" id="clPostLbl">라운드 후 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPost" type="file" accept="image/*" multiple hidden></label>
             <div id="clPostThumbs" class="cc-thumbs"></div>
           </div>
         </div>
