@@ -113,7 +113,12 @@ app.use('/api', (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
   // ★가입 승인 대기(pending)·차단(disabled) 회원은 데이터·기능 엔드포인트 전면 차단(외부인 배제).
   //  온보딩용 /me·/profile 은 이 게이트 앞(위)에 등록돼 있어 통과 — 이름 입력·상태 조회는 가능.
-  if (req.user.status !== 'active') return res.status(403).json({ error: '가입 승인 대기 중입니다. 관리자 확인 후 이용할 수 있어요.', pending: true });
+  if (req.user.status !== 'active') {
+    // ★승인 대기(pending) 회원은 '알림 구독'만 허용 — 승인되는 순간 그 폰으로 알림이 가게 하기 위함.
+    //  (데이터·기능은 계속 차단. 구독 정보는 회원 id에 묶여 저장되고, 승인 전엔 아무 알림도 발송되지 않음.)
+    if (req.user.status === 'pending' && p === '/subscribe') return next();
+    return res.status(403).json({ error: '가입 승인 대기 중입니다. 관리자 확인 후 이용할 수 있어요.', pending: true });
+  }
   next();
 });
 

@@ -807,7 +807,6 @@
       <button class="ov-notify" id="ovEnableBtn" hidden>알림 켜기</button>
       <div class="ov-notify-msg" id="ovEnableMsg"></div>
       <div class="ov-actions" id="ovActions" hidden>
-        <button class="ov-ghost" id="obAdmin" hidden>🛡 회원 관리</button>
         <button class="ov-ghost" id="obLogout">로그아웃</button>
         <button class="ov-ghost" id="obClose">닫기</button>
       </div>
@@ -833,7 +832,9 @@
       <div class="ov-badge" style="margin:0 auto 14px;">⏳</div>
       <h2 class="ov-title">가입 승인 대기 중</h2>
       <p class="ov-desc" style="text-align:center;"><b id="pendName">회원</b>님, 리버힐 캐디 본인 확인 후 <b>관리자가 승인</b>하면 바로 이용할 수 있어요. 승인되면 이 화면이 자동으로 넘어갑니다.</p>
-      <button class="ov-submit" id="pendReload">승인됐어요 · 새로고침</button>
+      <button class="ov-notify" id="pendEnableBtn">🔔 승인 알림 받기</button>
+      <div class="ov-notify-msg" id="pendEnableMsg" style="text-align:center;">알림을 켜두면 <b>승인되는 즉시</b> 폰으로 알려드려요.</div>
+      <button class="ov-submit" id="pendReload" style="margin-top:12px;">승인됐어요 · 새로고침</button>
       <div class="ov-actions" style="justify-content:center;">
         <button class="ov-ghost" id="pendLogout">로그아웃</button>
       </div>
@@ -853,15 +854,7 @@
     </div>
   </div>
 
-  <!-- 회원 관리(관리자 전용) -->
-  <div class="ov" id="adminOv" hidden>
-    <div class="ov-card">
-      <h2 class="ov-title">🛡 회원 관리</h2>
-      <p class="ov-desc">신규 가입은 <b>승인 대기</b>로 들어옵니다. <b>✅ 명부일치</b>는 배치표에 뜬 실제 캐디, <b>⚠️ 명부없음</b>은 확인이 필요한 이름이에요.</p>
-      <div id="adminList" class="admin-list"></div>
-      <div class="ov-actions"><button class="ov-ghost" id="adminClose">닫기</button></div>
-    </div>
-  </div>
+  <!-- (회원 관리는 관리자 모니터 :3100 승인 탭으로 이관됨) -->
 
   <main>
     <!-- 오늘 -->

@@ -143,6 +143,33 @@
   .btab.on .btab-c{ color:color-mix(in srgb,var(--acc) 75%,var(--tx2)); }
   .brow .xdt{ font-size:9.5px; font-weight:800; color:var(--info); background:color-mix(in srgb,var(--info) 12%,transparent); border:1px solid color-mix(in srgb,var(--info) 32%,transparent); border-radius:5px; padding:0 5px; white-space:nowrap; }
   .brow.work .xdt{ color:var(--info); }
+
+  /* 상단 탭 메뉴바 — 모바일 세로 스크롤 축소(카테고리 분리) */
+  .tabbar{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:1180px; margin:0 auto; padding:0 18px 11px; scrollbar-width:none; }
+  .tabbar::-webkit-scrollbar{ display:none; }
+  .tb{ appearance:none; border:1px solid var(--bord2); background:var(--panel2); color:var(--tx2); font:inherit; font-size:13px; font-weight:800; padding:8px 15px; border-radius:10px; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:7px; transition:.15s; }
+  .tb:hover{ color:var(--tx); border-color:var(--acc); }
+  .tb.on{ background:var(--acc); border-color:var(--acc); color:#fff; }
+  .tb .tb-badge{ font-size:10.5px; font-weight:800; background:var(--bad); color:#fff; border-radius:999px; padding:1px 7px; min-width:18px; text-align:center; line-height:1.5; }
+  .tb.on .tb-badge{ background:rgba(255,255,255,.28); }
+  .tab-page{ display:none; }
+  .tab-page.on{ display:block; }
+
+  /* 회원 승인 카드 */
+  .appr-empty{ text-align:center; color:var(--tx3); font-size:13px; padding:26px 12px; }
+  .mcard{ background:var(--panel); border:1px solid var(--bord); border-radius:14px; padding:13px 15px; margin-bottom:10px; box-shadow:var(--shadow); }
+  .mcard.pend{ border-color:color-mix(in srgb,var(--warn) 55%,transparent); box-shadow:0 0 0 1px color-mix(in srgb,var(--warn) 28%,transparent), var(--shadow); }
+  .mc-top{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .mc-name{ font-size:15px; font-weight:800; color:var(--tx); }
+  .mc-part{ font-size:11.5px; color:var(--tx2); font-weight:700; }
+  .mc-meta{ font-size:11px; color:var(--tx3); margin:6px 0 11px; display:flex; flex-wrap:wrap; gap:3px 12px; align-items:center; }
+  .mc-known.ok{ color:var(--good); font-weight:800; } .mc-known.no{ color:var(--bad); font-weight:800; }
+  .mc-btns{ display:flex; gap:7px; flex-wrap:wrap; }
+  .ab{ flex:1; min-width:74px; appearance:none; border:1px solid var(--bord2); background:var(--panel2); color:var(--tx2); font:inherit; font-size:13px; font-weight:800; padding:9px; border-radius:10px; cursor:pointer; transition:.12s; }
+  .ab.approve{ background:var(--good); border-color:var(--good); color:#fff; }
+  .ab.approve:hover{ filter:brightness(1.06); }
+  .ab.wait:hover{ border-color:var(--warn); color:var(--warn); }
+  .ab.block:hover{ border-color:var(--bad); color:var(--bad); }
 </style>
 </head>
 <body>
@@ -153,45 +180,75 @@
     <div class="updated" id="updated">불러오는 중…</div>
     <button class="btn" id="refreshBtn">새로고침</button>
   </div>
+  <nav class="tabbar" id="tabbar">
+    <button class="tb on" data-tab="approve">🛡 승인 <span class="tb-badge" id="badgeApprove" hidden>0</span></button>
+    <button class="tb" data-tab="board">📋 판독</button>
+    <button class="tb" data-tab="members">👥 회원</button>
+    <button class="tb" data-tab="push">🔔 알림</button>
+  </nav>
 </header>
 
 <div class="wrap">
   <div id="err"></div>
   <div class="kpis" id="kpis"></div>
 
-  <div class="sectlab">판독 검증 · 매일 대조</div>
-  <div class="panel full" id="boardPanel">
-    <h2>시스템이 판독한 최신 배치표</h2>
-    <p class="desc" id="boardDesc">원문 이미지와 나란히 대조하세요 — 순번·근무/스페어·티오프·대바 반영</p>
-    <div id="latestBoard"></div>
+  <!-- ── 승인 탭 ── -->
+  <div class="tab-page on" id="page-approve">
+    <div class="sectlab">회원 승인 · 실시간</div>
+    <div class="panel full">
+      <h2>가입 승인 신청</h2>
+      <p class="desc" id="apprDesc">신규 가입은 승인 대기로 들어옵니다 · ✅ 명부일치 / ⚠️ 명부없음 · 승인하면 그 회원 폰으로 즉시 알림이 갑니다.</p>
+      <div id="apprPending"></div>
+    </div>
+    <div class="panel full" style="margin-top:14px">
+      <h2>전체 회원</h2>
+      <p class="desc">활성 · 대기 · 차단 전체 — 상태 변경 가능</p>
+      <div id="apprAll"></div>
+    </div>
   </div>
 
-  <div class="grid">
-    <div class="panel"><h2>가입자 추이</h2><p class="desc">최근 30일 신규 가입(일별)</p><div id="signupChart"></div>
-      <div style="margin-top:14px" id="signupBreak"></div></div>
-    <div class="panel"><h2>방문 · 접속 추이</h2><p class="desc" id="visitDesc">최근 30일 앱 오픈(일별)</p><div id="visitChart"></div>
-      <div style="margin-top:14px" id="visitBreak"></div></div>
-
-    <div class="panel"><h2>배치표 이해도</h2><p class="desc">시스템이 배치표를 얼마나 정확히 읽었나 (불확실 판독 기준)</p><div id="boardGauge"></div>
-      <div style="margin-top:14px" id="boardBuckets"></div></div>
-    <div class="panel"><h2>불확실 판독 사유</h2><p class="desc">헷갈린 케이스의 원인 분포 — 여기를 줄이는 게 목표</p><div id="reasons"></div></div>
+  <!-- ── 판독 탭 ── -->
+  <div class="tab-page" id="page-board">
+    <div class="sectlab">판독 검증 · 매일 대조</div>
+    <div class="panel full" id="boardPanel">
+      <h2>시스템이 판독한 최신 배치표</h2>
+      <p class="desc" id="boardDesc">원문 이미지와 나란히 대조하세요 — 순번·근무/스페어·티오프·대바 반영</p>
+      <div id="latestBoard"></div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="panel"><h2>배치표 이해도</h2><p class="desc">시스템이 배치표를 얼마나 정확히 읽었나 (불확실 판독 기준)</p><div id="boardGauge"></div>
+        <div style="margin-top:14px" id="boardBuckets"></div></div>
+      <div class="panel"><h2>불확실 판독 사유</h2><p class="desc">헷갈린 케이스의 원인 분포 — 여기를 줄이는 게 목표</p><div id="reasons"></div></div>
+    </div>
+    <div class="sectlab">판독 로그</div>
+    <div class="grid">
+      <div class="panel full"><h2>최근 불확실 판독</h2><p class="desc">시스템이 확신하지 못한 최근 케이스</p><div id="uncertainTbl"></div></div>
+      <div class="panel full"><h2>최근 판독 피드</h2><p class="desc">최근 처리된 글(예시: 1번 회원 기준)</p><div id="feedTbl"></div></div>
+    </div>
   </div>
 
-  <div class="sectlab">회원 · 접속</div>
-  <div class="grid">
-    <div class="panel"><h2>회원 현황 · 접속 상태</h2><p class="desc" id="presDesc">접속 중 · 나감 · 마지막 방문</p><div id="presence"></div></div>
-    <div class="panel"><h2>기기 · 시스템</h2><p class="desc">플랫폼 분포 · 크롤러 상태</p><div id="devices"></div></div>
+  <!-- ── 회원 탭 ── -->
+  <div class="tab-page" id="page-members">
+    <div class="sectlab">가입 · 방문</div>
+    <div class="grid">
+      <div class="panel"><h2>가입자 추이</h2><p class="desc">최근 30일 신규 가입(일별)</p><div id="signupChart"></div>
+        <div style="margin-top:14px" id="signupBreak"></div></div>
+      <div class="panel"><h2>방문 · 접속 추이</h2><p class="desc" id="visitDesc">최근 30일 앱 오픈(일별)</p><div id="visitChart"></div>
+        <div style="margin-top:14px" id="visitBreak"></div></div>
+    </div>
+    <div class="sectlab">회원 · 접속</div>
+    <div class="grid">
+      <div class="panel"><h2>회원 현황 · 접속 상태</h2><p class="desc" id="presDesc">접속 중 · 나감 · 마지막 방문</p><div id="presence"></div></div>
+      <div class="panel"><h2>기기 · 시스템</h2><p class="desc">플랫폼 분포 · 크롤러 상태</p><div id="devices"></div></div>
+    </div>
   </div>
 
-  <div class="sectlab">판독 로그</div>
-  <div class="grid">
-    <div class="panel full"><h2>최근 불확실 판독</h2><p class="desc">시스템이 확신하지 못한 최근 케이스</p><div id="uncertainTbl"></div></div>
-    <div class="panel full"><h2>최근 판독 피드</h2><p class="desc">최근 처리된 글(예시: 1번 회원 기준)</p><div id="feedTbl"></div></div>
-  </div>
-
-  <div class="sectlab">알림 발송</div>
-  <div class="grid">
-    <div class="panel full"><h2>회원별 발송 알림 · 어제~오늘</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+  <!-- ── 알림 탭 ── -->
+  <div class="tab-page" id="page-push">
+    <div class="sectlab">알림 발송</div>
+    <div class="grid">
+      <div class="panel full"><h2>회원별 발송 알림 · 어제~오늘</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+    </div>
   </div>
 
   <p class="note" id="footnote"></p>
@@ -429,10 +486,94 @@
     try{ render(await loadStats()); }
     catch(e){ $('err').innerHTML = '<div class="err">집계를 불러오지 못했습니다: '+esc(e.message)+'</div>'; $('updated').textContent='오류'; $('statusDot').className='dot bad'; }
   }
-  $('refreshBtn').addEventListener('click', tick);
+  $('refreshBtn').addEventListener('click', function(){ tick(); loadMembers(); });
   function loop(){ clearInterval(timer); timer=setInterval(tick, REFRESH_MS); }
+
+  // ── 상단 탭 전환 ──
+  function switchTab(name){
+    Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.classList.toggle('on', b.getAttribute('data-tab')===name); });
+    Array.prototype.forEach.call(document.querySelectorAll('.tab-page'), function(p){ p.classList.toggle('on', p.id==='page-'+name); });
+    try{ localStorage.setItem('monTab', name); }catch(e){}
+    window.scrollTo(0,0);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
+
+  // ── 회원 승인(실시간) ──
+  var BLOCK_KO = { roster:'명부에 없는 이름', other:'기타' };
+  var MEMBERS_MS = 5000, mTimer = null, membersBusy = false;
+  function apiUrl(pth){ var k = new URLSearchParams(location.search).get('k') || ''; return pth + (k?('?k='+encodeURIComponent(k)):''); }
+  function memberCard(m, pend){
+    var known = m.boardName ? (m.nameKnown ? '<span class="mc-known ok">✅ 명부일치</span>' : '<span class="mc-known no">⚠️ 명부없음</span>') : '<span style="color:var(--tx3)">이름 미입력</span>';
+    var blocked = (m.status==='disabled' && m.blockReason) ? '<span style="color:var(--bad);font-weight:700">차단: '+(BLOCK_KO[m.blockReason]||'기타')+'</span>' : '';
+    var btns = m.role==='admin'
+      ? '<span style="color:var(--tx3);font-size:12px;padding:8px 2px;">관리자 계정</span>'
+      : '<button class="ab approve" data-id="'+m.id+'" data-s="active">승인</button>'
+      + '<button class="ab wait" data-id="'+m.id+'" data-s="pending">대기</button>'
+      + '<button class="ab block" data-id="'+m.id+'" data-s="disabled">차단</button>';
+    return '<div class="mcard'+(pend?' pend':'')+'">'+
+      '<div class="mc-top"><span class="mc-name">'+esc(m.boardName||'(이름 없음)')+'</span>'+
+        (m.part?'<span class="mc-part">'+esc(m.part)+'부</span>':'')+
+        '<span style="margin-left:auto">'+statusTag(m.status)+'</span></div>'+
+      '<div class="mc-meta"><span>#'+m.id+'</span>'+known+'<span>가입 '+rel(m.createdAt)+'</span>'+
+        (m.lastLogin?'<span>최근 '+rel(m.lastLogin)+'</span>':'')+blocked+'</div>'+
+      '<div class="mc-btns">'+btns+'</div></div>';
+  }
+  function bindMemberBtns(){
+    Array.prototype.forEach.call(document.querySelectorAll('.mc-btns .ab'), function(b){
+      b.onclick = function(){ var id=Number(b.getAttribute('data-id')), s=b.getAttribute('data-s');
+        if(s==='disabled') askBlock(id, b); else setMember(id, s); };
+    });
+  }
+  function askBlock(id, btn){
+    var box = btn.parentNode;
+    box.innerHTML = '<div style="width:100%;font-size:12px;color:var(--bad);font-weight:800;margin-bottom:1px;">차단 사유?</div>'+
+      '<button class="ab block" data-r="roster">명부없음</button>'+
+      '<button class="ab block" data-r="other">기타</button>'+
+      '<button class="ab" data-r="cancel">취소</button>';
+    Array.prototype.forEach.call(box.querySelectorAll('.ab'), function(b){
+      b.onclick = function(){ var r=b.getAttribute('data-r'); if(r==='cancel'){ loadMembers(); return; } setMember(id,'disabled',r); };
+    });
+  }
+  async function setMember(id, status, reason){
+    try{
+      var r = await fetch(apiUrl('/api/user-status'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:id,status:status,reason:reason||null}) });
+      var j = await r.json();
+      if(!j.ok) throw new Error(j.error||'변경 실패');
+      if(status==='active') toast(j.notified ? '✅ 승인 완료 · 알림 발송됨' : '✅ 승인 완료 (알림 미발송)');
+      loadMembers();
+    }catch(e){ alert(e.message||'변경 실패'); }
+  }
+  function toast(msg){ var t=document.createElement('div'); t.textContent=msg;
+    t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2a333f;color:#fff;font-size:13px;font-weight:700;padding:10px 18px;border-radius:11px;z-index:100;box-shadow:0 4px 18px rgba(0,0,0,.28)';
+    document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2400); }
+  function renderMembers(j){
+    var ms = j.members||[];
+    var pend = ms.filter(function(m){ return m.status==='pending'; });
+    var rest = ms.filter(function(m){ return m.status!=='pending'; });
+    var badge = $('badgeApprove');
+    if(badge){ if(pend.length){ badge.hidden=false; badge.textContent=pend.length; } else badge.hidden=true; }
+    $('apprPending').innerHTML = pend.length ? pend.map(function(m){ return memberCard(m,true); }).join('')
+      : '<div class="appr-empty">🎉 대기 중인 가입 신청이 없어요.</div>';
+    $('apprAll').innerHTML = rest.length ? rest.map(function(m){ return memberCard(m,false); }).join('')
+      : '<div class="muted">회원이 없습니다.</div>';
+    if($('apprDesc') && j.pushReady===false)
+      $('apprDesc').innerHTML = '신규 가입은 승인 대기로 들어옵니다 · <b style="color:var(--warn)">⚠️ 푸시 미설정 — 승인해도 알림이 발송되지 않습니다(서버 VAPID 확인)</b>';
+    bindMemberBtns();
+  }
+  async function loadMembers(){
+    if(membersBusy) return; membersBusy=true;
+    try{ var r = await fetch(apiUrl('/api/members'), {cache:'no-store'}); var j = await r.json(); if(j.ok) renderMembers(j); }
+    catch(e){ /* 무해 — 다음 폴링에서 재시도 */ } finally{ membersBusy=false; }
+  }
+  function memberLoop(){ clearInterval(mTimer); mTimer=setInterval(loadMembers, MEMBERS_MS); }
+
+  // 저장된 탭 복원(기본: 승인)
+  var savedTab=null; try{ savedTab=localStorage.getItem('monTab'); }catch(e){}
+  if(savedTab && document.getElementById('page-'+savedTab)) switchTab(savedTab);
+
   tick(); loop();
-  document.addEventListener('visibilitychange', function(){ if(!document.hidden) tick(); });
+  loadMembers(); memberLoop();
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden){ tick(); loadMembers(); } });
 })();
 </script>
 </body>

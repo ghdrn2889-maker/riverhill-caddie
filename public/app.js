@@ -115,8 +115,8 @@ async function healSubscription() {
   } catch {}
 }
 // 알림 구독 켜기 — 계정 팝업의 버튼 또는 '첫 방문 자동 요청'에서 호출. (msg/btn 없어도 안전)
-async function enableNotifications() {
-  const btn = $('ovEnableBtn'), msg = $('ovEnableMsg');
+async function enableNotifications(btnId, msgId) {
+  const btn = $(btnId || 'ovEnableBtn'), msg = $(msgId || 'ovEnableMsg');
   try {
     if (btn) btn.disabled = true;
     if (msg) msg.textContent = '';
@@ -134,6 +134,8 @@ async function enableNotifications() {
     const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) });
     await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
     await refreshPushHealth();
+    if (msg) msg.textContent = '알림이 켜졌어요. 승인되면 바로 알려드릴게요.';
+    if (btn) { btn.disabled = true; btn.className = 'ov-notify on'; btn.textContent = '알림 켜짐'; }
   } catch (e) { if (msg) msg.textContent = '알림 켜기 실패: ' + e.message; if (btn) btn.disabled = false; }
 }
 
@@ -1467,12 +1469,20 @@ async function loadMe() {
   if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
 }
+let _pendTimer = null;
 function showPending() {
   hideSplash();
   $('pendName').textContent = (meState.profile && meState.profile.boardName) || '회원';
   $('pendingOv').hidden = false;
+  // ★승인되면 자동 전환 — 대기 중 주기적으로 /api/me 재확인(승인 알림을 안 눌러도 넘어가게).
+  if (!_pendTimer) _pendTimer = setInterval(async () => {
+    try {
+      const me = await (await fetch('/api/me')).json();
+      if (me && me.authed && !me.pending && me.status === 'active') { clearInterval(_pendTimer); _pendTimer = null; location.reload(); }
+    } catch (_) { /* 무해 — 다음 폴링 재시도 */ }
+  }, 8000);
 }
-function hidePending() { $('pendingOv').hidden = true; }
+function hidePending() { $('pendingOv').hidden = true; if (_pendTimer) { clearInterval(_pendTimer); _pendTimer = null; } }
 // 차단됨 화면 — 사유(명부없음/기타) + 관리자 문의 안내.
 function showBlocked(reason) {
   hideSplash();
@@ -1482,64 +1492,8 @@ function showBlocked(reason) {
   $('blockedReason').textContent = '사유 · ' + txt;
   $('blockedOv').hidden = false;
 }
-// ── 회원 관리(관리자 전용) ──
-async function openAdmin() {
-  $('adminOv').hidden = false;
-  $('adminList').innerHTML = '<p style="text-align:center;color:#888;padding:16px;">불러오는 중…</p>';
-  try {
-    const r = await (await fetch('/api/admin/members')).json();
-    renderAdminList((r && r.members) || []);
-  } catch { $('adminList').innerHTML = '<p style="text-align:center;color:#c33;padding:16px;">불러오기 실패</p>'; }
-}
-const ADM_BSTYLE = 'flex:1;padding:8px;border:1px solid #ccc;border-radius:8px;background:#f7f7f7;font-weight:600;cursor:pointer;font-size:13px;';
-const BLOCK_REASON_KO = { roster: '명부에 없는 이름', other: '기타' };
-function renderAdminList(members) {
-  const STAT = { active: ['활성', '#2e7d32', '#e6f4ea'], pending: ['대기', '#b26a00', '#fff3e0'], disabled: ['차단', '#b3261e', '#fdecea'] };
-  const bstyle = ADM_BSTYLE;
-  $('adminList').innerHTML = (members.map((m) => {
-    const [sl, sc, sb] = STAT[m.status] || ['?', '#666', '#eee'];
-    const known = m.boardName ? (m.nameKnown ? '<span style="color:#2e7d32;font-weight:700;">✅ 명부일치</span>' : '<span style="color:#c33;font-weight:700;">⚠️ 명부없음</span>') : '<span style="color:#999;">이름 미입력</span>';
-    const blocked = (m.status === 'disabled' && m.blockReason) ? ` · <span style="color:#b3261e;font-weight:700;">차단 사유: ${BLOCK_REASON_KO[m.blockReason] || '기타'}</span>` : '';
-    const btns = m.role === 'admin' ? '<span style="color:#888;font-size:12px;">관리자 계정</span>' :
-      `<button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="active">승인</button>
-       <button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="pending">대기</button>
-       <button class="adm-b" style="${bstyle}" data-id="${m.id}" data-s="disabled">차단</button>`;
-    return `<div style="border:1px solid #e0e0e0;border-radius:12px;padding:10px 12px;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <b>#${m.id} ${esc(m.boardName || '(이름 없음)')}</b><small>${m.part ? esc(m.part) + '부' : ''}</small>
-        <span style="margin-left:auto;background:${sb};color:${sc};border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;">${sl}</span>
-      </div>
-      <div style="font-size:12px;margin:4px 0 8px;">${known}${blocked}</div>
-      <div class="adm-btns" data-mid="${m.id}" style="display:flex;gap:6px;flex-wrap:wrap;">${btns}</div>
-    </div>`;
-  }).join('')) || '<p style="text-align:center;color:#888;padding:16px;">회원이 없어요.</p>';
-  $('adminList').querySelectorAll('.adm-b').forEach((b) => {
-    b.onclick = () => {
-      const id = Number(b.dataset.id), s = b.dataset.s;
-      if (s === 'disabled') showBlockReason(id);   // 차단은 사유 먼저 선택
-      else setMemberStatus(id, s);
-    };
-  });
-}
-// 차단 사유 선택 UI — 해당 회원 카드의 버튼 줄을 사유 버튼으로 교체.
-function showBlockReason(id) {
-  const box = $('adminList').querySelector(`.adm-btns[data-mid="${id}"]`);
-  if (!box) return;
-  box.innerHTML = `<div style="width:100%;font-size:12px;color:#b3261e;font-weight:700;margin-bottom:2px;">차단 사유를 선택하세요</div>
-    <button class="adm-r" style="${ADM_BSTYLE}" data-id="${id}" data-r="roster">명부에 없는 이름</button>
-    <button class="adm-r" style="${ADM_BSTYLE}" data-id="${id}" data-r="other">기타</button>
-    <button class="adm-r" style="${ADM_BSTYLE};flex:0 0 auto;background:#eee;" data-id="${id}" data-r="cancel">취소</button>`;
-  box.querySelectorAll('.adm-r').forEach((b) => {
-    b.onclick = () => { const r = b.dataset.r; if (r === 'cancel') { openAdmin(); return; } setMemberStatus(id, 'disabled', r); };
-  });
-}
-async function setMemberStatus(id, status, reason) {
-  try {
-    const r = await postJSON('/api/admin/user-status', { id, status, reason });
-    if (!r || !r.ok) throw new Error((r && r.error) || '변경 실패');
-    openAdmin();
-  } catch (e) { alert(e.message || '변경 실패'); }
-}
+// ── 회원 관리 → 관리자 모니터(:3100 · 승인 탭)로 이관됨. ──
+//  실시간 승인신청·명부대조·승인 즉시 알림 발송은 모두 모니터에서 처리한다(앱에서는 제거).
 // 계정 오버레이(#ov) 닫기 제어 — 계정 화면은 닫기 가능, 가입(온보딩) 화면은 닫기 금지.
 let ovDismissable = false;
 function ovIsOpen() { return !$('ov').hidden; }
@@ -1595,7 +1549,6 @@ function openAccount() {
   $('obSubmit').textContent = '저장';
   fillProfileForm();
   $('ovActions').hidden = false;
-  $('obAdmin').hidden = !(meState.user && meState.user.role === 'admin'); // 관리자만 회원관리 버튼
   $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
   updateNotifyButton();              // 계정 팝업 열 때 알림 버튼 상태(켜기/켜짐/차단) 갱신
   $('ovErr').textContent = '';
@@ -1625,10 +1578,8 @@ function initAccount() {
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
   $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
-  $('obAdmin').onclick = openAdmin;
-  $('adminClose').onclick = () => { $('adminOv').hidden = true; };
-  $('adminOv').addEventListener('click', (e) => { if (e.target === $('adminOv')) $('adminOv').hidden = true; });
   $('pendReload').onclick = () => location.reload();
+  $('pendEnableBtn').onclick = () => enableNotifications('pendEnableBtn', 'pendEnableMsg');
   $('pendLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
   $('blockedLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
 }
