@@ -249,6 +249,46 @@ function sameDayLabel(a, b) {
   return ka === kb;
 }
 
+// ── 텍스트 취소 감지(B) — "내 이름 + 못 나감/취소/빠짐" 글·댓글 → 순번 제외(off:removed). AI 추가 없음. ──
+//  현장 취소는 새 배치표가 아니라 댓글 한 줄로 오는 경우가 많다. 이미 판독된 글의 원문을 코드로만 훑어
+//  '이 사람(회원)의 취소'인지 판정한다. 티오프/예약 취소("인 13:35 취소")·부정문("취소 없음")은 배제.
+function detectSelfCancel(article, member) {
+  const name = String(member?.name || '').replace(/\s/g, '');
+  if (name.length < 2) return false;
+  const chunks = [article?.subject, article?.text];
+  if (Array.isArray(article?.comments)) for (const c of article.comments) chunks.push(typeof c === 'string' ? c : (c?.content || c?.text));
+  const flat = chunks.filter(Boolean).join(' ').replace(/\s+/g, '');
+  if (!flat) return false;
+  // 사람 취소 표현(공백 제거된 텍스트 기준). '취소'는 넓어서 이름 인접(±14자)일 때만 인정.
+  const cancelRe = /(취소|못나|못가|못옴|못와|빠집니다|빠져|빠질|빠짐|결근|불참|제외|펑크|안나가|안나옴|노쇼)/;
+  const negRe = /(취소없|취소자없|취소안|취소불가|취소해주|취소해\s*드|취소가능|취소문의|예약취소|티오프취소|타임취소)/;
+  let from = 0;
+  while (true) {
+    const idx = flat.indexOf(name, from);
+    if (idx < 0) return false;
+    from = idx + name.length;
+    // 이름 바로 뒤가 근무/배정이면 이 사람은 '근무자'(예: "○○ 취소되어 △△님 근무"의 △△) → 취소 대상 아님.
+    const after = flat.slice(idx + name.length, idx + name.length + 6);
+    if (/^(님)?(근무|배정|출근|콜)/.test(after)) continue;
+    const win = flat.slice(Math.max(0, idx - 14), idx + name.length + 14);
+    if (cancelRe.test(win) && !negRe.test(win)) return true;   // 내 이름 인접에 사람-취소 표현
+  }
+}
+// 텍스트 취소가 '나(회원)의 오늘 순번 제외'로 확정되면 verdict를 off:removed로 표식(applyVerdict가 배관 처리).
+function applySelfCancel(v, article, today, member) {
+  if (!v || !detectSelfCancel(article, member)) return;
+  if (v.dateLabel && today?.date && !sameDayLabel(today.date, v.dateLabel)) return;   // 다른 날 취소 명시 → 오늘 안 건드림
+  // 오늘 순번/근무로 잡혀 있었어야 '제외'가 의미 있음(처음부터 없던 사람은 무관).
+  const wasIn = Number(today?.myPosition) > 0 || ['assigned', 'work', 'your_turn', 'spare', 'waiting', 'near'].includes(String(today?.status || ''));
+  if (!wasIn) return;
+  v.relevant = true;
+  v.myStatus = 'off';
+  v._offReason = 'removed';
+  v._prevPosition = Number(today?.myPosition) || null;
+  v.teeTime = ''; v.course = '';
+  v._selfCancel = `텍스트 취소 감지: "${member?.name}" 순번 제외(off)`;
+}
+
 function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
   if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
   const res = resolveMemberInRoster(v.part3Roster, member, v);
@@ -1137,6 +1177,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
+  applySelfCancel(verdict, article, today, member); // ★텍스트 취소("내 이름+취소") → 순번 제외(off:removed), AI 추가 없음
   return { ...decide(article, verdict, member), rawVerdict: verdict };
 }
 
