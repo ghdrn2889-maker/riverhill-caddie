@@ -532,14 +532,16 @@ app.post('/api/ledger/expense/:id/photo', (req, res) => {
 //  ★로컬(Ollama qwen2.5-VL, 크레딧 0) 우선. 로컬 실패 시 Gemini 폴백은 env(LEDGER_SCAN_GEMINI_FALLBACK)로만.
 app.post('/api/ledger/scan', async (req, res) => {
   const { image } = req.body || {};
+  console.log(`🧾 [scan] 요청 도달 uid=${req.user?.id ?? '?'} imageLen=${(image || '').length}`);
   if (!image) return res.status(400).json({ ok: false, error: 'no image' });
   try {
     let parsed = await analyzeReceiptLocal(image);
     let source = parsed ? 'local' : null;
     const fbOn = ['1', 'true', 'yes'].includes(String(process.env.LEDGER_SCAN_GEMINI_FALLBACK || '').toLowerCase());
     if (!parsed && fbOn) { parsed = await analyzeReceipt(image); source = parsed ? 'gemini' : null; }
+    console.log(`🧾 [scan] 결과 source=${source} parsed=${JSON.stringify(parsed)}`);
     res.json({ ok: !!parsed, parsed, source });
-  } catch (e) { res.json({ ok: false, error: e.message }); }
+  } catch (e) { console.error('🧾 [scan] 오류:', e.message); res.json({ ok: false, error: e.message }); }
 });
 app.get('/api/ledger/photo/:fname', (req, res) => {
   const fname = path.basename(req.params.fname);
