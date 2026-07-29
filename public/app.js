@@ -533,18 +533,23 @@ function renderToday(t) {
     }
     $('boardSlot').innerHTML = ''; renderRoundsStack(null); return;
   }
-  const s = t.state, st = s.status;
+  // ── focus(현재 활성 라운드)가 히어로+실시간 게이지를 이끈다 — 부별 동일 수준. ──
+  //  3부 단독일: focus=3부=대표 → 실제 t.state/t.commute 그대로(기존과 100% 동일, 회귀 0).
+  //  다중 라운드: 아침 1부→저녁 3부로 게이지·제목이 자동 이동. 1·2부 단독일도 같은 리치 게이지.
+  const off = Number(t.dayOffset) || 0;
+  const rounds = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
+  const focus = pickFocus(t, rounds, off >= 1);
+  const s = focus ? focus.state : t.state, st = s.status;
+  const commuteV = focus ? focus.commute : t.commute;
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const isSpare = st === 'spare' || st === 'waiting' || st === 'near';
   const posTxt = s.myPosition ? ` · ${s.myPosition}번째` : '';
-  // 대표 라운드(히어로가 담당하는 부) — 보통 3부지만, 순수 1부만/2부만 날엔 그 부가 히어로.
-  const heroPart = t.primaryPart ? `${t.primaryPart}부` : (s.part || '3부');
+  // 히어로가 담당하는 부 — focus 라운드의 부(보통 저녁 3부, 아침엔 1·2부).
+  const focusPart = focus ? String(focus.part) : String((t.primaryPart) || (s.part ? String(s.part).replace('부', '') : '3'));
+  const heroPart = `${focusPart}부`;
   // ★1부 '단독' 근무가 조출이면 '1부(조출)'로 표기(사용자 규칙). 복수 라운드면 그냥 '1부'.
-  const primaryRound = (Array.isArray(t.rounds) ? t.rounds : []).find((r) => String(r.part) === (t.primaryPart || '3'));
-  const soloChulgn = t.primaryPart === '1' && primaryRound && primaryRound.assign === 'chulgn' && (t.rounds || []).length <= 1;
-  const heroPfx = soloChulgn ? '1부(조출) ' : (t.primaryPart && t.primaryPart !== '3') ? `${heroPart} ` : ''; // 비3부 대표면 제목에 부 표기
-  // 근무 대상일(0=오늘, 1=내일, 2=모레…). 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
-  const off = Number(t.dayOffset) || 0;
+  const soloChulgn = focusPart === '1' && s.assign === 'chulgn' && rounds.length <= 1;
+  const heroPfx = soloChulgn ? '1부(조출) ' : (focusPart !== '3') ? `${heroPart} ` : ''; // 비3부 focus면 제목에 부 표기
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
   $('heroLabel').textContent = `${dayW} 내 상황`;
   // 근무 '확정'은 티오프가 실제 매칭됐을 때만. 그 전(순번상 근무권)은 '근무 예정'으로 스페어와 구분.
@@ -567,8 +572,9 @@ function renderToday(t) {
     : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
-  // 3부 순번 리스트(보드 상세)는 3부가 대표일 때만 — 순수 1·2부 날엔 3부 대기명단이 무의미.
-  if ((t.primaryPart || '3') === '3') renderBoard(t); else $('boardSlot').innerHTML = '';
+  // ★부별 동일 수준: focus 라운드의 리치 보드(근무 게이지 or 스페어 순번리스트)를 항상 그린다.
+  //  3부 단독일은 focus=대표 → 기존과 동일. 1·2부 단독/다중 라운드도 같은 수준의 보드를 받는다.
+  renderBoard({ state: s, commute: commuteV, dayOffset: off, date: (s.date || t.date), part: focusPart });
   renderRoundsStack(t);
 }
 // ── 하루 흐름(다중 라운드) — 미니맵 + 라운드 사이(현장/자유) + 비대표 라운드 카드 ──
@@ -578,11 +584,38 @@ const PART_KO = { '1': '1부', '2': '2부', '3': '3부' };
 const durKo = (m) => { m = Math.max(0, Math.round(m)); const h = Math.floor(m / 60), mi = m % 60; return (h ? `${h}시간 ` : '') + (mi || !h ? `${mi}분` : ''); };
 const roundOrd = (r) => { const m = toMin(r.teeTime); return m != null ? m : ({ '1': 360, '2': 700, '3': 1027 }[r.part] || 1200); };
 const roundEnd = (r) => roundOrd(r) + 150;   // 티오프 + ~2.5h = 종료 근사
+// ── focus(현재 활성 라운드) — 히어로·실시간 게이지가 담당할 라운드. 아침엔 1부, 저녁엔 3부로 자동 이동. ──
+//  아직 안 끝난 첫 라운드(=지금 향하는 곳). 전부 종료면 마지막 라운드(막 라운드/근무 중 잔상).
+function focusIdx(rounds, future) {
+  const d = new Date(); const now = d.getHours() * 60 + d.getMinutes();
+  let i = rounds.findIndex((r) => future || now < roundEnd(r));
+  if (i < 0) i = rounds.length - 1;
+  return i;
+}
+// 라운드 1장 → 대표 상태(state)로 재구성. 비대표 focus 라운드를 대표부처럼 리치 렌더하기 위함.
+//  ★대표부 focus는 재구성하지 않고 실제 t.state를 그대로 씀(회귀 0) — pickFocus 참고.
+function roundState(r) {
+  return {
+    part: `${r.part}부`, status: r.status, teeTime: r.teeTime || '', course: r.course || '',
+    myPosition: r.myPosition || null, cutLine: r.cutLine || null, cutoffName: r.cutoffName || '',
+    roster3: Array.isArray(r.roster3) ? r.roster3 : [], teeGrid: Array.isArray(r.teeGrid) ? r.teeGrid : [],
+    assign: r.assign || '', date: r.date || '',
+  };
+}
+// 히어로·게이지가 담당할 focus 라운드 선택. { part, state, commute } 또는 null(라운드 없음=휴무/미상).
+//  ★focus가 대표부면 실제 t.state/t.commute를 그대로(기존 3부 경로 100% 보존). 비대표만 재구성.
+function pickFocus(t, rounds, future) {
+  if (!rounds.length) return null;
+  const primary = String((t && t.primaryPart) || '3');
+  const i = focusIdx(rounds, future);
+  const r = rounds[i]; if (!r) return null;
+  if (String(r.part) === primary) return { part: String(r.part), state: t.state, commute: t.commute };
+  return { part: String(r.part), state: roundState(r), commute: r.commute };
+}
 function renderRoundsStack(t) {
   const el = $('round2Slot');
   if (!el) return;
   const rounds = (Array.isArray(t && t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
-  const heroPart = (t && t.primaryPart) || '3';
   if (rounds.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }   // 단독일 → 히어로만(기존 동일)
   const off = Number(t && t.dayOffset) || 0;
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : '';
@@ -590,6 +623,8 @@ function renderRoundsStack(t) {
   const d = new Date(); const now = d.getHours() * 60 + d.getMinutes();
   let curIdx = rounds.findIndex((r) => future || now < roundEnd(r));
   if (curIdx < 0) curIdx = rounds.length;   // 전부 종료
+  // 히어로 게이지가 담당하는 focus 라운드(= 카드에서 제외해 중복 방지). active 없으면 마지막.
+  const focusPart = String((rounds[curIdx] || rounds[rounds.length - 1] || {}).part || (t && t.primaryPart) || '3');
 
   // 요약(라운드 수·홀) — '탕' 표현 금지
   const works = rounds.filter((r) => r.kind === 'work').length;
@@ -623,7 +658,7 @@ function renderRoundsStack(t) {
     }
   }
 
-  const cards = rounds.filter((r) => r.part !== heroPart).map(roundCard).join('');
+  const cards = rounds.filter((r) => String(r.part) !== focusPart).map(roundCard).join('');
   el.innerHTML = `<div class="df-wrap"><div class="df-sum">${summary}</div>${mini}${between}${cards}</div>`;
   el.hidden = false;
 }
@@ -691,12 +726,14 @@ function homeSVG() {
   </svg>`;
 }
 
-function renderBoard(t) {
+// bd = { state, commute, dayOffset, date, part } — focus(활성) 라운드 뷰. 어느 부든 동일 수준으로 렌더.
+function renderBoard(bd) {
   const slot = $('boardSlot'); if (!slot) return;
-  const s = t.state, st = s.status;
+  const s = bd.state, st = s.status;
+  const partLabel = `${bd.part || '3'}부`;
   const heroEl = $('todayHero'); if (heroEl) heroEl.classList.toggle('hero-off', st === 'off'); // 휴무=코스 일러스트 모드
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
-  const c = t.commute;
+  const c = bd.commute;
 
   if (isWork && c && toMin(c.leave) != null && toMin(c.arrive) != null && toMin(c.standby) != null && toMin(c.tee) != null) {
     // 초 단위까지 반영해 실시간으로 게이지·아이콘이 함께 채워지며 이동하도록.
@@ -707,8 +744,8 @@ function renderBoard(t) {
     const B = toMin(c.standby) * 60;  // 백대기(티오프 50분 전)
     const T = toMin(c.tee) * 60;      // 티오프
     const nowMinNow = Math.floor(nowS / 60);
-    const off = Number(t.dayOffset) || 0;
-    const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
+    const off = Number(bd.dayOffset) || 0;
+    const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (bd.date || `${off}일 뒤`);
     // 5단계: 0 출발전 / 1 이동중(집→도착) / 2 도착(백대기 대기 10분) / 3 백대기중(→티오프) / 4 근무중
     //  ★가운데 지점은 '도착'(도착 전) ↔ '백대기'(도착 이후)로 라벨·시각이 전환된다.
     //  ★미래 근무일(off>=1)은 아직 시작 전 → '출발 전' 고정(게이지 0).
@@ -786,7 +823,7 @@ function renderBoard(t) {
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.
   if (st === 'off') slot.innerHTML = offCourseHTML();
-  else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s);
+  else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s, partLabel);
   else if (st === 'your_turn') slot.innerHTML = `<div class="board-plain"><b style="color:#bd312d">지금 바로 출근 준비하세요.</b> 티오프가 올라오면 시간 안내로 바뀝니다.</div>`;
   else slot.innerHTML = '';
 }
@@ -803,7 +840,8 @@ function nameLooseEq(a, b) {
 }
 
 // 스페어(대기) 대시보드 — '대기 순번 리스트'(깔끔 리스트 확정안). 실데이터로 그림.
-function renderSpareBoard(s) {
+//  ★partLabel(1부/2부/3부) — focus 라운드의 부에 맞춰 헤더 라벨을 표기(부별 동일 수준).
+function renderSpareBoard(s, partLabel = '3부') {
   const roster = Array.isArray(s.roster3) ? s.roster3 : [];
   const nameAt = (p) => (typeof p === 'number' && p >= 1 && roster[p - 1]) ? roster[p - 1] : '';
   // 티오프표(순번→시각) — 확정된 사람 이름 옆에 매칭 티오프 시간을 함께 보여준다.
@@ -847,7 +885,7 @@ function renderSpareBoard(s) {
     }
     return `<div class="sp-board">
       <div class="sp-head">
-        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+        <div><div class="lbl">${partLabel} 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
         <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
       </div>
       <div class="sp-foot" style="border-top:0"><span>🕒</span><span>내 순번 <b>${mp}번</b> · 확정선 <b>${cut}번</b> · 앞으로 <b>${ahead}명</b> 남았어요. 배치표 이름이 또렷이 읽히면 순번별로 표시할게요.</span></div>
@@ -876,7 +914,7 @@ function renderSpareBoard(s) {
     if (myPos + 1 <= roster.length) rows.push(rowHTML(myPos + 1, 'wait')); // 내가 마지막이면 뒤 행 없음
     return `<div class="sp-board">
       <div class="sp-head">
-        <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
+        <div><div class="lbl">${partLabel} 대기 순번</div><div class="sp-cutinfo">현재 확정선 ${cut}번</div></div>
         <div class="sp-ahead"><b>${ahead}</b><span>내 앞</span></div>
       </div>
       <div class="sp-list">${rows.join('')}</div>
@@ -890,7 +928,7 @@ function renderSpareBoard(s) {
   if (myPos + 1 <= roster.length) rows.push(rowHTML(myPos + 1, 'wait'));
   return `<div class="sp-board">
     <div class="sp-head">
-      <div><div class="lbl">3부 대기 순번</div><div class="sp-cutinfo">확정선 소식 대기 중</div></div>
+      <div><div class="lbl">${partLabel} 대기 순번</div><div class="sp-cutinfo">확정선 소식 대기 중</div></div>
       <div class="sp-ahead"><b>${myPos}</b><span>내 순번</span></div>
     </div>
     <div class="sp-list">${rows.join('')}</div>

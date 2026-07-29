@@ -340,9 +340,14 @@ app.get('/api/today', (req, res) => {
     rounds.push({
       part: pp, kind: isWork ? 'work' : 'spare', status: tp.status,
       teeTime: tp.teeTime || '', course: tp.course || '', myPosition: tp.myPosition || null,
-      cutLine: tp.cutLine || null,
+      cutLine: tp.cutLine || null, cutoffName: tp.cutoffName || null,
       assign: pp === '1' ? (tp.assign || null) : null,   // 1부 배정유형(조출/1,3/54/only1) → 대시보드 배지
       commute: (isWork && tp.teeTime) ? commuteInfo(tp.teeTime, prof.commute_min) : null,
+      // ★부별 동일 수준: 각 라운드가 리치 보드(근무 게이지·스페어 순번리스트)를 자체적으로 그릴 수 있게
+      //  해당 부의 명단·티오프표를 함께 실어 보냄(프론트가 focus 라운드를 대표부처럼 렌더).
+      roster3: Array.isArray(tp.roster3) ? tp.roster3 : null,
+      teeGrid: Array.isArray(tp.teeGrid) ? tp.teeGrid : null,
+      date: tp.date || t.date,
     });
   }
   const workParts = rounds.filter((r) => r.kind === 'work').map((r) => r.part);
