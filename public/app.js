@@ -1787,12 +1787,25 @@ async function lgSaveWord() {
   await lgDeliver(blob, lgDocName('doc'), 'application/msword');
 }
 async function lgSavePdf() {
-  const el = $('lgMFrame').querySelector('.lgdoc'); if (!el) return;
   const name = lgDocName('pdf');
   if (typeof html2pdf === 'undefined') { lgPrintDoc(); return; }
-  const opt = { margin: [8, 8, 8, 8], filename: name, image: { type: 'jpeg', quality: 0.96 }, html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } };
+  // ★캡처 전용 오프스크린 컨테이너에서 뽑는다 — 모달의 스크롤·중앙정렬 컨텍스트 때문에 html2canvas가
+  //  .lgdoc를 아래로 밀린 좌표로 캡처해 '상단 대형 여백 + 표 행이 페이지 경계에서 잘림'이 생기던 문제 차단.
+  const { o, S, period, isYear, profile } = lgDocCtx;
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;z-index:-1;';
+  holder.innerHTML = '<div class="lgdoc" style="max-width:none;margin:0;box-shadow:none;padding:24px;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
+  document.body.appendChild(holder);
+  const el = holder.querySelector('.lgdoc');
+  const opt = {
+    margin: [10, 10, 12, 10], filename: name, image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, windowWidth: 820, scrollX: 0, scrollY: 0 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },   // 표 행·헤더가 페이지 경계에서 잘리지 않게
+  };
   try { const blob = await html2pdf().set(opt).from(el).outputPdf('blob'); await lgDeliver(blob, name, 'application/pdf'); }
   catch (e) { try { await html2pdf().set(opt).from(el).save(); } catch (_) { lgPrintDoc(); } }
+  finally { holder.remove(); }
 }
 
 function initLedgerButtons() {

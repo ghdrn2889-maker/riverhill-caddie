@@ -482,6 +482,10 @@
     .lgdoc table.log tfoot td { background:#eef2f0; font-weight:700; } .lgdoc table.log tfoot tr.tot td { background:#0b5d34; color:#fff; font-size:13px; }
     .lgdoc table.net { width:64%; } .lgdoc table.net td { border:1px solid #bbb; padding:8px 10px; font-size:13px; } .lgdoc table.net td.num { text-align:right; font-weight:700; } .lgdoc table.net tr.tot td { background:#0b5d34; color:#fff; font-size:14px; }
     .lgdoc .note { font-size:10.5px; color:#777; margin-top:14px; line-height:1.65; }
+    /* PDF 페이지 분할 — 표 행·헤더가 페이지 경계에서 잘리지 않게, 소제목은 표와 붙어 다니게 */
+    .lgdoc tr, .lgdoc thead, .lgdoc tfoot { page-break-inside: avoid; break-inside: avoid; }
+    .lgdoc thead { display: table-header-group; }
+    .lgdoc h2, .lgdoc h3 { page-break-after: avoid; break-after: avoid; }
 
     /* ===== 대시보드 날씨 배경(오늘 화면 히어로) — 현재 날씨에 맞춰 배경이 바뀐다 ===== */
     .hero .fx { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:19px; }
