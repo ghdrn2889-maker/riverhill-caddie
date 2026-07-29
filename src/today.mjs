@@ -80,6 +80,21 @@ function parseCutoff(article) {
   return { name: m[2], holder: m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
 }
 
+// 휴가(연차·반차·월차·병가) 자동 판별 — 글/댓글에 '내 이름'이 휴가류 표현과 가까이 있으면 vacation.
+//  배치표 이미지의 '휴가' 표기까지는 못 읽으므로(그건 off로 뭉뚱그려짐) 텍스트 신호 기반 best-effort.
+//  정확도는 수동 보정으로 보완(사용자가 일지에서 직접 휴무↔휴가 변경).
+const VAC_RE = /(휴가|연차|반차|월차|병가)/;
+function detectVacation(article, name) {
+  if (!name) return false;
+  const nk = String(name).replace(/\s/g, '');
+  const t = `${article?.subject || ''} ${article?.text || ''} ${(Array.isArray(article?.comments) ? article.comments : []).map((c) => c?.content || '').join(' ')}`.replace(/\s+/g, ' ');
+  const i = t.indexOf(nk);
+  if (i < 0) return false;
+  // 이름 주변 ±14자 안에 휴가류 표현.
+  const around = t.slice(Math.max(0, i - 14), i + nk.length + 14);
+  return VAC_RE.test(around);
+}
+
 function renumberGrid(slots) {
   const clean = (slots || [])
     .map((s) => ({ time: (String(s?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(s?.course) ? 'IN' : 'OUT' }))
@@ -313,9 +328,13 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
     next.offReason = 'removed';
     next.prevPosition = Number(verdict._prevPosition) || Number(cur.myPosition) || null;
     next.teeTime = ''; next.course = '';   // 빠짐=근무 아님 → 잔여 티오프 정리
+    delete next.offType;                    // 순번 제외는 휴무/휴가와 별개 표식
   } else {
     if (next.offReason) delete next.offReason;
     if (next.prevPosition) delete next.prevPosition;
+    // ★휴무 vs 휴가 자동 구분: off인데 휴가류 신호가 있으면 vacation, 아니면 off(휴무).
+    if (next.status === 'off') next.offType = (verdict.offType === 'vacation' || detectVacation(article, cur.name || verdict.name)) ? 'vacation' : 'off';
+    else if (next.offType) delete next.offType;
   }
 
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });

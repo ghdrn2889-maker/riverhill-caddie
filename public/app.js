@@ -1019,13 +1019,14 @@ async function loadJournal() {
     const r = await (await fetch(`/api/journal?year=${y}&month=${m}`)).json();
     const s = r.summary || {}, days = r.days || [];
     $('jSummary').textContent = `${y}년 ${m}월`;
-    $('jSub').textContent = `근무 ${s.work || 0}일 · 스페어 ${s.spare || 0}일 · 휴무 ${s.off || 0}일`;
-    const KIND = { work: ['work', '근무'], spare: ['spare', '스페어'], off: ['off', '휴무'] };
+    const subParts = [`근무 ${s.work || 0}`, `스페어 ${s.spare || 0}`, `휴무 ${s.off || 0}`];
+    if (s.vacation) subParts.push(`휴가 ${s.vacation}`);
+    if (s.removed) subParts.push(`순번제외 ${s.removed}`);
+    $('jSub').textContent = subParts.join('일 · ') + '일';
     $('jDays').innerHTML = days.length ? days.map((d) => {
       const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
       const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
-      const [cls0, label0] = KIND[d.kind] || ['off', '기타'];
-      const cls = cls0, label = d.excluded ? '순번 제외' : label0;
+      const [cls, label] = jKindMeta(d);
       let detail;
       if (d.excluded) {
         detail = d.prevPosition ? `<span class="jt">순번 ${d.prevPosition} → 배치표에서 제외</span>` : `<span class="jt">근무 없음</span>`;
@@ -1038,9 +1039,52 @@ async function loadJournal() {
         detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
       } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
       const badge = (!d.excluded && d.twoRounds) ? '<span class="jk work" style="margin-left:4px;">두탕</span>' : '';
-      return `<div class="jday"><div><span class="jd">${md}</span>${detail}</div><span class="jk ${cls}">${label}${badge ? '' : ''}</span>${badge}</div>`;
+      const manual = d.userKind ? '<span class="jman">직접 지정</span>' : '';
+      const chip = (k, lab, c) => `<button class="jkbtn ${c}${jSel(d, k) ? ' on' : ''}" data-jd="${d.date}" data-jk="${k}">${lab}</button>`;
+      const editor = `<div class="jedit">
+        ${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}
+        ${d.userKind ? `<button class="jkbtn jauto" data-jd="${d.date}" data-jk="auto">↺ 자동</button>` : ''}
+      </div>`;
+      return `<div class="jday" data-card="${d.date}">
+        <div class="jrow"><div><span class="jd">${md}</span>${detail}${manual}</div>
+          <div style="display:flex;align-items:center;gap:4px;"><span class="jk ${cls}">${label}</span>${badge}<span class="jecar">✎</span></div></div>
+        ${editor}</div>`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
+    bindJournalEdit();
   } catch { $('jSummary').textContent = '불러오기 실패'; }
+}
+
+// 일지 배지 클래스·라벨(휴무/휴가/순번제외 구분).
+function jKindMeta(d) {
+  if (d.excluded) return ['removed', '순번 제외'];
+  if (d.kind === 'off') return d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
+  if (d.kind === 'spare') return ['spare', '스페어'];
+  if (d.kind === 'work') return ['work', '근무'];
+  return ['off', '기타'];
+}
+// 현재 이 날의 분류와 일치하는 수정 칩(하이라이트용).
+function jSel(d, k) {
+  if (k === 'removed') return !!d.excluded;
+  if (k === 'vacation') return d.kind === 'off' && !d.excluded && d.offType === 'vacation';
+  if (k === 'off') return d.kind === 'off' && !d.excluded && d.offType !== 'vacation';
+  return d.kind === k && !d.excluded;
+}
+function bindJournalEdit() {
+  // 행 탭 → 수정 패널 열기/닫기
+  $('jDays').querySelectorAll('.jday').forEach((el) => {
+    el.querySelector('.jrow').onclick = (e) => {
+      if (e.target.closest('.jkbtn')) return;
+      el.classList.toggle('editing');
+    };
+  });
+  // 분류 선택 → 저장
+  $('jDays').querySelectorAll('.jkbtn').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      await postJSON('/api/journal/kind', { date: b.dataset.jd, kind: b.dataset.jk === 'auto' ? null : b.dataset.jk });
+      loadJournal();
+    };
+  });
 }
 
 /* ── 근무·세무 기록 (월 단위 · 요약 카드 · 정리 필터) ── */

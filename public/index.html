@@ -295,14 +295,28 @@
     .wl-setbody { padding:2px 14px 14px; border-top:1px solid #eef1ec; }
     .settings-h { font-size:11px; font-weight:800; margin:14px 3px 6px; color:#647168; }
     /* 일일 근무 일지 */
-    .jday { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #eef1ec; font-size:12px; }
+    .jday { padding:8px 0; border-bottom:1px solid #eef1ec; font-size:12px; }
     .jday:last-child { border-bottom:0; }
+    .jrow { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
     .jday .jd { font-weight:700; }
     .jday .jt { font-size:10px; color:#79847d; margin-left:6px; }
+    .jman { font-size:9px; color:#9aa49c; margin-left:6px; background:#f2f4f1; padding:1px 6px; border-radius:99px; }
+    .jecar { font-size:11px; color:#c8d0c8; }
     .jk { font-size:10px; font-weight:800; padding:3px 10px; border-radius:99px; white-space:nowrap; }
     .jk.work { background:#e8f3eb; color:#1d6740; }
     .jk.spare { background:#fdf3df; color:#8a5d14; }
-    .jk.off { background:#eef1ec; color:#79847d; }
+    .jk.off { background:#ffe985; color:#7a5a00; }        /* 휴무 · 밝은 노란색 */
+    .jk.vac { background:#c3e39a; color:#33610f; }        /* 휴가 · 진한 연두색 */
+    .jk.removed { background:#eceef0; color:#8a97a0; }    /* 순번 제외 · 무채색 */
+    .jedit { display:none; gap:6px; flex-wrap:wrap; margin-top:9px; padding-top:9px; border-top:1px dashed #e6ebe4; }
+    .jday.editing .jedit { display:flex; }
+    .jkbtn { font-size:11px; font-weight:700; padding:5px 11px; border-radius:8px; border:1px solid #dbe2d9; background:#fff; color:#5a655c; cursor:pointer; }
+    .jkbtn.on.work { background:#e8f3eb; color:#1d6740; border-color:#bfe0c9; }
+    .jkbtn.on.spare { background:#fdf3df; color:#8a5d14; border-color:#ecd9a8; }
+    .jkbtn.on.off { background:#ffe985; color:#7a5a00; border-color:#ecd25a; }
+    .jkbtn.on.vac { background:#c3e39a; color:#33610f; border-color:#a7d17a; }
+    .jkbtn.on.removed { background:#eceef0; color:#8a97a0; border-color:#d4dade; }
+    .jkbtn.jauto { color:#9aa49c; }
 
     /* ===== 대시보드 날씨 배경(오늘 화면 히어로) — 현재 날씨에 맞춰 배경이 바뀐다 ===== */
     .hero .fx { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:19px; }

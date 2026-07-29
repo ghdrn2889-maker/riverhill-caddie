@@ -154,6 +154,14 @@ app.get('/api/journal', (req, res) => {
   res.json({ ok: true, days: journal.listJournal({ year, month }, uid), summary: journal.summary({ year, month }, uid) });
 });
 
+// 일일 근무 일지 수동 보정 — 그날 분류 직접 지정(근무/스페어/휴무/휴가/순번 제외, 또는 auto 복귀).
+app.post('/api/journal/kind', (req, res) => {
+  const { date, kind } = req.body || {};
+  const uid = req.user?.id || 1;
+  const day = journal.setDayKind(date, kind, uid);
+  res.json({ ok: true, day });
+});
+
 // 관리자 전용 알림 발송 — role='admin' 계정들의 기기에만. (네이버 쿠키 만료·테스트 등 운영성 알림)
 //  일반 회원(테스터 등)에게는 절대 가지 않는다. 관리자 계정이 없으면 조용히 아무것도 안 보냄.
 async function broadcastAdmins(msg) {
@@ -879,7 +887,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
     if (jIso && !v._uncertain && out.push !== 'check') {
       journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
         course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName,
-        offReason: merged.next.offReason, prevPosition: merged.next.prevPosition }, userId);
+        offReason: merged.next.offReason, prevPosition: merged.next.prevPosition, offType: merged.next.offType }, userId);
     }
     if (change.reversal) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
@@ -1064,7 +1072,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   // ── 저널·세무 다탕: 이 부 결과를 part로 기록. 주행거리 왕복은 worklog에서 계산(붙음 1회·떨어짐 2회). ──
   const jIso = worklog.labelToISO(n.date);
   if (jIso && !v._uncertain) {
-    journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part, offReason: n.offReason, prevPosition: n.prevPosition }, userId);
+    journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part, offReason: n.offReason, prevPosition: n.prevPosition, offType: n.offType }, userId);
     if (isWork) worklog.recordWorkDay(jIso, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part }, userId);
     // ★순번 제외(off:removed): 그날 근무 없음 → 근무일지에 '순번 제외'로 명시.
     else if (n.status === 'off' && n.offReason === 'removed') worklog.markExcludedDay(jIso, userId, { prevPosition: n.prevPosition, articleId: full.id });
