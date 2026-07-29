@@ -334,6 +334,9 @@ app.get('/api/today', (req, res) => {
     const isSpare = ['spare', 'waiting', 'near'].includes(tp.status);
     const hasPos = Number(tp.myPosition) > 0;
     if (!isWork && !(isSpare && hasPos)) continue;
+    // ★비대표부(1·2부) 근무는 '티오프 확정'된 것만 대시보드에 띄운다. 티오프 미정 근무는 섀도 단계 판독
+    //  오검출(예: 2부 명단 오독으로 생긴 '근무 티오프 미정' 유령 카드) 소지가 커 카드로 노출하지 않음.
+    if (pp !== primaryPart && isWork && !tp.teeTime) continue;
     const tpISO = worklog.labelToISO(tp.date);
     const sameDay = !tpISO || tpISO === tISO || (!tISO && tpISO >= todayISOKST());
     if (!sameDay) continue;
