@@ -878,7 +878,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
     const jIso = worklog.labelToISO(merged.next.date);
     if (jIso && !v._uncertain && out.push !== 'check') {
       journal.recordDayStatus(jIso, { status: merged.next.status, teeTime: merged.next.teeTime,
-        course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName }, userId);
+        course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName,
+        offReason: merged.next.offReason, prevPosition: merged.next.prevPosition }, userId);
     }
     if (change.reversal) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
@@ -1063,7 +1064,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   // ── 저널·세무 다탕: 이 부 결과를 part로 기록. 주행거리 왕복은 worklog에서 계산(붙음 1회·떨어짐 2회). ──
   const jIso = worklog.labelToISO(n.date);
   if (jIso && !v._uncertain) {
-    journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part }, userId);
+    journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part, offReason: n.offReason, prevPosition: n.prevPosition }, userId);
     if (isWork) worklog.recordWorkDay(jIso, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part }, userId);
     // ★순번 제외(off:removed): 그날 근무 없음 → 근무일지에 '순번 제외'로 명시.
     else if (n.status === 'off' && n.offReason === 'removed') worklog.markExcludedDay(jIso, userId, { prevPosition: n.prevPosition, articleId: full.id });

@@ -20,6 +20,22 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   const part = String(info.part || '3');
   const j = loadUserJSON(userId, FILE, {});
   const prev = j[dateISO] || {};
+  // ★순번 제외(off:removed): 배치표 순번에 있다 최신 배치표에서 빠짐 → 그날 전체를 '순번 제외'로.
+  //  유령/이전 근무 라운드(두탕 등)를 정리해 '근무·두탕'으로 잘못 뜨는 걸 막는다.
+  if (info.status === 'off' && info.offReason === 'removed') {
+    j[dateISO] = {
+      date: dateISO, kind: 'off', status: 'off', offReason: 'removed', excluded: true,
+      teeTime: '', course: '', myPosition: null,
+      prevPosition: info.prevPosition ?? prev.prevPosition ?? prev.myPosition ?? null,
+      cutoffName: info.cutoffName || prev.cutoffName || '',
+      rounds: {}, twoRounds: false, updatedAt: Date.now(),
+    };
+    saveUserJSON(userId, FILE, j);
+    return;
+  }
+  // 순번 제외로 표기된 날: 실제 티오프가 있는 '진짜 근무'(배치표 재등재)이거나 주(主) 3부 신호일 때만
+  //  되살린다 — 티오프 없는 부차(1·2부) 유령 근무표시로는 제외를 뒤집지 않는다.
+  if (prev.excluded && !(part === '3' || info.teeTime)) return;
   // ★"2,3 출근" 두 탕: rounds[부]에 부별 결과 보관. 대표 kind = 어느 라운드든 work면 work(둘 다 스페어면 spare).
   const rounds = { ...(prev.rounds || {}) };
   rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };

@@ -1024,9 +1024,12 @@ async function loadJournal() {
     $('jDays').innerHTML = days.length ? days.map((d) => {
       const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
       const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
-      const [cls, label] = KIND[d.kind] || ['off', '기타'];
+      const [cls0, label0] = KIND[d.kind] || ['off', '기타'];
+      const cls = cls0, label = d.excluded ? '순번 제외' : label0;
       let detail;
-      if (d.twoRounds && d.rounds) {
+      if (d.excluded) {
+        detail = d.prevPosition ? `<span class="jt">순번 ${d.prevPosition} → 배치표에서 제외</span>` : `<span class="jt">근무 없음</span>`;
+      } else if (d.twoRounds && d.rounds) {
         const legs = ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].kind === 'work' && d.rounds[p].teeTime)
           .map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
         const tang = legs.length >= 3 ? '세 탕' : '두 탕';
@@ -1034,7 +1037,7 @@ async function loadJournal() {
       } else if (d.kind === 'work' && d.teeTime) {
         detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
       } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
-      const badge = d.twoRounds ? '<span class="jk work" style="margin-left:4px;">두탕</span>' : '';
+      const badge = (!d.excluded && d.twoRounds) ? '<span class="jk work" style="margin-left:4px;">두탕</span>' : '';
       return `<div class="jday"><div><span class="jd">${md}</span>${detail}</div><span class="jk ${cls}">${label}${badge ? '' : ''}</span>${badge}</div>`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
   } catch { $('jSummary').textContent = '불러오기 실패'; }
