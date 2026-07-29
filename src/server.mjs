@@ -283,9 +283,12 @@ app.get('/api/today', (req, res) => {
   let primaryPart = '3';
   const t3ISO = t ? worklog.labelToISO(t.date) : null;
   const t3Usable = t && !(t3ISO && t3ISO < nowISO);   // 3부가 있고 낡지 않음(휴무·스페어·근무 전부 포함)
+  // ★1·2부 판독은 아직 섀도(불안정) — MINOR_PART_PUSH가 켜져 신뢰 수준이 되기 전엔 대시보드에서 완전히 숨긴다.
+  //  (50명짜리 '2부' 오라벨로 유령 순번이 히어로를 납치하던 문제 차단. 코드는 그대로, 켜면 부활.)
+  const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
   // ★순수 '1부만/2부만' 날: 3부 슬롯이 비었거나 낡았으면 1·2부에서 대표 라운드를 골라 히어로로 쓴다.
-  //  (3부가 멀쩡하면 이 블록은 건너뜀 → 기존 3부 동작 100% 보존.)
-  if (!t3Usable) {
+  //  (3부가 멀쩡하면 이 블록은 건너뜀 → 기존 3부 동작 100% 보존. 섀도 단계엔 아예 건너뜀.)
+  if (!t3Usable && minorPartOn) {
     const cands = [];
     for (const pp of ['1', '2']) {
       const s = loadToday(uid, pp);
@@ -328,6 +331,7 @@ app.get('/api/today', (req, res) => {
   //  ★근무 라운드는 항상, 스페어(대기)는 순번이 있을 때만 카드로. 다른 날짜 슬롯은 제외.
   const rounds = [];
   for (const pp of ['1', '2', '3']) {
+    if (pp !== '3' && !minorPartOn) continue;   // ★섀도 단계: 1·2부는 대시보드 라운드에서 제외(유령 카드 방지)
     const tp = (pp === primaryPart) ? t : loadToday(uid, pp);
     if (!tp) continue;
     const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);
