@@ -241,7 +241,15 @@ function resolveCutoff(verdict, article, today = null) {
   }
 }
 
-function fixMemberPosByRoster(v, member = memberFromEnv()) {
+// 날짜 라벨 같은 날 비교('7월 29일'·'2026년 7월 29일' 모두 '7-29'). 둘 다 있어야 True(불확실하면 보수적으로 False).
+function sameDayLabel(a, b) {
+  const key = (s) => { const m = String(s || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/); return m ? `${Number(m[1])}-${Number(m[2])}` : ''; };
+  const ka = key(a), kb = key(b);
+  if (!ka || !kb) return false;
+  return ka === kb;
+}
+
+function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
   if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
   const res = resolveMemberInRoster(v.part3Roster, member, v);
   const rp = res.pos;
@@ -260,9 +268,22 @@ function fixMemberPosByRoster(v, member = memberFromEnv()) {
     //  메인 판독이 다른 부(예: 3부 명단의 김홍구 순번28)에서 붙인 '유령 순번'을 제거해
     //  2부처럼 회원이 대개 없는 부에서 헛 슬롯/카드가 생기지 않게 한다. (3부 홈에선 부재=off라 순번0이 정답.)
     if (v.rosterReliable) {
-      if (Number(v.myPosition) > 0) v._posFixed = `명단 대조: 순번 ${v.myPosition}→없음(이 부 명단에 부재)`;
+      const prevPos = Number(v.myPosition) || 0;
+      if (prevPos > 0) v._posFixed = `명단 대조: 순번 ${prevPos}→없음(이 부 명단에 부재)`;
       v.myPosition = 0;
-      if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) { v.myStatus = 'spare'; v.teeTime = ''; v.course = ''; }
+      // ★오늘 이전엔 순번/근무로 배치표에 있었는데(same day) 신뢰할 만한 최신 배치표에서 이름이 사라짐
+      //  = 협의하 순번 제외(개인사·부상·휴무 — 사유는 알 수 없음). '스페어'가 아니라 'off(빠짐)'로 확정.
+      //  (판독 실패는 rosterReliable로 이미 배제. 이름이 다시 오르면 다음 판독에서 근무로 자동 복귀.)
+      const todayPos = Number(today?.myPosition) || 0;
+      const wasOnBoard = todayPos > 0 || ['assigned', 'work', 'your_turn', 'spare', 'waiting', 'near'].includes(String(today?.status || ''));
+      if (wasOnBoard && sameDayLabel(today?.date, v.dateLabel)) {
+        v.myStatus = 'off';
+        v._offReason = 'removed';
+        v._prevPosition = todayPos || prevPos || null;
+        v.teeTime = ''; v.course = '';
+      } else if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) {
+        v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
+      }
     }
     return;
   }
@@ -534,7 +555,10 @@ export function decide(article, verdict, member = memberFromEnv()) {
         : `${name}님, ${verdict.dateLabel || '오늘'} ${member.part}부 스페어 대기입니다.`;
     }
   } else if (status === 'off') {
-    body = `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
+    // ★순번 제외(removed)는 쉼·사유를 단정하지 않고 사실만(문제가 생긴 걸 수도 있음).
+    body = verdict._offReason === 'removed'
+      ? `${name}님, ${verdict.dateLabel || '오늘'} 최신 배치표에서 순번이 빠졌어요.`
+      : `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
   }
 
   if (verdict.note && String(verdict.note).trim()) body += `\n⚠️ ${String(verdict.note).trim()}`;
@@ -1109,7 +1133,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  명단이 있으면(배치표/대바) authoritative. 없으면 no-op(기존 판독 유지).
   if (verdict) {
     resolveCutoff(verdict, article, today);
-    fixMemberPosByRoster(verdict, member);
+    fixMemberPosByRoster(verdict, member, today);   // today = 이전 상태 → '순번에 있었다 사라짐'(off:removed) 감지
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터

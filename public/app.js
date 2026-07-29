@@ -518,6 +518,26 @@ function offCourseHTML() {
   </div>`;
 }
 
+// 순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 판에서 이름이 사라짐(사유 미상).
+//  쉼·사유를 단정하지 않고 '사실만'. 날씨 배경 위 글래스 카드 + 은은한 언덕 스트립(노을/새벽엔 CSS로 숨김).
+function removedBoardHTML(s) {
+  const prev = Number(s.prevPosition) || 0;
+  const line = prev > 0
+    ? `<span class="rm-chip">순번 ${prev}번</span><span class="rm-arrow">→</span>최신 배치표에서 제외`
+    : '최신 배치표에서 순번이 빠졌어요';
+  return `<div class="rm-scene">
+    <svg class="oc-hills" viewBox="0 0 390 132" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-far" d="M0 54 Q100 30 200 44 T390 40 V132 H0 Z"/>
+      <path class="hill-near" d="M0 80 Q130 58 250 72 T390 66 V132 H0 Z"/>
+    </svg>
+    <div class="rm-card">
+      <div class="rm-h">오늘 배치에서 빠졌어요 <span class="rm-tag">근무 없음</span></div>
+      <div class="rm-line">${line}</div>
+      <div class="rm-foot"><span>🔄</span><span>배치표에 이름이 다시 오르면 근무 화면으로 바로 돌아와요.</span></div>
+    </div>
+  </div>`;
+}
+
 // 대기(스플래시) 화면 감추기 — 준비되면 페이드아웃. 여러 곳에서 불려도 무해(idempotent).
 function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
@@ -554,7 +574,9 @@ function renderToday(t) {
   $('heroLabel').textContent = `${dayW} 내 상황`;
   // 근무 '확정'은 티오프가 실제 매칭됐을 때만. 그 전(순번상 근무권)은 '근무 예정'으로 스페어와 구분.
   const isConfirmed = isWork && s.teeTime;
-  const offToday = st === 'off' && off < 1;
+  // ★순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 판에서 사라짐(사유 미상). 평소 휴무의 시적 쉼 문구 대신 사실만.
+  const offRemoved = st === 'off' && s.offReason === 'removed';
+  const offToday = st === 'off' && off < 1 && !offRemoved;   // 평소 휴무만 랜덤 쉼 문구 로테이션
   if (offToday) {
     startOffTitle();                    // 랜덤 문구 + 슬라이드 로테이션 시작
   } else {
@@ -562,6 +584,7 @@ function renderToday(t) {
     $('heroTitle').textContent = st === 'your_turn' ? '지금 출근 차례!'
       : isConfirmed ? `${dayW} ${heroPfx}근무 확정`
       : isWork ? `${dayW} ${heroPfx}근무 예정`
+      : offRemoved ? '오늘은 근무가 없어요'
       : st === 'off' ? `${dayW} 휴무예요`
       : isSpare ? `${dayW} ${heroPart} 스페어${posTxt}` : '대기 중';
   }
@@ -569,6 +592,7 @@ function renderToday(t) {
     : (isWork && !s.teeTime) ? '순번상 근무권에 들었어요. 티오프가 매칭되면 시간을 알려드릴게요.'
     : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
+    : offRemoved ? '최신 배치표에서 순번이 빠졌어요.'
     : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
@@ -731,7 +755,8 @@ function renderBoard(bd) {
   const slot = $('boardSlot'); if (!slot) return;
   const s = bd.state, st = s.status;
   const partLabel = `${bd.part || '3'}부`;
-  const heroEl = $('todayHero'); if (heroEl) heroEl.classList.toggle('hero-off', st === 'off'); // 휴무=코스 일러스트 모드
+  // 휴무=코스 일러스트 모드. 단, 순번 제외(removed)는 시적 쉼 모드가 아니라 담백한 글래스 안내 → hero-off 끔.
+  const heroEl = $('todayHero'); if (heroEl) heroEl.classList.toggle('hero-off', st === 'off' && s.offReason !== 'removed');
   const isWork = st === 'assigned' || st === 'work' || st === 'your_turn';
   const c = bd.commute;
 
@@ -822,7 +847,8 @@ function renderBoard(bd) {
     return;
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.
-  if (st === 'off') slot.innerHTML = offCourseHTML();
+  //  ★순번 제외(removed)는 평소 휴무(시적 일러스트)와 달리 사실만 담은 글래스 안내 카드.
+  if (st === 'off') slot.innerHTML = (s.offReason === 'removed') ? removedBoardHTML(s) : offCourseHTML();
   else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s, partLabel);
   else if (st === 'your_turn') slot.innerHTML = `<div class="board-plain"><b style="color:#bd312d">지금 바로 출근 준비하세요.</b> 티오프가 올라오면 시간 안내로 바뀝니다.</div>`;
   else slot.innerHTML = '';

@@ -115,6 +115,9 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
 
   const next = { ...cur, timeline: [...(cur.timeline || [])] };
   const changes = [];
+  // ★순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 신뢰 판독에서 사라짐(사유 미상).
+  //  이 경우 아래 팀수·커트라인 재분류(스페어 승강)를 건너뛰어 'off' 결론을 지킨다.
+  const removed = verdict._offReason === 'removed';
 
   // ★커트라인 텍스트 보완: 모델이 "N번 ○○님까지 근무"를 cutoff 필드에 못 담아도(불안정) 정규식으로 채운다.
   //  순번 숫자가 없으면 저장된 명단(roster3)에서 그 이름의 순번을 찾아 보완.
@@ -255,7 +258,7 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   //  예약이 늘면(스페어→근무 "준비 시작"), 취소로 줄면(근무→스페어 "대기 전환") 양방향 반영.
   const tc = Number(verdict.teamCount);
   const myp = Number(next.myPosition);
-  if (Number.isFinite(tc) && tc > 0 && myp > 0) {
+  if (!removed && Number.isFinite(tc) && tc > 0 && myp > 0) {
     next.cutLine = tc; // 팀 수는 가장 권위 있는 실시간 확정선 → 티오프표 스냅샷보다 우선
     const nowWork = myp <= tc;
     const newStatus = nowWork ? (next.teeTime ? 'assigned' : 'work') : 'spare';
@@ -274,7 +277,7 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   //  배치표 색을 못 읽는 텍스트 글이라도, 명시된 커트라인 안에 내 순번이 들면 근무권으로 올린다.
   //  (커트라인에 딱 걸린 회원이 스페어 대시보드에 머무는 문제 해결 + 당추로 밀린 티오프 반영.)
   //  teamCount(현재 N팀) 블록이 이미 처리한 경우엔 건너뛴다(그쪽이 더 권위 있음).
-  if (!(Number.isFinite(tc) && tc > 0) && verdict.cutoffAnnounced && myp > 0) {
+  if (!removed && !(Number.isFinite(tc) && tc > 0) && verdict.cutoffAnnounced && myp > 0) {
     const cut = Number(next.cutLine) || 0;
     if (cut > 0) {
       const slot = Array.isArray(next.teeGrid) ? next.teeGrid.find((g) => Number(g.pos) === myp) : null;
@@ -303,6 +306,17 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
 
   // 스페어/대기 상태엔 티오프가 없어야 함 — 잔여·오독 티오프 정리(상황판·저널 일관성).
   if (next.status === 'spare' || next.status === 'waiting') { next.teeTime = ''; next.course = ''; }
+
+  // ★순번 제외(off:removed) 표식 — 대시보드가 평소 휴무(시적 쉼)와 구분해 '담백한 안내' 화면을 띄우게.
+  //  removed가 아닌 어떤 결론이든(근무·스페어·평소 휴무) 이전 removed 표식은 깨끗이 제거(오래 남지 않게).
+  if (removed && next.status === 'off') {
+    next.offReason = 'removed';
+    next.prevPosition = Number(verdict._prevPosition) || Number(cur.myPosition) || null;
+    next.teeTime = ''; next.course = '';   // 빠짐=근무 아님 → 잔여 티오프 정리
+  } else {
+    if (next.offReason) delete next.offReason;
+    if (next.prevPosition) delete next.prevPosition;
+  }
 
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });
   if (next.timeline.length > 40) next.timeline = next.timeline.slice(-40);
