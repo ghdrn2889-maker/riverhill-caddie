@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadUserJSON, saveUserJSON, userPhotoDir } from './store.mjs';
 import * as worklog from './worklog.mjs';
+import * as journal from './journal.mjs';
 
 const FILE = 'ledger.json';
 // 캐디피 단가 — 고정값(로직에 박음, 설정에서 변경 불가). 1·2부 14만, 3부 15만.
@@ -26,26 +27,34 @@ function load(userId = 1) {
 }
 function save(userId, d) { saveUserJSON(userId, FILE, d); }
 
-// 그날 근무한 부 배열 — 수동 보정(dayParts) 우선, 없으면 근무일지 rounds, 그것도 없으면 기본부(3부).
+// 일지 rounds에서 '실제 근무(work)'로 뛴 부만 추출 — 스페어(대기)로만 잡힌 부는 수익 대상 아님.
+//  (예: 2부 스페어 + 3부 근무 = 3부만 수익. 실제로 2부도 뛰었으면 사용자가 dayParts로 보정.)
+function workedPartsOf(rounds) {
+  if (!rounds) return [];
+  return Object.entries(rounds)
+    .filter(([p, r]) => ['1', '2', '3'].includes(p) && r && r.kind === 'work')
+    .map(([p]) => p);
+}
+// 그날 근무한 부 배열 — 수동 보정(dayParts) 우선, 없으면 일지의 '근무' 라운드, 그것도 없으면 기본부(3부).
 function partsForDay(day, d) {
   const ov = d.dayParts[day.date];
   if (Array.isArray(ov) && ov.length) return ov.slice().sort();
-  const r = day.rounds && Object.keys(day.rounds).filter((p) => ['1', '2', '3'].includes(p));
-  if (r && r.length) return r.slice().sort();
+  const r = workedPartsOf(day.rounds);
+  if (r.length) return r.slice().sort();
   return [DEFAULT_PART];
 }
 function feeOf(part) { return FEES[part] || 0; }
 function dayRevenue(parts) { return parts.reduce((sum, p) => sum + feeOf(p), 0); } // 부 조합 자동 합산(1·3부=29만 등)
 
-// 한 날짜의 '유효 부 조합' — 수동보정(dayParts) → 근무일지 rounds → 근거 없으면 null.
+// 한 날짜의 '유효 부 조합' — 수동보정(dayParts) → 일일 근무 일지 rounds → 근거 없으면 null.
 //  일지 표시와 정산 수익이 같은 값을 쓰도록 하는 단일 소스(partsForDay와 동일 우선순위).
 export function effPartsFor(dateISO, userId = 1) {
   const d = load(userId);
   const ov = d.dayParts[dateISO];
   if (Array.isArray(ov) && ov.length) return ov.slice().sort();
-  const wday = worklog.getDay(dateISO, userId);
-  const r = wday && wday.rounds && Object.keys(wday.rounds).filter((p) => ['1', '2', '3'].includes(p));
-  if (r && r.length) return r.slice().sort();
+  const jday = journal.getDay(dateISO, userId);
+  const r = workedPartsOf(jday && jday.rounds);
+  if (r.length) return r.slice().sort();
   return null;
 }
 // 수동보정 존재 여부(일지의 '직접 지정' 표시용).
@@ -62,9 +71,11 @@ const PART_KO = { 1: '1부', 2: '2부', 3: '3부' };
 // 월(또는 연) 정산 집계 + 일자별 내역.
 export function summary({ year, month } = {}, userId = 1) {
   const d = load(userId);
-  const all = worklog.listDays({ year, month }, userId);
-  const worked = all.filter((x) => x.worked === true);       // 확정 근무일 → 수익 산정 대상
-  const pending = all.filter((x) => x.worked == null);        // 확인 대기(확정하면 합산)
+  // ★수익 산정 = 일일 근무 일지(journal)의 '근무'일 기준(사용자가 보고 편집하는 그 일지와 동일 소스).
+  //  worklog(세무·차량 기록)는 주행거리·영수증 전용으로 분리 — 정산 수익은 일지가 단일 진실.
+  const all = journal.listJournal({ year, month }, userId);
+  const worked = all.filter((x) => x.kind === 'work' && !x.excluded);  // 확정 근무일 → 수익 산정 대상
+  const pending = [];                                                   // 일지엔 '확인 대기' 개념 없음(확정만 기록)
 
   const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1') }, 2: { days: 0, amount: 0, fee: feeOf('2') }, 3: { days: 0, amount: 0, fee: feeOf('3') } };
   let workRevenue = 0;
@@ -77,7 +88,7 @@ export function summary({ year, month } = {}, userId = 1) {
     return { date: day.date, parts, tang: parts.length >= 3 ? '54' : parts.join('/'), revenue: rev, tip };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
 
-  const pendingRevenue = pending.reduce((sum, day) => sum + dayRevenue(partsForDay(day, d)), 0);
+  const pendingRevenue = 0;
   const tipTotal = rows.reduce((a, r) => a + r.tip, 0);
   const expenses = d.expenses.filter((e) => inPeriod(e.date, year, month)).sort((a, b) => (a.date < b.date ? 1 : -1));
   const expTotal = expenses.reduce((a, e) => a + (Math.max(0, Number(e.amount) || 0)), 0);
