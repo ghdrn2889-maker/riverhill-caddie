@@ -500,8 +500,19 @@ function stopOffTitle() {
 }
 
 // 휴무 코스 일러스트 — 카드 바닥까지 꽉 차는 언덕(풀블리드) + 깃발. 하늘은 기존 날씨 배경 재사용.
-//  ★깃발은 CSS 애니메이션(.fcloth)으로 끊김 없이 펄럭임 — SMIL은 innerHTML 재삽입 시 재생이 멈추던 버그가 있었다.
+//  ★깃발: 폴대 쪽(왼쪽)은 고정, 자유단(오른쪽)이 물결치는 SMIL 부드러운 모프(펄럭). 자연스럽고 끊김 없음.
+//   '한 사이클 후 정지' 버그는 renderBoard가 이미 뜬 off-course를 다시 안 꽂게 해 해결(SVG를 안 갈아치움 → SMIL 지속).
+const OFF_WAVE = [   // 자유단이 위→아래로 물결치는 4위상(폴대 x9 고정)
+  'M9 8 C16 8 24 10 33 8 L33 17 C24 19 16 17 9 17 Z',
+  'M9 8 C16 10 24 8.5 33 10 L33 19 C24 17.5 16 19 9 17 Z',
+  'M9 8 C16 8 24 10 33 8 L33 17 C24 19 16 17 9 17 Z',
+  'M9 8 C16 6 24 8.5 33 6 L33 15 C24 17.5 16 15 9 17 Z',
+];
 function offCourseHTML() {
+  const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wave = rm ? '' : `<animate attributeName="d" dur="2.8s" repeatCount="indefinite" calcMode="spline"
+      keyTimes="0;0.25;0.5;0.75;1" keySplines="0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1;0.45 0 0.55 1"
+      values="${OFF_WAVE[0]};${OFF_WAVE[1]};${OFF_WAVE[2]};${OFF_WAVE[3]};${OFF_WAVE[0]}"/>`;
   return `<div class="off-course">
     <svg class="oc-hills" viewBox="0 0 390 200" preserveAspectRatio="none" aria-hidden="true">
       <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
@@ -511,7 +522,7 @@ function offCourseHTML() {
       <ellipse class="ftuft" cx="9" cy="55" rx="12" ry="3.4"/>
       <line class="fp" x1="9" y1="8" x2="9" y2="55" stroke-width="2.6" stroke-linecap="round"/>
       <circle class="fpc" cx="9" cy="9.5" r="1.8"/>
-      <path class="fcloth" d="M9 9 C16 9 24 11.5 33 9 L33 18 C24 20.5 16 18 9 18 Z"/>
+      <path class="fcloth" fill="#c85449" d="${OFF_WAVE[0]}">${wave}</path>
     </svg>
   </div>`;
 }
@@ -846,7 +857,11 @@ function renderBoard(bd) {
   }
   // 티오프 미배정(스페어/휴무/미상) — 시간 지어내지 않음.
   //  ★순번 제외(removed)는 평소 휴무(시적 일러스트)와 달리 사실만 담은 글래스 안내 카드.
-  if (st === 'off') slot.innerHTML = (s.offReason === 'removed') ? removedBoardHTML(s) : offCourseHTML();
+  //  ★휴무 일러스트는 이미 떠 있으면 다시 안 꽂는다 — 깃발 SMIL이 폴링마다 리셋/정지되지 않게(끊김 없는 펄럭).
+  if (st === 'off') {
+    if (s.offReason === 'removed') slot.innerHTML = removedBoardHTML(s);
+    else if (!slot.querySelector('.off-course')) slot.innerHTML = offCourseHTML();
+  }
   else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s, partLabel);
   else if (st === 'your_turn') slot.innerHTML = `<div class="board-plain"><b style="color:#bd312d">지금 바로 출근 준비하세요.</b> 티오프가 올라오면 시간 안내로 바뀝니다.</div>`;
   else slot.innerHTML = '';

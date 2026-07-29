@@ -602,10 +602,6 @@
     .hero.wx-night .oc-hills .hill-far { fill:#264c3c; }
     .hero.wx-night .oc-hills .hill-near { fill:#173327; }
     .oc-flag { position:absolute; left:32%; bottom:54px; width:44px; height:60px; z-index:2; overflow:visible; }
-    /* 깃발 천 — CSS로 계속 펄럭임(재렌더에도 항상 재생). 모션 줄이기 설정 시 정지. */
-    .oc-flag .fcloth { fill:#c85449; transform-box:fill-box; transform-origin:left center; animation:oc-flagwave 1.9s ease-in-out infinite; }
-    @keyframes oc-flagwave { 0%,100% { transform:skewY(0deg) scaleX(1); } 25% { transform:skewY(-3.5deg) scaleX(.965); } 50% { transform:skewY(0deg) scaleX(.94); } 75% { transform:skewY(3.5deg) scaleX(.965); } }
-    @media (prefers-reduced-motion:reduce) { .oc-flag .fcloth { animation:none; } }
     .oc-flag .fp { stroke:#385645; }
     .oc-flag .fpc { fill:#385645; }
     .oc-flag .ftuft { fill:#5aa877; }
