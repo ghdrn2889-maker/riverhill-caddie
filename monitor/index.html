@@ -94,7 +94,12 @@
   .mp-part{ font-size:10.5px; color:var(--tx2); font-weight:700; }
   .mp-cnt{ margin-left:auto; font-size:10.5px; font-weight:800; color:var(--acc); background:color-mix(in srgb,var(--acc) 14%,transparent); border-radius:999px; padding:2px 10px; }
   .mp-cnt.zero{ color:var(--tx3); background:var(--grid); }
-  .mp-items{ margin-top:9px; display:flex; flex-direction:column; gap:8px; }
+  .mp-head.tog{ cursor:pointer; user-select:none; }
+  .mp-head.tog:hover .mp-name{ color:var(--acc); }
+  .mp-caret{ font-size:10px; color:var(--tx3); transition:transform .15s; display:inline-block; width:11px; }
+  .mpush.open .mp-caret{ transform:rotate(90deg); }
+  .mp-items{ margin-top:9px; display:none; flex-direction:column; gap:8px; }
+  .mpush.open .mp-items{ display:flex; }
   .mp-item{ border-left:2px solid var(--bord2); padding:1px 0 1px 10px; }
   .mp-line{ display:flex; align-items:center; gap:7px; font-size:11.5px; }
   .mp-t{ color:var(--tx2); font-weight:700; white-space:nowrap; }
@@ -247,7 +252,7 @@
   <div class="tab-page" id="page-push">
     <div class="sectlab">알림 발송</div>
     <div class="grid">
-      <div class="panel full"><h2>회원별 발송 알림 · 어제~오늘</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+      <div class="panel full"><h2>회원별 발송 알림</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
     </div>
   </div>
 
@@ -300,6 +305,7 @@
 
   var PART_LABEL = { '1':'1부(조출)', '2':'2부', '3':'3부' };
   var boardTab = null;   // 선택된 부 탭
+  var openPush = {};     // 알림 발송 — 회원별 펼침 상태(uid→true) 유지(10초 재렌더에도 보존)
   function renderBoard(lb){
     var el = $('latestBoard'); if(!el) return;
     if(!lb || !lb.availableParts || !lb.availableParts.length){
@@ -459,12 +465,22 @@
     // 회원별 발송 알림(어제~오늘)
     var pk = s.pushes || {};
     var pm = pk.byMember || [];
-    if ($('pushRange')) $('pushRange').textContent = '어제~오늘 · 어제 ' + n(pk.sentYesterday||0) + '건 · 오늘 ' + n(pk.sentToday||0) + '건 · 각 회원에게 간 알림 문구(발송 없는 회원도 표시)';
+    if ($('pushRange')){
+      var bAt = pk.boardAt ? clock(pk.boardAt) : null;
+      $('pushRange').innerHTML = (bAt
+          ? ('<b>최신 배치표'+(pk.boardLabel?(' · '+esc(pk.boardLabel)):'')+' 판독 '+bAt+' 이후</b> '+n(pk.sinceBoard||0)+'건')
+          : '<b>최근 발송</b>')
+        + ' · 새 배치표가 뜨면 이전 배치표 알림은 자동 정리 · 회원 이름을 눌러 펼치기 · 오늘 '+n(pk.sentToday||0)+' / 어제 '+n(pk.sentYesterday||0);
+    }
     $('pushTbl').innerHTML = pm.length ? pm.map(function(mrow){
-      var head = '<div class="mp-head"><span class="mp-name">'+esc(mrow.name)+'</span>'+(mrow.part?'<span class="mp-part">'+esc(mrow.part)+'부</span>':'')+
+      var has = mrow.count>0;
+      var isOpen = has && !!openPush[mrow.uid];
+      var head = '<div class="mp-head'+(has?' tog':'')+'" data-uid="'+mrow.uid+'">'+
+        (has?'<span class="mp-caret">▶</span>':'<span class="mp-caret" style="opacity:0">▶</span>')+
+        '<span class="mp-name">'+esc(mrow.name)+'</span>'+(mrow.part?'<span class="mp-part">'+esc(mrow.part)+'부</span>':'')+
         (mrow.status&&mrow.status!=='active'?' '+statusTag(mrow.status):'')+
-        '<span class="mp-cnt'+(mrow.count?'':' zero')+'">'+(mrow.count?mrow.count+'건':'발송 없음')+'</span></div>';
-      var body = mrow.count ? '<div class="mp-items">'+mrow.items.map(function(p){
+        '<span class="mp-cnt'+(has?'':' zero')+'">'+(has?mrow.count+'건':'발송 없음')+'</span></div>';
+      var body = has ? '<div class="mp-items">'+mrow.items.map(function(p){
         var lv = ({ high:['b','긴급'], check:['w','확인'], normal:['i','일반'], low:['','조용'] })[p.level] || ['i','일반'];
         var dv = (p.devices==null)?'—':(p.sent+'/'+p.devices);
         var dcls = (p.devices==null||p.devices===0)?'':(p.sent>0?'g':'b');
@@ -472,9 +488,12 @@
           '<span class="tag '+lv[0]+'">'+lv[1]+'</span><span class="mp-ttl">'+esc(p.title)+'</span>'+
           '<span class="tag '+dcls+'" style="margin-left:auto" title="도달/구독 기기">'+dv+'</span></div>'+
           '<div class="mp-body">'+esc(p.body)+'</div></div>';
-      }).join('')+'</div>' : '<div class="mp-empty">이 기간 발송된 알림 없음</div>';
-      return '<div class="mpush'+(mrow.count?'':' silent')+'">'+head+body+'</div>';
+      }).join('')+'</div>' : '';
+      return '<div class="mpush'+(has?'':' silent')+(isOpen?' open':'')+'">'+head+body+'</div>';
     }).join('') : '<div class="muted">발송된 알림 로그가 아직 없습니다. (수집 시작 후 표시)</div>';
+    Array.prototype.forEach.call($('pushTbl').querySelectorAll('.mp-head.tog'), function(h){
+      h.onclick = function(){ var card=h.parentNode; var open=card.classList.toggle('open'); openPush[h.getAttribute('data-uid')] = open; };
+    });
 
     $('footnote').innerHTML = '가입·회원·세션·기기는 실데이터입니다. ' +
       (v.source==='visits'?'':'· <b style="color:var(--warn)">방문/재접속은 아직 로그인 세션으로 추정</b> — 방문 로그가 쌓이면 실제 앱 오픈 기준으로 바뀝니다. ') +

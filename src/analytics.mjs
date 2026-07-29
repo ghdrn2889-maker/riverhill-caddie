@@ -372,12 +372,17 @@ export function computeStats(now = Date.now()) {
       relevant: r.relevant, at: r.detectedAt || r.writeDate || 0, aiMessage: r.aiMessage || '' }));
 
   // 발송 알림 — sent-push.jsonl. ★목적: '각 회원에게 맞는 알림이 제대로 갔는지' 점검.
-  //  범위는 어제~오늘 고정. 회원별로 묶어(발송 없는 회원도 노출) 문구까지 그대로 보여준다.
+  //  ★표시 범위 = '최신 배치표 판독 시각 이후'. 새 배치표가 뜨면 그 시각으로 컷오프가 옮겨가
+  //   이전 배치표 관련 알림은 자동으로 화면에서 빠진다(로그 파일은 보존 — 표시만 정리).
+  const latestBoard = buildLatestBoard();
+  const boardCutoff = (latestBoard && latestBoard.at) ? latestBoard.at : (startToday - DAY);
   const nameById = new Map(users.map((u) => [u.id, u.board_name || `#${u.id}`]));
   const partById = new Map(users.map((u) => [u.id, u.part || '']));
   const statusById = new Map(users.map((u) => [u.id, u.status]));
   const yStart = startToday - DAY; // 어제 00:00(KST)
-  const sentPush = readJSONL('sent-push.jsonl', { sinceTs: yStart });
+  const readFloor = Math.min(yStart, boardCutoff);  // 오늘/어제 카운트도 유지하려 더 이른 시점부터 읽음
+  const sentPushAll = readJSONL('sent-push.jsonl', { sinceTs: readFloor });
+  const sentPush = sentPushAll.filter((p) => p.at >= boardCutoff);   // 회원별 목록은 최신 배치표 이후만
   const fmtPush = (p) => ({ at: p.at, title: p.title || '', body: p.body || '', level: p.level || 'normal', sent: p.sent ?? null, devices: p.devices ?? null });
   const byUid = new Map();
   for (const p of sentPush) { if (!byUid.has(p.uid)) byUid.set(p.uid, []); byUid.get(p.uid).push(p); }
@@ -395,14 +400,16 @@ export function computeStats(now = Date.now()) {
   // 발송 있는 회원 먼저(최근 발송 순), 발송 없는 회원은 뒤로
   memberRows.sort((a, b) => (b.items[0]?.at || 0) - (a.items[0]?.at || 0) || a.uid - b.uid);
   const pushes = {
-    range: { from: yStart, to: now },
-    sentToday: sentPush.filter((p) => p.at >= startToday).length,
-    sentYesterday: sentPush.filter((p) => p.at >= yStart && p.at < startToday).length,
-    total: sentPush.length,
+    range: { from: boardCutoff, to: now },
+    boardAt: (latestBoard && latestBoard.at) || null,
+    boardLabel: (latestBoard && latestBoard.dateLabel) || '',
+    boardSubject: (latestBoard && latestBoard.subject) || '',
+    sinceBoard: sentPush.length,                                    // 최신 배치표 이후 발송 건수
+    sentToday: sentPushAll.filter((p) => p.at >= startToday).length,
+    sentYesterday: sentPushAll.filter((p) => p.at >= yStart && p.at < startToday).length,
+    total: sentPushAll.length,
     byMember: memberRows,
   };
-
-  const latestBoard = buildLatestBoard();
 
   return { generatedAt: now, members, signups, sessions: sessInfo, visits, presence, recentLogins, board, devices, health, feed, pushes, latestBoard };
 }
