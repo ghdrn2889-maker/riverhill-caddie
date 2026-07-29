@@ -5,7 +5,7 @@
 import express from 'express';
 import path from 'node:path';
 import { loadEnv, ROOT_DIR } from './env.mjs';
-import { computeStats } from './analytics.mjs';
+import { computeStats, computeBoardParts } from './analytics.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -26,6 +26,11 @@ app.get('/healthz', (req, res) => res.json({ ok: true }));
 app.get('/api/stats', gate, (req, res) => {
   try { res.json({ ok: true, ...computeStats() }); }
   catch (e) { console.error('stats 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+// 판독검증 1·2·3부 탭 데이터 — 모니터가 직접 부별 판독(board별 1회 캐시). 앱 무관·읽기 전용.
+app.get('/api/board-parts', gate, async (req, res) => {
+  try { res.json({ ok: true, board: await computeBoardParts() }); }
+  catch (e) { console.error('board-parts 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));
 

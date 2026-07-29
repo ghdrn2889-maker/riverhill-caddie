@@ -135,6 +135,14 @@
   .bd-comments{ margin-top:13px; font-size:11px; }
   .bd-comments b{ color:var(--tx3); font-size:10.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
   .bd-comments .c{ padding:6px 10px; background:var(--panel2); border-left:2px solid var(--info); border-radius:0 6px 6px 0; margin-top:5px; color:var(--tx2); white-space:pre-wrap; }
+  .btabs{ display:flex; gap:6px; margin:12px 0 6px; flex-wrap:wrap; }
+  .btab{ font:inherit; font-size:12.5px; font-weight:800; padding:7px 14px; border-radius:10px; background:var(--panel2); border:1px solid var(--bord2); color:var(--tx2); cursor:pointer; display:flex; align-items:center; gap:8px; transition:.15s; }
+  .btab:hover{ border-color:var(--acc); color:var(--tx); }
+  .btab.on{ background:color-mix(in srgb,var(--acc) 13%,transparent); border-color:var(--acc); color:var(--acc); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 30%,transparent); }
+  .btab .btab-c{ font-size:10px; font-weight:700; color:var(--tx3); font-variant-numeric:tabular-nums; }
+  .btab.on .btab-c{ color:color-mix(in srgb,var(--acc) 75%,var(--tx2)); }
+  .brow .xdt{ font-size:9.5px; font-weight:800; color:var(--info); background:color-mix(in srgb,var(--info) 12%,transparent); border:1px solid color-mix(in srgb,var(--info) 32%,transparent); border-radius:5px; padding:0 5px; white-space:nowrap; }
+  .brow.work .xdt{ color:var(--info); }
 </style>
 </head>
 <body>
@@ -233,50 +241,81 @@
   }
   function statusTag(st){ var m={active:['g','활성'],pending:['w','대기'],disabled:['b','차단']}; var x=m[st]||['','?']; return '<span class="tag '+x[0]+'">'+x[1]+'</span>'; }
 
+  var PART_LABEL = { '1':'1부(조출)', '2':'2부', '3':'3부' };
+  var boardTab = null;   // 선택된 부 탭
   function renderBoard(lb){
     var el = $('latestBoard'); if(!el) return;
-    if(!lb){ el.innerHTML = '<div class="muted">아직 판독된 배치표가 없습니다. 배치표 글이 올라오면 자동으로 표시됩니다.</div>'; return; }
-    var rows = lb.rows||[];
+    if(!lb || !lb.availableParts || !lb.availableParts.length){
+      el.innerHTML = '<div class="muted">아직 판독된 배치표가 없습니다. 배치표 글이 올라오면 자동으로 표시됩니다.</div>'; return; }
+    var aps = lb.availableParts;
+    if(boardTab==null || aps.indexOf(boardTab)<0) boardTab = aps[aps.length-1];   // 기본: 마지막(대개 3부)
+    var p = boardTab, pd = lb.parts[p] || {};
+    var rows = pd.rows||[];
+    // 탭 (있는 부만)
+    var tabs = aps.map(function(x){ var d=lb.parts[x]||{};
+      return '<button class="btab'+(x===p?' on':'')+'" data-part="'+x+'">'+esc(PART_LABEL[x]||x+'부')+
+        ' <span class="btab-c">'+n(d.total||0)+'명 · 근무 '+n(d.workCount||0)+'</span></button>'; }).join('');
+    // 순번별 행
     var grid = rows.map(function(r){
       var right = r.work
         ? '<span class="bs">'+(r.tee? (esc(r.tee)+(r.course?(' '+esc(r.course)):'')) : '근무')+'</span>'
         : '<span class="bs sp">스페어'+(r.spareRank!=null?(' '+r.spareRank+'번'):'')+'</span>';
+      var xdt = r.crossDuty? '<span class="xdt" title="교차확인: 여러 부 근무">🔁'+esc(r.crossDuty)+'</span>' : '';
       return '<div class="brow'+(r.work?' work':'')+(r.isCut?' cut':'')+'">'+
-        '<span class="bp num">'+r.pos+'</span><span class="bn">'+esc(r.name)+'</span>'+right+
+        '<span class="bp num">'+r.pos+'</span><span class="bn">'+esc(r.name)+'</span>'+xdt+right+
         (r.isCut?'<span class="bs" style="color:var(--acc)">◀컷</span>':'')+'</div>';
     }).join('');
-    var swaps = (lb.swaps||[]).map(function(x){ return '<span class="chip swap">🔄 '+esc(x)+'</span>'; }).join('');
+    var swaps = (pd.swaps||[]).map(function(x){ return '<span class="chip swap">🔄 '+esc(x)+'</span>'; }).join('');
     var mdl = esc(String(lb.model||'').replace('gemini-','').replace('-latest',''));
-    var interns = (lb.internTees||[]).map(function(t){ return esc(t.time)+(t.course?(' '+esc(t.course)):''); }).join(', ');
+    var interns = (pd.internTees||[]).map(function(t){ return esc(t.time)+(t.course?(' '+esc(t.course)):''); }).join(', ');
     var badges =
-      '<span class="chip acc">정규 근무 '+n(lb.workCount)+'</span>'+
-      '<span class="chip">스페어 '+n(lb.spareCount)+'</span>'+
-      (lb.internCount? '<span class="chip" style="color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent)" title="'+esc(interns)+'">🟡 인턴 '+lb.internCount+'팀</span>':'')+
-      (lb.cutoffName? '<span class="chip">컷 '+esc(lb.cutoffName)+(lb.cutoffPosition?('('+lb.cutoffPosition+'번)'):'')+'</span>':'')+
-      (lb.teamCount? '<span class="chip" title="제목 표기 팀수(인턴 포함 여부는 배치표마다 다름)">제목 '+lb.teamCount+'팀</span>':'')+
+      '<span class="chip acc">'+esc(PART_LABEL[p]||p+'부')+' 근무 '+n(pd.workCount||0)+'</span>'+
+      '<span class="chip">스페어 '+n(pd.spareCount||0)+'</span>'+
+      (pd.teamCount? '<span class="chip" title="이 부 예약 팀 수(=근무 순번 상한)">근무선 '+pd.teamCount+'팀</span>':'')+
+      (pd.internCount? '<span class="chip" style="color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:color-mix(in srgb,var(--warn) 12%,transparent)" title="'+esc(interns)+'">🟡 인턴 '+pd.internCount+'팀</span>':'')+
+      (pd.cutoffName? '<span class="chip">컷 '+esc(pd.cutoffName)+(pd.cutoffPosition?('('+pd.cutoffPosition+'번)'):'')+'</span>':'')+
       '<span class="chip">🤖 '+mdl+'</span>'+ swaps;
     var img = lb.image
       ? '<a href="'+esc(lb.url||lb.image)+'" target="_blank" rel="noopener"><img src="'+esc(lb.image)+'" alt="배치표 원본"/></a>'
       : '<div class="noimg">원본 이미지 없음</div>';
-    var internNote = lb.internCount
-      ? '<div class="bd-comments"><b>🟡 인턴 캐디 '+lb.internCount+'팀</b><div class="c" style="border-left-color:var(--warn)">티오프 매칭표의 노란칸('+esc(interns)+')은 그날 섭외된 인턴 캐디입니다. 정규 순번이 아니라 정규 캐디 스페어 계산엔 영향이 없습니다. → 정규 근무 '+n(lb.workCount)+'팀 + 인턴 '+lb.internCount+'팀 = 총 '+(lb.workCount+lb.internCount)+'팀 티오프 매칭.</div></div>'
+    var twoNote = (lb.twoRounds&&lb.twoRounds.length)
+      ? '<div class="bd-comments"><b>🔁 두 탕 · 여러 부 근무 (교차확인)</b><div class="c">'+lb.twoRounds.map(function(t){ return esc(t.name)+' <b style="color:var(--info)">'+esc(t.duty)+'</b>'; }).join(' · ')+'</div></div>'
+      : '';
+    var internNote = pd.internCount
+      ? '<div class="bd-comments"><b>🟡 인턴 캐디 '+pd.internCount+'팀</b><div class="c" style="border-left-color:var(--warn)">티오프 매칭표의 노란칸('+esc(interns)+')은 그날 섭외된 인턴 캐디입니다. 정규 순번이 아니라 정규 캐디 스페어 계산엔 영향이 없습니다. → 정규 근무 '+n(pd.workCount||0)+'팀 + 인턴 '+pd.internCount+'팀 = 총 '+((pd.workCount||0)+pd.internCount)+'팀 티오프 매칭.</div></div>'
       : '';
     var cmts = (lb.comments||[]).length
       ? '<div class="bd-comments"><b>원문 댓글 (대바 반영 확인용)</b>'+lb.comments.map(function(c){ return '<div class="c">'+esc(c)+'</div>'; }).join('')+'</div>'
       : '';
-    var unc = lb.uncertain? '<div class="err" style="margin:8px 0 2px">⚠️ '+esc(lb.uncertain)+'</div>' : '';
+    var unc = pd.uncertain? '<div class="err" style="margin:8px 0 2px">⚠️ '+esc(pd.uncertain)+'</div>' : '';
     el.innerHTML =
       '<div class="bd-top"><span class="bd-subj">'+esc(lb.subject||'(제목 없음)')+'</span>'+
         '<span class="bd-meta">'+(lb.dateLabel?esc(lb.dateLabel)+' · ':'')+(lb.writer?esc(lb.writer)+' · ':'')+'판독 '+clock(lb.at)+'</span></div>'+
+      '<div class="btabs">'+tabs+'</div>'+
       '<div class="bd-badges">'+badges+'</div>'+ unc +
       '<div class="bd-cols"><div class="bd-imgbox">'+img+'</div>'+
-      '<div><div class="roster">'+grid+'</div>'+internNote+cmts+'</div></div>';
+      '<div><div class="roster">'+grid+'</div>'+internNote+twoNote+cmts+'</div></div>';
+    Array.prototype.forEach.call(el.querySelectorAll('.btab'), function(b){
+      b.onclick = function(){ boardTab = b.getAttribute('data-part'); renderBoard(lb); }; });
     if($('boardDesc')) $('boardDesc').textContent =
-      '원문과 나란히 대조 — 순번·근무/스페어·티오프·대바 · '+(lb.reliable?'명단 신뢰 판독':'부분 판독')+' · 총 '+n(lb.total||0)+'명';
+      '부별 탭으로 각 배치를 원문과 대조 — 순번·근무/스페어·티오프·인턴·두 탕 · '+(pd.reliable?'명단 신뢰 판독':'부분 판독')+' · '+esc(PART_LABEL[p]||p+'부')+' 총 '+n(pd.total||0)+'명';
   }
 
+  var boardPartsData = null, boardPartsLoading = false;
+  async function loadBoardParts(){
+    if (boardPartsLoading) return; boardPartsLoading = true;
+    try {
+      var k = new URLSearchParams(location.search).get('k') || '';
+      var r = await fetch('/api/board-parts' + (k?('?k='+encodeURIComponent(k)):''), { cache:'no-store' });
+      var j = await r.json();
+      if (j.ok && j.board) { boardPartsData = j.board; renderBoard(boardPartsData); }
+    } catch(e){ /* 실패 시 3부 폴백 유지 */ } finally { boardPartsLoading = false; }
+  }
   function render(s){
-    renderBoard(s.latestBoard);
+    // 판독검증: 즉시 3부(빠른 sync) 표시 → /api/board-parts로 1·2·3부 전체 탭 채움(모니터 온디맨드 판독).
+    var lb = s.latestBoard;
+    if (boardPartsData && lb && boardPartsData.articleId === lb.articleId) renderBoard(boardPartsData);
+    else { renderBoard(lb); if (lb && lb.articleId) loadBoardParts(); }
     // 상태 점
     var h = s.health||{}; var failed = (h.failStreak||0)>0; var stale = h.lastOkAt && (Date.now()-h.lastOkAt > 20*60000);
     var dot = $('statusDot'); dot.className = 'dot' + (failed?' bad':(stale?' warn':''));

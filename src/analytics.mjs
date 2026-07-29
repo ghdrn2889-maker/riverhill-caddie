@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, appendJSONL, loadJSON, loadUserJSON } from './store.mjs';
 import { all, get, run } from './db.mjs';
+import { analyzeRoster, analyzeInterns, analyzePartTeams } from './gemini.mjs';
 
 // ── 기록(본 앱에서 호출) ────────────────────────────────
 const VISIT_THROTTLE_MS = 10 * 60 * 1000; // 같은 회원 10분 내 재방문은 1건으로
@@ -76,60 +77,155 @@ function seriesByDay(items, days, tsFn = (x) => x.at) {
 // ── 시스템이 판독한 '최신 배치표' — 매일 실제 배치표와 대조 검증용 ─────────
 //  lastboard.json(원문+판독결과) + 1번 회원 today.json(명단/컷/티오프) 을 합쳐 순번별로 재구성.
 //  원문 이미지 링크를 함께 줘서, 관리자가 실제 배치표와 나란히 눈으로 대조할 수 있게 한다.
-function buildLatestBoard() {
-  const lb = loadJSON('lastboard.json', null);
-  const t1 = loadUserJSON(1, 'today.json', null) || {};
-  const v = (lb && lb.rawVerdict) ? lb.rawVerdict : {};
-  const roster = (Array.isArray(v.part3Roster) && v.part3Roster.length) ? v.part3Roster
-    : (Array.isArray(t1.roster3) ? t1.roster3 : []);
+// 이름 정규화(듀티태그·교환 제거) — 교차확인 맵(byName) 조회용. "정유경(54)"→"정유경".
+function baseName(cell) { return String(cell || '').replace(/\s*\([^)]*\).*$/, '').replace(/\s/g, ''); }
+
+// 한 부(部)의 판독 essentials → 순번별 행 + 요약. crossByName로 두 탕 표시.
+function buildPartView(pv, crossByName) {
+  const roster = Array.isArray(pv.roster) ? pv.roster : [];
   if (!roster.length) return null;
-  const cutoffPos = Number(v.cutoffPosition) > 0 ? Number(v.cutoffPosition)
-    : (Number(t1.cutoffPosition) > 0 ? Number(t1.cutoffPosition) : 0);
-  const teamCount = Number(v.teamCount) > 0 ? Number(v.teamCount) : null;
-  const teeGrid = (Array.isArray(v.teeGrid) && v.teeGrid.length) ? v.teeGrid
-    : (Array.isArray(t1.teeGrid) ? t1.teeGrid : []);
+  const teeGrid = Array.isArray(pv.teeGrid) ? pv.teeGrid : [];
   const teeByPos = new Map(teeGrid.map((g) => [Number(g.pos), g]));
+  const cutoffPos = Number(pv.cutoffPosition) > 0 ? Number(pv.cutoffPosition) : 0;
+  const teamCount = Number(pv.teamCount) > 0 ? Number(pv.teamCount) : null;
   const workLimit = cutoffPos || teamCount || 0;   // 근무 확정선(없으면 티오프표 유무로)
   const rows = roster.map((cell, i) => {
     const pos = i + 1;
     const g = teeByPos.get(pos);
     const work = workLimit > 0 ? pos <= workLimit : !!g;
+    const ce = crossByName && crossByName[baseName(cell)];
     return {
-      pos, name: String(cell || ''),
-      work,
+      pos, name: String(cell || ''), work,
       spareRank: (!work && workLimit > 0) ? (pos - workLimit) : null,
       tee: g ? (String(g.time || '').match(/\d{1,2}:\d{2}/) || [''])[0] : '',
       course: g ? String(g.course || '') : '',
       isCut: workLimit > 0 && pos === workLimit,
+      crossDuty: (ce && Array.isArray(ce.parts) && ce.parts.length >= 2) ? ce.duty : '', // 두 탕/54 표시
     };
   });
-  const art = (lb && lb.article) || {};
   return {
-    at: (lb && lb.at) || null,
-    articleId: (lb && lb.id) || v.articleId || '',
-    subject: art.subject || '',
-    writer: art.writer || '',
-    writeDate: art.writeDate || null,
-    dateLabel: v.dateLabel || (lb && lb.dateLabel) || '',
-    image: (Array.isArray(art.images) && art.images[0]) || '',
-    url: art.url || '',
-    model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
-    cutoffName: v.cutoffName || t1.cutoffName || '',
-    cutoffPosition: cutoffPos || null,
-    teamCount,
-    internCount: Number(v.internCount) > 0 ? Number(v.internCount) : (Number(t1.internCount) > 0 ? Number(t1.internCount) : 0),
-    internTees: (Array.isArray(v.internTees) && v.internTees.length) ? v.internTees
-      : (Array.isArray(t1.internTees) ? t1.internTees : []),
-    swaps: Array.isArray(v._swaps) ? v._swaps : [],
-    uncertain: v._uncertain || '',
-    reliable: !!v.rosterReliable,
-    comments: (Array.isArray(art.comments) ? art.comments : [])
-      .map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+    teamCount, cutoffName: pv.cutoffName || '', cutoffPosition: cutoffPos || null,
+    internCount: Number(pv.internCount) > 0 ? Number(pv.internCount) : 0,
+    internTees: Array.isArray(pv.internTees) ? pv.internTees : [],
+    swaps: Array.isArray(pv.swaps) ? pv.swaps : [],
+    reliable: !!pv.reliable, uncertain: pv.uncertain || '',
     workCount: rows.filter((r) => r.work).length,
     spareCount: rows.filter((r) => !r.work).length,
-    total: rows.length,
-    rows,
+    total: rows.length, rows,
   };
+}
+
+function buildLatestBoard() {
+  const lbp = loadJSON('lastboard-parts.json', null);   // 부별 판독(server가 배치표 처리 시 저장)
+  const lb = loadJSON('lastboard.json', null);          // 3부 메인(하위호환 폴백)
+  const crossByName = (lbp && lbp.crossPart && lbp.crossPart.byName) || {};
+  // 부별 데이터 소스: 신형(lastboard-parts) 우선, 없으면 구형(lastboard 3부 + user1 today).
+  let partsSrc = (lbp && lbp.parts) || null;
+  if (!partsSrc) {
+    const v = (lb && lb.rawVerdict) ? lb.rawVerdict : {};
+    const t1 = loadUserJSON(1, 'today.json', null) || {};
+    partsSrc = { 3: {
+      roster: (Array.isArray(v.part3Roster) && v.part3Roster.length) ? v.part3Roster : (Array.isArray(t1.roster3) ? t1.roster3 : []),
+      teamCount: v.teamCount, teeGrid: (Array.isArray(v.teeGrid) && v.teeGrid.length) ? v.teeGrid : t1.teeGrid,
+      cutoffName: v.cutoffName || t1.cutoffName, cutoffPosition: v.cutoffPosition || t1.cutoffPosition,
+      internCount: v.internCount || t1.internCount, internTees: (v.internTees && v.internTees.length) ? v.internTees : t1.internTees,
+      swaps: v._swaps, reliable: v.rosterReliable, uncertain: v._uncertain,
+    } };
+  }
+  const parts = {};
+  const availableParts = [];
+  for (const p of ['1', '2', '3']) {
+    const view = buildPartView(partsSrc[p] || partsSrc[Number(p)], crossByName);
+    if (view) { parts[p] = view; availableParts.push(p); }
+  }
+  if (!availableParts.length) return null;
+  const art = (lbp && lbp.article) || (lb && lb.article) || {};
+  const twoRounds = (lbp && lbp.crossPart && Array.isArray(lbp.crossPart.twoRounds))
+    ? lbp.crossPart.twoRounds.map((nm) => ({ name: nm, duty: crossByName[nm]?.duty || '', pos: crossByName[nm]?.pos || {} }))
+    : [];
+  return {
+    at: (lbp && lbp.at) || (lb && lb.at) || null,
+    articleId: (lbp && lbp.articleId) || (lb && lb.id) || '',
+    subject: (lbp && lbp.subject) || art.subject || '',
+    writer: (lbp && lbp.writer) || art.writer || '',
+    writeDate: art.writeDate || null,
+    dateLabel: (lbp && lbp.dateLabel) || (lb && lb.rawVerdict && lb.rawVerdict.dateLabel) || (lb && lb.dateLabel) || '',
+    image: (lbp && lbp.image) || (Array.isArray(art.images) && art.images[0]) || '',
+    url: (lbp && lbp.url) || art.url || '',
+    model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
+    comments: (Array.isArray(art.comments) ? art.comments : [])
+      .map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+    availableParts, twoRounds, parts,
+  };
+}
+
+// 부(部) 집합 → 근무표시. {1,2,3}→"54", {1,3}→"1,3", {2}→"2부".
+function partsToDuty(set) {
+  const a = [...set].sort();
+  if (a.length >= 3) return '54';
+  if (a.length === 2) return a.join(',');
+  if (a.length === 1) return `${a[0]}부`;
+  return '';
+}
+
+// ★모니터 전용 — 앱을 건드리지 않고 모니터가 '직접' 1·2·3부 부별 판독(온디맨드, board별 1회 캐시).
+//  3부는 앱이 저장한 lastboard.json(rawVerdict)을 재사용(추가 판독 0), 1·2부만 새로 판독.
+//  각 부 근무자(순번≤팀수)를 교차해 두 탕(🔁)도 산출. 관리자만 보는 판독검증 탭의 데이터.
+let _boardPartsCache = { id: null, data: null };
+export async function computeBoardParts() {
+  const lb = loadJSON('lastboard.json', null);
+  if (!lb || !lb.article) return null;
+  const id = String(lb.id || '');
+  if (_boardPartsCache.id === id) return _boardPartsCache.data;   // board별 1회만 판독(캐시)
+  try {
+    const article = lb.article;
+    const v3 = lb.rawVerdict || {};
+    const teams = await analyzePartTeams(article);                 // 상단 헤더 "N부 M" 팀수
+    const partsSrc = {};
+    for (const p of ['1', '2', '3']) {
+      const tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || 0) : 0);
+      let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, swaps = [], reliable = false, uncertain = '';
+      if (p === '3') {                                             // 3부는 앱 저장분 재사용(추가 판독 없음)
+        roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : await analyzeRoster(article, '3');
+        teeGrid = Array.isArray(v3.teeGrid) ? v3.teeGrid : [];
+        internCount = Number(v3.internCount) || 0; internTees = Array.isArray(v3.internTees) ? v3.internTees : [];
+        cutoffName = v3.cutoffName || ''; cutoffPosition = Number(v3.cutoffPosition) || null;
+        swaps = Array.isArray(v3._swaps) ? v3._swaps : []; reliable = !!v3.rosterReliable; uncertain = v3._uncertain || '';
+      } else {                                                    // 1·2부는 모니터가 직접 판독
+        if (!tc) continue;                                        // 그 부 없음(헤더 팀수 0)
+        roster = (await analyzeRoster(article, p)).map((r) => r.name);
+        const it = await analyzeInterns(article, p); internCount = it?.internCount || 0; internTees = it?.internTees || [];
+        reliable = roster.length > 0;
+      }
+      if (!roster.length) continue;
+      partsSrc[p] = { roster, teamCount: tc || null, teeGrid, internCount, internTees, cutoffName, cutoffPosition, swaps, reliable, uncertain };
+    }
+    // 교차확인(두 탕): 각 부 근무자(순번≤팀수) 이름을 교차. baseName으로 듀티태그 제거.
+    const acc = {};
+    for (const p of ['1', '2', '3']) {
+      const ps = partsSrc[p]; if (!ps) continue; const tc = ps.teamCount || 0;
+      ps.roster.forEach((cell, i) => {
+        if (tc > 0 && i + 1 <= tc) { const nm = baseName(cell); if (nm) { (acc[nm] ||= { parts: new Set(), pos: {} }); acc[nm].parts.add(p); if (acc[nm].pos[p] == null) acc[nm].pos[p] = i + 1; } }
+      });
+    }
+    const crossByName = {};
+    for (const nm in acc) crossByName[nm] = { parts: [...acc[nm].parts].sort(), duty: partsToDuty(acc[nm].parts), pos: acc[nm].pos };
+    const twoRounds = Object.keys(crossByName).filter((nm) => crossByName[nm].parts.length >= 2);
+    const parts = {}; const availableParts = [];
+    for (const p of ['1', '2', '3']) { const view = buildPartView(partsSrc[p], crossByName); if (view) { parts[p] = view; availableParts.push(p); } }
+    if (!availableParts.length) { _boardPartsCache = { id, data: null }; return null; }
+    const art = article;
+    const data = {
+      at: lb.at || null, articleId: id, subject: art.subject || '', writer: art.writer || '',
+      writeDate: art.writeDate || null, dateLabel: v3.dateLabel || lb.dateLabel || '',
+      image: (Array.isArray(art.images) && art.images[0]) || '', url: art.url || '',
+      model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
+      comments: (Array.isArray(art.comments) ? art.comments : []).map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+      availableParts, twoRounds: twoRounds.map((nm) => ({ name: nm, duty: crossByName[nm].duty, pos: crossByName[nm].pos })), parts,
+    };
+    _boardPartsCache = { id, data };
+    return data;
+  } catch (e) { console.error('computeBoardParts 오류:', e.message); return _boardPartsCache.data || null; }
 }
 
 // ── 집계(모니터 사이트에서 호출) ─────────────────────────
