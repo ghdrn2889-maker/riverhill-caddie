@@ -1076,6 +1076,13 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
     if (log[sig] != null) { saveUserJSON(userId, pf, log); return { pushed: false }; }
     log[sig] = now; saveUserJSON(userId, pf, log);
   }
+  // ★1·2부 알림 섀도 게이트(기본 OFF=발송 안 함). 상태·저널·로그는 위에서 이미 반영됨.
+  //  이유: 2부 명단/팀수 판독이 아직 불안정(엉뚱한 섹션·팀수 오독)해 2부 안 하는 3부 캐디에게 오발송 발생.
+  //  판독 신뢰도 확보 후 MINOR_PART_PUSH=1 로 재개. (3부 메인 경로는 이 함수와 무관, 정상 발송.)
+  if (!['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase())) {
+    console.log(`🔕 [회원${userId}·${label}] 섀도(발송억제) — ${title} | ${String(body).replace(/\n/g, ' ').slice(0, 60)}`);
+    return { pushed: false, shadow: true };
+  }
   await broadcast({ title, body, url: full.url, level: push }, userId);
   console.log(`🔔 [회원${userId}·${label}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true };
@@ -1181,6 +1188,8 @@ function rearmTimelineReminders(userId) {
 async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMin, todayISO) {
   if (!t || !t.teeTime) return false;
   if (!['assigned', 'work', 'your_turn'].includes(t.status)) return false;
+  // ★1·2부(prefix 있음) 리마인더도 섀도 게이트 — 2부 판독 불안정으로 잘못된 티오프 출발알림 방지.
+  if (prefix && !['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase())) return false;
   const tISO = worklog.labelToISO(t.date);
   if (tISO && tISO !== todayISO) return false;           // 오늘 근무만(내일 배치표는 제외)
   const c = commuteInfo(t.teeTime, mem.commute_min);
