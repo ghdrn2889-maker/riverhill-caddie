@@ -64,18 +64,48 @@ export function recordWorkDay(dateISO, info = {}, userId = 1) {
   if (!dateISO) return null;
   const d = load(userId);
   const cur = d.days[dateISO] || { date: dateISO, worked: null, source: 'auto', detectedAt: Date.now() };
+  // ★'순번 제외'(off:removed)로 표시된 날은 실제 티오프가 있는 '진짜 근무'(배치표 재등재)일 때만 되살린다.
+  //  티오프 없는 신호(카톡·유령 근무표시)로는 제외 상태를 뒤집지 않는다.
+  if (cur.excluded && !(info.teeTime || info.course)) return cur;
+  const wasExcluded = !!cur.excluded;
   const part = String(info.part || '3');
   const rounds = { ...(cur.rounds || {}) };
   if (info.teeTime || info.course) rounds[part] = { part, teeTime: info.teeTime || '', course: info.course || '', articleId: info.articleId || '' };
   const primary = rounds['3'] || rounds['2'] || rounds['1'] || null; // 대표(주된 라운드) = 3부 우선
   d.days[dateISO] = {
     ...cur, date: dateISO,
+    excluded: false,                              // 재등재 → 제외 해제
+    worked: wasExcluded ? null : cur.worked,      // 다시 '확인 대기'로
     teeTime: primary?.teeTime || info.teeTime || cur.teeTime || '',
     course: primary?.course || info.course || cur.course || '',
     articleId: info.articleId || cur.articleId || '',
     rounds,
     twoRounds: Object.keys(rounds).length >= 2, // 하루 2라운드 이상(두 탕·세 탕) 여부
     trips: tripsFromRounds(rounds),             // 자동 산출 왕복 횟수(수정 전 기본값)
+  };
+  save(userId, d);
+  return d.days[dateISO];
+}
+
+// ★순번 제외(off:removed): 배치표 순번에 있던 회원이 최신 배치표에서 빠짐 → 그날 근무 없음.
+//  근무로 잘못 자동기록된 걸 '근무/두탕'이 아니라 '순번 제외'로 명시(세무 근무일·주행거리에서 빼고,
+//  '근무하셨나요?' 도 안 물음). 배치표에 이름이 다시 오르면 recordWorkDay가 제외를 해제한다.
+//  ★사용자가 손댄 날(수동확인·수동추가·사진·계기판)은 정정하지 않는다.
+export function markExcludedDay(dateISO, userId = 1, info = {}) {
+  if (!dateISO) return null;
+  const d = load(userId);
+  const cur = d.days[dateISO] || null;
+  if (cur) {
+    const userTouched = cur.confirmedAt || cur.worked === true || cur.source === 'manual'
+      || (cur.photos && Object.keys(cur.photos).length) || (cur.odo && Object.keys(cur.odo).length);
+    if (userTouched) return cur; // 사용자 데이터 보존
+  }
+  d.days[dateISO] = {
+    date: dateISO, source: 'auto', detectedAt: (cur && cur.detectedAt) || Date.now(),
+    worked: false, excluded: true,
+    prevPosition: info.prevPosition ?? (cur && cur.prevPosition) ?? null,
+    articleId: info.articleId || (cur && cur.articleId) || '',
+    teeTime: '', course: '', rounds: {}, twoRounds: false, trips: 0,
   };
   save(userId, d);
   return d.days[dateISO];
@@ -89,9 +119,9 @@ export function unrecordWorkDay(dateISO, part = null, userId = 1) {
   const d = load(userId);
   const cur = d.days[dateISO];
   if (!cur) return null;
-  const touched = cur.source !== 'auto' || cur.worked === true || cur.confirmedAt
+  const touched = cur.source !== 'auto' || cur.worked === true || cur.confirmedAt || cur.excluded
     || (cur.photos && Object.keys(cur.photos).length) || (cur.odo && Object.keys(cur.odo).length);
-  if (touched) return cur; // 사용자 데이터 보존
+  if (touched) return cur; // 사용자 데이터·순번 제외 표시 보존
   if (part && cur.rounds && Object.keys(cur.rounds).length) {
     const rounds = { ...cur.rounds };
     delete rounds[String(part)];
@@ -130,6 +160,8 @@ export function confirmWorkDay(dateISO, worked, userId = 1) {
   const cur = d.days[dateISO] || { date: dateISO, source: 'manual', detectedAt: Date.now(), teeTime: '', course: '' };
   cur.worked = worked === null ? null : !!worked;
   cur.confirmedAt = Date.now();
+  // ★순번 제외로 자동 표기된 날을 사용자가 직접 정정 → 제외 해제하고 수동 확정으로 승격(이후 자동 덮어쓰기 방지).
+  if (cur.excluded) { cur.excluded = false; cur.source = 'manual'; }
   d.days[dateISO] = cur;
   save(userId, d);
   return cur;

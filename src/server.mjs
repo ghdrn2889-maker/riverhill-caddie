@@ -933,6 +933,9 @@ async function processForMember(userId, member, out, full, opts = {}) {
     const iso = worklog.labelToISO(merged.next.date) || new Date().toISOString().slice(0, 10);
     if (['assigned', 'work', 'your_turn'].includes(merged.next.status))
       worklog.recordWorkDay(iso, { teeTime: merged.next.teeTime || '', course: merged.next.course || '', articleId: full.id }, userId);
+    // ★순번 제외(off:removed): 배치표 순번에 있다 최신 배치표에서 빠짐 → 근무일지에 '순번 제외'로 명시.
+    else if (merged.next.status === 'off' && merged.next.offReason === 'removed')
+      worklog.markExcludedDay(iso, userId, { prevPosition: merged.next.prevPosition, articleId: full.id });
     // ★근무→스페어/취소/오프 번복: 자동 기록된 세무 근무일을 되돌린다(스페어로 끝난 날 '근무했냐' 알림 방지).
     else if (['spare', 'waiting', 'near', 'off', 'cancelled', 'canceled'].includes(merged.next.status))
       worklog.unrecordWorkDay(iso, '3', userId);
@@ -1062,6 +1065,8 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   if (jIso && !v._uncertain) {
     journal.recordDayStatus(jIso, { status: n.status, teeTime: n.teeTime, course: n.course, myPosition: n.myPosition, cutoffName: n.cutoffName, part }, userId);
     if (isWork) worklog.recordWorkDay(jIso, { teeTime: n.teeTime || '', course: n.course || '', articleId: full.id, part }, userId);
+    // ★순번 제외(off:removed): 그날 근무 없음 → 근무일지에 '순번 제외'로 명시.
+    else if (n.status === 'off' && n.offReason === 'removed') worklog.markExcludedDay(jIso, userId, { prevPosition: n.prevPosition, articleId: full.id });
     // ★이 부가 근무→스페어/취소로 번복되면 그 부 자동 기록만 되돌림(다른 부 근무는 유지).
     else if (['spare', 'waiting', 'near', 'off', 'cancelled', 'canceled'].includes(n.status)) worklog.unrecordWorkDay(jIso, part, userId);
   }

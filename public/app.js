@@ -1147,7 +1147,10 @@ function wlCard(d, roundKm) {
   const attn = wlIsAsk(d) || wlIsBlank(d);
   const nPhoto = d.photos ? Object.keys(d.photos).length : 0;
   let right, meta;
-  if (d.worked == null) {
+  if (d.excluded) {
+    right = `<div class="wl-right"><span class="wl-chip x">순번 제외</span><button class="wl-change" data-d="${d.date}">변경</button></div>`;
+    meta = `<span>배치표 순번에서 빠져 근무 없음</span>`;
+  } else if (d.worked == null) {
     right = `<div class="wl-right"><button class="wl-btn wl-yes" data-w="1" data-d="${d.date}">예</button><button class="wl-btn wl-no" data-w="0" data-d="${d.date}">아니오</button></div>`;
     meta = `<span>근무 확정 감지 · 근무하셨나요?</span>`;
   } else if (d.worked === false) {
@@ -1158,12 +1161,14 @@ function wlCard(d, roundKm) {
     const odo = d.odo && Object.keys(d.odo).length ? `<span>· 계기판 입력됨</span>` : '';
     meta = `${ph}${odo}`;
   }
-  const teeLegs = (d.twoRounds && d.rounds) ? ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].teeTime) : [];
+  const teeLegs = (!d.excluded && d.twoRounds && d.rounds) ? ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].teeTime) : [];
   const tripBadge = (d.tripsManual ?? d.trips ?? 1) >= 2 ? ' · 왕복 2회' : '';
-  const tee = teeLegs.length
-    ? `🔁 ${teeLegs.length >= 3 ? '세 탕' : '두 탕'} ` + teeLegs.map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ') + tripBadge
-    : d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
-  const expandable = d.worked !== false;
+  const tee = d.excluded
+    ? (d.prevPosition ? `순번 ${d.prevPosition}번 → 배치표에서 제외` : '순번 제외 · 근무 없음')
+    : teeLegs.length
+      ? `🔁 ${teeLegs.length >= 3 ? '세 탕' : '두 탕'} ` + teeLegs.map((p) => `${p}부 ${d.rounds[p].teeTime}`).join(' · ') + tripBadge
+      : d.teeTime ? `${d.teeTime}${d.course ? ' ' + d.course : ''}` : (d.worked === false ? '—' : (d.source === 'manual' ? '수동 입력' : ''));
+  const expandable = d.worked !== false && !d.excluded;
   let panel = '';
   if (expandable) {
     const odo = d.odo || {};
