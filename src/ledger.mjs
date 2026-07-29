@@ -37,6 +37,20 @@ function partsForDay(day, d) {
 function feeOf(part) { return FEES[part] || 0; }
 function dayRevenue(parts) { return parts.reduce((sum, p) => sum + feeOf(p), 0); } // 부 조합 자동 합산(1·3부=29만 등)
 
+// 한 날짜의 '유효 부 조합' — 수동보정(dayParts) → 근무일지 rounds → 근거 없으면 null.
+//  일지 표시와 정산 수익이 같은 값을 쓰도록 하는 단일 소스(partsForDay와 동일 우선순위).
+export function effPartsFor(dateISO, userId = 1) {
+  const d = load(userId);
+  const ov = d.dayParts[dateISO];
+  if (Array.isArray(ov) && ov.length) return ov.slice().sort();
+  const wday = worklog.getDay(dateISO, userId);
+  const r = wday && wday.rounds && Object.keys(wday.rounds).filter((p) => ['1', '2', '3'].includes(p));
+  if (r && r.length) return r.slice().sort();
+  return null;
+}
+// 수동보정 존재 여부(일지의 '직접 지정' 표시용).
+export function hasDayPartsOverride(dateISO, userId = 1) { return Array.isArray(load(userId).dayParts[dateISO]); }
+
 const inPeriod = (dateISO, year, month) => {
   if (!dateISO) return false;
   if (year && !String(dateISO).startsWith(`${year}-`)) return false;

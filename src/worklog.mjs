@@ -47,6 +47,9 @@ export function labelToISO(label, now = new Date()) {
   return `${y}-${mo}-${da}`;
 }
 
+// 한 날짜의 근무일 객체(없으면 null). 정산·일지가 그날 rounds(부 조합)를 참조할 때.
+export function getDay(dateISO, userId = 1) { return load(userId).days[dateISO] || null; }
+
 // 근무한 라운드(부) 조합 → 왕복(집↔골프장) 횟수. 붙은 라운드는 1회, 떨어지면(사이 부 거름) 2회.
 //  예: {3}·{2,3}·{1,2,3} → 1회(한 번 나가 연속), {1,3}(2부 거름) → 2회(사이 귀가). = 연속 구간(run) 수.
 export function tripsFromRounds(rounds) {

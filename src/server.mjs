@@ -153,7 +153,15 @@ app.get('/api/journal', (req, res) => {
   const year = req.query.year ? Number(req.query.year) : undefined;
   const month = req.query.month ? Number(req.query.month) : undefined;
   const uid = req.user?.id || 1;
-  res.json({ ok: true, days: journal.listJournal({ year, month }, uid), summary: journal.summary({ year, month }, uid) });
+  const days = journal.listJournal({ year, month }, uid).map((d) => {
+    // ★유효 부 조합(정산과 동일 소스) + 수동보정 여부를 얹어 일지가 조합·탕수를 표시/수정하게 함.
+    if (d.kind === 'work' && !d.excluded) {
+      const eff = ledger.effPartsFor(d.date, uid) || ['3'];
+      return { ...d, effParts: eff, partsOverride: ledger.hasDayPartsOverride(d.date, uid) };
+    }
+    return d;
+  });
+  res.json({ ok: true, days, summary: journal.summary({ year, month }, uid) });
 });
 
 // 일일 근무 일지 수동 보정 — 그날 분류 직접 지정(근무/스페어/휴무/휴가/순번 제외, 또는 auto 복귀).
@@ -1154,6 +1162,14 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   if (v && !isKakaoSource(full)) recordBoardRead({ uid: userId, part, articleId: full.id,
     subject: full.subject, status: n.status, category: v.category || null,
     confidence: v.confidence ?? null, uncertain: !!v._uncertain, relevant: !!v.relevant });
+  // ★1·2부 감지 정확도 전건 로그(유령 2부 판별·실전화 신뢰도 관찰). 관련 회원(순번/상태 있음)만 여기 도달.
+  if (v && !isKakaoSource(full)) appendJSONL('part-detect.jsonl', {
+    at: Date.now(), userId, part, articleId: full.id, subject: full.subject,
+    status: n.status, isWork, myPosition: n.myPosition ?? null, teeTime: n.teeTime || '',
+    teamCount: v.teamCount ?? null, cutoffName: n.cutoffName || '', crossDuty: v.crossDuty || null,
+    duty: (opts.crewDuty && opts.crewDuty[nameKey]) || null,
+    confidence: v.confidence ?? null, uncertain: !!v._uncertain, partSource: v._partSource || null,
+  });
 
   // 알림: 근무 배정(티오프 신규) · 티오프 변경 · 스페어→근무 승격 등 의미있는 변동만.
   const chgs = change.changes || [];
@@ -1218,8 +1234,10 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
       partSource: v?._partSource || null, reads: v?._reads || null,
     });
   }
-  if (push === 'low') {
-    if (userId === 1) console.log(`·  [${label}] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);
+  // ★1·2부는 '필요한 알림만' — 저확신(check)·반복 스페어진행(앞에 N명)은 발송 보류, high(근무배정·티오프변경·근무권·스페어 임박)만 발송.
+  //  (상태·저널·근무일지·진단로그는 위에서 이미 반영됨. 3부 경로는 무관하게 기존대로 확인 알림 유지.)
+  if (push !== 'high') {
+    if (userId === 1) console.log(`·  [${label}] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (${push === 'check' ? '저확신·반복 보류' : '알림없음'})`);
     return { pushed: false };
   }
   // 부 전용 중복 억제(pushlog{part}.json) — 부별·3부 pushlog과 분리.

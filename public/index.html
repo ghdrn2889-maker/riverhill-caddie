@@ -308,8 +308,12 @@
     .jk.off { background:#ffe985; color:#7a5a00; }        /* 휴무 · 밝은 노란색 */
     .jk.vac { background:#c3e39a; color:#33610f; }        /* 휴가 · 진한 연두색 */
     .jk.removed { background:#eceef0; color:#8a97a0; }    /* 순번 제외 · 무채색 */
-    .jedit { display:none; gap:6px; flex-wrap:wrap; margin-top:9px; padding-top:9px; border-top:1px dashed #e6ebe4; }
+    .jcombo { font-size:10px; font-weight:800; padding:3px 8px; border-radius:7px; background:#eef3ec; color:#33552f; white-space:nowrap; }
+    .jcheck { font-size:9px; font-weight:800; padding:2px 6px; border-radius:99px; background:#fff3d6; color:#96690c; border:1px solid #f0dca6; white-space:nowrap; }
+    .jk.jtang { background:#e6f0fb; color:#22528a; }       /* 두 탕/세 탕 배지 · 파란톤 */
+    .jedit { display:none; flex-direction:column; gap:9px; margin-top:9px; padding-top:9px; border-top:1px dashed #e6ebe4; }
     .jday.editing .jedit { display:flex; }
+    .jkinds { display:flex; gap:6px; flex-wrap:wrap; }
     .jkbtn { font-size:11px; font-weight:700; padding:5px 11px; border-radius:8px; border:1px solid #dbe2d9; background:#fff; color:#5a655c; cursor:pointer; }
     .jkbtn.on.work { background:#e8f3eb; color:#1d6740; border-color:#bfe0c9; }
     .jkbtn.on.spare { background:#fdf3df; color:#8a5d14; border-color:#ecd9a8; }
@@ -317,6 +321,13 @@
     .jkbtn.on.vac { background:#c3e39a; color:#33610f; border-color:#a7d17a; }
     .jkbtn.on.removed { background:#eceef0; color:#8a97a0; border-color:#d4dade; }
     .jkbtn.jauto { color:#9aa49c; }
+    /* 부 조합 편집(일지 → 정산 dayParts 동기화) */
+    .jparts { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .jplabel { font-size:10.5px; font-weight:800; color:#7a857c; }
+    .jpchip { font-size:11px; font-weight:800; padding:5px 12px; border-radius:8px; border:1px solid #dbe2d9; background:#fff; color:#9aa49c; cursor:pointer; }
+    .jpchip.on { background:#0b5d34; color:#fff; border-color:#0b5d34; }
+    .jpchip.jpauto { color:#8a5d14; background:#fdf3df; border-color:#ecd9a8; }
+    .jphint { width:100%; font-size:10px; color:#9aa49c; }
     /* ── 정산(ledger) ── */
     .sect-sub { font-size:10px; color:#9aa49c; font-weight:500; margin-left:auto; }
     .lg-ico { width:15px; height:15px; flex-shrink:0; vertical-align:-2px; }

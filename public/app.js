@@ -1028,27 +1028,37 @@ async function loadJournal() {
       const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
       const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
       const [cls, label] = jKindMeta(d);
+      const isWork = d.kind === 'work' && !d.excluded;
+      const eff = isWork ? (d.effParts || null) : null;   // 근무일 유효 조합(정산과 동일 소스)
       let detail;
       if (d.excluded) {
         detail = d.prevPosition ? `<span class="jt">순번 ${d.prevPosition} → 배치표에서 제외</span>` : `<span class="jt">근무 없음</span>`;
-      } else if (d.twoRounds && d.rounds) {
-        const legs = ['1', '2', '3'].filter((p) => d.rounds[p] && d.rounds[p].kind === 'work' && d.rounds[p].teeTime)
-          .map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
-        const tang = legs.length >= 3 ? '세 탕' : '두 탕';
-        detail = `<span class="jt">🔁 ${tang} · ${legs.join(' → ')}</span>`;
-      } else if (d.kind === 'work' && d.teeTime) {
+      } else if (isWork && eff && eff.length >= 2) {
+        const legs = eff.filter((p) => d.rounds && d.rounds[p] && d.rounds[p].teeTime).map((p) => `${p}부 ${esc(d.rounds[p].teeTime)}`);
+        detail = `<span class="jt">🔁 ${jTang(eff)} · ${legs.length ? legs.join(' → ') : eff.map((p) => p + '부').join('·')}</span>`;
+      } else if (isWork && d.teeTime) {
         detail = `<span class="jt">티오프 ${esc(d.teeTime)}${d.course ? ' ' + esc(d.course) : ''}</span>`;
       } else detail = d.myPosition ? `<span class="jt">순번 ${d.myPosition}</span>` : '';
-      const badge = (!d.excluded && d.twoRounds) ? '<span class="jk work" style="margin-left:4px;">두탕</span>' : '';
-      const manual = d.userKind ? '<span class="jman">직접 지정</span>' : '';
+      const combo = (isWork && eff) ? `<span class="jcombo">${jCombo(eff)}</span>` : '';
+      // 자동 감지된 1·2부 포함 조합 + 아직 사용자 확인(수동보정) 안 함 → '확인?' 넛지(유령 2부 대비).
+      const needsCheck = isWork && eff && !d.partsOverride && (eff.includes('1') || eff.includes('2'));
+      const checkBadge = needsCheck ? '<span class="jcheck">확인?</span>' : '';
+      const tang = (isWork && eff && eff.length >= 2) ? `<span class="jk work jtang">${jTang(eff)}</span>` : '';
+      const manual = d.userKind ? '<span class="jman">직접 지정</span>' : (d.partsOverride ? '<span class="jman">부 확인됨</span>' : '');
       const chip = (k, lab, c) => `<button class="jkbtn ${c}${jSel(d, k) ? ' on' : ''}" data-jd="${d.date}" data-jk="${k}">${lab}</button>`;
+      const partsEdit = isWork ? `<div class="jparts">
+        <span class="jplabel">부 조합</span>
+        ${['1', '2', '3'].map((p) => `<button class="jpchip${eff && eff.includes(p) ? ' on' : ''}" data-pd="${d.date}" data-pp="${p}">${p === '1' ? '1부' : p + '부'}</button>`).join('')}
+        ${d.partsOverride ? `<button class="jpchip jpauto" data-pd="${d.date}" data-pp="reset">↺ 자동</button>` : ''}
+        <div class="jphint">그날 실제 조합으로 눌러 고치면 정산 수익에 바로 반영돼요.</div>
+      </div>` : '';
       const editor = `<div class="jedit">
-        ${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}
-        ${d.userKind ? `<button class="jkbtn jauto" data-jd="${d.date}" data-jk="auto">↺ 자동</button>` : ''}
+        <div class="jkinds">${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}${d.userKind ? `<button class="jkbtn jauto" data-jd="${d.date}" data-jk="auto">↺ 자동</button>` : ''}</div>
+        ${partsEdit}
       </div>`;
       return `<div class="jday" data-card="${d.date}">
         <div class="jrow"><div><span class="jd">${md}</span>${detail}${manual}</div>
-          <div style="display:flex;align-items:center;gap:4px;"><span class="jk ${cls}">${label}</span>${badge}<span class="jecar">✎</span></div></div>
+          <div style="display:flex;align-items:center;gap:4px;">${combo}${checkBadge}<span class="jk ${cls}">${label}</span>${tang}<span class="jecar">✎</span></div></div>
         ${editor}</div>`;
     }).join('') : '<div class="empty">이번 달 기록이 아직 없어요.</div>';
     bindJournalEdit();
@@ -1070,6 +1080,9 @@ function jSel(d, k) {
   if (k === 'off') return d.kind === 'off' && !d.excluded && d.offType !== 'vacation';
   return d.kind === k && !d.excluded;
 }
+// 부 조합 라벨: 3부 이상=54, 아니면 2·3부 식. 탕수: 서로 다른 부 수.
+function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.length >= 3) return '54'; return parts.map((p) => p + '부').join('·'); }
+function jTang(parts) { const n = parts ? parts.length : 0; return n >= 3 ? '세 탕' : n === 2 ? '두 탕' : '한 탕'; }
 function bindJournalEdit() {
   // 행 탭 → 수정 패널 열기/닫기
   $('jDays').querySelectorAll('.jday').forEach((el) => {
@@ -1083,6 +1096,20 @@ function bindJournalEdit() {
     b.onclick = async (e) => {
       e.stopPropagation();
       await postJSON('/api/journal/kind', { date: b.dataset.jd, kind: b.dataset.jk === 'auto' ? null : b.dataset.jk });
+      loadJournal();
+    };
+  });
+  // 부 조합 수정 → 정산과 같은 dayParts 저장소에 기록(수익 자동 동기화)
+  $('jDays').querySelectorAll('.jpchip').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      const date = b.dataset.pd, pp = b.dataset.pp;
+      if (pp === 'reset') { await postJSON('/api/ledger/dayparts', { date, parts: [] }); loadJournal(); return; } // 자동(감지값)으로 복귀
+      const row = b.closest('.jparts');
+      const cur = new Set([...row.querySelectorAll('.jpchip.on')].map((x) => x.dataset.pp).filter((x) => ['1', '2', '3'].includes(x)));
+      cur.has(pp) ? cur.delete(pp) : cur.add(pp);
+      if (cur.size === 0) return; // 최소 1개
+      await postJSON('/api/ledger/dayparts', { date, parts: [...cur].sort() });
       loadJournal();
     };
   });
