@@ -499,21 +499,19 @@ function stopOffTitle() {
   if (offTitleTimer) { clearInterval(offTitleTimer); offTitleTimer = null; }
 }
 
-// 휴무 코스 일러스트 — 언덕(좌우 풀폭) + 깃발(세 포즈 A→B→C→B 왕복, 1.2초/컷). 하늘은 기존 날씨 배경 재사용.
-const OFF_FLAG_A = 'M9 8 C16 10.5 24 8 33 5.5 L33 14.5 C24 17 16 19.5 9 17 Z';
-const OFF_FLAG_B = 'M9 8 C16 8 24 10.5 33 8 L33 17 C24 19.5 16 17 9 17 Z';
-const OFF_FLAG_C = 'M9 8 C16 5.5 24 8 33 10.5 L33 19.5 C24 17 16 14.5 9 17 Z';
+// 휴무 코스 일러스트 — 카드 바닥까지 꽉 차는 언덕(풀블리드) + 깃발. 하늘은 기존 날씨 배경 재사용.
+//  ★깃발은 CSS 애니메이션(.fcloth)으로 끊김 없이 펄럭임 — SMIL은 innerHTML 재삽입 시 재생이 멈추던 버그가 있었다.
 function offCourseHTML() {
   return `<div class="off-course">
-    <svg class="oc-hills" viewBox="0 0 390 132" preserveAspectRatio="none" aria-hidden="true">
-      <path class="hill-far" d="M0 54 Q100 30 200 44 T390 40 V132 H0 Z"/>
-      <path class="hill-near" d="M0 80 Q130 58 250 72 T390 66 V132 H0 Z"/>
+    <svg class="oc-hills" viewBox="0 0 390 200" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
+      <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
     </svg>
-    <svg class="oc-flag" viewBox="0 0 44 58" aria-hidden="true">
-      <line class="fp" x1="9" y1="8" x2="9" y2="54" stroke-width="2.6" stroke-linecap="round"/>
+    <svg class="oc-flag" viewBox="0 0 44 60" aria-hidden="true">
+      <ellipse class="ftuft" cx="9" cy="55" rx="12" ry="3.4"/>
+      <line class="fp" x1="9" y1="8" x2="9" y2="55" stroke-width="2.6" stroke-linecap="round"/>
       <circle class="fpc" cx="9" cy="9.5" r="1.8"/>
-      <path class="fcloth" fill="#c2564b"><animate attributeName="d" dur="4.8s" calcMode="discrete" keyTimes="0;0.25;0.5;0.75" repeatCount="indefinite" values="${OFF_FLAG_A};${OFF_FLAG_B};${OFF_FLAG_C};${OFF_FLAG_B}"/></path>
-      <ellipse class="ftuft" cx="9" cy="54" rx="12" ry="3.4"/>
+      <path class="fcloth" d="M9 9 C16 9 24 11.5 33 9 L33 18 C24 20.5 16 18 9 18 Z"/>
     </svg>
   </div>`;
 }
