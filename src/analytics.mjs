@@ -229,6 +229,29 @@ export async function computeBoardParts() {
   } catch (e) { console.error('computeBoardParts 오류:', e.message); return _boardPartsCache.data || null; }
 }
 
+// 발송 알림 표시 컷오프 = '최신 배치표의 첫 판독 시각'(약간의 여유 lead 포함).
+//  ★한 배치표의 알림(공지 푸시)은 그 배치표를 처리하는 도중에 나가고, lastboard.json '기록'은
+//   푸시를 다 보낸 뒤에 쓰인다. 그래서 컷오프를 lastboard 기록 시각으로 잡으면 그 배치표
+//   알림이 통째로 잘린다(밀리초 차이). 실제 순서: 판독기록 → 푸시발송 → lastboard 기록.
+//   따라서 '첫 판독 시각'을 컷오프로 삼으면 그 배치표의 알림 배치는 온전히 남고, 이전 배치표
+//   (보통 수 시간 전) 알림은 자연히 빠진다. 새 배치표가 뜨면 컷오프가 그 배치표로 옮겨가
+//   이전 배치표 알림이 정리된다. lead(3분)는 푸시가 판독기록보다 살짝 앞서는 경우 대비.
+//  board-reads.jsonl에서 최신 배치표 id의 첫 판독 시각(댓글 #c1 등은 같은 배치표로 묶음).
+function boardPushCutoff(latestBoard, startToday, now) {
+  const fallback = startToday - DAY;
+  if (!latestBoard) return fallback;
+  const baseId = String(latestBoard.articleId || '').split('#')[0];
+  const reads = readJSONL('board-reads.jsonl', { sinceTs: now - 21 * DAY })
+    .filter((r) => String(r.subject || '').includes('배치표'));
+  let latestFirst = null;
+  for (const r of reads) {
+    if (baseId && String(r.articleId || '').split('#')[0] !== baseId) continue;
+    if (latestFirst == null || r.at < latestFirst) latestFirst = r.at;
+  }
+  const base = latestFirst || latestBoard.at || fallback;
+  return base - 3 * 60 * 1000;   // 첫 판독 3분 전(푸시가 기록보다 앞설 여유)
+}
+
 // ── 집계(모니터 사이트에서 호출) ─────────────────────────
 export function computeStats(now = Date.now()) {
   const startToday = new Date(dayKey(now) + 'T00:00:00').getTime();
@@ -375,7 +398,7 @@ export function computeStats(now = Date.now()) {
   //  ★표시 범위 = '최신 배치표 판독 시각 이후'. 새 배치표가 뜨면 그 시각으로 컷오프가 옮겨가
   //   이전 배치표 관련 알림은 자동으로 화면에서 빠진다(로그 파일은 보존 — 표시만 정리).
   const latestBoard = buildLatestBoard();
-  const boardCutoff = (latestBoard && latestBoard.at) ? latestBoard.at : (startToday - DAY);
+  const boardCutoff = boardPushCutoff(latestBoard, startToday, now);
   const nameById = new Map(users.map((u) => [u.id, u.board_name || `#${u.id}`]));
   const partById = new Map(users.map((u) => [u.id, u.part || '']));
   const statusById = new Map(users.map((u) => [u.id, u.status]));
