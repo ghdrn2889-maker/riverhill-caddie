@@ -1519,7 +1519,7 @@ function initLedgerButtons() {
       const r = await (await fetch('/api/ledger/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) })).json();
       if (r.ok && r.parsed) {
         lgExpEdit = { date: r.parsed.date || new Date().toISOString().slice(0, 10), amount: r.parsed.amount || '', vendor: r.parsed.vendor || '', category: r.parsed.category || '기타', method: r.parsed.method || '', photoData: image, scanned: true };
-        msg.textContent = '✓ 판독 완료 — 확인 후 저장하세요. 틀린 값은 직접 고치면 돼요.';
+        msg.textContent = (r.source === 'local' ? '✓ 로컬 AI 판독 완료 · 크레딧 0' : '✓ AI 판독 완료') + ' — 확인 후 저장하세요. 틀린 값은 직접 고치면 돼요.';
       } else { lgExpEdit = { date: new Date().toISOString().slice(0, 10), photoData: image, category: '기타' }; msg.textContent = '판독이 어려웠어요 — 직접 입력해 주세요(사진은 첨부됨).'; }
     } catch { msg.textContent = '분석 실패 — 직접 입력해 주세요.'; }
     $('lgScanLabel').classList.remove('busy'); inp.value = '';

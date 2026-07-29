@@ -141,13 +141,13 @@ export async function analyzeReceipt(input) {
   else if (input) imageUrl = input;
   else return null;
   const prompt = `당신은 영수증(주유·통행료·식대 등)을 판독하는 도우미입니다.
-첨부한 영수증 사진에서 아래 항목을 뽑아 JSON "하나만" 출력하세요(설명 금지).
-- date: 결제/승인 날짜 "YYYY-MM-DD"(연도 안 보이면 올해). 없으면 null.
-- amount: 총 결제금액(숫자만, 원 단위, 콤마 제거). 없으면 null.
+첨부한 영수증 사진의 실제 인쇄된 값만 읽어 JSON "하나만" 출력하세요(설명 금지, 값을 지어내지 말 것).
+- date: 영수증의 거래일시/승인일시에 적힌 날짜를 "YYYY-MM-DD"로. 반드시 사진에 보이는 날짜 그대로. 없으면 null.
+- amount: 실제 승인된 총 결제금액(숫자만, 콤마 제거). 취소(마이너스) 금액은 제외. 없으면 null.
 - vendor: 상호/사용처(주유소·휴게소·업체명). 없으면 "".
 - category: "주유"|"톨비"|"식대"|"기타" 중 추정(기름/주유소=주유, 통행료/하이패스/톨게이트=톨비).
 - method: "카드"|"현금"|"현금영수증"|"" 중 추정.
-{"date":"2026-07-29","amount":50000,"vendor":"","category":"기타","method":""}`;
+형식(값은 예시 아님, 실제 값으로 채울 것): {"date":"YYYY-MM-DD","amount":0,"vendor":"","category":"기타","method":""}`;
   const model = process.env.GEMINI_ROSTER_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest';
   const out = await callGeminiJSON(prompt, imageUrl, model, { inlineImage });
   if (!out || typeof out !== 'object') return null;

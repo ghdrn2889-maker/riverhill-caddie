@@ -16,6 +16,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as ledger from './ledger.mjs';
+import { analyzeReceiptLocal } from './ollama.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
@@ -528,11 +529,17 @@ app.post('/api/ledger/expense/:id/photo', (req, res) => {
   res.json({ ok: !!row, expense: row });
 });
 // AI 영수증 판독 — 사진(base64) 올리면 날짜·금액·상호·항목 추출(사용자 확인 후 저장).
+//  ★로컬(Ollama qwen2.5-VL, 크레딧 0) 우선. 로컬 실패 시 Gemini 폴백은 env(LEDGER_SCAN_GEMINI_FALLBACK)로만.
 app.post('/api/ledger/scan', async (req, res) => {
   const { image } = req.body || {};
   if (!image) return res.status(400).json({ ok: false, error: 'no image' });
-  try { const parsed = await analyzeReceipt(image); res.json({ ok: !!parsed, parsed }); }
-  catch (e) { res.json({ ok: false, error: e.message }); }
+  try {
+    let parsed = await analyzeReceiptLocal(image);
+    let source = parsed ? 'local' : null;
+    const fbOn = ['1', 'true', 'yes'].includes(String(process.env.LEDGER_SCAN_GEMINI_FALLBACK || '').toLowerCase());
+    if (!parsed && fbOn) { parsed = await analyzeReceipt(image); source = parsed ? 'gemini' : null; }
+    res.json({ ok: !!parsed, parsed, source });
+  } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 app.get('/api/ledger/photo/:fname', (req, res) => {
   const fname = path.basename(req.params.fname);
