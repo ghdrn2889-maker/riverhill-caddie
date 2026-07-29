@@ -79,7 +79,9 @@ export async function callGeminiJSON(promptText, imageUrl = null, modelOverride 
   const model = modelOverride || process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
   let img = null;
-  if (imageUrl) {
+  if (opts.inlineImage && opts.inlineImage.data) {
+    img = { data: opts.inlineImage.data, mime: opts.inlineImage.mime || 'image/jpeg' }; // 앱 업로드(base64) 직접 사용
+  } else if (imageUrl) {
     try {
       img = await fetchImageBase64(imageUrl);
     } catch (e) {
@@ -127,6 +129,34 @@ function nameAndPart() {
   return {
     name: (process.env.MY_NAME || '김홍구').trim(),
     part: (process.env.MY_PART || '3').trim(),
+  };
+}
+
+// ── 영수증 판독 — 사진에서 날짜·금액·상호·항목 자동 추출(정산 지출 입력 보조) ──
+//  input: data URL(앱 업로드 압축본) 또는 이미지 URL. 실패 시 null(사용자 수동 입력으로 폴백).
+export async function analyzeReceipt(input) {
+  let inlineImage = null, imageUrl = null;
+  const m = String(input || '').match(/^data:(image\/\w+);base64,(.+)$/);
+  if (m) inlineImage = { mime: m[1], data: m[2] };
+  else if (input) imageUrl = input;
+  else return null;
+  const prompt = `당신은 영수증(주유·통행료·식대 등)을 판독하는 도우미입니다.
+첨부한 영수증 사진에서 아래 항목을 뽑아 JSON "하나만" 출력하세요(설명 금지).
+- date: 결제/승인 날짜 "YYYY-MM-DD"(연도 안 보이면 올해). 없으면 null.
+- amount: 총 결제금액(숫자만, 원 단위, 콤마 제거). 없으면 null.
+- vendor: 상호/사용처(주유소·휴게소·업체명). 없으면 "".
+- category: "주유"|"톨비"|"식대"|"기타" 중 추정(기름/주유소=주유, 통행료/하이패스/톨게이트=톨비).
+- method: "카드"|"현금"|"현금영수증"|"" 중 추정.
+{"date":"2026-07-29","amount":50000,"vendor":"","category":"기타","method":""}`;
+  const model = process.env.GEMINI_ROSTER_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const out = await callGeminiJSON(prompt, imageUrl, model, { inlineImage });
+  if (!out || typeof out !== 'object') return null;
+  return {
+    date: (typeof out.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(out.date)) ? out.date : null,
+    amount: Number.isFinite(Number(out.amount)) ? Math.round(Number(out.amount)) : null,
+    vendor: String(out.vendor || '').slice(0, 40),
+    category: ['주유', '톨비', '식대', '기타'].includes(out.category) ? out.category : '기타',
+    method: ['카드', '현금', '현금영수증'].includes(out.method) ? out.method : '',
   };
 }
 

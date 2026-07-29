@@ -317,6 +317,60 @@
     .jkbtn.on.vac { background:#c3e39a; color:#33610f; border-color:#a7d17a; }
     .jkbtn.on.removed { background:#eceef0; color:#8a97a0; border-color:#d4dade; }
     .jkbtn.jauto { color:#9aa49c; }
+    /* ── 정산(ledger) ── */
+    .sect-sub { font-size:10px; color:#9aa49c; font-weight:500; margin-left:auto; }
+    .lg-total { text-align:center; padding:14px 0 6px; }
+    .lg-total .lab { font-size:11px; color:#647168; font-weight:700; }
+    .lg-total .amt { font-size:30px; font-weight:800; letter-spacing:-.03em; color:#0b5d34; font-variant-numeric:tabular-nums; margin-top:2px; }
+    .lg-net { font-size:12px; color:#3a453d; margin-top:4px; } .lg-net b { color:#0b5d34; } .lg-net .cap { color:#9aa49c; font-size:10px; }
+    .lg-mini { display:flex; gap:8px; margin:10px 0 6px; }
+    .lg-m { flex:1; background:#f6f9f5; border:1px solid #e6ece3; border-radius:10px; padding:9px 6px; text-align:center; }
+    .lg-m .k { font-size:10px; color:#647168; font-weight:700; } .lg-m .v { font-size:15px; font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin-top:2px; }
+    .lg-parts { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .lg-pill { font-size:10.5px; font-weight:700; background:#eef3ec; color:#33552f; border-radius:99px; padding:4px 10px; }
+    .lg-pend { font-size:11px; color:#8a5e18; background:#fdf5e3; border-radius:8px; padding:8px 10px; margin-top:8px; }
+    /* 근무 수입 행 */
+    .lgd { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid #eef1ec; }
+    .lgd:last-child { border-bottom:0; }
+    .lgd .d { font-weight:700; font-size:12px; width:52px; flex-shrink:0; }
+    .lgd .pb { font-size:10px; font-weight:800; background:#e8f3eb; color:#1d6740; border:1px solid #c9e6d2; border-radius:8px; padding:3px 8px; cursor:pointer; white-space:nowrap; }
+    .lgd .rev { font-size:12px; font-weight:800; color:#0b5d34; margin-left:auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .lgd .tipbox { display:flex; align-items:center; gap:3px; }
+    .lgd .tipbox input { width:64px; font-size:11px; padding:4px 6px; border:1px solid #dbe2d9; border-radius:7px; text-align:right; font-variant-numeric:tabular-nums; }
+    .lgd .tipbox .u { font-size:10px; color:#9aa49c; }
+    .lg-partedit { display:flex; gap:5px; flex-wrap:wrap; padding:6px 0 10px; }
+    .lg-pe { font-size:11px; font-weight:700; padding:5px 11px; border-radius:8px; border:1px solid #dbe2d9; background:#fff; color:#5a655c; cursor:pointer; }
+    .lg-pe.on { background:#e8f3eb; color:#1d6740; border-color:#a7d1b5; }
+    /* 지출 */
+    .lg-expadd { display:flex; gap:8px; margin-bottom:8px; }
+    .lg-scan { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; font-size:12px; font-weight:700; color:#0b5d34; background:#eef7f0; border:1px dashed #9cc9ab; border-radius:9px; padding:11px; cursor:pointer; }
+    .lg-scan.busy { opacity:.6; pointer-events:none; }
+    .lg-scanmsg { font-size:11px; color:#647168; background:#f6f9f5; border-radius:8px; padding:8px 10px; margin-bottom:8px; }
+    .lg-exp { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid #eef1ec; }
+    .lg-exp:last-child { border-bottom:0; }
+    .lg-exp .ec { font-size:10px; font-weight:800; border-radius:7px; padding:3px 8px; background:#f0eee9; color:#7a6a58; white-space:nowrap; }
+    .lg-exp .einfo { flex:1; min-width:0; } .lg-exp .einfo .et { font-size:12px; font-weight:700; } .lg-exp .einfo .es { font-size:10px; color:#8a938b; margin-top:1px; }
+    .lg-exp .ea { font-size:12px; font-weight:800; color:#b0483a; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .lg-exp .ephoto { width:34px; height:34px; border-radius:6px; object-fit:cover; border:1px solid #ddd; }
+    .lg-exp .edel { font-size:14px; color:#c2ccc2; background:none; border:0; cursor:pointer; }
+    .lg-empty { font-size:11px; color:#9aa49c; text-align:center; padding:10px 0; }
+    /* 지출 편집 폼 */
+    .lg-eform { background:#f6f9f5; border:1px solid #e6ece3; border-radius:10px; padding:10px; margin:8px 0; display:flex; flex-direction:column; gap:7px; }
+    .lg-eform .r { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .lg-eform input, .lg-eform select { font-size:12px; padding:6px 8px; border:1px solid #dbe2d9; border-radius:7px; }
+    .lg-eform input.amt { width:96px; text-align:right; font-variant-numeric:tabular-nums; }
+    .lg-eform .cats { display:flex; gap:4px; flex-wrap:wrap; }
+    .lg-eform .cat { font-size:11px; font-weight:700; padding:5px 10px; border-radius:7px; border:1px solid #dbe2d9; background:#fff; color:#5a655c; cursor:pointer; }
+    .lg-eform .cat.on { background:#0b5d34; color:#fff; border-color:#0b5d34; }
+    .lg-eform .foot { display:flex; gap:6px; justify-content:flex-end; }
+    /* 문서 옵션 */
+    .lg-opts { display:flex; flex-wrap:wrap; gap:8px 14px; padding:2px 0 8px; }
+    .lg-chk { font-size:12px; font-weight:600; color:#3a453d; display:flex; align-items:center; gap:5px; }
+    .lg-docdesc { font-size:11px; color:#647168; background:#f6f9f5; border-radius:8px; padding:8px 10px; margin-bottom:10px; }
+    .lg-datefilter { display:flex; align-items:center; gap:8px; padding:2px 0 10px; margin-bottom:4px; border-bottom:1px solid #eef1ec; }
+    .lg-datefilter .k { font-size:11px; font-weight:700; color:#647168; }
+    .lg-datefilter input { font-size:12px; padding:6px 8px; border:1px solid #dbe2d9; border-radius:8px; }
+    .lg-dclear { font-size:11px; font-weight:700; color:#8a5d14; background:#fdf3df; border:1px solid #ecd9a8; border-radius:8px; padding:6px 10px; cursor:pointer; }
 
     /* ===== 대시보드 날씨 배경(오늘 화면 히어로) — 현재 날씨에 맞춰 배경이 바뀐다 ===== */
     .hero .fx { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:19px; }
@@ -962,6 +1016,76 @@
       </section>
     </section>
 
+    <!-- 정산 (수익·팁·지출·수익계산서) -->
+    <section class="view body" id="view-settle" role="tabpanel" aria-labelledby="tab-settle" hidden>
+      <div class="sect"><span>💰 정산</span></div>
+      <section class="hero">
+        <div class="wl-monthnav">
+          <button id="lgPrev" aria-label="이전 달">‹</button>
+          <div class="wl-mlabel"><b id="lgMLabel">불러오는 중…</b><span id="lgMSub"></span></div>
+          <button id="lgNext" aria-label="다음 달">›</button>
+        </div>
+        <div class="wl-thismo" id="lgThisMo" hidden><button id="lgJump">↩︎ 이번 달로</button></div>
+
+        <div class="lg-total"><div class="lab">이 달 수입 합계</div><div class="amt" id="lgRevTotal">0원</div>
+          <div class="lg-net" id="lgNetWrap" hidden>순이익 <b id="lgNet">0원</b> <span class="cap">(수입−지출)</span></div></div>
+
+        <div class="lg-mini">
+          <div class="lg-m"><div class="k">근무 수입</div><div class="v" id="lgWorkRev">0</div></div>
+          <div class="lg-m"><div class="k">팁</div><div class="v" id="lgTip">0</div></div>
+          <div class="lg-m"><div class="k">지출</div><div class="v" id="lgExp">0</div></div>
+        </div>
+        <div class="lg-parts" id="lgParts"></div>
+        <div class="lg-pend" id="lgPend" hidden></div>
+      </section>
+
+      <div class="sect"><span>🏌️ 근무 수입 · 팁</span><span class="sect-sub">부 조합을 눌러 수정 · 팁은 선택 입력</span></div>
+      <section class="hero">
+        <div class="lg-datefilter">
+          <span class="k">날짜</span>
+          <input type="date" id="lgDateSel" aria-label="날짜 선택">
+          <button id="lgDateClear" class="lg-dclear" hidden>✕ 전체 보기</button>
+        </div>
+        <div id="lgDays"></div>
+      </section>
+
+      <div class="sect"><span>🧾 지출 · 영수증</span><span class="sect-sub">업무 경비 증빙(기름·톨비 등)</span></div>
+      <section class="hero">
+        <div class="lg-expadd">
+          <label class="lg-scan" id="lgScanLabel">📷 영수증 사진 → AI 판독<input type="file" accept="image/*" id="lgScanInput" hidden></label>
+          <button class="wl-btn wl-no" id="lgAddManual">＋ 직접 입력</button>
+        </div>
+        <div class="lg-scanmsg" id="lgScanMsg" hidden></div>
+        <div id="lgExpenses"></div>
+      </section>
+
+      <div class="sect"><span>📄 수익계산서 출력</span><span class="sect-sub">항목을 골라 PDF·Word로</span></div>
+      <section class="hero">
+        <div class="lg-opts">
+          <label class="lg-chk"><input type="checkbox" id="lgOptRev" checked> 수익(부별)</label>
+          <label class="lg-chk"><input type="checkbox" id="lgOptTip" checked> 팁</label>
+          <label class="lg-chk"><input type="checkbox" id="lgOptExp" checked> 지출</label>
+          <label class="lg-chk"><input type="checkbox" id="lgOptPhoto"> 영수증 사진 포함</label>
+        </div>
+        <div class="lg-docdesc" id="lgDocDesc"></div>
+        <div class="wl-export">
+          <button id="lgPdf" class="wl-exp pdf">📑 PDF(인쇄)<span class="scope" id="lgSc1"></span></button>
+          <button id="lgWord" class="wl-exp csv">📝 Word(.doc)<span class="scope" id="lgSc2"></span></button>
+        </div>
+
+        <details class="wl-settings">
+          <summary>⚙︎ 캐디피 단가 설정 <span class="car">▾</span></summary>
+          <div class="wl-setbody">
+            <div class="wl-row"><span>1부</span><input id="lgFee1" type="number" min="0" step="1000" inputmode="numeric" aria-label="1부 캐디피"/><span>원</span>
+              <span>2부</span><input id="lgFee2" type="number" min="0" step="1000" inputmode="numeric" aria-label="2부 캐디피"/><span>원</span></div>
+            <div class="wl-row"><span>3부</span><input id="lgFee3" type="number" min="0" step="1000" inputmode="numeric" aria-label="3부 캐디피"/><span>원</span>
+              <button id="lgFeeSave" class="wl-btn wl-no">저장</button></div>
+          </div>
+        </details>
+        <div class="wl-note"><b>수입</b>은 확정 근무일 × 부별 캐디피 자동 합산이에요(확인 대기는 제외). 부 조합이 틀리면 근무 수입 목록에서 부 배지를 눌러 고치세요. <b>지출</b>은 영수증을 올리면 AI가 날짜·금액을 읽어 채워주고, 문서엔 항목별→총합→순이익으로 정리돼요. 실제 세무 증빙은 영수증·카드전표이며 본 문서는 소명자료입니다.</div>
+      </section>
+    </section>
+
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
       <div class="sect"><span>🏌️ 라운드 점검</span></div>
@@ -1031,6 +1155,7 @@
     <button role="tab" id="tab-news" aria-selected="false" aria-controls="view-news" data-view="news">소식</button>
     <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
     <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>
+    <button role="tab" id="tab-settle" aria-selected="false" aria-controls="view-settle" data-view="settle">정산</button>
   </nav>
 
   <!-- 사진 확대 보기(라이트박스) -->

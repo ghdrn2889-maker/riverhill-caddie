@@ -8,13 +8,14 @@ import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
-import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
+import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
+import * as ledger from './ledger.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
@@ -492,6 +493,68 @@ app.get('/api/worklog/report.html', (req, res) => {
   const month = req.query.month ? Number(req.query.month) : undefined;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(worklog.reportHTML({ year, month }, req.user?.id || 1));
+});
+
+// ── 정산(회계) — 수익 자동 산정 + 팁 + 지출/영수증 + 수익계산서(PDF/Word) ──
+app.get('/api/ledger', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, summary: ledger.summary({ year, month }, uid), settings: ledger.getSettings(uid) });
+});
+app.post('/api/ledger/settings', (req, res) => {
+  res.json({ ok: true, settings: ledger.setSettings(req.body || {}, req.user?.id || 1) });
+});
+app.post('/api/ledger/tip', (req, res) => {
+  const { date, amount } = req.body || {};
+  res.json({ ok: true, tip: ledger.setTip(date, amount, req.user?.id || 1) });
+});
+app.post('/api/ledger/dayparts', (req, res) => {
+  const { date, parts } = req.body || {};
+  res.json({ ok: true, day: ledger.setDayParts(date, parts, req.user?.id || 1) });
+});
+app.post('/api/ledger/expense', (req, res) => {
+  res.json({ ok: true, expense: ledger.addExpense(req.body || {}, req.user?.id || 1) });
+});
+app.post('/api/ledger/expense/:id', (req, res) => {
+  res.json({ ok: true, expense: ledger.updateExpense(req.params.id, req.body || {}, req.user?.id || 1) });
+});
+app.delete('/api/ledger/expense/:id', (req, res) => {
+  res.json({ ok: ledger.deleteExpense(req.params.id, req.user?.id || 1) });
+});
+app.post('/api/ledger/expense/:id/photo', (req, res) => {
+  const { image } = req.body || {};
+  const row = ledger.saveExpensePhoto(req.params.id, image, req.user?.id || 1);
+  res.json({ ok: !!row, expense: row });
+});
+// AI 영수증 판독 — 사진(base64) 올리면 날짜·금액·상호·항목 추출(사용자 확인 후 저장).
+app.post('/api/ledger/scan', async (req, res) => {
+  const { image } = req.body || {};
+  if (!image) return res.status(400).json({ ok: false, error: 'no image' });
+  try { const parsed = await analyzeReceipt(image); res.json({ ok: !!parsed, parsed }); }
+  catch (e) { res.json({ ok: false, error: e.message }); }
+});
+app.get('/api/ledger/photo/:fname', (req, res) => {
+  const fname = path.basename(req.params.fname);
+  res.sendFile(ledger.expensePhotoPath(fname, req.user?.id || 1), (err) => { if (err) res.status(404).end(); });
+});
+// 수익계산서 — HTML(인쇄→PDF) / Word(.doc). ?rev=1&tips=1&exp=1&photos=1&fmt=doc
+app.get('/api/ledger/report', (req, res) => {
+  const year = req.query.year ? Number(req.query.year) : undefined;
+  const month = req.query.month ? Number(req.query.month) : undefined;
+  const on = (v) => v === '1' || v === 'true';
+  const include = { revenue: on(req.query.rev), tips: on(req.query.tips), expenses: on(req.query.exp) };
+  if (!include.revenue && !include.expenses) include.revenue = true; // 최소 하나
+  const isWord = req.query.fmt === 'doc' || req.query.fmt === 'word';
+  const html = ledger.incomeReportHTML({ year, month, include, photos: on(req.query.photos), forWord: isWord }, req.user?.id || 1);
+  if (isWord) {
+    const fn = `수익계산서_${year || ''}${month ? '-' + month : ''}.doc`;
+    res.setHeader('Content-Type', 'application/msword; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
+  } else {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  }
+  res.send(html);
 });
 
 // ── 카트 점검 ─────────────────────────────────────────

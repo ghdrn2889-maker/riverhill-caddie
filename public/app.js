@@ -30,13 +30,14 @@ function tickDate() {
 }
 
 /* ── 하단 내비 / 뷰 전환 ── */
-const VIEWS = ['today', 'news', 'cart', 'worklog'];
+const VIEWS = ['today', 'news', 'cart', 'worklog', 'settle'];
 function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'worklog') { loadJournal(); loadWorklog(); }
   if (name === 'cart') loadCartCheck();
+  if (name === 'settle') loadLedger();
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
 }
@@ -1318,6 +1319,221 @@ function initWorklogButtons() {
   $('wlReport').onclick = () => window.open(`/api/worklog/report.html?year=${wlYear}&month=${wlMonth}`, '_blank');
 }
 
+/* ── 정산 (수익·팁·지출·수익계산서) ── */
+let lgYear = null, lgMonth = null, lgData = null;
+let lgPartEdit = null;    // 부 조합 수정 중인 날짜
+let lgExpEdit = null;     // 지출 편집 폼 상태 { id?, date, category, amount, method, vendor, memo, photoData? }
+let lgDateFilter = '';    // 근무 수입·팁 날짜 필터(YYYY-MM-DD), 빈값=이 달 전체
+const wonKo = (n) => `${(Number(n) || 0).toLocaleString('ko-KR')}원`;
+const manKo = (n) => { const v = Number(n) || 0; return v >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만` : v.toLocaleString('ko-KR'); };
+const EXP_CATS = ['주유', '톨비', '식대', '주차', '기타'];
+const EXP_METHODS = ['카드', '현금영수증', '현금', '세금계산서', '간이영수증'];
+
+async function loadLedger() {
+  const now = new Date();
+  if (lgYear == null) { lgYear = now.getFullYear(); lgMonth = now.getMonth() + 1; }
+  try {
+    const r = await (await fetch(`/api/ledger?year=${lgYear}&month=${lgMonth}`)).json();
+    lgData = r.summary; lgData.settings = r.settings;
+  } catch { $('lgMLabel').textContent = '불러오기 실패'; return; }
+  renderLedger();
+}
+
+function renderLedger() {
+  const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
+  const s = lgData; const st = s.settings || {};
+  $('lgMLabel').textContent = `${lgYear}년 ${lgMonth}월`;
+  const isNow = lgYear === realY && lgMonth === realM;
+  $('lgMSub').textContent = isNow ? '이번 달' : '지난 기록';
+  $('lgThisMo').hidden = isNow;
+  $('lgNext').disabled = (lgYear > realY) || (lgYear === realY && lgMonth >= realM);
+  $('lgSc1').textContent = $('lgSc2').textContent = `${lgMonth}월`;
+
+  $('lgRevTotal').textContent = wonKo(s.revenueTotal);
+  const hasExp = s.expTotal > 0;
+  $('lgNetWrap').hidden = !hasExp;
+  $('lgNet').textContent = wonKo(s.netProfit);
+  $('lgWorkRev').textContent = manKo(s.workRevenue);
+  $('lgTip').textContent = manKo(s.tipTotal);
+  $('lgExp').textContent = manKo(s.expTotal);
+
+  // 부별 수익
+  $('lgParts').innerHTML = ['1', '2', '3'].filter((p) => s.byPart[p].days > 0)
+    .map((p) => `<span class="lg-pill">${p}부 ${s.byPart[p].days}일 · ${manKo(s.byPart[p].amount)}</span>`).join('')
+    || '<span class="lg-pill" style="background:#f2f4f1;color:#9aa49c;">확정된 근무가 아직 없어요</span>';
+  $('lgPend').hidden = !s.pendingDays;
+  if (s.pendingDays) $('lgPend').innerHTML = `확인 대기 ${s.pendingDays}일 (예상 ${manKo(s.pendingRevenue)}) — 근무 기록에서 '예'로 확정하면 합산돼요.`;
+
+  // 근무 수입 · 팁 목록 (날짜 필터 적용)
+  $('lgDateSel').value = lgDateFilter || '';
+  $('lgDateClear').hidden = !lgDateFilter;
+  const dayRows = lgDateFilter ? s.rows.filter((r) => r.date === lgDateFilter) : s.rows;
+  $('lgDays').innerHTML = dayRows.length ? dayRows.map((r) => {
+    const dow = WD[new Date(r.date + 'T00:00:00').getDay()];
+    const md = `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}(${dow})`;
+    const tang = r.parts.length >= 3 ? '54' : r.parts.map((p) => p + '부').join('·');
+    const editor = lgPartEdit === r.date ? `<div class="lg-partedit">
+      ${['1', '2', '3'].map((p) => `<button class="lg-pe${r.parts.includes(p) ? ' on' : ''}" data-ped="${r.date}" data-p="${p}">${p}부</button>`).join('')}
+    </div>` : '';
+    return `<div class="lgd" data-row="${r.date}">
+      <span class="d">${md}</span>
+      <button class="pb" data-pb="${r.date}">${tang} · ${manKo(r.revenue)}</button>
+      <span class="rev">캐디피 ${wonKo(r.revenue)}</span></div>
+      <div class="tiprow" style="display:flex;justify-content:flex-end;padding:0 0 8px;"><span class="tipbox"><span class="u">팁</span><input type="number" inputmode="numeric" placeholder="0" data-tip="${r.date}" value="${r.tip || ''}"><span class="u">원</span></span></div>
+      ${editor}`;
+  }).join('') : `<div class="lg-empty">${lgDateFilter ? '이 날짜에 확정된 근무가 없어요.' : '이 달 확정 근무가 없어요. 근무 기록에서 근무를 확정하면 수입이 자동 계산돼요.'}</div>`;
+
+  // 지출 목록
+  const expForm = lgExpEdit ? expFormHTML(lgExpEdit) : '';
+  $('lgExpenses').innerHTML = expForm + (s.expenses.length ? s.expenses.map(expRowHTML).join('')
+    : (lgExpEdit ? '' : '<div class="lg-empty">등록된 지출이 없어요. 영수증을 올리거나 직접 입력하세요.</div>'));
+
+  updateDocDesc();
+  // 설정 입력칸
+  if (document.activeElement !== $('lgFee1')) $('lgFee1').value = st.fee1 ?? 140000;
+  if (document.activeElement !== $('lgFee2')) $('lgFee2').value = st.fee2 ?? 140000;
+  if (document.activeElement !== $('lgFee3')) $('lgFee3').value = st.fee3 ?? 150000;
+  bindLedger();
+}
+
+function expRowHTML(e) {
+  const dow = WD[new Date(e.date + 'T00:00:00').getDay()];
+  const md = `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8, 10))}(${dow})`;
+  const photo = e.photo ? `<img class="ephoto" src="/api/ledger/photo/${e.photo}?t=${e.at || 0}" alt="영수증">` : '';
+  const sub = [e.vendor, e.method].filter(Boolean).join(' · ');
+  return `<div class="lg-exp" data-exp="${e.id}">
+    <span class="ec">${esc(e.category)}</span>
+    <div class="einfo"><div class="et">${md} · ${wonKo(e.amount)}</div>${sub ? `<div class="es">${esc(sub)}</div>` : ''}</div>
+    ${photo}
+    <button class="edit-e" data-ee="${e.id}" style="font-size:11px;background:none;border:0;color:#5a8;cursor:pointer;">수정</button>
+    <button class="edel" data-del="${e.id}">✕</button></div>`;
+}
+
+function expFormHTML(f) {
+  const cats = EXP_CATS.map((c) => `<button class="cat${f.category === c ? ' on' : ''}" data-ecat="${c}">${c}</button>`).join('');
+  const methods = ['', ...EXP_METHODS].map((m) => `<option value="${m}"${f.method === m ? ' selected' : ''}>${m || '결제수단'}</option>`).join('');
+  const photoPrev = f.photoData ? `<img src="${f.photoData}" style="width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid #ddd;">`
+    : (f.photo ? `<img src="/api/ledger/photo/${f.photo}" style="width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid #ddd;">` : '');
+  return `<div class="lg-eform">
+    <div class="cats">${cats}</div>
+    <div class="r"><input type="date" id="lgeDate" value="${f.date || ''}">
+      <input class="amt" type="number" inputmode="numeric" id="lgeAmt" placeholder="금액" value="${f.amount || ''}"><span style="font-size:11px;color:#9aa49c;">원</span></div>
+    <div class="r"><input type="text" id="lgeVendor" placeholder="사용처(선택)" value="${esc(f.vendor || '')}" style="flex:1;">
+      <select id="lgeMethod">${methods}</select></div>
+    <div class="r"><label class="lg-scan" style="flex:1;padding:8px;">📷 영수증 사진<input type="file" accept="image/*" id="lgePhoto" hidden></label>${photoPrev}</div>
+    <div class="foot"><button class="wl-btn" id="lgeCancel">취소</button><button class="wl-btn wl-yes" id="lgeSave">저장</button></div>
+  </div>`;
+}
+
+function updateDocDesc() {
+  const rev = $('lgOptRev').checked, tip = $('lgOptTip').checked, exp = $('lgOptExp').checked;
+  let name; if (rev && exp) name = '수입·지출 정산서(순이익 포함)'; else if (rev) name = '수입 정산서'; else if (exp) name = '지출 정산서'; else name = '(항목을 하나 이상 선택하세요)';
+  const bits = [];
+  if (rev) bits.push('부별 수익' + (tip ? '+팁' : ''));
+  if (exp) bits.push('지출 내역' + ($('lgOptPhoto').checked ? '+영수증 사진' : ''));
+  $('lgDocDesc').textContent = `${name}${bits.length ? ' — ' + bits.join(' · ') : ''}`;
+}
+
+function docQuery() {
+  const p = new URLSearchParams({ year: lgYear, month: lgMonth });
+  if ($('lgOptRev').checked) p.set('rev', '1');
+  if ($('lgOptTip').checked) p.set('tips', '1');
+  if ($('lgOptExp').checked) p.set('exp', '1');
+  if ($('lgOptPhoto').checked) p.set('photos', '1');
+  return p.toString();
+}
+
+function bindLedger() {
+  // 팁 입력
+  $('lgDays').querySelectorAll('input[data-tip]').forEach((inp) => {
+    inp.onchange = async () => { await postJSON('/api/ledger/tip', { date: inp.dataset.tip, amount: inp.value }); loadLedger(); };
+  });
+  // 부 조합 열기
+  $('lgDays').querySelectorAll('.pb').forEach((b) => {
+    b.onclick = () => { lgPartEdit = lgPartEdit === b.dataset.pb ? null : b.dataset.pb; renderLedger(); };
+  });
+  // 부 조합 토글
+  $('lgDays').querySelectorAll('.lg-pe').forEach((b) => {
+    b.onclick = async () => {
+      const date = b.dataset.ped, row = lgData.rows.find((r) => r.date === date);
+      const cur = new Set(row.parts);
+      if (cur.has(b.dataset.p)) cur.delete(b.dataset.p); else cur.add(b.dataset.p);
+      const parts = [...cur].sort();
+      if (!parts.length) return; // 최소 1개
+      await postJSON('/api/ledger/dayparts', { date, parts });
+      await loadLedger();
+    };
+  });
+  // 지출 삭제
+  $('lgExpenses').querySelectorAll('.edel').forEach((b) => {
+    b.onclick = async () => { if (!confirm('이 지출을 삭제할까요?')) return; await fetch('/api/ledger/expense/' + b.dataset.del, { method: 'DELETE' }); loadLedger(); };
+  });
+  // 지출 수정 열기
+  $('lgExpenses').querySelectorAll('.edit-e').forEach((b) => {
+    b.onclick = () => { const e = lgData.expenses.find((x) => x.id === b.dataset.ee); lgExpEdit = { ...e }; renderLedger(); };
+  });
+  bindExpForm();
+}
+
+function bindExpForm() {
+  if (!lgExpEdit) return;
+  $('lgExpenses').querySelectorAll('.cat').forEach((b) => {
+    b.onclick = () => { lgExpEdit.category = b.dataset.ecat; renderLedger(); };
+  });
+  const photoInp = $('lgePhoto');
+  if (photoInp) photoInp.onchange = async () => {
+    if (!photoInp.files || !photoInp.files[0]) return;
+    lgExpEdit.date = $('lgeDate').value; lgExpEdit.amount = $('lgeAmt').value; lgExpEdit.vendor = $('lgeVendor').value; lgExpEdit.method = $('lgeMethod').value;
+    try { lgExpEdit.photoData = await compressImage(photoInp.files[0]); renderLedger(); } catch { /* noop */ }
+  };
+  $('lgeCancel').onclick = () => { lgExpEdit = null; renderLedger(); };
+  $('lgeSave').onclick = async () => {
+    const body = { date: $('lgeDate').value, category: lgExpEdit.category || '기타', amount: $('lgeAmt').value, vendor: $('lgeVendor').value, method: $('lgeMethod').value, scanned: !!lgExpEdit.scanned };
+    if (!body.date || !(Number(body.amount) > 0)) { alert('날짜와 금액을 입력하세요.'); return; }
+    let id = lgExpEdit.id;
+    if (id) await postJSON('/api/ledger/expense/' + id, body);
+    else { const r = await postJSON('/api/ledger/expense', body); id = r.expense?.id; }
+    if (id && lgExpEdit.photoData) await postJSON('/api/ledger/expense/' + id + '/photo', { image: lgExpEdit.photoData });
+    lgExpEdit = null; loadLedger();
+  };
+}
+
+function initLedgerButtons() {
+  $('lgPrev').onclick = () => { lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
+  $('lgNext').onclick = () => { if ($('lgNext').disabled) return; lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
+  $('lgJump').onclick = () => { const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgPartEdit = null; lgExpEdit = null; lgDateFilter = ''; loadLedger(); };
+  // 날짜 필터 — 고른 날짜의 근무만 보이기(다른 달이면 그 달로 이동).
+  $('lgDateSel').onchange = () => {
+    const v = $('lgDateSel').value; if (!v) { lgDateFilter = ''; renderLedger(); return; }
+    lgDateFilter = v;
+    const y = Number(v.slice(0, 4)), m = Number(v.slice(5, 7));
+    if (y !== lgYear || m !== lgMonth) { lgYear = y; lgMonth = m; loadLedger(); } else renderLedger();
+  };
+  $('lgDateClear').onclick = () => { lgDateFilter = ''; renderLedger(); };
+  // AI 영수증 판독
+  $('lgScanInput').onchange = async () => {
+    const inp = $('lgScanInput'); if (!inp.files || !inp.files[0]) return;
+    const msg = $('lgScanMsg'); msg.hidden = false; msg.textContent = '📷 영수증 분석 중…'; $('lgScanLabel').classList.add('busy');
+    try {
+      const image = await compressImage(inp.files[0], 1400, 0.75);
+      const r = await (await fetch('/api/ledger/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) })).json();
+      if (r.ok && r.parsed) {
+        lgExpEdit = { date: r.parsed.date || new Date().toISOString().slice(0, 10), amount: r.parsed.amount || '', vendor: r.parsed.vendor || '', category: r.parsed.category || '기타', method: r.parsed.method || '', photoData: image, scanned: true };
+        msg.textContent = '✓ 판독 완료 — 확인 후 저장하세요. 틀린 값은 직접 고치면 돼요.';
+      } else { lgExpEdit = { date: new Date().toISOString().slice(0, 10), photoData: image, category: '기타' }; msg.textContent = '판독이 어려웠어요 — 직접 입력해 주세요(사진은 첨부됨).'; }
+    } catch { msg.textContent = '분석 실패 — 직접 입력해 주세요.'; }
+    $('lgScanLabel').classList.remove('busy'); inp.value = '';
+    renderLedger();
+  };
+  $('lgAddManual').onclick = () => { lgExpEdit = { date: (lgYear === new Date().getFullYear() && lgMonth === new Date().getMonth() + 1) ? new Date().toISOString().slice(0, 10) : `${lgYear}-${String(lgMonth).padStart(2, '0')}-01`, category: '기타' }; $('lgScanMsg').hidden = true; renderLedger(); };
+  // 문서 옵션
+  ['lgOptRev', 'lgOptTip', 'lgOptExp', 'lgOptPhoto'].forEach((id) => { $(id).onchange = updateDocDesc; });
+  $('lgPdf').onclick = () => { if (!$('lgOptRev').checked && !$('lgOptExp').checked) { alert('수익 또는 지출 중 하나는 선택하세요.'); return; } window.open(`/api/ledger/report?${docQuery()}`, '_blank'); };
+  $('lgWord').onclick = () => { if (!$('lgOptRev').checked && !$('lgOptExp').checked) { alert('수익 또는 지출 중 하나는 선택하세요.'); return; } window.location.href = `/api/ledger/report?${docQuery()}&fmt=doc`; };
+  // 단가 저장
+  $('lgFeeSave').onclick = async () => { await postJSON('/api/ledger/settings', { fee1: $('lgFee1').value, fee2: $('lgFee2').value, fee3: $('lgFee3').value }); loadLedger(); };
+}
+
 /* ── 카트 점검 ── */
 let ccDate = null;
 let ccEditMode = false;
@@ -1638,7 +1854,7 @@ function initAccount() {
 
 /* ── 부팅 ── */
 async function main() {
-  tickDate(); initNav(); initWorklogButtons(); initCartButtons(); initAccount();
+  tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount();
   initInstallPrompt();
   $('readAll').onclick = markAllRead;
   await registerSW();
