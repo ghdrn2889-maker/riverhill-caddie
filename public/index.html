@@ -31,28 +31,43 @@
     .hero h3 { font-size:25px; line-height:1.1; letter-spacing:-.045em; margin:8px 0 6px; }
     .sub { font-size:11px; line-height:1.5; color:#647168; margin:0; }
 
-    /* 라운드 카드 스택(다중 라운드: 조출·두 탕·세 탕) */
+    /* ── 하루 흐름(다중 라운드) — 미니맵·라운드사이·라운드 카드. 부별 색(1부 분홍·2부 하늘·3부 보라) ── */
+    :root { --p1c:#c14b86; --p2c:#1f6bb0; --p3c:#6a4bbf; }
+    @media (prefers-color-scheme:dark) { :root { --p1c:#f0a6c8; --p2c:#7fc0ef; --p3c:#c3b0f0; } }
+    .pc1 { color:var(--p1c); font-weight:800; } .pc2 { color:var(--p2c); font-weight:800; } .pc3 { color:var(--p3c); font-weight:800; }
     #round2Slot { margin:12px 0 0; }
-    .rs-stack { display:flex; flex-direction:column; gap:8px; }
-    .rs-summary { font-size:13px; font-weight:700; color:#556; padding:2px 2px 0; }
-    .rs-summary b { color:#0b5d34; }
-    .rs-tang { background:#0b5d34; color:#fff; border-radius:8px; padding:2px 9px; font-size:12px; font-weight:800; margin-left:4px; }
-    .rc-card { border-radius:16px; padding:13px 16px; color:#fff; box-shadow:0 4px 14px rgba(0,0,0,.16); }
-    .rc-p1 { background:linear-gradient(135deg,#e06aa0,#c14b86); }   /* 1부 = 분홍 */
-    .rc-p2 { background:linear-gradient(135deg,#2f7cc4,#1f5fa0); }   /* 2부 = 하늘 */
-    .rc-spare { filter:saturate(.72) brightness(.94); }
-    .rc-head { font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; }
-    .rc-part { font-size:15px; font-weight:800; letter-spacing:.02em; }
-    .rc-tag { border-radius:8px; padding:2px 9px; font-size:12px; font-weight:800; background:rgba(255,255,255,.22); }
-    .rc-tag-spare { background:rgba(255,255,255,.16); }
-    .rc-tee { margin-top:8px; font-size:16px; }
-    .rc-tee b { font-size:18px; }
-    .rc-legs { margin-top:8px; font-size:13px; opacity:.95; display:flex; flex-wrap:wrap; gap:4px 12px; }
-    .rc-note { margin-top:6px; font-size:12.5px; opacity:.9; }
-    @media (prefers-color-scheme: dark) {
-      .rs-summary { color:#aeb7c0; } .rs-summary b { color:#7fd6a6; } .rs-tang { background:#1c7a4a; }
-      .rc-p1 { background:linear-gradient(135deg,#a83f74,#7f2e57); }
-      .rc-p2 { background:linear-gradient(135deg,#1e5488,#153c63); }
+    .df-wrap { display:flex; flex-direction:column; gap:9px; }
+    .df-sum { font-size:13px; font-weight:700; color:#5a6660; padding:0 2px; } .df-sum b { color:#0b5d34; }
+    .df-map { display:flex; align-items:center; gap:0; background:#fff; border:1px solid #e2e7e1; border-radius:14px; padding:9px 12px; box-shadow:0 3px 12px rgba(24,54,35,.05); }
+    .df-node { display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .df-dot { width:21px; height:21px; border-radius:50%; border:2.4px solid #cbd6ce; background:#fff; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:#6b7a72; font-variant-numeric:tabular-nums; }
+    .df-node.done .df-dot { background:#2e7149; border-color:#2e7149; color:#fff; }
+    .df-node.cur .df-dot { border-color:#2e7149; color:#2e7149; box-shadow:0 0 0 4px rgba(46,113,73,.16); }
+    .df-node.sp .df-dot { border-style:dashed; }
+    .df-lbl { font-size:8.5px; font-weight:700; color:#5a6660; white-space:nowrap; }
+    .df-link { flex:1; height:2.4px; background:#cbd6ce; margin:0 4px 13px; border-radius:2px; }
+    .df-link.done { background:#2e7149; }
+    .df-link.onsite { background:repeating-linear-gradient(90deg,#2e7149,#2e7149 5px,transparent 5px,transparent 9px); opacity:.65; }
+    .df-link.free { background:repeating-linear-gradient(90deg,#cbd6ce,#cbd6ce 3px,transparent 3px,transparent 7px); }
+    .df-gap { display:flex; align-items:center; gap:11px; background:#fff; border:1px solid #e2e7e1; border-radius:14px; padding:11px 13px; box-shadow:0 3px 12px rgba(24,54,35,.05); }
+    .df-gap.onsite { border-left:3px solid #2e7149; } .df-gap.free { border-style:dashed; background:#fbfcfa; }
+    .df-gi { font-size:22px; } .df-gt { flex:1; min-width:0; } .df-gt b { font-size:13px; color:#17231d; display:block; } .df-gt span { font-size:11px; color:#647168; line-height:1.45; }
+    .df-gc { text-align:right; font-size:9.5px; color:#647168; font-weight:700; white-space:nowrap; } .df-gc b { display:block; font-size:17px; color:#17231d; font-variant-numeric:tabular-nums; }
+    .df-card { background:#fff; border:1px solid #e2e7e1; border-radius:14px; padding:12px 14px; box-shadow:0 3px 12px rgba(24,54,35,.05); }
+    .df-ch { display:flex; align-items:center; gap:8px; } .df-pp { font-size:14.5px; }
+    .df-tag { font-size:11px; font-weight:800; border-radius:7px; padding:2px 9px; }
+    .df-tag.work { background:#0b6d3d; color:#fff; } .df-tag.spare { background:#fff7e8; color:#b5771a; border:1px solid #f0dcae; }
+    .df-tee { margin-top:8px; font-size:15px; color:#17231d; } .df-tee b { font-size:19px; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+    .df-crs { font-size:12px; color:#647168; font-weight:700; margin-left:4px; }
+    .df-legs { margin-top:8px; font-size:13px; color:#3f5148; display:flex; flex-wrap:wrap; gap:4px 14px; font-variant-numeric:tabular-nums; }
+    .df-note { margin-top:7px; font-size:12.5px; color:#647168; }
+    @media (prefers-color-scheme:dark) {
+      .df-sum { color:#aeb7c0; } .df-sum b { color:#7fd6a6; }
+      .df-map, .df-gap, .df-card { background:#1c211b; border-color:#2c332b; }
+      .df-gap.free { background:#171c16; }
+      .df-dot { background:#1c211b; border-color:#3a463c; color:#9aa79d; }
+      .df-lbl, .df-gt span, .df-gc, .df-note, .df-crs { color:#9aa79d; } .df-gt b, .df-gc b, .df-tee { color:#eef2ea; }
+      .df-link { background:#3a463c; } .df-tag.spare { background:#2a2415; border-color:#4a3d1e; color:#e0b968; }
     }
 
     /* 행동 진행 보드 */

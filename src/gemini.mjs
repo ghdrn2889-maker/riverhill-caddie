@@ -130,6 +130,33 @@ function nameAndPart() {
   };
 }
 
+// ── 판독 메모 캐시(크레딧 절약의 핵심) ─────────────────────────────
+//  같은 배치표 이미지를 judge·crossPartWorkMap·모니터·재폴링이 제각각 다시 판독해 Gemini 호출이
+//  이미지 1장당 십수 회씩 났다. (함수+부+이미지지문) 키로 '성공한 판독'을 캐시해 중복 호출을 제거한다.
+//  · 성공(비어있지 않음)만 캐시 — 빈값/실패는 재시도 허용. · opts.fresh=true면 캐시 우회 + 성공 시 캐시 갱신
+//    (judge의 '내 이름 없음' 의도적 재판독이 캐시에 막히지 않게). · 최근 이미지 몇 장만 유지(메모리 보호).
+const _readMemo = new Map();               // key → { at, value }
+const _READ_MEMO_MAX = 48;
+function imgFp(article) { return String(article?.images?.[0] || '').split('?')[0]; }
+function memoGet(key) { const e = _readMemo.get(key); return e ? e.value : undefined; }
+function memoSet(key, value) {
+  _readMemo.set(key, { at: Date.now(), value });
+  if (_readMemo.size > _READ_MEMO_MAX) {
+    let oldestK = null, oldestAt = Infinity;
+    for (const [k, e] of _readMemo) if (e.at < oldestAt) { oldestAt = e.at; oldestK = k; }
+    if (oldestK) _readMemo.delete(oldestK);
+  }
+  return value;
+}
+// 캐시 래퍼: 성공(truthy·비어있지 않음)만 저장. producer는 판독 Promise를 반환하는 함수.
+async function memoRead(key, producer, opts = {}) {
+  if (!opts.fresh) { const c = memoGet(key); if (c !== undefined) return c; }
+  const v = await producer();
+  const ok = Array.isArray(v) ? v.length > 0 : (v && (typeof v !== 'object' || Object.keys(v).length > 0));
+  if (ok) memoSet(key, v);
+  return v;
+}
+
 function roleKorean(role) {
   return role === 'spare' ? '스페어(대기)'
     : role === 'work' ? '출근 확정(근무)'
@@ -303,16 +330,58 @@ ${anchor}
 - 이름 옆 괄호((54),(1,3),(2,3) 등)는 그대로 붙여 적으세요.
 - 명단이 두 세로단이면(왼단 1~25, 오른단 26~50) 두 단 모두 맨 아래 마지막 줄까지. ★${p}부 명단은 앞부분 이름(순번 2~12)이 뒷순번(41~50)에 '다시' 인쇄되기도 합니다 — 같은 이름이라도 순번(pos)이 다르면 각각 실제 항목이니 그대로 전부 넣으세요(겹친다고 빼거나 멈추지 말 것).
 - 인쇄 안 된 순번은 지어내지 말고 마지막 인쇄 순번에서 멈추세요.
-
+${p === '1' ? `
+[★1부 배정 유형 — 각 이름 칸의 '배경색'으로 구분(리버힐 규칙, 매우 중요)]
+1부 명단에서 이름 칸의 배경색이 그 사람의 1부 배정 유형입니다. 이름마다 "assign"을 아래 중 하나로:
+- 배경 녹색(green) → "54"      (1·2·3부 전부 근무)
+- 배경 진한분홍/핫핑크(hot·vivid pink, 채도 높은 강렬한 분홍) → "1,3"  (1부·3부 근무)
+- 배경 흰색/무색(white·none) → "only1"   (원래 1부로 배정된, 1부만 하는 캐디)
+- 배경 연분홍(연한·옅은 분홍, 핫핑크보다 훨씬 채도 낮고 밝음) → "chulgn"  (조출 — 신청해서 1부 뜀)
+- 이름 뒤 괄호 "(찾근)" → "찾근"  (찾아서근무 신청 — 색과 무관, 괄호 텍스트가 근거)
+★핫핑크(강렬)와 연분홍(옅음)을 반드시 채도·명도로 구분하세요(둘 다 분홍이지만 전혀 다른 유형).
+★이름 옆 괄호 텍스트가 있으면 그것을 우선 근거로: "(54)"→"54", "(1,3)"·"(1/3)"→"1,3", "(2,3)"→"2,3", "(찾근)"→"찾근". 괄호가 없으면 배경색으로만 판단.
+` : ''}
 반드시 JSON "하나만"(설명 금지):
-{ "part": ${p}, "gridFirstTime": "고른 명단 오른쪽 'OUT ${p}부 IN' 표의 가장 이른 티오프 시각 HH:MM", "roster": [ {"pos":1,"name":"정유경(54)"} ] }
+{ "part": ${p}, "gridFirstTime": "고른 명단 오른쪽 'OUT ${p}부 IN' 표의 가장 이른 티오프 시각 HH:MM", "roster": [ ${p === '1' ? '{"pos":1,"name":"정유경(54)","assign":"54"}' : '{"pos":1,"name":"정유경(54)"}'} ] }
 ${p}부 목록을 못 찾으면 {"part":${p},"gridFirstTime":"","roster":[]}.`;
+}
+// 1부 배정유형 정규화: 괄호텍스트/유형값/배경색 판독값 → '54'|'1,3'|'only1'|'chulgn'|null.
+//  모델이 유형('54'/'chulgn' 등) 또는 색이름('green'/'hotpink'/'lightpink'/'white')을 줄 수 있어 둘 다 수용.
+function normAssign(a, name) {
+  const s = String(a || '').replace(/\s/g, '').toLowerCase();
+  const paren = String(name || '').match(/\(([^)]*)\)/)?.[1]?.replace(/\s/g, '') || '';
+  // 괄호 텍스트가 가장 강한 근거.
+  if (/54/.test(paren)) return '54';
+  if (/1[,/·]3/.test(paren)) return '1,3';
+  if (/2[,/·]3/.test(paren)) return '2,3';
+  if (/찾근/.test(paren)) return '찾근';        // (찾근) = 찾아서근무 신청
+  // 유형/색 문자열.
+  if (/^54$|녹색|green/.test(s)) return '54';
+  if (/2[,/·]?3/.test(s)) return '2,3';
+  if (/1[,/·]?3|hot|vivid|진한|핫핑크/.test(s)) return '1,3';   // 진한분홍/핫핑크 = 1·3 (연분홍보다 먼저 매칭)
+  if (/찾근|chatg/.test(s)) return '찾근';
+  if (/chulgn|조출|연분홍|연한|pale|light/.test(s)) return 'chulgn';  // 연분홍 = 조출
+  if (/only1|흰|white|무색|none|1부전용|1부만/.test(s)) return 'only1';
+  return null;
+}
+// 배정유형 → 그 사람이 뛰는 부 집합. ('54'=1·2·3, '1,3'=1·3, '2,3'=2·3, 조출/찾근/1부전용=해당 부)
+export function assignToParts(assign) {
+  const a = String(assign || '');
+  if (a === '54') return new Set(['1', '2', '3']);
+  if (a === '1,3') return new Set(['1', '3']);
+  if (a === '2,3') return new Set(['2', '3']);
+  if (a === 'only1' || a === 'chulgn' || a === '찾근') return new Set(['1']);
+  return new Set();
 }
 
 // gemini 응답 → [{pos,name}] 정리(순번 오름차순, pos 기준 dedup) + gridFirstTime의 '시(hour)'.
 function cleanRosterOut(out) {
   const cleaned = (Array.isArray(out?.roster) ? out.roster : [])
-    .map((r) => ({ pos: Number(r?.pos), name: String(r?.name || '').trim() }))
+    .map((r) => {
+      const name = String(r?.name || '').trim();
+      const assign = normAssign(r?.assign, name);   // 1부만 채워짐(2·3부는 assign 미요청→null)
+      return assign ? { pos: Number(r?.pos), name, assign } : { pos: Number(r?.pos), name };
+    })
     .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
     .sort((a, b) => a.pos - b.pos);
   // ★중복 제거는 '순번(pos)' 기준 — 같은 pos가 두 번이면 첫 것만.
@@ -325,22 +394,25 @@ function cleanRosterOut(out) {
   return { rows: deduped, hour: hm ? Number(hm[1]) : null };
 }
 
-// 반환: [{pos:number, name:string}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
-export async function analyzeRoster(article, part = '3') {
+// 반환: [{pos:number, name:string(, assign)}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
+//  ★이미지별 캐시(memoRead): judge·crossPartWorkMap·모니터가 같은 부 명단을 재판독하지 않는다.
+//   opts.fresh=true면 캐시 우회(judge의 '내 이름 없음' 의도적 재판독 전용) + 성공 시 캐시 갱신.
+export async function analyzeRoster(article, part = '3', opts = {}) {
   if (!article.images?.length) return [];
-  // ★명단은 '구조화 JSON 리스트'라 flash가 더 안정적(pro는 긴 40행 명단에서 JSON 파싱 실패 잦음).
-  //  괄호 교환("정진영(조하빈)")도 flash가 또렷이 포착 → 점유자 해석은 코드(normRosterName)가 결정적으로.
-  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
-  const { min, max } = partGridInfo(part);
-  let parsed = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
-  // ★검증: 모델이 보고한 앵커 표 시각이 이 부의 창(min~max) 밖이면 엉뚱한 부 표에 붙은 명단을 집은 것 → 1회 재판독.
-  //  (샌드위치 앵커링으로 오독은 드물지만, 배치표 변형 대비 안전망. hour 미보고면 검증 생략.)
-  if (parsed.hour != null && (parsed.hour < min || parsed.hour >= max)) {
-    console.log(`↻ [roster] ${part}부 명단 앵커시각 ${parsed.hour}시가 창(${min}~${max}) 밖 → 재판독`);
-    const retry = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
-    if (retry.hour == null || (retry.hour >= min && retry.hour < max)) parsed = retry;
-  }
-  return parsed.rows;
+  return memoRead(`roster:${part}:${imgFp(article)}`, async () => {
+    // ★명단은 '구조화 JSON 리스트'라 flash가 더 안정적(pro는 긴 40행 명단에서 JSON 파싱 실패 잦음).
+    //  괄호 교환("정진영(조하빈)")도 flash가 또렷이 포착 → 점유자 해석은 코드(normRosterName)가 결정적으로.
+    const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+    const { min, max } = partGridInfo(part);
+    let parsed = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
+    // ★검증: 모델이 보고한 앵커 표 시각이 이 부의 창(min~max) 밖이면 엉뚱한 부 표에 붙은 명단을 집은 것 → 1회 재판독.
+    if (parsed.hour != null && (parsed.hour < min || parsed.hour >= max)) {
+      console.log(`↻ [roster] ${part}부 명단 앵커시각 ${parsed.hour}시가 창(${min}~${max}) 밖 → 재판독`);
+      const retry = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
+      if (retry.hour == null || (retry.hour >= min && retry.hour < max)) parsed = retry;
+    }
+    return parsed.rows;
+  }, opts);
 }
 
 // ── 3.2) 상단 제목의 부별 '팀 수'만 집중 판독 ──────────────────
@@ -352,14 +424,16 @@ function buildPartTeamsPrompt() {
 - 특정 부가 없으면 그 값은 0.
 반드시 JSON 하나만: {"part1":정수,"part2":정수,"part3":정수,"total":정수}`;
 }
-// 반환: {1:n,2:n,3:n} — 실패 시 {}.
+// 반환: {1:n,2:n,3:n} — 실패 시 {}. (이미지별 캐시: crossPartWorkMap·모니터 중복 판독 제거)
 export async function analyzePartTeams(article) {
   if (!article.images?.length) return {};
-  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
-  const out = await callGeminiJSON(buildPartTeamsPrompt(), article.images[0], model);
-  if (!out) return {};
-  const g = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
-  return { 1: g(out.part1), 2: g(out.part2), 3: g(out.part3), total: g(out.total) };
+  return memoRead(`teams:${imgFp(article)}`, async () => {
+    const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+    const out = await callGeminiJSON(buildPartTeamsPrompt(), article.images[0], model);
+    if (!out) return {};
+    const g = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+    return { 1: g(out.part1), 2: g(out.part2), 3: g(out.part3), total: g(out.total) };
+  });
 }
 
 // ── 3.5) 인턴 캐디(티오프표 노란칸) 전용 판독 ─────────────────
@@ -374,16 +448,64 @@ function buildInternPrompt(part = '3') {
 { "internTees": [ {"time":"HH:MM","course":"OUT 또는 IN"} ], "internCount": 노란칸 개수 }
 노란 칸이 없으면 {"internTees": [], "internCount": 0}.`;
 }
-// 반환: {internTees:[{time,course}], internCount} — 실패 시 null.
+// 반환: {internTees:[{time,course}], internCount} — 실패 시 null. (이미지·부별 캐시)
 export async function analyzeInterns(article, part = '3') {
   if (!article.images?.length) return null;
-  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
-  const out = await callGeminiJSON(buildInternPrompt(part), article.images[0], model);
-  if (!out) return null;
-  const tees = (Array.isArray(out.internTees) ? out.internTees : [])
-    .map((g) => ({ time: (String(g?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(String(g?.course)) ? 'IN' : 'OUT' }))
-    .filter((g) => g.time);
-  return { internTees: tees, internCount: Number.isFinite(Number(out.internCount)) ? Number(out.internCount) : tees.length };
+  return memoRead(`interns:${part}:${imgFp(article)}`, async () => {
+    const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+    const out = await callGeminiJSON(buildInternPrompt(part), article.images[0], model);
+    if (!out) return null;
+    const tees = (Array.isArray(out.internTees) ? out.internTees : [])
+      .map((g) => ({ time: (String(g?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(String(g?.course)) ? 'IN' : 'OUT' }))
+      .filter((g) => g.time);
+    return { internTees: tees, internCount: Number.isFinite(Number(out.internCount)) ? Number(out.internCount) : tees.length };
+  });
+}
+
+// ── 3.7) 대바(대기바꿈) 댓글 → 순번 재배치 op (텍스트 전용, 저렴) ────
+//  실제 대바 댓글은 형식이 제각각·오타 많음("2부7번 조예린", "김동윤 2부 25번", "홍준쵸 24번",
+//  "A님 B님 바꿈")이라 정규식으론 대부분 놓친다. 모델이 '현재 명단 + 댓글'을 보고 최종 이동 순번을 낸다.
+//  비전 토큰 없는 텍스트 판독이라 저렴. 결과 op는 코드(applySwapAssignments)가 결정적으로 명단에 적용.
+function buildDaebaPrompt(part, roster, comments) {
+  const p = String(part);
+  const other = p === '3' ? '1·2부' : p === '2' ? '1·3부' : '2·3부';
+  const N = roster.length;
+  return `골프장 '대기바꿈(대바)' 댓글을 반영해 ${p}부 최종 대기순번 명단을 내는 도우미입니다.
+[현재 ${p}부 명단] (순번:이름)
+${roster.map((n, i) => `${i + 1}:${daebaBaseName(n)}`).join('  ')}
+
+[캐디 댓글]
+${comments.map((c, i) => `(${i + 1}) ${String(c?.content ?? c ?? '').replace(/\s+/g, ' ').trim()}`).join('\n')}
+
+규칙:
+- ★오직 ${p}부에 대한 항목만 반영. 다른 부(${other}) 언급 항목은 완전히 무시.
+- 다양한 형식 모두 처리: "${p}부7번 조예린"=조예린을 7번으로 / "김동윤 ${p}부 25번"=김동윤을 25번으로 / "홍준쵸 24번"=명단의 실제 이름(오타 교정)을 24번으로 / "A님 B님 바꿈"=A와 B의 순번 맞교환.
+- 이름 오타는 위 [현재 명단]의 실제 이름으로 교정. ★[현재 명단]에 없는 이름은 무시(다른 부 사람). 명단 인원(${N}명)은 그대로, 순서만 바뀜.
+- 바뀐 사람만 자리 이동, 나머지는 현재 순번 그대로.
+★반드시 대바 반영 '후' ${p}부 ${N}명 전체를 순번 1~${N} 순서대로 출력(JSON 하나만):
+{"roster":[{"pos":1,"name":"홍길동"},{"pos":2,"name":"김철수"}]}`;
+}
+// 이름에서 듀티태그/공백 제거 → 본명(대바 이름 매칭용). "정유경(54)"→"정유경", "A(B)"→"A".
+function daebaBaseName(s) { return String(s || '').replace(/\s*\([^)]*\).*/, '').replace(/\s/g, ''); }
+// 반환: [{name, pos}] — ${part}부 명단에 적용할 재배치 op. 실패/무관이면 [].
+export async function parseDaebaByModel(roster, comments, part = '3') {
+  if (!Array.isArray(roster) || !roster.length || !Array.isArray(comments) || !comments.length) return [];
+  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';   // ★flash(안정) — lite는 출력형식이 흔들림
+  const out = await callGeminiJSON(buildDaebaPrompt(part, roster, comments), null, model);
+  // ★모델이 형식을 흔든다(ops/list/roster 키, 델타 vs 전체명단). 내용은 정확하니 모든 형식 수용.
+  let rows = out?.ops || out?.list || out?.roster || out?.changes || (Array.isArray(out) ? out : []);
+  if (!Array.isArray(rows)) return [];
+  rows = rows
+    .map((r) => ({ name: daebaBaseName(r?.name), pos: Number(r?.pos) }))
+    .filter((r) => r.name.length >= 2 && Number.isFinite(r.pos) && r.pos >= 1 && r.pos <= 60);
+  // 전체 명단을 통째로 냈으면(길이 ≈ 원본) 원본과 대조해 '바뀐 자리만' op로 뽑는다(불필요한 무변화 op 제거).
+  if (rows.length >= Math.max(8, Math.floor(roster.length * 0.6))) {
+    const orig = roster.map((n) => daebaBaseName(n));
+    const ops = [];
+    for (const r of rows) { const i = r.pos - 1; if (i >= 0 && i < orig.length && orig[i] !== r.name) ops.push(r); }
+    return ops;
+  }
+  return rows;   // 델타 ops
 }
 
 // ── 4) 오른쪽 '조 배치표'(전체 캐디 명부) 판독 ────────────────
@@ -401,13 +523,15 @@ function buildCrewsPrompt() {
 { "crews": [ {"jo":1,"name":"김홍구","duty":"3부"}, {"jo":1,"name":"김상미","duty":""} ] }`;
 }
 
-// 반환: [{jo:number, name:string, duty:string}] — 실패/미검출이면 [].
+// 반환: [{jo:number, name:string, duty:string}] — 실패/미검출이면 []. (이미지별 캐시)
 export async function analyzeCrews(article) {
   if (!article.images?.length) return [];
-  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
-  const out = await callGeminiJSON(buildCrewsPrompt(), article.images[0], model);
-  const rows = Array.isArray(out?.crews) ? out.crews : [];
-  return rows
-    .map((r) => ({ jo: Number(r?.jo) || 0, name: String(r?.name || '').trim(), duty: String(r?.duty || '').trim() }))
-    .filter((r) => r.name);
+  return memoRead(`crews:${imgFp(article)}`, async () => {
+    const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+    const out = await callGeminiJSON(buildCrewsPrompt(), article.images[0], model);
+    const rows = Array.isArray(out?.crews) ? out.crews : [];
+    return rows
+      .map((r) => ({ jo: Number(r?.jo) || 0, name: String(r?.name || '').trim(), duty: String(r?.duty || '').trim() }))
+      .filter((r) => r.name);
+  });
 }

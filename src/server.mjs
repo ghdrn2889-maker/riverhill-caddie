@@ -341,6 +341,7 @@ app.get('/api/today', (req, res) => {
       part: pp, kind: isWork ? 'work' : 'spare', status: tp.status,
       teeTime: tp.teeTime || '', course: tp.course || '', myPosition: tp.myPosition || null,
       cutLine: tp.cutLine || null,
+      assign: pp === '1' ? (tp.assign || null) : null,   // 1부 배정유형(조출/1,3/54/only1) → 대시보드 배지
       commute: (isWork && tp.teeTime) ? commuteInfo(tp.teeTime, prof.commute_min) : null,
     });
   }
@@ -1032,6 +1033,9 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   if (!hadState && !hasNow) return { pushed: false };
 
   const merged = applyVerdict(cur, v, full, { teeMin: win.min, teeMax: win.max });
+  // ★1부 배정유형(조출/1,3/54/1부전용) 저장 → 대시보드 배지. 값 없으면 이전 값 보존(명단 미판독 글 대비).
+  if (part === '1' && v.myAssign) merged.next.assign = v.myAssign;
+  else if (part === '1' && cur && cur.assign && !merged.next.assign) merged.next.assign = cur.assign;
   saveToday(merged.next, userId, part);
   const n = merged.next, change = merged.change;
   const isWork = ['assigned', 'work', 'your_turn'].includes(n.status);
@@ -1090,6 +1094,27 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
       const WATCH = Number(process.env.SPARE_WATCH_AHEAD ?? 6);
       push = ahead === 0 ? 'high' : (ahead <= WATCH ? 'check' : 'low');
     }
+  }
+  // ★소식 피드(recent.json) — 순수 1·2부 회원용. 3부 경로(processForMember)가 이미 이 글을 저장했으면
+  //  덮어쓰지 않는다(3부 본문 보존). 3부와 무관해 아직 피드에 없는 회원(순수 1·2부 근무)만 이 부 본문으로 채움.
+  //  같은 날 두 탕이면 3부 본문이 우선 노출되고, 이 부 상세는 대시보드 다중 라운드에서 보여준다.
+  if (isWork && push !== 'low' && !isKakaoSource(full)) {
+    try {
+      const feed = loadUserJSON(userId, 'recent.json', []);
+      if (!feed.some((x) => x && x.id === full.id)) {
+        saveRecentV2(full, { relevant: true, body, status: n.status, push, rawVerdict: v }, userId);
+      }
+    } catch { /* 피드 저장 실패는 무해 — 알림 흐름 유지 */ }
+  }
+  // ★판독 불확실(check) 사유 진단 로그 — 1·2부 판독 신뢰도 추적(MINOR_PART_PUSH 켜기 판단 근거).
+  //  3부(processForMember)와 동일 포맷. 섀도(발송억제) 상태에서도 기록돼 며칠치 정확도를 모니터에서 본다.
+  if (push === 'check') {
+    appendJSONL('uncertain-log.jsonl', {
+      at: Date.now(), userId, part, articleId: full.id, subject: full.subject,
+      status: n.status, category: v?.category || null, confidence: v?.confidence ?? null,
+      reason: v?._uncertain || `저확신(confidence=${v?.confidence ?? '-'})`,
+      partSource: v?._partSource || null, reads: v?._reads || null,
+    });
   }
   if (push === 'low') {
     if (userId === 1) console.log(`·  [${label}] ${full.subject} → ${n.status}/${n.teeTime || '-'} 순번${n.myPosition ?? '-'} (알림없음)`);

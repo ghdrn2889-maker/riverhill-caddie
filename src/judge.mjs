@@ -2,7 +2,7 @@
 //  글 하나(제목+본문+이미지) + 내 프로필 + 오늘 기준표 → 구조화된 판정 '하나'.
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
-import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePartTeams } from './gemini.mjs';
+import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePartTeams, parseDaebaByModel } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 import { loadJSON } from './store.mjs';
@@ -165,6 +165,21 @@ export function parseSwapAssignments(comments) {
   return ops;
 }
 
+// ★"반영" 마커 댓글 감지 — 관리자가 대바 요청들을 공식 반영 완료했다는 신호("------반영------" 등).
+//  이 마커가 있을 때만 대바를 명단에 못박는다(요청만으론 대기). 마커는 짧은 '반영' 전용 댓글.
+//  긴 서술문 속 '반영'(예: "명단에 반영하세요")은 오탐 방지 위해 제외 — 댓글 전체가 사실상 '반영'일 때만.
+export function hasReflectionMarker(comments) {
+  const arr = Array.isArray(comments) ? comments : [];
+  for (const c of arr) {
+    const t = String(c?.content ?? c ?? '').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    // 대시·특수문자·공백을 벗겨낸 '핵심'이 '반영'(+완료/됨/했습니다/합니다/끝 선택)이면 마커.
+    const core = t.replace(/[-=~*_.·ㅡー—–─▬<>\[\]()]/g, '').replace(/\s/g, '');
+    if (/^반영(완료|됨|함|했습니다|합니다|끝|done)?$/.test(core)) return true;
+  }
+  return false;
+}
+
 // 명단(순번순 배열, index=순번-1)에 대바 재배치를 적용. 각 op는 name↔그 pos 점유자 맞교환.
 //  이름 매칭은 괄호 교환("A(B)")이면 실제 점유자 B 기준(normRosterName). 명단/순번 밖·미발견은 건너뜀(오손 방지).
 //  반환: { roster:교환후배열, applied:["연승준→3", ...] }.
@@ -264,7 +279,19 @@ function fixMemberPosByRoster(v, member = memberFromEnv()) {
   const workLimit = annCut > 0 ? annCut : (gridMax > 0 ? gridMax : Math.max(0, team - intern));
   if (rp !== prevPos) v._posFixed = `명단 대조: 순번 ${prevPos || '?'}→${rp}`;
   v.myPosition = rp;
-  if (workLimit > 0 && rp > workLimit) {
+  // ★54·찾근 = 우선배치 '무조건 근무'(사용자 확정): 커트라인 밖이어도 스페어 강등 안 함.
+  //  근거: 명단 셀 태그(guaranteedWork) 또는 1부 배경색 판독(myAssign 54/찾근). (1,3·2,3·조출은 커트라인 따름 = 예외 아님)
+  const nk = String(member.name || '').replace(/\s/g, '');
+  const cd = String((v.crewDuty && v.crewDuty[nk]) || '');   // 조배치표 근무표시(예: "54h","찾근")
+  const guaranteed = (Array.isArray(v.guaranteedWork) && v.guaranteedWork.some((n) => String(n).replace(/\s/g, '') === nk))
+    || ['54', '찾근'].includes(String(v.myAssign || ''))
+    || /54/.test(cd) || /찾근/.test(cd);
+  if (guaranteed) {
+    if (!['assigned', 'work', 'your_turn'].includes(v.myStatus)) v.myStatus = 'work';
+    v._teeSource = 'guaranteed-work(54/찾근)';
+    delete v._uncertain;
+    resolveTeeByGrid(v, member); // 무조건 근무 → 티오프표에서 시각 확정
+  } else if (workLimit > 0 && rp > workLimit) {
     v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
     v._teeSource = 'roster-beyond-cut';
     delete v._uncertain;
@@ -837,7 +864,11 @@ export function consensusFromReads(reads, member = memberFromEnv()) {
 async function readBoardConsensus(article, member) {
   const img = article.images?.[0] || null;
   const boardModel = process.env.GEMINI_BOARD_MODEL || null; // 배치표는 강한 모델(정확도↑, 비용 소액)
-  const MAX = Math.max(1, Math.min(5, Number(process.env.BOARD_READ_MAX ?? 3)));
+  // ★표결 횟수 최소화(크레딧 절감) — 최종 판정은 표결이 아니라 구조 검증(fixMemberPosByRoster·resolveTeeByGrid)이
+  //  결정하므로 표결은 relevant/스페어-근무 갈림 방어용 최소치면 충분(26763 실측: 1회=3회 판정 동일).
+  //  · 3부(알림 발송·홈): 기본 2회(합의로 갈림만 방어, 조기종료 유지). · 1·2부(섀도·구조도출): 1회.
+  const primary = String(member.part) === '3';
+  const MAX = primary ? Math.max(1, Math.min(5, Number(process.env.BOARD_READ_MAX ?? 2))) : 1;
   const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
   const reads = [];
   for (let i = 0; i < MAX; i++) {
@@ -859,12 +890,15 @@ async function readBoardConsensus(article, member) {
 function normRosterName(raw) {
   const s = String(raw || '').trim();
   const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*(.*)$/);   // "이름(속)나머지" — 나머지(tail)까지 포착
-  if (!m) return { name: s, cross: false };
+  if (!m) return { name: s, cross: false, duty: '' };
   const base = m[1].trim(), inner = m[2].trim(), tail = m[3].trim();
+  const dutyTag = inner.replace(/\s/g, '');   // "54"·"1,3"·"2,3"·"찾근" 등 근무구분 태그
   // "최수원(1,3)연승준" — 괄호 뒤에 이름이 더 있으면 그게 실제 점유자(괄호 속은 부/근무 태그).
-  if (tail && /[가-힣]/.test(tail)) return { name: tail, cross: /^[\d,\s.]+$/.test(inner) };
-  if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true };  // "표승완(54)" 부/근무 구분
-  return { name: inner || base, cross: false };                       // "정진영(조하빈)" 순번 교환 → 점유자
+  if (tail && /[가-힣]/.test(tail)) return { name: tail, cross: /^[\d,\s.]+$/.test(inner), duty: /^[\d,\s.]+$/.test(inner) ? dutyTag : '' };
+  if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true, duty: dutyTag };  // "표승완(54)" 부/근무 구분
+  // 근무구분 키워드(찾근·조출 등)는 '순번 교환'이 아니라 태그 → 본명(base) 유지. (없으면 "우겸조(찾근)"이 이름 "찾근"으로 깨짐)
+  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, cross: false, duty: dutyTag };
+  return { name: inner || base, cross: false, duty: '' };             // "정진영(조하빈)" 순번 교환 → 점유자
 }
 
 // 부(部) 집합 → 근무표시 문자열. {1,2,3}→"54", {1,3}→"1,3", {2,3}→"2,3", {2}→"2부".
@@ -917,13 +951,15 @@ function buildPositionalRoster(ordered, verdict) {
   if (myPos && maxPos < myPos) return null;                 // 내 순번을 못 덮음
   const arr = new Array(maxPos).fill('');
   const cross = [];
+  const guaranteed = [];   // ★54·찾근 = 우선배치 '무조건 근무'(절대 스페어 아님, 사용자 확정) → 스페어 강등 예외
   for (const [pos, raw] of byPos) {
     if (pos < 1 || pos > maxPos) continue;
-    const { name, cross: isCross } = normRosterName(raw);
+    const { name, cross: isCross, duty } = normRosterName(raw);
     arr[pos - 1] = name;
     if (isCross && name) cross.push(name);
+    if (name && (duty === '54' || duty === '찾근')) guaranteed.push(name);
   }
-  return { roster: arr, cross };
+  return { roster: arr, cross, guaranteed };
 }
 
 export async function judge(article, today = null, member = memberFromEnv()) {
@@ -959,13 +995,24 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       const nameKey = String(member.name || '').replace(/\s/g, '');
       const myPos = Number(verdict?.myPosition) || 0;
       const hasMe = (b) => (b ? b.roster.some((n) => String(n).replace(/\s/g, '').includes(nameKey)) : false);
-      let built = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
+      let rosterRows = await analyzeRoster(article, member.part);
+      let built = buildPositionalRoster(rosterRows, verdict);
       // ★hasMe 재시도는 회원이 그 부 배치표에 '반드시 있는' 부(3부=김홍구 홈)에서만 유효.
       //  2부처럼 회원이 대개 명단에 없는 부에선 역효과(정상인데 재시도, 오히려 3부로 잘못 읽히면 이름이 있어 재시도 안 함) → 3부 한정.
       if (!built || (member.part === '3' && nameKey && myPos > 0 && !hasMe(built))) {   // 빈값·불완전·또는 (3부에서 순번 있는데 명단에 내가 없음=다른 부 오독) → 1회 재시도
         console.log(`↻ [roster] ${member.part}부 명단 재시도 (1차 내포함=${built ? hasMe(built) : 'null'})`);
-        const built2 = buildPositionalRoster(await analyzeRoster(article, member.part), verdict);
-        if (built2 && (hasMe(built2) || !built)) built = built2; // 재시도가 나를 포함하면 채택(다른 부 교정), 1차 실패면 재시도 사용
+        const rows2 = await analyzeRoster(article, member.part, { fresh: true });
+        const built2 = buildPositionalRoster(rows2, verdict);
+        if (built2 && (hasMe(built2) || !built)) { built = built2; rosterRows = rows2; } // 재시도가 나를 포함하면 채택(다른 부 교정), 1차 실패면 재시도 사용
+      }
+      // ★1부 배정유형(배치표 배경색: 녹=54·핫핑크=1,3·흰=1부전용·연분홍=조출) 맵 부착 → today/대시보드 배지 근거.
+      //  각 회원(interpretForMember)이 자기 이름으로 조회. 3부 캐디의 1부 근무=조출/1,3 구분에 사용.
+      if (member.part === '1' && Array.isArray(rosterRows)) {
+        const base = (nm) => String(nm || '').replace(/\s*\([^)]*\).*/, '').replace(/\s/g, '');
+        verdict.assignMap = {};
+        for (const r of rosterRows) { const k = base(r.name); if (k && r.assign && !verdict.assignMap[k]) verdict.assignMap[k] = r.assign; }
+        const mk = base(member.name);
+        if (mk && verdict.assignMap[mk]) verdict.myAssign = verdict.assignMap[mk];
       }
       // ★인턴(노란칸) 전용 판독으로 통합판독의 오탐을 교정(표시 정확도). 실패하면 통합판독값 유지.
       const interns = await analyzeInterns(article, member.part);
@@ -993,6 +1040,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
         // ★캐디 사전으로 순번 이름 후처리 보정 + 축적(오탈자 되돌림). 위치(빈칸)는 보존.
         verdict.part3Roster = correctAndLearn(built.roster);
         verdict.crossPartNames = built.cross.map((n) => snapName(n));
+        verdict.guaranteedWork = (built.guaranteed || []).map((n) => snapName(n));  // 54·찾근 무조건근무 명단
         verdict.rosterReliable = true;
       } else if (Array.isArray(verdict.part3Roster)) verdict.part3Roster = [];
     } catch (e) { console.error('[roster] 명단/조 판독 실패:', e.message); }
@@ -1029,32 +1077,31 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     const idx = today.roster3.findIndex((n) => String(n).includes(verdict.cutoffName));
     if (idx >= 0) verdict.cutoffPosition = idx + 1;
   }
-  // ★대바(대기바꿈) 결정적 반영 — 모델은 원본 순번만 읽고, 교환은 코드가 명단에 못박는다.
-  //  · 배치표 글: 방금 하베스트한 '깨끗한 원본 명단'(rosterReliable)에 적용 → 매번 동일(멱등).
-  //  · 당일변동 글(26750 등): 명단을 새로 안 읽으므로 저장된 today.roster3를 근거로 적용.
-  //    같은 댓글이 재처리로 두 번 적용(자리 되돌림)되지 않도록 swapKey로 멱등 보장.
-  if (verdict) {
-    const ops = parseSwapAssignments(article.comments);
-    if (ops.length) {
-      const swapKey = `${article.id || ''}:${ops.map((o) => `${o.name}${o.pos}`).join('|')}`;
-      const fresh = !!verdict.rosterReliable && Array.isArray(verdict.part3Roster) && verdict.part3Roster.length;
+  // ★대바(대기바꿈) 반영 — ★"반영" 마커 댓글이 확인될 때만 명단에 못박는다(엄격 게이트, 사용자 결정 A).
+  //  요청 댓글만 있고 아직 '반영' 마커가 없으면 대기(적용 안 함) → 관리자가 공식 반영한 것만 회원에게 반영.
+  //  스왑 해석은 모델(parseDaebaByModel)이 지저분한 실제 형식·오타·부-라우팅까지 처리 → 코드가 결정적으로 적용(멱등).
+  //  · 배치표 글: 갓 하베스트한 '깨끗한 원본 명단'(rosterReliable)에 적용. · 당일변동 글: 저장된 today.roster3에 적용.
+  if (verdict && hasReflectionMarker(article.comments)) {
+    const fresh = !!verdict.rosterReliable && Array.isArray(verdict.part3Roster) && verdict.part3Roster.length;
+    const base = fresh ? verdict.part3Roster
+      : (Array.isArray(today?.roster3) && today.roster3.length ? today.roster3 : []);
+    if (base.length) {
+      const ops = await parseDaebaByModel(base, article.comments, member.part);
+      const swapKey = `${article.id || ''}:반영:${ops.map((o) => `${o.name}${o.pos}`).join('|')}`;
       const alreadyApplied = today?.swapKey && today.swapKey === swapKey;
-      const base = fresh ? verdict.part3Roster
-        : (Array.isArray(today?.roster3) && today.roster3.length ? today.roster3 : []);
-      if (base.length) {
-        if (fresh || !alreadyApplied) {
-          const { roster: swapped, applied } = applySwapAssignments(base, ops);
-          if (applied.length) {
-            verdict.part3Roster = swapped;
-            verdict.crossPartNames = Array.isArray(verdict.crossPartNames) && verdict.crossPartNames.length
-              ? verdict.crossPartNames : (Array.isArray(today?.crossPart3) ? today.crossPart3 : []);
-            verdict._swaps = applied;
-            verdict._swapKey = swapKey;
-          }
-        } else {
-          verdict.part3Roster = base.slice();   // 이미 반영된 저장 명단 그대로 사용(재적용 금지)
+      if (ops.length && (fresh || !alreadyApplied)) {
+        const { roster: swapped, applied } = applySwapAssignments(base, ops);
+        if (applied.length) {
+          verdict.part3Roster = swapped;
+          verdict.crossPartNames = Array.isArray(verdict.crossPartNames) && verdict.crossPartNames.length
+            ? verdict.crossPartNames : (Array.isArray(today?.crossPart3) ? today.crossPart3 : []);
+          verdict._swaps = applied;
           verdict._swapKey = swapKey;
+          if (member.part === '3') console.log(`🔄 대바 반영(마커 확인) ${member.part}부: ${applied.join(', ')}`);
         }
+      } else if (!fresh && alreadyApplied) {
+        verdict.part3Roster = base.slice();   // 이미 반영된 저장 명단 그대로(재적용 금지)
+        verdict._swapKey = swapKey;
       }
     }
   }
@@ -1163,7 +1210,13 @@ export function interpretForMember(article, shared, member, today = null) {
     myStatus: 'unknown',
     teeTime: null, course: '',
     myPosition: memberPositionFromShared(shared, member, today),
+    assignMap: shared.assignMap,         // 1부 배정유형 맵(배경색) — 하위 조회용
   };
+  // ★1부 배정유형: 이 회원 이름으로 assignMap 조회(조출/1,3/54/1부전용). 대시보드 배지 근거.
+  if (String(member.part) === '1' && shared.assignMap) {
+    const mk = String(member.name || '').replace(/\s*\([^)]*\).*/, '').replace(/\s/g, '');
+    if (mk && shared.assignMap[mk]) v.myAssign = shared.assignMap[mk];
+  }
   // ★공유 board 판독이 표결에서 갈렸으면(shared._uncertain) 이 회원 순번도 그 흔들린 명단에서 뽑은 것 →
   //  이 회원에게도 정직하게 '확인 필요'를 전달(문구는 회원 본인 기준으로 일반화 — 1번 회원 시각·순번 노출 금지).
   if (shared._uncertain) v._uncertain = '배치표 판독이 불안정합니다 — 원문(배치표)을 직접 확인하세요';

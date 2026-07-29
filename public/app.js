@@ -539,7 +539,10 @@ function renderToday(t) {
   const posTxt = s.myPosition ? ` · ${s.myPosition}번째` : '';
   // 대표 라운드(히어로가 담당하는 부) — 보통 3부지만, 순수 1부만/2부만 날엔 그 부가 히어로.
   const heroPart = t.primaryPart ? `${t.primaryPart}부` : (s.part || '3부');
-  const heroPfx = (t.primaryPart && t.primaryPart !== '3') ? `${heroPart} ` : ''; // 비3부 대표면 제목에 부 표기
+  // ★1부 '단독' 근무가 조출이면 '1부(조출)'로 표기(사용자 규칙). 복수 라운드면 그냥 '1부'.
+  const primaryRound = (Array.isArray(t.rounds) ? t.rounds : []).find((r) => String(r.part) === (t.primaryPart || '3'));
+  const soloChulgn = t.primaryPart === '1' && primaryRound && primaryRound.assign === 'chulgn' && (t.rounds || []).length <= 1;
+  const heroPfx = soloChulgn ? '1부(조출) ' : (t.primaryPart && t.primaryPart !== '3') ? `${heroPart} ` : ''; // 비3부 대표면 제목에 부 표기
   // 근무 대상일(0=오늘, 1=내일, 2=모레…). 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
   const off = Number(t.dayOffset) || 0;
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
@@ -568,43 +571,79 @@ function renderToday(t) {
   if ((t.primaryPart || '3') === '3') renderBoard(t); else $('boardSlot').innerHTML = '';
   renderRoundsStack(t);
 }
-// 라운드 카드 스택(다중 라운드: 조출·두 탕·세 탕) — 요약 스트립 + 1·2부 라운드 카드를 3부 히어로 위에.
-//  ★3부는 아래 히어로/보드가 담당 → 스택엔 1·2부만 카드로(중복 방지). 요약 스트립엔 3부 포함 조합·홀수.
+// ── 하루 흐름(다중 라운드) — 미니맵 + 라운드 사이(현장/자유) + 비대표 라운드 카드 ──
+//  ★대표 라운드(히어로)는 위 실시간 게이지가 담당 → 카드는 비대표만(중복 방지). 미니맵엔 전체 라운드.
+//   라운드가 하나(단독일)면 숨김 → 히어로만, 기존과 100% 동일(회귀 0).
+const PART_KO = { '1': '1부', '2': '2부', '3': '3부' };
+const durKo = (m) => { m = Math.max(0, Math.round(m)); const h = Math.floor(m / 60), mi = m % 60; return (h ? `${h}시간 ` : '') + (mi || !h ? `${mi}분` : ''); };
+const roundOrd = (r) => { const m = toMin(r.teeTime); return m != null ? m : ({ '1': 360, '2': 700, '3': 1027 }[r.part] || 1200); };
+const roundEnd = (r) => roundOrd(r) + 150;   // 티오프 + ~2.5h = 종료 근사
 function renderRoundsStack(t) {
   const el = $('round2Slot');
   if (!el) return;
-  const rounds = Array.isArray(t && t.rounds) ? t.rounds : [];
-  const heroPart = (t && t.primaryPart) || '3';          // 히어로가 담당하는 부는 카드에서 제외(중복 방지)
-  const extra = rounds.filter((r) => r.part !== heroPart);
-  if (!extra.length) { el.hidden = true; el.innerHTML = ''; return; }
-  const sum = (t && t.roundsSummary) || {};
+  const rounds = (Array.isArray(t && t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
+  const heroPart = (t && t.primaryPart) || '3';
+  if (rounds.length <= 1) { el.hidden = true; el.innerHTML = ''; return; }   // 단독일 → 히어로만(기존 동일)
   const off = Number(t && t.dayOffset) || 0;
   const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : '';
-  const tangW = sum.tang >= 3 ? '세 탕 · 54홀' : sum.tang === 2 ? '두 탕 · 36홀' : '';
-  const stripParts = rounds.map((r) => `${r.part}부`).join('·');
-  const strip = `<div class="rs-summary">${dayW} · <b>${stripParts}</b>${tangW ? ` <span class="rs-tang">${tangW}</span>` : ''}</div>`;
-  el.innerHTML = `<div class="rs-stack">${strip}${extra.map(roundCard).join('')}</div>`;
+  const future = off >= 1;
+  const d = new Date(); const now = d.getHours() * 60 + d.getMinutes();
+  let curIdx = rounds.findIndex((r) => future || now < roundEnd(r));
+  if (curIdx < 0) curIdx = rounds.length;   // 전부 종료
+
+  // 요약(라운드 수·홀) — '탕' 표현 금지
+  const works = rounds.filter((r) => r.kind === 'work').length;
+  const summary = works >= 2 ? `${dayW} · <b>${works}라운드 · ${works * 18}홀</b>` : `${dayW} 라운드`;
+
+  // 미니맵
+  let mini = '<div class="df-map">';
+  rounds.forEach((r, i) => {
+    const done = !future && now >= roundEnd(r);
+    const cur = i === curIdx;
+    const sp = r.kind === 'spare';
+    const tee = sp ? '대기' : (r.teeTime || '미정');
+    mini += `<div class="df-node${done ? ' done' : ''}${cur ? ' cur' : ''}${sp ? ' sp' : ''}"><span class="df-dot">${done ? '✓' : (i + 1)}</span><span class="df-lbl"><span class="pc${r.part}">${PART_KO[r.part] || ''}</span> ${esc(tee)}</span></div>`;
+    if (i < rounds.length - 1) {
+      const gm = roundOrd(rounds[i + 1]) - roundEnd(r);
+      mini += `<span class="df-link${done ? ' done' : ''}${gm >= 180 ? ' free' : ' onsite'}"></span>`;
+    }
+  });
+  mini += '</div>';
+
+  // 라운드 사이(현재 이전 끝 ~ 다음 시작 전) — 붙음=현장대기 / 뜸=자유시간
+  let between = '';
+  if (!future && curIdx > 0 && curIdx < rounds.length) {
+    const cur = rounds[curIdx], prev = rounds[curIdx - 1];
+    const c = cur.commute; const eng = c ? (toMin(c.standby) ?? toMin(c.leave)) : roundOrd(cur);
+    if (eng != null && now >= roundEnd(prev) && now < eng) {
+      const gm = roundOrd(cur) - roundEnd(prev), free = gm >= 180, left = eng - now;
+      between = free
+        ? `<div class="df-gap free"><span class="df-gi">☕</span><div class="df-gt"><b>자유시간 · 공백 ${durKo(gm)}</b><span>집에 다녀오거나 근처에서 볼 일 보세요 · 복귀 목표 ${esc(hhmm(eng))}</span></div><div class="df-gc">복귀까지<b>${durKo(left)}</b></div></div>`
+        : `<div class="df-gap onsite"><span class="df-gi">🏌️</span><div class="df-gt"><b>골프장에서 백대기하며 대기</b><span>${PART_KO[prev.part]} 끝 · 바로 이어서 ${PART_KO[cur.part]} · 공백 ${durKo(gm)}</span></div><div class="df-gc">백대기까지<b>${durKo(left)}</b></div></div>`;
+    }
+  }
+
+  const cards = rounds.filter((r) => r.part !== heroPart).map(roundCard).join('');
+  el.innerHTML = `<div class="df-wrap"><div class="df-sum">${summary}</div>${mini}${between}${cards}</div>`;
   el.hidden = false;
 }
-// 라운드 1장 카드 — 근무면 티오프·출발/도착/백대기, 스페어면 순번·대기 안내. 부별 색(1부 분홍·2부 하늘).
+// 라운드 1장 카드 — 근무면 티오프·집/도착/백대기, 스페어면 순번·앞에 N명. 부별 색(1부 분홍·2부 하늘·3부 보라).
+//  ★복수 근무 표시라 1부는 배정유형 무관하게 그냥 '1부'(조출 접미사 없음 — 사용자 규칙).
 function roundCard(r) {
-  const partKo = `${r.part}부`;
+  const partHtml = `<span class="pc${r.part} df-pp">${PART_KO[r.part] || ''}</span>`;
   const isWork = r.kind === 'work';
-  const courseKo = r.course === 'IN' ? '인' : r.course === 'OUT' ? '아웃' : '';
-  const tee = r.teeTime ? `${r.teeTime}${courseKo ? `(${courseKo})` : ''}` : '미정';
-  const c = isWork ? (r.commute || null) : null;
   if (isWork) {
-    const legs = (r.teeTime && c) ? `<div class="rc-legs"><span>🏠 ${c.leave}</span><span>📍 ${c.arrive}</span><span>⛳ ${c.standby}</span></div>` : '';
-    return `<div class="rc-card rc-work rc-p${r.part}">
-      <div class="rc-head"><span class="rc-part">${partKo}</span><span class="rc-tag rc-tag-work">근무</span></div>
-      <div class="rc-tee">⛳ 티오프 <b>${tee}</b></div>${legs}
-    </div>`;
+    const c = r.commute || null;
+    const crsKo = r.course === 'IN' ? '인' : r.course === 'OUT' ? '아웃' : '';
+    const crs = crsKo ? `<span class="df-crs">${crsKo}코스</span>` : '';
+    const legs = (r.teeTime && c) ? `<div class="df-legs"><span>🏠 ${esc(c.leave)}</span><span>📍 ${esc(c.arrive)}</span><span>⛳ ${esc(c.standby)}</span></div>` : '';
+    return `<div class="df-card"><div class="df-ch">${partHtml}<span class="df-tag work">근무</span></div><div class="df-tee">⛳ 티오프 <b>${esc(r.teeTime || '미정')}</b> ${crs}</div>${legs}</div>`;
   }
-  const posTxt = r.myPosition ? `순번 ${r.myPosition}번` : '대기';
-  return `<div class="rc-card rc-spare rc-p${r.part}">
-    <div class="rc-head"><span class="rc-part">${partKo}</span><span class="rc-tag rc-tag-spare">스페어</span></div>
-    <div class="rc-note">${posTxt} — 팀이 차면 알려드릴게요.</div>
-  </div>`;
+  const pos = Number(r.myPosition) || 0, cut = Number(r.cutLine) || 0;
+  const sparePos = (cut && pos > cut) ? (pos - cut) : pos;
+  const ahead = (cut && pos > cut) ? Math.max(0, pos - cut - 1) : Math.max(0, pos - 1);
+  const posTxt = pos ? `스페어 ${sparePos}번 · 앞에 ${ahead}명` : '대기';
+  return `<div class="df-card sp"><div class="df-ch">${partHtml}<span class="df-tag spare">스페어</span></div><div class="df-note">${posTxt} — 팀이 차면 알려드릴게요.</div></div>`;
 }
 // 오른쪽(백대기 방향)을 향한 자동차 SVG. driving=true면 바퀴 회전·배기 연기·바람 라인 모션.
 function carSVG(driving) {
