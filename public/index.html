@@ -594,8 +594,8 @@
     .hero-off #heroTitle .tt.enter { transform:translateY(.72em); opacity:0; }        /* 새 문구: 아래에서 대기 */
     .hero-off #heroTitle .tt.leave { position:absolute; top:0; left:0; right:0; transform:translateY(-.72em); opacity:0; }  /* 기존 문구: 위로 빠짐 */
     @media (prefers-reduced-motion:reduce){ .hero-off #heroTitle .tt { transition:none; } }
-    .hero.hero-off { min-height:300px; }                                                     /* 풀블리드 언덕이 들어갈 최소 높이 */
-    .off-course { position:absolute; left:0; right:0; bottom:0; height:200px; z-index:0; }    /* 카드 좌우·바닥까지 꽉 참 — 절단선 제거(둥근 모서리에 자연 클립) */
+    /* 흐름(flow) 유지 + 음수 마진으로 카드 좌우·바닥까지 풀블리드 → 절단선 제거(둥근 모서리 자연 클립). */
+    .off-course { position:relative; height:186px; margin:12px -17px -17px; }
     .oc-hills { position:absolute; inset:0; width:100%; height:100%; display:block; }
     .oc-hills .hill-far { fill:#bfe3c9; }
     .oc-hills .hill-near { fill:#7cc596; }
