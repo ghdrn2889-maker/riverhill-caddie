@@ -353,8 +353,12 @@ app.get('/api/today', (req, res) => {
   // ── 다중 라운드(조출·2탕·세 탕) — 같은 날 1·2·3부 활성 라운드를 배열로 내려보냄(카드 스택·조합 요약용). ──
   //  ★근무 라운드는 항상, 스페어(대기)는 순번이 있을 때만 카드로. 다른 날짜 슬롯은 제외.
   const rounds = [];
+  // ★대표(3부)가 '휴무/휴가/순번제외'로 확정된 날은 그날 근무를 안 하는 날 → 1·2부 유령 라운드(특히 잘못 잡힌
+  //  2부 스페어)를 절대 붙이지 않는다. 붙이면 pickFocus가 비대표 라운드를 히어로로 올려 '휴무'가 '스페어'로 납치됨.
+  const primaryOff = t.status === 'off';
   for (const pp of ['1', '2', '3']) {
     if (pp !== '3' && !minorPartOn) continue;   // ★섀도 단계: 1·2부는 대시보드 라운드에서 제외(유령 카드 방지)
+    if (pp !== primaryPart && primaryOff) continue;   // ★휴무 = 휴무: 다른 부 유령 라운드 억제
     const tp = (pp === primaryPart) ? t : loadToday(uid, pp);
     if (!tp) continue;
     const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);

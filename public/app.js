@@ -643,6 +643,14 @@ function roundState(r) {
 function pickFocus(t, rounds, future) {
   if (!rounds.length) return null;
   const primary = String((t && t.primaryPart) || '3');
+  // ★대표가 휴무(off)면 그날은 쉬는 날 — 비대표 라운드(잘못 잡힌 2부 스페어 등)가 히어로를 뺏지 못하게
+  //  실제 근무(work)로 확정된 라운드가 아니면 focus를 포기하고 t.state(휴무)를 그대로 쓴다.
+  if (t && t.state && t.state.status === 'off') {
+    const w = rounds.find((r) => r.kind === 'work' && r.teeTime);
+    if (!w) return null;
+    if (String(w.part) === primary) return { part: primary, state: t.state, commute: t.commute };
+    return { part: String(w.part), state: roundState(w), commute: w.commute };
+  }
   const i = focusIdx(rounds, future);
   const r = rounds[i]; if (!r) return null;
   if (String(r.part) === primary) return { part: String(r.part), state: t.state, commute: t.commute };
