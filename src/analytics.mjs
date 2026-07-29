@@ -82,6 +82,7 @@ function baseName(cell) { return String(cell || '').replace(/\s*\([^)]*\).*$/, '
 
 // 한 부(部)의 판독 essentials → 순번별 행 + 요약. crossByName로 두 탕 표시.
 function buildPartView(pv, crossByName) {
+  if (!pv) return null;                                   // 그 부 없음(undefined) → 탭 미생성
   const roster = Array.isArray(pv.roster) ? pv.roster : [];
   if (!roster.length) return null;
   const teeGrid = Array.isArray(pv.teeGrid) ? pv.teeGrid : [];
