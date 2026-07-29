@@ -5,6 +5,15 @@
 import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
+import { loadJSON } from './store.mjs';
+
+// ★관리자가 '진짜 동명이인'으로 등록한 이름들(data/homonyms.json = ["이지은", ...]).
+//  배치표에 같은 이름이 여러 순번에 뜨는 건 대개 '재인쇄'(같은 사람)라 기본은 접는다.
+//  단 이 목록의 이름만은 실제로 딴 사람이 섞인 것이라, 명단만으론 어느 자리가 회원인지 확정 못 함 → 배정 보류.
+//  판독 지식으로는 재인쇄/동명이인을 구분할 수 없어(조배치표 총원과도 일치) 사람이 지정하는 방식.
+export function declaredHomonyms() {
+  return new Set((loadJSON('homonyms.json', []) || []).map((n) => String(n).replace(/\s/g, '')));
+}
 
 // 배치표 날짜(dateLabel)가 오늘/내일/모레인지 말로. 저녁에 뜬 내일 배치표를 '오늘'로 말하지 않게.
 function kstTodayISO() {
@@ -219,7 +228,18 @@ function resolveCutoff(verdict, article, today = null) {
 
 function fixMemberPosByRoster(v, member = memberFromEnv()) {
   if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
-  const rp = rosterPosOf(v.part3Roster, member.name);
+  const res = resolveMemberInRoster(v.part3Roster, member, v);
+  const rp = res.pos;
+  // ★동명이인(배치표에 같은 이름이 여러 순번)인데 어느 자리가 회원인지 확정 불가.
+  //  잘못된 동명이인에게 '근무 배정' 오알림이 가는 걸 막으려 자동 근무승격을 보류(스페어로 보수 처리)하고 플래그.
+  //  관리자가 member.homonymPos로 자리를 지정하면 확정 처리(resolveMemberInRoster에서 이미 반영).
+  if (res.ambiguous) {
+    const crew = res.crewN ? `, 조배치표 ${res.crewN}조` : '';
+    v._ambiguousIdentity = `동명이인 '${member.name}': 명단 ${res.hits.join('·')}순번${crew} → 자동 근무배정 보류(homonymPos로 자리 지정 필요)`;
+    v.myPosition = rp;
+    if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) { v.myStatus = 'spare'; v.teeTime = ''; v.course = ''; }
+    return;
+  }
   if (rp <= 0) {
     // ★신뢰할 만큼 완전한 명단(rosterReliable)인데 회원이 없다 = 오늘 이 부(部)에 없음.
     //  메인 판독이 다른 부(예: 3부 명단의 김홍구 순번28)에서 붙인 '유령 순번'을 제거해
@@ -693,15 +713,39 @@ function pickRoster(reads) {
 //  ★대기명단=순번 순서이므로 index+1이 곧 순번. 괄호 교환("A(B)")이면 실제 점유자 B 기준.
 function rosterPosOf(roster, name) {
   if (!Array.isArray(roster) || !name) return 0;
+  const hits = rosterHitsOf(roster, name);
+  return hits.length ? hits[0] : 0;
+}
+// 명단에서 이름/괄호점유자가 일치하는 '모든' 순번(1-base). 같은 이름이 여러 순번에 있으면 전부.
+function rosterHitsOf(roster, name) {
+  const out = [];
+  if (!Array.isArray(roster) || !name) return out;
   const key = String(name).replace(/\s/g, '');
   for (let i = 0; i < roster.length; i++) {
     const cell = String(roster[i] || '').replace(/\s/g, '');
     if (!cell) continue;
     const m = cell.match(/\(([^)]+)\)/);
     const occupant = (m ? m[1] : cell.replace(/\(.*$/, '')).trim();
-    if (occupant === key || cell === key) return i + 1;
+    if (occupant === key || cell === key) out.push(i + 1);
   }
-  return 0;
+  return out;
+}
+// 회원 명단 위치 해석 — 같은 이름이 여러 순번에 있을 때 '재인쇄' vs '동명이인' 구분.
+//  · 이름이 한 번만 → 그 자리.
+//  · 여러 번 등장 →
+//     - 기본(대다수): '재인쇄'(같은 사람이 스페어 순환 목록에 두 번) → 근무 자리(가장 이른 순번). [이은지 등]
+//     - 관리자가 동명이인으로 등록한 이름(declaredHomonyms)만: 실제 딴 사람이 섞임 → 명단만으론 회원 자리 확정 불가.
+//       member.homonymPos 지정 시 그 자리, 아니면 ambiguous=true → 자동 근무배정 보류(엉뚱한 동명이인 오알림 방지). [이지은]
+export function resolveMemberInRoster(roster, member, verdict) {
+  const key = String(member?.name || '').replace(/\s/g, '');
+  const hits = rosterHitsOf(roster, member?.name);
+  if (hits.length === 0) return { pos: 0, ambiguous: false, hits };
+  if (hits.length === 1) return { pos: hits[0], ambiguous: false, hits };
+  const forced = Number(member?.homonymPos) || 0;                                 // 관리자 수동 지정(매개변수)
+  if (forced && hits.includes(forced)) return { pos: forced, ambiguous: false, hits, forced: true };
+  if (!declaredHomonyms().has(key)) return { pos: hits[0], ambiguous: false, hits, reprint: true }; // 재인쇄(같은 사람)
+  const crewN = Number(verdict?.personCount?.[key]) || null;                      // 조배치표상 조 수(진단용)
+  return { pos: hits[0], ambiguous: true, hits, crewN };                          // 등록된 동명이인 — 배정 보류
 }
 
 // 순수 표결: 여러 raw 읽기 → 합의 verdict 하나(불확실이면 _uncertain). I/O 없음(테스트 용이).
@@ -899,6 +943,15 @@ export async function judge(article, today = null, member = memberFromEnv()) {
         //  (전역 사전 duties는 날짜 누적이라 '오늘의 부'엔 못 씀 — 이 배치표 crews만 사용.)
         verdict.crewDuty = {};
         for (const c of crews) { const k = String(c.name || '').replace(/\s/g, ''); if (k && !verdict.crewDuty[k]) verdict.crewDuty[k] = c.duty || ''; }
+        // ★조 배치표 = '사람 대장'. 같은 이름이 '서로 다른 조'에 ≥2행이면 진짜 동명이인(딴 사람).
+        //  같은 조에서 두 번 잡히면 재판독 중복으로 보고 1명 처리 → 이름별 '조(jo) 집합' 크기로 실제 인원 판정.
+        //  이 값이 명단(순번+이름)에서 같은 이름이 '재인쇄'인지 '동명이인'인지 가르는 authoritative 근거.
+        const joByName = {};
+        for (const c of crews) { const k = String(c.name || '').replace(/\s/g, ''); if (!k) continue; (joByName[k] ||= new Set()).add(Number(c.jo) || 0); }
+        verdict.personCount = {};
+        for (const k in joByName) verdict.personCount[k] = joByName[k].size;
+        verdict.homonyms = Object.keys(joByName).filter((k) => joByName[k].size >= 2);
+        if (verdict.homonyms.length) console.log(`⚠️ 동명이인 감지: ${verdict.homonyms.map((k) => `${k}(${verdict.personCount[k]}명)`).join(', ')}`);
         if (n) console.log(`👥 조 배치표 ${n}명 수확`);
       }
       if (built) {
