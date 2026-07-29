@@ -220,7 +220,17 @@ function resolveCutoff(verdict, article, today = null) {
 function fixMemberPosByRoster(v, member = memberFromEnv()) {
   if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
   const rp = rosterPosOf(v.part3Roster, member.name);
-  if (rp <= 0) return;
+  if (rp <= 0) {
+    // ★신뢰할 만큼 완전한 명단(rosterReliable)인데 회원이 없다 = 오늘 이 부(部)에 없음.
+    //  메인 판독이 다른 부(예: 3부 명단의 김홍구 순번28)에서 붙인 '유령 순번'을 제거해
+    //  2부처럼 회원이 대개 없는 부에서 헛 슬롯/카드가 생기지 않게 한다. (3부 홈에선 부재=off라 순번0이 정답.)
+    if (v.rosterReliable) {
+      if (Number(v.myPosition) > 0) v._posFixed = `명단 대조: 순번 ${v.myPosition}→없음(이 부 명단에 부재)`;
+      v.myPosition = 0;
+      if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) { v.myStatus = 'spare'; v.teeTime = ''; v.course = ''; }
+    }
+    return;
+  }
   const prevPos = Number(v.myPosition) || 0;
   const gridMax = Array.isArray(v.teeGrid) ? v.teeGrid.reduce((mx, g) => Math.max(mx, Number(g?.pos) || 0), 0) : 0;
   const annCut = (v.cutoffAnnounced && Number(v.cutoffPosition) > 0) ? Number(v.cutoffPosition) : 0;

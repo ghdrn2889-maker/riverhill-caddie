@@ -261,30 +261,68 @@ export async function analyzeSchedule(article) {
 // ── 3) 본배치표에서 'N부 순번/이름 목록'만 집중 판독 ─────────────
 //  통합 판독은 한 번에 너무 많은 걸 읽어 명단을 자주 놓친다(타임아웃·부분). 명단만 따로 뽑으면
 //  또렷한 인쇄 글씨라 순번 순서대로 안정적으로 읽힌다 → 스페어 대시보드의 '순번별 이름'의 근거.
-// 부(部)별 표 배경색 이름 (리버힐: 1부=분홍, 2부=하늘색, 3부=보라).
-function partColorName(part) {
+// 부(部)별 티오프표 특징 — 배경색 + 티오프 시각대(창). 이 두 축으로 '어느 부 표'인지 특정한다.
+//  (리버힐: 1부=분홍 아침, 2부=하늘색 낮, 3부=보라 저녁. 창은 judge.mjs partWindow와 일치.)
+function partGridInfo(part) {
   const p = String(part);
-  return p === '1' ? '연분홍(분홍)' : p === '2' ? '하늘색' : '보라';
+  return p === '1' ? { color: '연분홍(분홍)', win: '이른 아침(대략 05~10시, 예: 06:23·07:33)', min: 5, max: 10 }
+    : p === '2' ? { color: '하늘색', win: '낮(대략 10~16시, 예: 11:57·13:07)', min: 10, max: 16 }
+    : { color: '보라', win: '저녁(대략 16~24시, 예: 17:00·18:45)', min: 16, max: 24 };
 }
+function partColorName(part) { return partGridInfo(part).color; }
+
+// ★배치표 가로 배열은 [1부명단][OUT1부IN표][2부명단][OUT2부IN표][3부명단][OUT3부IN표][조배치표] 순으로
+//  '명단→자기 부 티오프표'가 반복된다(명단은 '자기 부 표의 바로 왼쪽'). 그래서 각 부 명단은 두 티오프표 사이에 낀다.
+//  한쪽만("왼쪽") 지시하면 모델이 좌/우를 헷갈려 이웃 부 명단을 집는다(2부→3부명단 오독 실증). → 양쪽 표로 샌드위치 앵커링.
 function buildRosterPrompt(part) {
   const p = String(part);
-  const color = partColorName(p);
-  const others = ['1', '2', '3'].filter((x) => x !== p)
-    .map((x) => `${x}부(${partColorName(x)})`).join('·');
-  return `당신은 골프장 배치표 이미지를 정확히 옮겨적는 도우미입니다.
-이미지에서 "${p}부 순번/이름 목록"을 찾으세요.
-- ★${p}부 섹션은 헤더가 "OUT ${p}부 IN"이고, 그 표의 배경색이 **${color}**입니다. 오직 이 ${color} ${p}부 섹션만 읽으세요.
-- 이 목록은 "OUT ${p}부 IN" 티오프 시간표의 '왼쪽'에 있으며, 각 줄이 "순번(숫자) + 이름" 형태입니다.
-- 순번 1번부터 마지막 번호까지 한 명도 빠뜨리지 말고 순서대로 전부 옮기세요(근무·스페어 모두 포함).
-- 이름 옆 괄호 표기((54), (1,3), (2,3) 등)가 있으면 이름에 그대로 붙여 적으세요.
-- ★명단이 두 세로단으로 나뉘어 있으면(예: 왼단 1~25, 오른단 26~50) 두 단 모두 '맨 아래 마지막 줄까지' 읽어 순번 순서대로 이어붙이세요. 특히 오른단 아래쪽(41·45·50번 등)을 빠뜨리지 마세요.
-- 순번 숫자는 이름 왼쪽에 분명히 적혀 있습니다. 그 숫자를 pos 로 쓰세요(임의로 매기지 말 것). 인쇄 안 된 순번은 지어내지 말고, 실제 인쇄된 마지막 순번에서 멈추세요.
-- ★${others} 섹션은 절대 섞지 마세요. 오직 ${p}부(${color})만.
-- ★${p}부 명단은 앞부분 이름(예: 순번 2~12)이 뒤 순번(예: 41~50)에 '다시' 인쇄돼 있기도 합니다. 같은 이름이라도 순번(pos)이 다르면 각각 실제 항목이니 그 순번 그대로 전부 넣으세요 — 이름이 겹친다고 절대 빼거나 멈추지 마세요.
+  const me = partGridInfo(p);
+  const left = p === '2' ? { n: '1', ...partGridInfo('1') } : p === '3' ? { n: '2', ...partGridInfo('2') } : null;
+  const hasRight = p !== '3';
+  let anchor;
+  if (p === '1') {
+    anchor = `1부 명단은 배치표에서 **가장 왼쪽**에 있는 순번+이름 세로칸입니다. 그 오른쪽에 "OUT 1부 IN"(${me.color}, 티오프 ${me.win}) 표가 붙어 있습니다.`;
+  } else {
+    anchor = `${p}부 명단은 **두 티오프표 사이에 끼어 있는** 순번+이름 세로칸입니다:
+   · 그 명단의 **왼쪽**엔 "OUT ${left.n}부 IN"(${left.color}, 티오프 ${left.win}) 표,
+   · 그 명단의 **오른쪽**엔 "OUT ${p}부 IN"(${me.color}, 티오프 ${me.win}) 표가 있습니다.
+   즉 ${p}부 명단은 "OUT ${p}부 IN" 표의 **바로 왼쪽** 칸입니다.${hasRight ? ` "OUT ${p}부 IN" 표의 **오른쪽**에 있는 명단은 다음 부의 것이니 절대 읽지 마세요.` : ''}`;
+  }
+  return `당신은 골프장 배치표 이미지를 정확히 옮겨적는 도우미입니다. "${p}부 순번/이름 목록"만 읽으세요.
 
-반드시 JSON "하나만" 출력(설명 금지):
-{ "part": ${p}, "roster": [ {"pos": 1, "name": "정유경(54)"}, {"pos": 2, "name": "표승완(54)"} ] }
-${p}부 목록을 못 찾으면 {"part": ${p}, "roster": []}.`;
+[배치표 가로 배열 — 매우 중요]
+이 배치표는 왼→오른쪽으로 [1부 명단]→[OUT 1부 IN 표]→[2부 명단]→[OUT 2부 IN 표]→[3부 명단]→[OUT 3부 IN 표]→[조 배치표(1·2·3·4조)] 순서로 '명단→그 부 티오프표'가 반복됩니다. 각 부 명단은 '자기 부 티오프표의 바로 왼쪽'에 있습니다.
+
+[${p}부 명단 위치]
+${anchor}
+
+[스스로 검증] 올바른 ${p}부 명단이면 그 오른쪽에 붙은 "OUT ${p}부 IN" 표의 티오프 시각이 ${me.win}대여야 합니다. 만약 고른 명단 오른쪽 표 시각이 이 시간대가 아니면 잘못 고른 것 — 다시 왼쪽/오른쪽을 확인하세요.
+
+[읽기 규칙]
+- 순번 1번부터 실제 인쇄된 마지막 번호까지 한 명도 빠짐없이, 이름 왼쪽의 숫자를 pos로(임의로 매기지 말 것). 근무·스페어 모두.
+- 이름 옆 괄호((54),(1,3),(2,3) 등)는 그대로 붙여 적으세요.
+- 명단이 두 세로단이면(왼단 1~25, 오른단 26~50) 두 단 모두 맨 아래 마지막 줄까지. ★${p}부 명단은 앞부분 이름(순번 2~12)이 뒷순번(41~50)에 '다시' 인쇄되기도 합니다 — 같은 이름이라도 순번(pos)이 다르면 각각 실제 항목이니 그대로 전부 넣으세요(겹친다고 빼거나 멈추지 말 것).
+- 인쇄 안 된 순번은 지어내지 말고 마지막 인쇄 순번에서 멈추세요.
+
+반드시 JSON "하나만"(설명 금지):
+{ "part": ${p}, "gridFirstTime": "고른 명단 오른쪽 'OUT ${p}부 IN' 표의 가장 이른 티오프 시각 HH:MM", "roster": [ {"pos":1,"name":"정유경(54)"} ] }
+${p}부 목록을 못 찾으면 {"part":${p},"gridFirstTime":"","roster":[]}.`;
+}
+
+// gemini 응답 → [{pos,name}] 정리(순번 오름차순, pos 기준 dedup) + gridFirstTime의 '시(hour)'.
+function cleanRosterOut(out) {
+  const cleaned = (Array.isArray(out?.roster) ? out.roster : [])
+    .map((r) => ({ pos: Number(r?.pos), name: String(r?.name || '').trim() }))
+    .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
+    .sort((a, b) => a.pos - b.pos);
+  // ★중복 제거는 '순번(pos)' 기준 — 같은 pos가 두 번이면 첫 것만.
+  //  이름 중복은 허용: 2부 명단은 앞부분 이름(순번 2~12)이 뒤 순번(41~50)에 실제로 다시 인쇄되므로
+  //  이름으로 지우면 뒷순번(41~50)이 통째로 날아간다(홍아름=13·신철=28 등 앞은 맞아도 50까지 못 채움).
+  const seen = new Set();
+  const deduped = [];
+  for (const r of cleaned) { if (seen.has(r.pos)) continue; seen.add(r.pos); deduped.push(r); }
+  const hm = String(out?.gridFirstTime || '').match(/(\d{1,2}):/);
+  return { rows: deduped, hour: hm ? Number(hm[1]) : null };
 }
 
 // 반환: [{pos:number, name:string}] (순번 오름차순, 유효행만) — 실패/미검출이면 [].
@@ -293,23 +331,16 @@ export async function analyzeRoster(article, part = '3') {
   // ★명단은 '구조화 JSON 리스트'라 flash가 더 안정적(pro는 긴 40행 명단에서 JSON 파싱 실패 잦음).
   //  괄호 교환("정진영(조하빈)")도 flash가 또렷이 포착 → 점유자 해석은 코드(normRosterName)가 결정적으로.
   const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
-  const out = await callGeminiJSON(buildRosterPrompt(part), article.images[0], model);
-  const rows = Array.isArray(out?.roster) ? out.roster : [];
-  const cleaned = rows
-    .map((r) => ({ pos: Number(r?.pos), name: String(r?.name || '').trim() }))
-    .filter((r) => Number.isFinite(r.pos) && r.pos >= 1 && r.name)
-    .sort((a, b) => a.pos - b.pos);
-  // ★중복 제거는 '순번(pos)' 기준 — 같은 pos가 두 번 나오면 첫 것만.
-  //  이름 중복은 허용한다: 2부 명단은 앞부분 이름(순번 2~12)이 뒤 순번(41~50)에 실제로 다시 인쇄되므로
-  //  이름으로 지우면 뒷순번(41~50)이 통째로 날아간다(홍아름=13·신철=28 등 앞은 맞아도 50까지 못 채움).
-  const seen = new Set();
-  const deduped = [];
-  for (const r of cleaned) {
-    if (seen.has(r.pos)) continue;
-    seen.add(r.pos);
-    deduped.push(r);
+  const { min, max } = partGridInfo(part);
+  let parsed = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
+  // ★검증: 모델이 보고한 앵커 표 시각이 이 부의 창(min~max) 밖이면 엉뚱한 부 표에 붙은 명단을 집은 것 → 1회 재판독.
+  //  (샌드위치 앵커링으로 오독은 드물지만, 배치표 변형 대비 안전망. hour 미보고면 검증 생략.)
+  if (parsed.hour != null && (parsed.hour < min || parsed.hour >= max)) {
+    console.log(`↻ [roster] ${part}부 명단 앵커시각 ${parsed.hour}시가 창(${min}~${max}) 밖 → 재판독`);
+    const retry = cleanRosterOut(await callGeminiJSON(buildRosterPrompt(part), article.images[0], model));
+    if (retry.hour == null || (retry.hour >= min && retry.hour < max)) parsed = retry;
   }
-  return deduped;
+  return parsed.rows;
 }
 
 // ── 3.5) 인턴 캐디(티오프표 노란칸) 전용 판독 ─────────────────
