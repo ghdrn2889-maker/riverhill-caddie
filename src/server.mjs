@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
@@ -790,6 +790,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const txt = `${full.subject || ''} ${full.text || ''}`;
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
+    const crewDuty = out.rawVerdict?.crewDuty || null;   // 조배치표 근무표시 맵(3부 판독에서 수확) → 부별 알림 게이트 근거
     // 부별 텍스트 게이트: '{n}부' 명시(1부는 '조출' 포함) 또는 그 부 창 시각. (1부=5~9시, 2부=10~15시)
     //  3부 시각(16시~)은 어느 게이트에도 안 걸림 → 3부 당추 텍스트가 1·2부 판독을 유발하지 않음.
     const PARTS = [
@@ -810,13 +811,13 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
       //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
-      await processForMemberPart(1, mp, m1outP, full, opts);
+      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty });
       for (const m of activeMembers()) {
         if (m.id === 1) continue;
         try {
           const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
           const moutP = interpretForMember(full, outP.rawVerdict, memberP, loadToday(m.id, p));
-          await processForMemberPart(m.id, memberP, moutP, full, opts);
+          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
     }
@@ -988,6 +989,17 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   const v = out.rawVerdict;
   if (!out.relevant || !v) return { pushed: false };
   const part = String(member.part || '2');
+  // ★근무표시 게이트 — 조 배치표에 이 회원의 근무표시가 있고, 그 표시가 '이 부'를 명시적으로 안 하면 스킵.
+  //  (예: 조하빈 근무표시="3부" → 2부 처리 자체를 안 함. 슬롯·상태·알림 전부 생성 안 됨.)
+  //  근무표시가 없거나(회원이 조배치표 밖) 애매하면 개입 안 함(기존 명단 기반 판단에 맡김).
+  const duty = opts.crewDuty && opts.crewDuty[String(member.name || '').replace(/\s/g, '')];
+  if (duty) {
+    const dp = dutyToParts(duty);
+    if (dp.size && !dp.has(part)) {
+      if (userId === 1) console.log(`·  [${part}부] ${member.name} 근무표시="${duty}"(${[...dp].join('·')}부) → ${part}부 아님, 스킵`);
+      return { pushed: false, gated: true };
+    }
+  }
   // 1부는 캐디 은어로 '조출'(조기출근) — 번호와 함께 표기해 알아보기 쉽게.
   const label = part === '1' ? '1부(조출)' : `${part}부`;
   const win = partWindow(part);

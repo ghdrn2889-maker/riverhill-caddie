@@ -25,6 +25,24 @@ export function partWindow(part) {
   if (p === '2') return { min: 10, max: 16 };  // 2부: 낮(대략 10~15시대)
   return { min: Number(process.env.TEE_MIN_HOUR ?? 16), max: 24 }; // 3부(기본): 16시 이후
 }
+// 조 배치표 '근무표시'(duty) → 그 캐디가 오늘 뛰는 부(部) 집합.
+//  "3부"→{3}, "2,3"→{2,3}, "1,3"→{1,3}, "54/54h"→{1,2,3}(전 부), "조출"→{1}.
+//  ★부를 '명시적으로 특정'하는 표시만 해석. 애매(선발/정출/배치/당번/프리 등)하거나 비면 빈 집합
+//   → 게이트가 개입하지 않고 기존 명단 기반 판단에 맡긴다(오차단 방지).
+export function dutyToParts(duty) {
+  const d = String(duty || '').replace(/\s/g, '');
+  const parts = new Set();
+  if (!d) return parts;
+  if (/휴무|휴가|병가|격리|연차|반차|월차/.test(d)) return parts; // 근무 안 함 → 개별 판단
+  if (/54|올라운드|오라운드/.test(d)) { parts.add('1'); parts.add('2'); parts.add('3'); return parts; }
+  const nums = d.match(/[123]/g);
+  if (/,|\./.test(d) && nums) { nums.forEach((x) => parts.add(x)); return parts; } // "2,3" "1,3"
+  const m = d.match(/([123])부/);
+  if (m) { parts.add(m[1]); return parts; }                     // "3부"
+  if (/조출/.test(d)) { parts.add('1'); return parts; }          // 조출=1부 조기출근
+  return parts;                                                  // 특정 불가
+}
+
 // 창을 벗어난(=남의 부) 시각인가. teeMin/teeMax 없으면 부로 유추.
 function outOfWindow(hour, member) {
   if (hour == null || !Number.isFinite(Number(hour))) return false;
@@ -865,7 +883,14 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       if (interns) { verdict.internCount = interns.internCount; verdict.internTees = interns.internTees; }
       const crews = doCrew ? await analyzeCrews(article) : [];
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
-      if (crews.length) { const n = learnCrews(crews); markHarvested(imgKey); if (n) console.log(`👥 조 배치표 ${n}명 수확`); }
+      if (crews.length) {
+        const n = learnCrews(crews); markHarvested(imgKey);
+        // ★오늘 이 배치표의 '이름→근무표시' 맵을 판독결과에 부착 → 부(部)별 알림 게이트의 authoritative 근거.
+        //  (전역 사전 duties는 날짜 누적이라 '오늘의 부'엔 못 씀 — 이 배치표 crews만 사용.)
+        verdict.crewDuty = {};
+        for (const c of crews) { const k = String(c.name || '').replace(/\s/g, ''); if (k && !verdict.crewDuty[k]) verdict.crewDuty[k] = c.duty || ''; }
+        if (n) console.log(`👥 조 배치표 ${n}명 수확`);
+      }
       if (built) {
         // ★캐디 사전으로 순번 이름 후처리 보정 + 축적(오탈자 되돌림). 위치(빈칸)는 보존.
         verdict.part3Roster = correctAndLearn(built.roster);
