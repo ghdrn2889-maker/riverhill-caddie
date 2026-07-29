@@ -9,7 +9,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
@@ -791,6 +791,15 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
     const crewDuty = out.rawVerdict?.crewDuty || null;   // 조배치표 근무표시 맵(3부 판독에서 수확) → 부별 알림 게이트 근거
+    // ★이름 중복 교차확인(두 탕) — board당 1회. 각 부 근무자 집합(순번≤팀수)을 교차해 '이름→뛰는 부' authoritative 맵.
+    //  2부 근무자는 조배치표 근무표시가 빈칸이라 이 교차확인이 두 탕/부소속의 가장 확실한 신호. 전체·다부 배치표에서만(비용).
+    let crossPart = null;
+    if (isBoardImg && (isFullBoard || boardTables.length >= 2)) {
+      try {
+        crossPart = await crossPartWorkMap(full);
+        if (crossPart?.twoRounds?.length) console.log(`🔁 두 탕 감지(교차확인): ${crossPart.twoRounds.map((nm) => `${nm}(${crossPart.byName[nm].duty})`).join(', ')}`);
+      } catch (e) { console.error('[교차확인 오류]', e.message); }
+    }
     // 부별 텍스트 게이트: '{n}부' 명시(1부는 '조출' 포함) 또는 그 부 창 시각. (1부=5~9시, 2부=10~15시)
     //  3부 시각(16시~)은 어느 게이트에도 안 걸림 → 3부 당추 텍스트가 1·2부 판독을 유발하지 않음.
     const PARTS = [
@@ -811,13 +820,13 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
       //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
-      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty });
+      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty, crossPart });
       for (const m of activeMembers()) {
         if (m.id === 1) continue;
         try {
           const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
           const moutP = interpretForMember(full, outP.rawVerdict, memberP, loadToday(m.id, p));
-          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty });
+          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
     }
@@ -992,7 +1001,8 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   // ★근무표시 게이트 — 조 배치표에 이 회원의 근무표시가 있고, 그 표시가 '이 부'를 명시적으로 안 하면 스킵.
   //  (예: 조하빈 근무표시="3부" → 2부 처리 자체를 안 함. 슬롯·상태·알림 전부 생성 안 됨.)
   //  근무표시가 없거나(회원이 조배치표 밖) 애매하면 개입 안 함(기존 명단 기반 판단에 맡김).
-  const duty = opts.crewDuty && opts.crewDuty[String(member.name || '').replace(/\s/g, '')];
+  const nameKey = String(member.name || '').replace(/\s/g, '');
+  const duty = opts.crewDuty && opts.crewDuty[nameKey];
   if (duty) {
     const dp = dutyToParts(duty);
     if (dp.size && !dp.has(part)) {
@@ -1000,6 +1010,18 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
       return { pushed: false, gated: true };
     }
   }
+  // ★이름 중복 교차확인 게이트(독립 교차검증) — 각 부 근무자 집합을 교차한 authoritative '두 탕' 맵.
+  //  이 회원이 교차맵에 '근무자'로 잡혔는데(=어느 부의 순번≤팀수) 그 부 집합에 '이 부'가 없으면
+  //  = 다른 부만 뛰는데 이 부 근무로 오검출 → 근무 승격 보류(엉뚱한 두 탕 근무 오알림 방지).
+  //  교차맵에 이름이 아예 없으면(스페어 등 비근무) 개입 안 함(스페어 대기 알림은 기존 로직에 맡김).
+  const crossE = opts.crossPart?.byName?.[nameKey];
+  if (crossE && !crossE.parts.includes(part)) {
+    if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) {
+      if (userId === 1) console.log(`·  [${part}부] ${member.name} 교차확인=${crossE.duty}(${crossE.parts.join('·')}부) → ${part}부 근무 아님, 근무배정 보류`);
+      v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
+    }
+  }
+  if (crossE) v.crossDuty = crossE.duty; // 두 탕 표시·검증용
   // 1부는 캐디 은어로 '조출'(조기출근) — 번호와 함께 표기해 알아보기 쉽게.
   const label = part === '1' ? '1부(조출)' : `${part}부`;
   const win = partWindow(part);

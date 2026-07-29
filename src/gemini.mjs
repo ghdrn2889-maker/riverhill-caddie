@@ -343,6 +343,25 @@ export async function analyzeRoster(article, part = '3') {
   return parsed.rows;
 }
 
+// ── 3.2) 상단 제목의 부별 '팀 수'만 집중 판독 ──────────────────
+//  "1부 14  2부 7  3부 24  총:45팀". ★조 배치표 "1조 21명"의 인원수와 혼동 금지(오른쪽, 최상단 아님).
+//  교차확인(두 탕)에서 각 부 근무 상한(순번 ≤ 팀수)의 근거. 헤더 전용 판독이 flash로 안정(3/3 검증).
+function buildPartTeamsPrompt() {
+  return `골프장 배치표 '최상단 제목 줄'에는 "1부 14   2부 7   3부 24   총: 45팀" 형식으로 각 부 예약 '팀 수'가 적혀 있습니다. 그 숫자만 읽으세요.
+- ★오른쪽 '조 배치표'의 "1조 21명 / 2조 22명" 같은 '조별 인원수'와 절대 혼동 금지 — 그건 팀수가 아닙니다. 오직 최상단 "N부 M" 제목 숫자만.
+- 특정 부가 없으면 그 값은 0.
+반드시 JSON 하나만: {"part1":정수,"part2":정수,"part3":정수,"total":정수}`;
+}
+// 반환: {1:n,2:n,3:n} — 실패 시 {}.
+export async function analyzePartTeams(article) {
+  if (!article.images?.length) return {};
+  const model = process.env.GEMINI_ROSTER_MODEL || 'gemini-flash-latest';
+  const out = await callGeminiJSON(buildPartTeamsPrompt(), article.images[0], model);
+  if (!out) return {};
+  const g = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+  return { 1: g(out.part1), 2: g(out.part2), 3: g(out.part3), total: g(out.total) };
+}
+
 // ── 3.5) 인턴 캐디(티오프표 노란칸) 전용 판독 ─────────────────
 //  통합 판독은 인턴 감지가 흔들려(오탐) → 노란칸만 집중해서 또렷이 센다(flash 안정).
 function buildInternPrompt(part = '3') {

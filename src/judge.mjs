@@ -2,7 +2,7 @@
 //  글 하나(제목+본문+이미지) + 내 프로필 + 오늘 기준표 → 구조화된 판정 '하나'.
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
-import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns } from './gemini.mjs';
+import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePartTeams } from './gemini.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 import { loadJSON } from './store.mjs';
@@ -865,6 +865,41 @@ function normRosterName(raw) {
   if (tail && /[가-힣]/.test(tail)) return { name: tail, cross: /^[\d,\s.]+$/.test(inner) };
   if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true };  // "표승완(54)" 부/근무 구분
   return { name: inner || base, cross: false };                       // "정진영(조하빈)" 순번 교환 → 점유자
+}
+
+// 부(部) 집합 → 근무표시 문자열. {1,2,3}→"54", {1,3}→"1,3", {2,3}→"2,3", {2}→"2부".
+function partsToDuty(parts) {
+  const a = [...parts].map(String).filter((x) => ['1', '2', '3'].includes(x)).sort();
+  if (a.length === 3) return '54';
+  if (a.length === 2) return a.join(',');
+  if (a.length === 1) return `${a[0]}부`;
+  return '';
+}
+
+// ★이름 중복 교차확인(두 탕 감지) — 각 부 '근무자 집합'(순번 ≤ 팀수)을 교차해
+//  같은 사람이 여러 부에 있으면 두 탕/54로 독립 판정. 2부 근무자는 조배치표 근무표시가 빈칸이라
+//  이 교차확인이 두 탕을 잡는 가장 확실한 신호. 조배치표 duty("54h","1,3")와 상호검증도 가능.
+//  반환: { teams:{1,2,3}, byName:{정규이름:{parts:[..],duty,pos:{부:순번}}}, twoRounds:[정규이름..] }
+export async function crossPartWorkMap(article, parts = ['1', '2', '3']) {
+  const teams = await analyzePartTeams(article);
+  const byName = {};
+  for (const p of parts) {
+    const tc = Number(teams?.[p]) || 0;
+    if (tc <= 0) continue;                                   // 그 부 없음/팀수 미상 → 건너뜀
+    const roster = await analyzeRoster(article, p);
+    for (const r of roster) {
+      if (!(Number(r.pos) > 0 && r.pos <= tc)) continue;     // 근무자만(순번 ≤ 팀수). 스페어·재인쇄(뒷순번) 제외.
+      const nm = normRosterName(r.name).name.replace(/\s/g, '');
+      if (!nm) continue;
+      const e = (byName[nm] ||= { parts: new Set(), pos: {} });
+      e.parts.add(p);
+      if (e.pos[p] == null) e.pos[p] = r.pos;
+    }
+  }
+  const out = {};
+  for (const nm in byName) out[nm] = { parts: [...byName[nm].parts].sort(), duty: partsToDuty(byName[nm].parts), pos: byName[nm].pos };
+  const twoRounds = Object.keys(out).filter((nm) => out[nm].parts.length >= 2);
+  return { teams, byName: out, twoRounds };
 }
 
 // 전용 명단 판독([{pos,name}]) → { roster:위치정렬(index=순번-1,빈칸=''), cross:[부중복 본명] }.
