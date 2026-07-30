@@ -49,7 +49,10 @@
   .ud-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:2px 0 14px; font-size:11.5px; color:var(--tx2); }
   .ud-legend .lg{ display:inline-flex; align-items:center; gap:5px; }
   .ud-legend .sw{ width:11px; height:11px; border-radius:3px; display:inline-block; }
-  .ud-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:13px; }
+  .ud-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:13px; }
+  @media(max-width:600px){ .ud-grid{ grid-template-columns:1fr; gap:11px; } }
+  .ud-card{ min-width:0; }
+  .ud-pushbody{ overflow-wrap:anywhere; }
   .ud-card{ background:var(--panel); border:1px solid var(--bord); border-left:4px solid var(--tx3); border-radius:14px; padding:13px 15px; box-shadow:var(--shadow); }
   .ud-card.k-work{ border-left-color:var(--good); }
   .ud-card.k-spare{ border-left-color:var(--info); }
