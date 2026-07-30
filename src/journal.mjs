@@ -94,6 +94,16 @@ export function setDayKind(dateISO, choice, userId = 1) {
   return next;
 }
 
+// ★기록 삭제 — 캘린더에서 잘못 넣은 날을 통째로 지움(일지에서 제거). 정산 dayParts는 서버에서 함께 클리어.
+export function removeDay(dateISO, userId = 1) {
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return false;
+  const j = loadUserJSON(userId, FILE, {});
+  if (!(dateISO in j)) return false;
+  delete j[dateISO];
+  saveUserJSON(userId, FILE, j);
+  return true;
+}
+
 // 특정 날짜의 최종 기록(그날 결과) 조회 — 응원 문구가 '오늘 무근무' 등을 인식하는 근거.
 export function getDay(dateISO, userId = 1) {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;

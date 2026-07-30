@@ -1019,142 +1019,134 @@ async function loadRecent() {
 }
 function markAllRead() { setLastRead(Number($('readAll').dataset.newest) || Date.now()); loadRecent(); }
 
-/* ── 일일 근무 일지(근무/스페어/휴무 하루하루) ── */
-let jCache = { year: null, days: [], summary: {} };
-let jPage = 0;                 // 현재 페이지(0=최신). 최신순 리스트를 J_PAGE개씩 보여줌.
-let jOpenDate = null;          // 펼쳐진 단락 날짜(항상 하나만).
-const J_PAGE = 7;              // 일주일 단위(한 화면 최대 7개).
+/* ── 일일 근무 일지 = 달력(통합): 날짜 탭 → 근무/부 기록·수정, 정산 자동 연동 ── */
+let jCache = { year: null, days: [] };
+let jMap = {};                     // 'YYYY-MM-DD' -> day
+let jViewY = null, jViewM = null;  // 표시 중인 월
+let jSelDate = null;               // 편집 중 날짜(하나만)
+let jEdit = null;                  // { kind, parts }
+const WDX = ['일', '월', '화', '수', '목', '금', '토'];
 
 async function loadJournal(year) {
-  const y = year || jCache.year || new Date().getFullYear();
+  const now = new Date();
+  if (jViewY == null) { jViewY = now.getFullYear(); jViewM = now.getMonth() + 1; }
+  const y = year || jViewY;
   try {
     const r = await (await fetch(`/api/journal?year=${y}`)).json();
-    jCache = { year: y, days: r.days || [], summary: r.summary || {} };
-  } catch { $('jSummary').textContent = '불러오기 실패'; return; }
-  renderJournal();
+    jCache = { year: y, days: r.days || [] };
+    jMap = {}; jCache.days.forEach((d) => { jMap[d.date] = d; });
+  } catch { if ($('jTitle')) $('jTitle').textContent = '불러오기 실패'; return; }
+  renderJournalCal();
 }
 
-// 부 조합 → 배지 색 클래스(사용자 지정: 1부 연분홍·2부 하늘·3부 보라·1·3 핫핑크·2·3 하늘·54 연두).
+// 부 조합 → 배지 색 클래스(1부 연분홍·2부 하늘·3부 보라·1·3 핫핑크·2·3 하늘·54 연두).
 function jComboClass(parts) {
-  if (!parts || !parts.length) return 'work';
+  if (!parts || !parts.length) return 'jc-p3';
   const k = parts.length >= 3 ? '54' : parts.slice().sort().join('');
   return { '1': 'jc-p1', '2': 'jc-p2', '3': 'jc-p3', '13': 'jc-13', '23': 'jc-23', '12': 'jc-12', '54': 'jc-54' }[k] || 'jc-p3';
 }
+// 부 조합 라벨: 3부↑=54, 2개=1·3/2·3, 1개=3부. (탕 표현 안 씀)
+function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.length >= 3) return '54'; if (parts.length === 2) return parts.slice().sort().join('·'); return parts[0] + '부'; }
 
-function renderJournal() {
-  const days = jCache.days || [];              // 서버가 최신순(DESC)으로 내려줌
-  const total = Math.max(1, Math.ceil(days.length / J_PAGE));
-  if (jPage > total - 1) jPage = total - 1;
-  if (jPage < 0) jPage = 0;
-  const s = jCache.summary || {};
-  $('jSummary').textContent = `${jCache.year}년 근무 일지`;
-  const subParts = [`근무 ${s.work || 0}`, `스페어 ${s.spare || 0}`, `휴무 ${s.off || 0}`];
-  if (s.vacation) subParts.push(`휴가 ${s.vacation}`);
-  if (s.removed) subParts.push(`순번제외 ${s.removed}`);
-  $('jSub').textContent = subParts.join('일 · ') + '일';
-
-  const pageDays = days.slice(jPage * J_PAGE, jPage * J_PAGE + J_PAGE);
-  const mdOf = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
-  const rangeEl = $('jRange');
-  if (rangeEl) rangeEl.textContent = pageDays.length
-    ? `${pageDays.length > 1 ? `${mdOf(pageDays[pageDays.length - 1].date)} ~ ${mdOf(pageDays[0].date)}` : mdOf(pageDays[0].date)} · ${jPage + 1}/${total}`
-    : '기록 없음';
-  if ($('jPrev')) $('jPrev').disabled = jPage <= 0;            // ‹ = 더 최근(위)
-  if ($('jNext')) $('jNext').disabled = jPage >= total - 1;    // › = 더 과거(아래)
-
-  $('jDays').innerHTML = pageDays.length ? pageDays.map((d) => {
-    const dow = WD[new Date(d.date + 'T00:00:00').getDay()];
-    const md = `${Number(d.date.slice(5, 7))}/${Number(d.date.slice(8, 10))}(${dow})`;
-    const [cls, label] = jKindMeta(d);
-    const isWork = d.kind === 'work' && !d.excluded;
-    const eff = isWork ? (d.effParts || null) : null;   // 근무일 유효 조합(정산과 동일 소스)
-    // 근무일 = 부 조합 배지 1개(조합별 색). 비근무일은 분류 배지.
-    const badge = isWork
-      ? `<span class="jk ${eff ? jComboClass(eff) : 'work'}">${eff ? jCombo(eff) : '근무'}</span>`
-      : `<span class="jk ${cls}">${label}</span>`;
-    const manual = d.userKind ? '<span class="jman">직접 지정</span>' : '';
-    const chip = (k, lab, c) => `<button class="jkbtn ${c}${jSel(d, k) ? ' on' : ''}" data-jd="${d.date}" data-jk="${k}">${lab}</button>`;
-    const partsEdit = isWork ? `<div class="jparts">
-      <span class="jplabel">부 조합</span>
-      ${['1', '2', '3'].map((p) => `<button class="jpchip${eff && eff.includes(p) ? ' on' : ''}" data-pd="${d.date}" data-pp="${p}">${p === '1' ? '1부' : p + '부'}</button>`).join('')}
-      <div class="jphint">그날 실제 조합으로 눌러 고치면 정산 수입에 바로 반영돼요.</div>
-    </div>` : '';
-    const editor = `<div class="jedit">
-      <div class="jkinds">${chip('work', '근무', 'work')}${chip('spare', '스페어', 'spare')}${chip('off', '휴무', 'off')}${chip('vacation', '휴가', 'vac')}${chip('removed', '순번 제외', 'removed')}</div>
-      ${partsEdit}
-    </div>`;
-    // 펼치기 화살표: 접힘=아래(⌄), 펼침=위(⌃). 탭하면 CSS 오버슈트 전환으로 빠르게 회전.
-    const open = d.date === jOpenDate ? ' editing' : '';
-    return `<div class="jday${open}" data-card="${d.date}">
-      <div class="jrow"><div><span class="jd">${md}</span>${manual}</div>
-        <div class="jbadges">${badge}<svg class="jchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div></div>
-      ${editor}</div>`;
-  }).join('') : '<div class="empty">이 해 기록이 아직 없어요.</div>';
-  bindJournalEdit();
-}
-
-// 일지 배지 클래스·라벨(휴무/휴가/순번제외 구분).
-function jKindMeta(d) {
+// 하루 → [배지 색클래스, 라벨]. 기록 없으면 null.
+function jDayBadge(d) {
+  if (!d) return null;
   if (d.excluded) return ['removed', '순번 제외'];
   if (d.kind === 'off') return d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
   if (d.kind === 'spare') return ['spare', '스페어'];
-  if (d.kind === 'work') return ['work', '근무'];
-  return ['off', '기타'];
+  if (d.kind === 'work') { const eff = (d.effParts && d.effParts.length) ? d.effParts : ['3']; return [jComboClass(eff), jCombo(eff)]; }
+  return null;
 }
-// 현재 이 날의 분류와 일치하는 수정 칩(하이라이트용).
-function jSel(d, k) {
-  if (k === 'removed') return !!d.excluded;
-  if (k === 'vacation') return d.kind === 'off' && !d.excluded && d.offType === 'vacation';
-  if (k === 'off') return d.kind === 'off' && !d.excluded && d.offType !== 'vacation';
-  return d.kind === k && !d.excluded;
+// 하루 → 편집기 초기 상태.
+function jDayToEdit(d) {
+  if (!d) return { kind: 'work', parts: ['3'] };
+  if (d.excluded) return { kind: 'removed', parts: [] };
+  if (d.kind === 'off') return { kind: d.offType === 'vacation' ? 'vacation' : 'off', parts: [] };
+  if (d.kind === 'spare') return { kind: 'spare', parts: [] };
+  if (d.kind === 'work') return { kind: 'work', parts: ((d.effParts && d.effParts.length) ? d.effParts : ['3']).slice() };
+  return { kind: 'work', parts: ['3'] };
 }
-// 부 조합 배지 라벨: 3부↑=54, 2개=1·3/2·3(부 생략), 1개=3부. (근무 횟수/탕 표현은 쓰지 않음)
-function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.length >= 3) return '54'; if (parts.length === 2) return parts.join('·'); return parts[0] + '부'; }
-function bindJournalEdit() {
-  // 페이지 이동(‹ 최근 / › 과거) + 날짜 점프
-  const prevBtn = $('jPrev'), nextBtn = $('jNext'), jump = $('jJump');
-  if (prevBtn) prevBtn.onclick = () => { if (jPage > 0) { jPage--; renderJournal(); } };
-  if (nextBtn) nextBtn.onclick = () => { const total = Math.ceil(jCache.days.length / J_PAGE); if (jPage < total - 1) { jPage++; renderJournal(); } };
-  if (jump) jump.onchange = async () => {
-    const v = jump.value; if (!v) return;
-    const y = Number(v.slice(0, 4));
-    if (y !== jCache.year) await loadJournal(y);
-    const idx = jCache.days.findIndex((d) => d.date <= v);   // 최신순 → v 이하 첫 항목이 있는 페이지로
-    jPage = idx < 0 ? Math.max(0, Math.ceil(jCache.days.length / J_PAGE) - 1) : Math.floor(idx / J_PAGE);
-    if (jCache.days.some((d) => d.date === v)) jOpenDate = v; // 정확히 그날이 있으면 펼침
-    renderJournal();
-  };
 
-  // 행 탭 → 단락 열기/닫기(항상 하나만; 다른 걸 열면 기존 건 자동으로 닫힘). 선택해도 자동으로 안 닫힘.
-  $('jDays').querySelectorAll('.jday').forEach((el) => {
-    el.querySelector('.jrow').onclick = (e) => {
-      if (e.target.closest('.jkbtn') || e.target.closest('.jpchip')) return;
-      const date = el.dataset.card, wasOpen = el.classList.contains('editing');
-      $('jDays').querySelectorAll('.jday.editing').forEach((x) => x.classList.remove('editing'));
-      if (wasOpen) { jOpenDate = null; } else { el.classList.add('editing'); jOpenDate = date; }
-    };
-  });
-  // 분류 선택 → 저장(단락은 열린 채 유지, 데이터만 새로고침)
-  $('jDays').querySelectorAll('.jkbtn').forEach((b) => {
-    b.onclick = async (e) => {
-      e.stopPropagation();
-      await postJSON('/api/journal/kind', { date: b.dataset.jd, kind: b.dataset.jk });
-      await loadJournal();          // jPage·jOpenDate 유지 → 열린 채로 갱신
-    };
-  });
-  // 부 조합 수정 → 정산 dayParts 동기화(단락 유지)
-  $('jDays').querySelectorAll('.jpchip').forEach((b) => {
-    b.onclick = async (e) => {
-      e.stopPropagation();
-      const date = b.dataset.pd, pp = b.dataset.pp;
-      const row = b.closest('.jparts');
-      const cur = new Set([...row.querySelectorAll('.jpchip.on')].map((x) => x.dataset.pp).filter((x) => ['1', '2', '3'].includes(x)));
-      cur.has(pp) ? cur.delete(pp) : cur.add(pp);
-      if (cur.size === 0) return;   // 최소 1개
-      await postJSON('/api/ledger/dayparts', { date, parts: [...cur].sort() });
-      await loadJournal();
-    };
-  });
+async function renderJournalCal() {
+  if (!$('jCal')) return;
+  if (jCache.year !== jViewY) { await loadJournal(jViewY); return; }  // 연도 바뀌면 로드
+  if ($('jPrev')) $('jPrev').onclick = () => jMonthShift(-1);
+  if ($('jNext')) $('jNext').onclick = () => jMonthShift(1);
+  $('jTitle').textContent = `${jViewY}년 ${jViewM}월`;
+
+  const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
+  const md = jCache.days.filter((d) => d.date.startsWith(pre));
+  const cnt = (f) => md.filter(f).length;
+  const sub = [`근무 ${cnt((d) => d.kind === 'work' && !d.excluded)}`, `스페어 ${cnt((d) => d.kind === 'spare')}`, `휴무 ${cnt((d) => d.kind === 'off' && !d.excluded && d.offType !== 'vacation')}`];
+  const vac = cnt((d) => d.kind === 'off' && !d.excluded && d.offType === 'vacation');
+  const rem = cnt((d) => d.excluded);
+  if (vac) sub.push(`휴가 ${vac}`);
+  if (rem) sub.push(`순번제외 ${rem}`);
+  $('jSub').textContent = sub.join('일 · ') + '일';
+
+  const first = new Date(jViewY, jViewM - 1, 1).getDay();
+  const ndays = new Date(jViewY, jViewM, 0).getDate();
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  let h = WDX.map((w, i) => `<div class="jcal-wd${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) h += '<div class="jcell empty"></div>';
+  for (let d = 1; d <= ndays; d++) {
+    const key = `${pre}-${String(d).padStart(2, '0')}`;
+    const b = jDayBadge(jMap[key]);
+    const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
+    h += `<div class="jcell${jMap[key] ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}"><span class="jcn">${d}</span>${bd}</div>`;
+  }
+  $('jCal').innerHTML = h;
+  $('jCal').querySelectorAll('.jcell[data-d]').forEach((c) => { c.onclick = () => openDayEditor(c.dataset.d); });
+
+  if (jSelDate && jSelDate.startsWith(pre)) drawDayEditor();
+  else { jSelDate = null; if ($('jEditor')) $('jEditor').hidden = true; if ($('jHint')) $('jHint').hidden = false; }
+}
+
+function jMonthShift(delta) {
+  jViewM += delta;
+  if (jViewM < 1) { jViewM = 12; jViewY--; } else if (jViewM > 12) { jViewM = 1; jViewY++; }
+  jSelDate = null; jEdit = null;
+  renderJournalCal();
+}
+
+function openDayEditor(key) {
+  if (jSelDate === key) { jSelDate = null; jEdit = null; renderJournalCal(); return; }  // 같은 날 → 닫기
+  jSelDate = key; jEdit = jDayToEdit(jMap[key]);
+  renderJournalCal();
+  if ($('jEditor')) $('jEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function drawDayEditor() {
+  const key = jSelDate, ed = $('jEditor'); if (!ed || !jEdit) return;
+  const dow = WDX[new Date(key + 'T00:00:00').getDay()];
+  const mdL = `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}(${dow})`;
+  const isWork = jEdit.kind === 'work';
+  const exists = !!jMap[key];
+  const KINDS = [['work', '근무', 'work'], ['spare', '스페어', 'spare'], ['off', '휴무', 'off'], ['vacation', '휴가', 'vac'], ['removed', '순번 제외', 'removed']];
+  const res = jEdit.kind === 'del' ? '이 날 기록을 지웁니다'
+    : isWork ? `${jCombo(jEdit.parts) || '부 선택'} · 캐디피 정산 자동 반영`
+    : ({ spare: '스페어', off: '휴무', vacation: '휴가', removed: '순번 제외' })[jEdit.kind];
+  ed.innerHTML = `<div class="jed-h">${mdL} <b>· 이 날 기록</b></div>
+    <div class="jkinds">${KINDS.map(([k, lab, c]) => `<button class="jkbtn ${c}${jEdit.kind === k ? ' on' : ''}" data-k="${k}">${lab}</button>`).join('')}${exists ? `<button class="jkbtn jdel${jEdit.kind === 'del' ? ' on' : ''}" data-k="del">지우기</button>` : ''}</div>
+    ${isWork ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts.includes(p) ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">그날 뛴 부를 다 누르세요 · 여러 개 = 복수 근무(2·3부·54)</div></div>` : ''}
+    <div class="jed-res${isWork && !jEdit.parts.length ? ' muted' : ''}">→ ${res}</div>
+    <button class="jed-save">${exists ? '저장' : '추가'}</button>`;
+  ed.hidden = false; if ($('jHint')) $('jHint').hidden = true;
+  ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jEdit.kind = b.dataset.k; if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3']; drawDayEditor(); }; });
+  ed.querySelectorAll('.jpchip[data-p]').forEach((b) => { b.onclick = () => { const p = b.dataset.p, i = jEdit.parts.indexOf(p); if (i >= 0) jEdit.parts.splice(i, 1); else jEdit.parts.push(p); if (!jEdit.parts.length) jEdit.parts = [p]; drawDayEditor(); }; });
+  ed.querySelector('.jed-save').onclick = () => saveDayEditor();
+}
+
+async function saveDayEditor() {
+  const date = jSelDate, e = jEdit; if (!date || !e) return;
+  try {
+    if (e.kind === 'del') { await postJSON('/api/journal/remove', { date }); }
+    else if (e.kind === 'work') { await postJSON('/api/journal/kind', { date, kind: 'work' }); await postJSON('/api/ledger/dayparts', { date, parts: e.parts.slice().sort() }); }
+    else { await postJSON('/api/journal/kind', { date, kind: e.kind }); await postJSON('/api/ledger/dayparts', { date, parts: [] }); }
+  } catch { /* noop */ }
+  jSelDate = null; jEdit = null;
+  await loadJournal(jViewY);
 }
 
 /* ── 근무·세무 기록 (월 단위 · 요약 카드 · 정리 필터) ── */

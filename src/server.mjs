@@ -187,6 +187,14 @@ app.post('/api/journal/kind', (req, res) => {
   const day = journal.setDayKind(date, kind, uid);
   res.json({ ok: true, day });
 });
+// 일일 근무 일지 기록 삭제(캘린더에서 잘못 넣은 날 제거) — 정산 부(部) 보정도 함께 클리어.
+app.post('/api/journal/remove', (req, res) => {
+  const { date } = req.body || {};
+  const uid = req.user?.id || 1;
+  const ok = journal.removeDay(date, uid);
+  ledger.setDayParts(date, [], uid);
+  res.json({ ok });
+});
 
 // 관리자 전용 알림 발송 — role='admin' 계정들의 기기에만. (네이버 쿠키 만료·테스트 등 운영성 알림)
 //  일반 회원(테스터 등)에게는 절대 가지 않는다. 관리자 계정이 없으면 조용히 아무것도 안 보냄.
