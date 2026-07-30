@@ -1703,7 +1703,7 @@ function lgReportInner(o, S, opts) {
     const expTot = exps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const catRows = Object.keys(byCat).length ? Object.entries(byCat).map(([c, a]) => `<tr><td>${esc(c)}</td><td class="num st">${w(a)}</td></tr>`).join('') : `<tr><td colspan="2" class="mid">등록된 지출이 없습니다.</td></tr>`;
     const detRows = exps.length ? exps.map((e, i) => `<tr><td>${i + 1}</td><td>${e.date}(${lgDow(e.date)})</td><td>${esc(e.category)}</td><td>${esc(e.vendor || '')}</td><td>${esc(e.method || '')}</td><td class="num st">${w(e.amount)}</td></tr>`).join('') : `<tr><td colspan="6" class="mid">—</td></tr>`;
-    expBlock = `<h2>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
+    expBlock = `<h2${o.rev ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
       <table class="log half"><thead><tr><th>항목</th><th>금액</th></tr></thead><tbody>${catRows}</tbody><tfoot><tr class="tot"><td>지출 합계</td><td class="num">${w(expTot)}</td></tr></tfoot></table>
       <h3>지출 상세(증빙)</h3>
       <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>`;
@@ -1731,6 +1731,7 @@ td.num{text-align:right;} td.st{font-weight:700;} td.mid{text-align:center;color
 table.log tfoot td{background:#eef2f0;font-weight:700;} table.log tfoot tr.tot td{background:#0b5d34;color:#fff;font-size:13px;}
 table.net{width:64%;} table.net td{border:1px solid #bbb;padding:8px 10px;font-size:13px;} table.net td.num{text-align:right;font-weight:700;} table.net tr.tot td{background:#0b5d34;color:#fff;font-size:14px;}
 .note{font-size:10.5px;color:#777;margin-top:14px;line-height:1.65;}
+.pb-before{page-break-before:always;break-before:page;}
 .bar{position:sticky;top:0;background:#0b5d34;padding:10px;text-align:center;margin:-24px -24px 18px;} .bar button{font-size:14px;font-weight:700;padding:9px 18px;border:0;border-radius:8px;background:#fff;color:#0b5d34;}
 @media print{.bar{display:none;}}`;
 
@@ -1822,7 +1823,7 @@ async function lgSavePdf() {
     margin: 10, filename: name, image: { type: 'jpeg', quality: 0.96 },   // 균일 여백 → 좌우 대칭
     html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, scrollX: 0, scrollY: 0 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },   // 표 행·헤더가 페이지 경계에서 잘리지 않게
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'], before: '.pb-before' },   // 행 잘림 방지 + 지출은 새 페이지로
   };
   let blob = null;
   try { blob = await html2pdf().set(opt).from(el).outputPdf('blob'); } catch (e) { /* 실패 → 아래 폴백 */ }

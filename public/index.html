@@ -486,6 +486,7 @@
     .lgdoc tr, .lgdoc thead, .lgdoc tfoot { page-break-inside: avoid; break-inside: avoid; }
     .lgdoc thead { display: table-header-group; }
     .lgdoc h2, .lgdoc h3 { page-break-after: avoid; break-after: avoid; }
+    .lgdoc .pb-before { page-break-before: always; break-before: page; }   /* 지출 섹션은 항상 새 페이지에서 시작 */
 
     /* ===== 대시보드 날씨 배경(오늘 화면 히어로) — 현재 날씨에 맞춰 배경이 바뀐다 ===== */
     .hero .fx { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:19px; }
