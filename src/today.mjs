@@ -340,11 +340,15 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   } else {
     if (next.offReason) delete next.offReason;
     if (next.prevPosition) delete next.prevPosition;
-    // ★휴무 vs 휴가 vs 병가 자동 구분: off인데 병가 신호면 sick, 휴가류면 vacation, 아니면 off(휴무).
+    // ★휴무 vs 휴가 vs 병가 자동 구분: off인데 병가 신호면 sick, 휴가류면 vacation.
+    //  ★신호 없으면 '이전에 확정된 sick/vacation'을 보존 — 같은 날 침묵 재판독이 병가→휴무로 강등하지 못하게.
+    //   (날짜 바뀌면 위에서 blank로 초기화되므로 하루 단위로만 유지. journal.mjs와 동일한 보존 원칙.)
     if (next.status === 'off') {
       const sig = detectOffType(article, cur.name || verdict.name);
-      next.offType = (verdict.offType === 'sick' || sig === 'sick') ? 'sick'
-        : (verdict.offType === 'vacation' || sig === 'vacation') ? 'vacation' : 'off';
+      const signalled = (verdict.offType === 'sick' || sig === 'sick') ? 'sick'
+        : (verdict.offType === 'vacation' || sig === 'vacation') ? 'vacation' : null;
+      next.offType = signalled
+        || ((cur.offType === 'sick' || cur.offType === 'vacation') ? cur.offType : 'off');
     } else if (next.offType) delete next.offType;
   }
 
