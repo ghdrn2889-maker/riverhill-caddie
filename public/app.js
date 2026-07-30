@@ -589,7 +589,9 @@ function renderToday(t) {
   const isConfirmed = isWork && s.teeTime;
   // ★순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 판에서 사라짐(사유 미상). 평소 휴무의 시적 쉼 문구 대신 사실만.
   const offRemoved = st === 'off' && s.offReason === 'removed';
-  const offToday = st === 'off' && off < 1 && !offRemoved;   // 평소 휴무만 랜덤 쉼 문구 로테이션
+  const offSick = st === 'off' && s.offType === 'sick';
+  const offVac = st === 'off' && s.offType === 'vacation';
+  const offToday = st === 'off' && off < 1 && !offRemoved && !offSick && !offVac;   // 평소 휴무만 랜덤 쉼 문구 로테이션
   if (offToday) {
     startOffTitle();                    // 랜덤 문구 + 슬라이드 로테이션 시작
   } else {
@@ -598,6 +600,8 @@ function renderToday(t) {
       : isConfirmed ? `${dayW} ${heroPfx}근무 확정`
       : isWork ? `${dayW} ${heroPfx}근무 예정`
       : offRemoved ? '오늘은 근무가 없어요'
+      : offSick ? `${dayW} 병가예요`
+      : offVac ? `${dayW} 휴가예요`
       : st === 'off' ? `${dayW} 휴무예요`
       : isSpare ? `${dayW} ${heroPart} 스페어${posTxt}` : '대기 중';
   }
@@ -606,6 +610,8 @@ function renderToday(t) {
     : (isWork && off >= 1) ? `${dayW} 근무예요. 아직 여유 있으니 출발 시각을 확인해두세요.`
     : isWork ? '아래 시간에 맞춰 움직이면 됩니다.'
     : offRemoved ? '최신 배치표에서 순번이 빠졌어요.'
+    : offSick ? '무리하지 말고 몸부터 잘 회복해요.'
+    : offVac ? (off >= 1 ? `${dayW}은 휴가예요. 잘 보내요.` : '오늘은 휴가예요. 잘 보내요.')
     : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
@@ -1055,7 +1061,7 @@ function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.lengt
 function jDayBadge(d) {
   if (!d) return null;
   if (d.excluded) return ['removed', '제외'];   // 셀은 좁아 짧게(편집기 칩은 '순번 제외' 그대로)
-  if (d.kind === 'off') return d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
+  if (d.kind === 'off') return d.offType === 'sick' ? ['sick', '병가'] : d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
   if (d.kind === 'spare') return ['spare', '스페어'];
   if (d.kind === 'work') { const eff = (d.effParts && d.effParts.length) ? d.effParts : ['3']; return [jComboClass(eff), jCombo(eff)]; }
   return null;
@@ -1064,7 +1070,7 @@ function jDayBadge(d) {
 function jDayToEdit(d) {
   if (!d) return { kind: 'work', parts: ['3'] };
   if (d.excluded) return { kind: 'removed', parts: [] };
-  if (d.kind === 'off') return { kind: d.offType === 'vacation' ? 'vacation' : 'off', parts: [] };
+  if (d.kind === 'off') return { kind: d.offType === 'sick' ? 'sick' : d.offType === 'vacation' ? 'vacation' : 'off', parts: [] };
   if (d.kind === 'spare') return { kind: 'spare', parts: [] };
   if (d.kind === 'work') return { kind: 'work', parts: ((d.effParts && d.effParts.length) ? d.effParts : ['3']).slice() };
   return { kind: 'work', parts: ['3'] };
@@ -1080,10 +1086,12 @@ async function renderJournalCal() {
   const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
   const md = jCache.days.filter((d) => d.date.startsWith(pre));
   const cnt = (f) => md.filter(f).length;
-  const sub = [`근무 ${cnt((d) => d.kind === 'work' && !d.excluded)}`, `스페어 ${cnt((d) => d.kind === 'spare')}`, `휴무 ${cnt((d) => d.kind === 'off' && !d.excluded && d.offType !== 'vacation')}`];
+  const sub = [`근무 ${cnt((d) => d.kind === 'work' && !d.excluded)}`, `스페어 ${cnt((d) => d.kind === 'spare')}`, `휴무 ${cnt((d) => d.kind === 'off' && !d.excluded && d.offType !== 'vacation' && d.offType !== 'sick')}`];
   const vac = cnt((d) => d.kind === 'off' && !d.excluded && d.offType === 'vacation');
+  const sick = cnt((d) => d.kind === 'off' && !d.excluded && d.offType === 'sick');
   const rem = cnt((d) => d.excluded);
   if (vac) sub.push(`휴가 ${vac}`);
+  if (sick) sub.push(`병가 ${sick}`);
   if (rem) sub.push(`순번제외 ${rem}`);
   $('jSub').textContent = sub.join('일 · ') + '일';
 
@@ -1126,10 +1134,10 @@ function drawDayEditor() {
   const mdL = `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}(${dow})`;
   const isWork = jEdit.kind === 'work';
   const exists = !!jMap[key];
-  const KINDS = [['work', '근무', 'work'], ['spare', '스페어', 'spare'], ['off', '휴무', 'off'], ['vacation', '휴가', 'vac'], ['removed', '순번 제외', 'removed']];
+  const KINDS = [['work', '근무', 'work'], ['spare', '스페어', 'spare'], ['off', '휴무', 'off'], ['vacation', '휴가', 'vac'], ['sick', '병가', 'sick'], ['removed', '순번 제외', 'removed']];
   const res = jEdit.kind === 'del' ? '이 날 기록을 지웁니다'
     : isWork ? `${jCombo(jEdit.parts) || '부 선택'} · 캐디피 정산 자동 반영`
-    : ({ spare: '스페어', off: '휴무', vacation: '휴가', removed: '순번 제외' })[jEdit.kind];
+    : ({ spare: '스페어', off: '휴무', vacation: '휴가', sick: '병가', removed: '순번 제외' })[jEdit.kind];
   ed.innerHTML = `<div class="jed-h">${mdL} <b>· 이 날 기록</b></div>
     <div class="jkinds">${KINDS.map(([k, lab, c]) => `<button class="jkbtn ${c}${jEdit.kind === k ? ' on' : ''}" data-k="${k}">${lab}</button>`).join('')}${exists ? `<button class="jkbtn jdel${jEdit.kind === 'del' ? ' on' : ''}" data-k="del">지우기</button>` : ''}</div>
     ${isWork ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts.includes(p) ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">그날 뛴 부를 다 누르세요 · 여러 개 = 복수 근무(2·3부·54)</div></div>` : ''}

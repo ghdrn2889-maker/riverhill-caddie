@@ -83,16 +83,19 @@ function parseCutoff(article) {
 // 휴가(연차·반차·월차·병가) 자동 판별 — 글/댓글에 '내 이름'이 휴가류 표현과 가까이 있으면 vacation.
 //  배치표 이미지의 '휴가' 표기까지는 못 읽으므로(그건 off로 뭉뚱그려짐) 텍스트 신호 기반 best-effort.
 //  정확도는 수동 보정으로 보완(사용자가 일지에서 직접 휴무↔휴가 변경).
-const VAC_RE = /(휴가|연차|반차|월차|병가)/;
-function detectVacation(article, name) {
-  if (!name) return false;
+const SICK_RE = /병가/;                       // 병가는 별도 상태(sick)
+const VAC_RE = /(휴가|연차|반차|월차)/;        // 휴가류(병가 제외)
+// off 세부 유형 판별 — 이름 주변 ±14자에 병가 신호면 'sick', 휴가류면 'vacation', 없으면 null.
+function detectOffType(article, name) {
+  if (!name) return null;
   const nk = String(name).replace(/\s/g, '');
   const t = `${article?.subject || ''} ${article?.text || ''} ${(Array.isArray(article?.comments) ? article.comments : []).map((c) => c?.content || '').join(' ')}`.replace(/\s+/g, ' ');
   const i = t.indexOf(nk);
-  if (i < 0) return false;
-  // 이름 주변 ±14자 안에 휴가류 표현.
+  if (i < 0) return null;
   const around = t.slice(Math.max(0, i - 14), i + nk.length + 14);
-  return VAC_RE.test(around);
+  if (SICK_RE.test(around)) return 'sick';
+  if (VAC_RE.test(around)) return 'vacation';
+  return null;
 }
 
 function renumberGrid(slots) {
@@ -332,9 +335,12 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   } else {
     if (next.offReason) delete next.offReason;
     if (next.prevPosition) delete next.prevPosition;
-    // ★휴무 vs 휴가 자동 구분: off인데 휴가류 신호가 있으면 vacation, 아니면 off(휴무).
-    if (next.status === 'off') next.offType = (verdict.offType === 'vacation' || detectVacation(article, cur.name || verdict.name)) ? 'vacation' : 'off';
-    else if (next.offType) delete next.offType;
+    // ★휴무 vs 휴가 vs 병가 자동 구분: off인데 병가 신호면 sick, 휴가류면 vacation, 아니면 off(휴무).
+    if (next.status === 'off') {
+      const sig = detectOffType(article, cur.name || verdict.name);
+      next.offType = (verdict.offType === 'sick' || sig === 'sick') ? 'sick'
+        : (verdict.offType === 'vacation' || sig === 'vacation') ? 'vacation' : 'off';
+    } else if (next.offType) delete next.offType;
   }
 
   next.timeline.push({ id: article.id, at: Date.now(), category: verdict.category || '', summary: verdict.summary || '' });

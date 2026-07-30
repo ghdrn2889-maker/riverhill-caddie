@@ -46,9 +46,9 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   const primary = (rounds['3']?.kind === 'work' && rounds['3'].teeTime) ? rounds['3']
     : Object.values(rounds).find((r) => r.kind === 'work' && r.teeTime) || null;
   const workCount = Object.values(rounds).filter((r) => r.kind === 'work').length;
-  // 휴무 vs 휴가: off일 때만 offType 보관(vacation 신호 우선, 없으면 이전 값·기본 off).
+  // 휴무 vs 휴가 vs 병가: off일 때만 offType 보관(sick/vacation 신호 우선, 없으면 이전 값·기본 off).
   const offType = overall === 'off'
-    ? (info.offType === 'vacation' ? 'vacation' : (prev.offType || 'off'))
+    ? (info.offType === 'sick' ? 'sick' : info.offType === 'vacation' ? 'vacation' : (prev.offType || 'off'))
     : null;
   j[dateISO] = {
     date: dateISO,
@@ -68,7 +68,7 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
 
 // ★수동 보정 — 사용자가 일지에서 그날 분류를 직접 지정(근무/스페어/휴무/휴가/순번 제외).
 //  userKind:true 로 표식해 이후 자동 판독이 덮지 않게 한다(수동 우선). null 지정 시 자동으로 되돌림.
-const MANUAL_KINDS = { work: 'work', spare: 'spare', off: 'off', vacation: 'off', removed: 'off' };
+const MANUAL_KINDS = { work: 'work', spare: 'spare', off: 'off', vacation: 'off', sick: 'off', removed: 'off' };
 export function setDayKind(dateISO, choice, userId = 1) {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
   const j = loadUserJSON(userId, FILE, {});
@@ -82,7 +82,7 @@ export function setDayKind(dateISO, choice, userId = 1) {
   const kind = MANUAL_KINDS[choice];
   const next = {
     ...prev, date: dateISO, kind, userKind: true,
-    offType: kind === 'off' ? (choice === 'vacation' ? 'vacation' : 'off') : null,
+    offType: kind === 'off' ? (choice === 'vacation' ? 'vacation' : choice === 'sick' ? 'sick' : 'off') : null,
     excluded: choice === 'removed',
     offReason: choice === 'removed' ? 'removed' : undefined,
     updatedAt: Date.now(),
@@ -128,8 +128,9 @@ export function summary({ year, month } = {}, userId = 1) {
   return {
     work: days.filter((d) => d.kind === 'work').length,
     spare: days.filter((d) => d.kind === 'spare').length,
-    off: off.filter((d) => !d.excluded && d.offType !== 'vacation').length, // 순수 휴무
+    off: off.filter((d) => !d.excluded && d.offType !== 'vacation' && d.offType !== 'sick').length, // 순수 휴무
     vacation: off.filter((d) => !d.excluded && d.offType === 'vacation').length,
+    sick: off.filter((d) => !d.excluded && d.offType === 'sick').length,
     removed: off.filter((d) => d.excluded).length,
     total: days.length,
   };
