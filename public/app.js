@@ -22,8 +22,6 @@ function timeAgo(ts) {
 }
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const postJSON = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
-// [임시 디버그] 클라이언트 상태를 서버 로그로 보고(진단용, fire-and-forget).
-const dbg = (m) => { try { fetch('/api/dbg', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ m }) }); } catch {} };
 
 /* ── 헤더 날짜·시각 ── */
 function tickDate() {
@@ -2106,7 +2104,6 @@ function initCcLightbox() {
 let meState = null;
 async function loadMe() {
   try { meState = await (await fetch('/api/me')).json(); } catch { meState = null; }
-  try { dbg('loadMe authed=' + (meState && meState.authed) + ' sa=' + isStandalonePWA + ' wh=' + wantHandoff + ' dm=' + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) + ' vis=' + document.visibilityState + ' path=' + location.pathname); } catch {}
   // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
   hideLogin();
@@ -2166,82 +2163,16 @@ function closeOv() {
 window.addEventListener('popstate', () => {
   if (ovIsOpen() && ovDismissable) { $('ov').hidden = true; ovDismissable = false; }
 });
-// 설치형(홈화면 앱)인지 — OAuth가 앱 밖(브라우저)에서 돌아 쿠키가 앱에 안 심기는 환경.
-const isStandalonePWA = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-  || window.navigator.standalone === true;
-// ★모바일은 설치형(standalone) 감지가 실패해도 OAuth가 앱 밖(브라우저)에서 열려 쿠키가 앱에 안 심길 수 있다.
-//  그래서 설치형 감지에만 의존하지 말고, 터치·모바일 UA면 핸드오프(폴링→교환)를 쓴다. 데스크톱은 일반 리다이렉트로 충분.
-const wantHandoff = isStandalonePWA || (navigator.maxTouchPoints || 0) > 0
-  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-let _pwaPoll = null;
-
 function showLogin() {
-  dbg('showLogin path=' + location.pathname);
   hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
-  // ★설치형 PWA: 구글 버튼을 핸드오프 로그인으로(브라우저에서 로그인→앱이 폴링으로 세션 교환). 1회 바인딩.
-  if (wantHandoff && !showLogin._bound) {
-    showLogin._bound = true;
-    $('googleLoginBtn').addEventListener('click', startPwaLogin);
-  }
-  // 로그인하러 나간 사이 앱이 재시작돼도 이어받기: 저장된 핸드오프 nonce가 있으면 폴링 재개.
-  if (wantHandoff && !_pwaPoll) {
-    let pending = null; try { pending = localStorage.getItem('rh_pwa_nonce'); } catch {}
-    if (pending) { setLoginWaiting(true); pollPwaLogin(pending); }
-  }
   const lo = $('loginOv');
   lo.hidden = false;
   lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
 }
-function hideLogin() { $('loginOv').hidden = true; if (_pwaPoll) { clearInterval(_pwaPoll); _pwaPoll = null; } }
-
-function setLoginWaiting(on, msg) {
-  const btn = $('googleLoginBtn');
-  btn.style.pointerEvents = on ? 'none' : '';
-  btn.style.opacity = on ? '.55' : '';
-  $('loginErr').textContent = on ? '브라우저에서 로그인을 완료한 뒤, 이 앱으로 다시 돌아오세요…' : (msg || '');
-}
-
-// 설치형 PWA 로그인: (1)nonce 발급 (2)브라우저에서 구글 로그인 (3)앱이 폴링→교환해 세션을 '앱'에 심음.
-function startPwaLogin(e) {
-  dbg('startPwaLogin (preventDefault)');
-  if (e) e.preventDefault();
-  // 사용자 제스처를 유지하려 빈 창을 먼저 연다(iOS 팝업 차단 방지). 이후 URL을 채운다.
-  const w = window.open('about:blank', '_blank');
-  setLoginWaiting(true);
-  postJSON('/api/login/start').then((r) => {
-    if (!r || !r.ok || !r.nonce) throw new Error('start');
-    try { localStorage.setItem('rh_pwa_nonce', r.nonce); } catch {}  // 앱이 재시작돼도 이어받도록 저장
-    const url = '/api/auth/google?h=' + encodeURIComponent(r.nonce);
-    if (w && !w.closed) w.location.href = url; else window.location.href = url;
-    pollPwaLogin(r.nonce);
-  }).catch(() => { if (w && !w.closed) w.close(); setLoginWaiting(false, '로그인을 시작하지 못했어요. 다시 시도해주세요.'); });
-}
-
-function pollPwaLogin(nonce) {
-  if (_pwaPoll) clearInterval(_pwaPoll);
-  let tries = 0;
-  const tick = async () => {
-    if (++tries > 120) { clearInterval(_pwaPoll); _pwaPoll = null; try { localStorage.removeItem('rh_pwa_nonce'); } catch {} setLoginWaiting(false, '시간이 초과됐어요. 다시 시도해주세요.'); return; }
-    try {
-      const s = await (await fetch('/api/login/poll?h=' + encodeURIComponent(nonce), { cache: 'no-store' })).json();
-      if (s.status === 'done') {
-        clearInterval(_pwaPoll); _pwaPoll = null;
-        const ex = await postJSON('/api/login/exchange', { nonce });
-        try { localStorage.removeItem('rh_pwa_nonce'); } catch {}
-        if (ex && ex.ok) { setLoginWaiting(false); await loadMe(); }   // 쿠키가 앱에 심김 → authed
-        else setLoginWaiting(false, '로그인 확정에 실패했어요. 다시 시도해주세요.');
-      } else if (s.status === 'expired') {
-        clearInterval(_pwaPoll); _pwaPoll = null; try { localStorage.removeItem('rh_pwa_nonce'); } catch {} setLoginWaiting(false, '로그인 요청이 만료됐어요. 다시 시도해주세요.');
-      }
-    } catch { /* 네트워크 일시 오류 — 다음 틱에 재시도 */ }
-  };
-  _pwaPoll = setInterval(tick, 2000);
-  // 앱으로 돌아온 순간(포그라운드) 즉시 한 번 확인 → 대기 체감 단축.
-  const onVis = () => { if (!document.hidden && _pwaPoll) tick(); };
-  document.addEventListener('visibilitychange', onVis, { once: false });
-}
+// 구글 버튼은 <a href="/api/auth/google"> 그대로 → 일반 리다이렉트 로그인(자연스러운 흐름). 팝업·핸드오프 없음.
+function hideLogin() { $('loginOv').hidden = true; }
 function renderAccount() {
   const btn = $('acctBtn');
   if (!meState || !meState.authed) { btn.hidden = true; return; }

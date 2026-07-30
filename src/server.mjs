@@ -66,8 +66,6 @@ app.get('/api/login/poll', pollLoginHandoffRoute);
 app.post('/api/login/exchange', exchangeLoginHandoff);
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
-  const ck = req.headers.cookie || '';
-  console.log('[LT] /me cookie=' + (ck.includes('rh_sess=') ? (/rh_sess=[^;]/.test(ck) ? 'rh_sess-VALUE' : 'rh_sess-EMPTY') : (ck ? 'other' : 'NONE')) + ' → authed=' + (req.user ? 'Y(user' + req.user.id + ')' : 'N'));
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
   if (!req.user) return res.json({ ...base, authed: false });
   recordVisit(req.user.id, { role: req.user.role, status: req.user.status }); // 방문(앱 오픈) 기록 — 10분 스로틀
@@ -83,12 +81,6 @@ app.get('/api/me', (req, res) => {
       homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
     needsOnboarding });
-});
-// [임시 디버그] 클라이언트가 로그인/렌더 상태를 서버로 보고 → pm2 logs로 실시간 관찰(진단 완료 후 제거).
-app.post('/api/dbg', (req, res) => {
-  const ck = req.headers.cookie || '';
-  console.log('[DBG] ' + String((req.body && req.body.m) || '').slice(0, 240) + ' | cookie=' + (ck.includes('rh_sess=') ? 'Y' : 'N') + ' | user=' + (req.user ? req.user.id : '-'));
-  res.json({ ok: true });
 });
 // 접속 하트비트 — 앱이 열려 있는 동안 주기적으로 호출. 마지막 활동 시각만 갱신(운영 모니터의 접속중/나감 판별).
 //  게이트 앞에 둬서 로그인만 돼 있으면(대기 회원 포함) 접속 상태가 잡힌다. 비로그인은 그냥 통과.
