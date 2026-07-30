@@ -37,7 +37,7 @@ function showView(name) {
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'worklog') { loadJournal(); loadWorklog(); }
   if (name === 'cart') loadCartCheck();
-  if (name === 'settle') loadLedger();
+  if (name === 'settle') { lgPage = -1; loadLedger(); }
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
 }
@@ -1387,7 +1387,7 @@ function initWorklogButtons() {
 let lgYear = null, lgMonth = null, lgData = null, lgProfile = { name: '', workplace: '리버힐CC' };
 let lgOpenDate = null;    // 펼쳐진 날짜 단락
 let lgExpForm = null;     // 지출 입력 폼 { id?, date, category, amount, vendor, method, photoData?, scanned?, _scanned? }
-let lgPage = 0;           // 7일 페이지네이션(0 = 최근 7일)
+let lgPage = -1;          // 7일 페이지네이션(오름차순). -1 = 첫 표시 → 가장 최근 페이지로 스냅
 let lgDocPeriod = 'month'; // 문서 대상: 'month' | 'year'
 let lgDocCtx = null;      // 미리보기/문서 컨텍스트
 let lgDayList = [];       // 이 달 날짜 목록(근무 or 지출) — 최신순
@@ -1427,7 +1427,7 @@ function lgBuildDays() {
     if (!d) { d = { date: e.date, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] }; map.set(e.date, d); }
     d.expenses.push(e);
   });
-  return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+  return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
 function renderLedger() {
@@ -1467,8 +1467,8 @@ function lgBrkText(d) { return `${lgTang(d.parts)} 캐디피 ${manKo(d.revenue)}
 
 function renderLgList() {
   const pages = Math.max(1, Math.ceil(lgDayList.length / LG_PAGE));
+  if (lgPage < 0) lgPage = pages - 1;        // 첫 표시 → 가장 최근(마지막) 페이지
   if (lgPage > pages - 1) lgPage = pages - 1;
-  if (lgPage < 0) lgPage = 0;
   const shown = lgDayList.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
   $('lgList').innerHTML = shown.length ? shown.map(lgAccHTML).join('') : '<div class="lg-listempty">이 달 근무·지출 기록이 없어요.</div>';
   shown.forEach((d) => { if (d._saved) delete d._saved; });
@@ -1831,9 +1831,9 @@ async function lgSavePdf() {
 }
 
 function initLedgerButtons() {
-  $('lgPrev').onclick = async () => { await lgFlushTips(); lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
-  $('lgNext').onclick = async () => { if ($('lgNext').disabled) return; await lgFlushTips(); lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
-  $('lgJump').onclick = async () => { await lgFlushTips(); const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); };
+  $('lgPrev').onclick = async () => { await lgFlushTips(); lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
+  $('lgNext').onclick = async () => { if ($('lgNext').disabled) return; await lgFlushTips(); lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
+  $('lgJump').onclick = async () => { await lgFlushTips(); const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
   $('lgSeg').querySelectorAll('button').forEach((b) => b.onclick = () => { lgDocPeriod = b.dataset.per; $('lgSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); updateDocDesc(); });
   ['lgORev', 'lgOTip', 'lgOExp'].forEach((id) => $(id).addEventListener('change', updateDocDesc));
   $('lgPdf').onclick = () => lgOpenDoc('pdf');
