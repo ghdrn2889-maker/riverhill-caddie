@@ -999,7 +999,9 @@ async function processForMember(userId, member, out, full, opts = {}) {
   let merged = null;
   if (out.relevant && v) {
     merged = applyVerdict(today, v, full);
-    saveToday(merged.next, userId);
+    // ★불안정 판독(_uncertain)은 상황판 baseline을 갱신하지 않는다 — 흔들리는 순번/상태가
+    //  다음 안정 판독과 비교돼 '유령 변경(순번 15→29 등)'을 만드는 것을 원천 차단. (읽기 기록·진단 로그는 아래에서 별도.)
+    if (!v._uncertain) saveToday(merged.next, userId);
     change = merged.change;
     const jIso = worklog.labelToISO(merged.next.date);
     if (jIso && !v._uncertain && out.push !== 'check') {
@@ -1007,7 +1009,11 @@ async function processForMember(userId, member, out, full, opts = {}) {
         course: merged.next.course, myPosition: merged.next.myPosition, cutoffName: merged.next.cutoffName,
         offReason: merged.next.offReason, prevPosition: merged.next.prevPosition, offType: merged.next.offType }, userId);
     }
-    if (change.reversal) {
+    if (v._uncertain) {
+      // ★불안정 판독 → 확정 변경알림 억제(피드/푸시 없음, 아래 low 리턴). baseline도 위에서 미갱신.
+      //  합의 판독·이미지 재판독으로 안정적으로 다시 읽힐 때 정식 알림. 흔들리는 순번을 '변경'으로 절대 단정하지 않는다.
+      out.push = 'low';
+    } else if (change.reversal) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
       if (teeChg) {
         // 티오프 시각 변경 → 출발·도착·백대기 전부 바뀜. 변경 사실 + 확인 요청 + 갱신된 전체 시각.
@@ -1044,7 +1050,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
   //  개인 카톡·잡담·개인 톡방 내용은 상황판만 조용히 스치고 알림을 내지 않는다(변동 없으면 완전 무음).
   //  변동(reversal: 티오프 변경/근무↔스페어/취소 등)이 있을 때만 '업무 시간 변동'을 최소한으로, 원문 노출 없이 알린다.
   if (isKakaoSource(full)) {
-    if (out.relevant && change.reversal) {
+    if (out.relevant && change.reversal && !v._uncertain) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
       title = '업무 시간 변동';
       body = teeChg
@@ -1182,7 +1188,8 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   // ★1부 배정유형(조출/1,3/54/1부전용) 저장 → 대시보드 배지. 값 없으면 이전 값 보존(명단 미판독 글 대비).
   if (part === '1' && v.myAssign) merged.next.assign = v.myAssign;
   else if (part === '1' && cur && cur.assign && !merged.next.assign) merged.next.assign = cur.assign;
-  saveToday(merged.next, userId, part);
+  // ★불안정 판독은 이 부 baseline도 미갱신 — 3부 경로와 동일하게 유령 변경 방지.
+  if (!v._uncertain) saveToday(merged.next, userId, part);
   const n = merged.next, change = merged.change;
   const isWork = ['assigned', 'work', 'your_turn'].includes(n.status);
 
@@ -1225,7 +1232,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   let title = '', body = '', push = 'low';
   // 전날 밤 뜨는 조출 배치표 대응 — '오늘/내일/모레'를 날짜 라벨로 정확히.
   const dayW = dayWordFor(n.date) || '오늘';
-  if (isWork && (teeChg || gotTee || becameWork)) {
+  if (isWork && (teeChg || gotTee || becameWork) && !v._uncertain) {
     // 오늘 이 회원의 근무 라운드 조합 안내(예: 2·3부 · 36홀).
     const wparts = workRoundPartsForDay(userId, jIso);
     const combo = wparts.length >= 2 ? ` — ${dayW} ${wparts.join('·')}부 근무예요(${wparts.length * 18}홀).` : '';

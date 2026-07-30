@@ -290,7 +290,22 @@ function applySelfCancel(v, article, today, member) {
 }
 
 function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
-  if (!v || !Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
+  if (!v) return;
+  // ★근태칸 오프 게이트(최우선) — 조배치표 근태칸에 휴무/휴가/병가/연차/반차/월차/격리가 '손으로 적힌' 사람은
+  //  티오프·순번 판독이 어떻게 흔들리든 무조건 오프. (사람이 확정 표기한 근태 > 모델의 색·순번 판독)
+  //  예: 도대영·조하빈 "휴무" — 모델이 근무/스페어로 오독해도 여기서 오프로 못박아 오알림을 원천 차단.
+  const dutyNk = String(member.name || '').replace(/\s/g, '');
+  const dutyCd = String((v.crewDuty && v.crewDuty[dutyNk]) || '');
+  if (/휴무|휴가|병가|격리|연차|반차|월차/.test(dutyCd)) {
+    v.myPosition = 0;
+    v.myStatus = 'off';
+    v.teeTime = ''; v.course = '';
+    v._teeSource = `duty-off(${dutyCd})`;
+    v.offType = /병가/.test(dutyCd) ? 'sick' : /휴가|연차|반차|월차/.test(dutyCd) ? 'vacation' : 'off';
+    delete v._uncertain;
+    return;
+  }
+  if (!Array.isArray(v.part3Roster) || !v.part3Roster.length) return;
   const res = resolveMemberInRoster(v.part3Roster, member, v);
   const rp = res.pos;
   // ★동명이인(배치표에 같은 이름이 여러 순번)인데 어느 자리가 회원인지 확정 불가.
