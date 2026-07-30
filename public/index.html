@@ -838,13 +838,20 @@
     .hero.wx-night .oc-flag .fpc { fill:#9fd3b4; }
     .hero.wx-night .oc-flag .ftuft { fill:#2f6a4c; }
     /* 병가 라운드 표식 — 기둥 위 원형 사인(밤엔 링 밝게) + 잔잔한 회복 문구(시간대별 색) */
-    .sick-flag { position:absolute; left:14%; bottom:70px; width:70px; height:84px; z-index:2; overflow:visible; filter:drop-shadow(0 4px 6px rgba(18,54,36,.18)); }
+    .sick-flag { position:absolute; left:14%; bottom:89px; width:70px; height:84px; z-index:2; overflow:visible; filter:drop-shadow(0 4px 6px rgba(18,54,36,.18)); }
     .sick-flag .fp { stroke:#385645; }
     .sick-flag .sign-ring { fill:#2f9e60; }
     .sick-flag .sign-face { fill:#fff; }
     .sick-flag .sign-cross { fill:#2f9e60; }
     .hero.wx-night .sick-flag .fp { stroke:#9fd3b4; }
     .hero.wx-night .sick-flag .sign-ring { fill:#3fb877; }
+    /* 밤 — 십자가에 노란 불빛이 잔잔하게 깜빡(글로우 펄스) */
+    .hero.wx-night .sick-flag .sign-cross { fill:#f0b429; animation:sickGlow 2.8s ease-in-out infinite; }
+    @keyframes sickGlow {
+      0%, 100% { fill:#dca02a; filter:drop-shadow(0 0 1px rgba(255,206,86,.4)); }
+      50% { fill:#ffe27a; filter:drop-shadow(0 0 5px rgba(255,214,92,.95)); }
+    }
+    @media (prefers-reduced-motion: reduce) { .hero.wx-night .sick-flag .sign-cross { animation:none; fill:#ffd257; } }
     .oc-sickcap { position:absolute; left:0; right:0; bottom:12px; text-align:center; font-size:11.5px; font-weight:700; color:#2c6b4c; z-index:3; }
     .hero.wx-night.has-wx .oc-sickcap { color:#bfe6cf; text-shadow:0 1px 3px rgba(0,0,0,.45); }
     .hero.wx-dusk.has-wx .oc-sickcap { color:#7a3f2c; }
