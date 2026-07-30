@@ -22,6 +22,8 @@ function timeAgo(ts) {
 }
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const postJSON = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+// [임시 디버그] 클라이언트 상태를 서버 로그로 보고(진단용, fire-and-forget).
+const dbg = (m) => { try { fetch('/api/dbg', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ m }) }); } catch {} };
 
 /* ── 헤더 날짜·시각 ── */
 function tickDate() {
@@ -2104,6 +2106,7 @@ function initCcLightbox() {
 let meState = null;
 async function loadMe() {
   try { meState = await (await fetch('/api/me')).json(); } catch { meState = null; }
+  try { dbg('loadMe authed=' + (meState && meState.authed) + ' sa=' + isStandalonePWA + ' wh=' + wantHandoff + ' dm=' + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) + ' vis=' + document.visibilityState + ' path=' + location.pathname); } catch {}
   // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
   hideLogin();
@@ -2173,6 +2176,7 @@ const wantHandoff = isStandalonePWA || (navigator.maxTouchPoints || 0) > 0
 let _pwaPoll = null;
 
 function showLogin() {
+  dbg('showLogin path=' + location.pathname);
   hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
@@ -2201,6 +2205,7 @@ function setLoginWaiting(on, msg) {
 
 // 설치형 PWA 로그인: (1)nonce 발급 (2)브라우저에서 구글 로그인 (3)앱이 폴링→교환해 세션을 '앱'에 심음.
 function startPwaLogin(e) {
+  dbg('startPwaLogin (preventDefault)');
   if (e) e.preventDefault();
   // 사용자 제스처를 유지하려 빈 창을 먼저 연다(iOS 팝업 차단 방지). 이후 URL을 채운다.
   const w = window.open('about:blank', '_blank');
