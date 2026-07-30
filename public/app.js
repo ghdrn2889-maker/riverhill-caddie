@@ -574,7 +574,6 @@ function sickBoardHTML() {
       <rect class="sign-cross" x="31.5" y="13" width="7" height="18" rx="2"/>
       <rect class="sign-cross" x="25" y="19" width="20" height="7" rx="2"/>
     </svg>
-    <div class="oc-sickcap">회복 중 · 편히 쉬세요</div>
   </div>`;
 }
 
