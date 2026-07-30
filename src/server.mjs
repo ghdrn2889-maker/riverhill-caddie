@@ -22,7 +22,7 @@ import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin } from './users.mjs';
-import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured } from './auth.mjs';
+import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -60,6 +60,10 @@ app.get('/api/auth/naver/callback', naverCallback);
 app.get('/api/auth/google', beginGoogleLogin);
 app.get('/api/auth/google/callback', googleCallback);
 app.post('/api/logout', logout);
+// ★설치형 PWA 로그인 핸드오프(비로그인 통과 — 게이트 앞에 등록). 앱이 nonce로 시작→폴링→교환.
+app.post('/api/login/start', startLoginHandoff);
+app.get('/api/login/poll', pollLoginHandoffRoute);
+app.post('/api/login/exchange', exchangeLoginHandoff);
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };

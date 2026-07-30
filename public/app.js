@@ -2163,15 +2163,69 @@ function closeOv() {
 window.addEventListener('popstate', () => {
   if (ovIsOpen() && ovDismissable) { $('ov').hidden = true; ovDismissable = false; }
 });
+// 설치형(홈화면 앱)인지 — OAuth가 앱 밖(브라우저)에서 돌아 쿠키가 앱에 안 심기는 환경.
+const isStandalonePWA = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+  || window.navigator.standalone === true;
+let _pwaPoll = null;
+
 function showLogin() {
   hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
+  // ★설치형 PWA: 구글 버튼을 핸드오프 로그인으로(브라우저에서 로그인→앱이 폴링으로 세션 교환). 1회 바인딩.
+  if (isStandalonePWA && !showLogin._bound) {
+    showLogin._bound = true;
+    $('googleLoginBtn').addEventListener('click', startPwaLogin);
+  }
   const lo = $('loginOv');
   lo.hidden = false;
   lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
 }
-function hideLogin() { $('loginOv').hidden = true; }
+function hideLogin() { $('loginOv').hidden = true; if (_pwaPoll) { clearInterval(_pwaPoll); _pwaPoll = null; } }
+
+function setLoginWaiting(on, msg) {
+  const btn = $('googleLoginBtn');
+  btn.style.pointerEvents = on ? 'none' : '';
+  btn.style.opacity = on ? '.55' : '';
+  $('loginErr').textContent = on ? '브라우저에서 로그인을 완료한 뒤, 이 앱으로 다시 돌아오세요…' : (msg || '');
+}
+
+// 설치형 PWA 로그인: (1)nonce 발급 (2)브라우저에서 구글 로그인 (3)앱이 폴링→교환해 세션을 '앱'에 심음.
+function startPwaLogin(e) {
+  if (e) e.preventDefault();
+  // 사용자 제스처를 유지하려 빈 창을 먼저 연다(iOS 팝업 차단 방지). 이후 URL을 채운다.
+  const w = window.open('about:blank', '_blank');
+  setLoginWaiting(true);
+  postJSON('/api/login/start').then((r) => {
+    if (!r || !r.ok || !r.nonce) throw new Error('start');
+    const url = '/api/auth/google?h=' + encodeURIComponent(r.nonce);
+    if (w && !w.closed) w.location.href = url; else window.location.href = url;
+    pollPwaLogin(r.nonce);
+  }).catch(() => { if (w && !w.closed) w.close(); setLoginWaiting(false, '로그인을 시작하지 못했어요. 다시 시도해주세요.'); });
+}
+
+function pollPwaLogin(nonce) {
+  if (_pwaPoll) clearInterval(_pwaPoll);
+  let tries = 0;
+  const tick = async () => {
+    if (++tries > 120) { clearInterval(_pwaPoll); _pwaPoll = null; setLoginWaiting(false, '시간이 초과됐어요. 다시 시도해주세요.'); return; }
+    try {
+      const s = await (await fetch('/api/login/poll?h=' + encodeURIComponent(nonce), { cache: 'no-store' })).json();
+      if (s.status === 'done') {
+        clearInterval(_pwaPoll); _pwaPoll = null;
+        const ex = await postJSON('/api/login/exchange', { nonce });
+        if (ex && ex.ok) { setLoginWaiting(false); await loadMe(); }   // 쿠키가 앱에 심김 → authed
+        else setLoginWaiting(false, '로그인 확정에 실패했어요. 다시 시도해주세요.');
+      } else if (s.status === 'expired') {
+        clearInterval(_pwaPoll); _pwaPoll = null; setLoginWaiting(false, '로그인 요청이 만료됐어요. 다시 시도해주세요.');
+      }
+    } catch { /* 네트워크 일시 오류 — 다음 틱에 재시도 */ }
+  };
+  _pwaPoll = setInterval(tick, 2000);
+  // 앱으로 돌아온 순간(포그라운드) 즉시 한 번 확인 → 대기 체감 단축.
+  const onVis = () => { if (!document.hidden && _pwaPoll) tick(); };
+  document.addEventListener('visibilitychange', onVis, { once: false });
+}
 function renderAccount() {
   const btn = $('acctBtn');
   if (!meState || !meState.authed) { btn.hidden = true; return; }

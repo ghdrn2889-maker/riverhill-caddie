@@ -61,6 +61,15 @@ function migrate(d) {
       created_at  INTEGER NOT NULL
     );
 
+    -- 설치형 PWA 로그인 핸드오프: 앱이 nonce 발급 → 브라우저에서 OAuth 완료 → 콜백이 done 표시 →
+    --  앱이 폴링으로 감지 후 nonce로 교환(앱 컨텍스트에서 세션 쿠키 심기). 단명(10분), 1회용.
+    CREATE TABLE IF NOT EXISTS login_handoff (
+      nonce       TEXT PRIMARY KEY,
+      status      TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'done'
+      user_id     INTEGER,
+      created_at  INTEGER NOT NULL
+    );
+
     -- 웹푸시 구독을 회원별로. (기존 subscriptions.json 은 다음 단계에서 이관)
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       endpoint    TEXT PRIMARY KEY,
@@ -75,6 +84,7 @@ function migrate(d) {
   // ★캐디 구분(하우스/3부). 기존 회원은 part로 자동 변환: 1·2부 → house, 3부 → part3. (본인이 수정 가능)
   addColumn(d, 'profiles', 'caddie_type', "TEXT NOT NULL DEFAULT ''");
   d.exec("UPDATE profiles SET caddie_type = CASE WHEN part = '3' THEN 'part3' ELSE 'house' END WHERE caddie_type = '' OR caddie_type IS NULL");
+  addColumn(d, 'oauth_states', 'handoff', 'TEXT');   // ★PWA 로그인 핸드오프 nonce를 state에 연결(설치형 앱 로그인)
   addColumn(d, 'users', 'google_id', 'TEXT');
   addColumn(d, 'users', 'block_reason', 'TEXT');   // 차단 사유(roster|other) — disabled일 때만 채움
   addColumn(d, 'users', 'last_seen', 'INTEGER');   // 마지막 활동(하트비트) — 접속중/나감 판별용(운영 모니터)

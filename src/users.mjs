@@ -81,18 +81,51 @@ export function userForSession(token) {
 export function destroySession(token) { if (token) run('DELETE FROM sessions WHERE token = ?', token); }
 
 // ── OAuth state(CSRF) ───────────────────────────────────
-export function newOAuthState() {
+//  handoff: 설치형 PWA 로그인 시 이 state에 연결된 핸드오프 nonce(없으면 null=일반 브라우저 로그인).
+export function newOAuthState(handoff = null) {
   const state = crypto.randomBytes(16).toString('base64url');
-  run('INSERT INTO oauth_states (state, created_at) VALUES (?, ?)', state, Date.now());
+  run('INSERT INTO oauth_states (state, created_at, handoff) VALUES (?, ?, ?)', state, Date.now(), handoff || null);
   // 오래된 state 청소(10분)
   run('DELETE FROM oauth_states WHERE created_at < ?', Date.now() - 10 * 60 * 1000);
   return state;
 }
+// 반환: { ok, handoff } — ok=state 유효, handoff=연결된 PWA nonce(있으면).
 export function consumeOAuthState(state) {
-  if (!state) return false;
-  const row = get('SELECT state FROM oauth_states WHERE state = ?', state);
+  if (!state) return { ok: false, handoff: null };
+  const row = get('SELECT state, handoff FROM oauth_states WHERE state = ?', state);
   if (row) run('DELETE FROM oauth_states WHERE state = ?', state);
-  return !!row;
+  return { ok: !!row, handoff: row ? (row.handoff || null) : null };
+}
+
+// ── 설치형 PWA 로그인 핸드오프 ───────────────────────────
+//  앱이 nonce 발급 → 브라우저에서 OAuth 완료 → 콜백이 done 표시 → 앱이 폴링 후 nonce로 세션 교환.
+export function newLoginHandoff() {
+  const nonce = crypto.randomBytes(24).toString('base64url');
+  run('INSERT INTO login_handoff (nonce, status, created_at) VALUES (?, ?, ?)', nonce, 'pending', Date.now());
+  run('DELETE FROM login_handoff WHERE created_at < ?', Date.now() - 10 * 60 * 1000); // 단명 청소
+  return nonce;
+}
+// 브라우저 콜백에서 로그인 완료를 이 nonce에 기록(pending → done + user_id).
+export function completeLoginHandoff(nonce, userId) {
+  if (!nonce) return false;
+  const row = get('SELECT nonce, status FROM login_handoff WHERE nonce = ?', nonce);
+  if (!row || row.status !== 'pending') return false;
+  run('UPDATE login_handoff SET status = ?, user_id = ? WHERE nonce = ?', 'done', userId, nonce);
+  return true;
+}
+// 앱 폴링: 상태 조회(민감정보 없음).
+export function pollLoginHandoff(nonce) {
+  const row = nonce ? get('SELECT status FROM login_handoff WHERE nonce = ?', nonce) : null;
+  if (!row) return { status: 'expired' };
+  return { status: row.status === 'done' ? 'done' : 'pending' };
+}
+// 앱 교환: done이면 user_id 반환 + 1회용으로 삭제(재사용 차단). 아니면 null.
+export function redeemLoginHandoff(nonce) {
+  if (!nonce) return null;
+  const row = get('SELECT user_id, status FROM login_handoff WHERE nonce = ?', nonce);
+  if (!row || row.status !== 'done' || !row.user_id) return null;
+  run('DELETE FROM login_handoff WHERE nonce = ?', nonce);
+  return row.user_id;
 }
 
 // ── 1번 회원(김홍구) 시드 — .env + 기존 근무일지 설정에서 ──────

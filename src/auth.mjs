@@ -4,6 +4,7 @@
 import {
   getUserByNaver, getUserByGoogle, createUser, touchLogin, seedPrimaryUser,
   createSession, userForSession, destroySession, newOAuthState, consumeOAuthState,
+  newLoginHandoff, completeLoginHandoff, pollLoginHandoff, redeemLoginHandoff,
 } from './users.mjs';
 
 const COOKIE = 'rh_sess';
@@ -103,7 +104,7 @@ export async function naverCallback(req, res) {
   try {
     if (!authConfigured()) return res.status(503).send('네이버 로그인 미설정');
     const { code, state } = req.query;
-    if (!code || !consumeOAuthState(state)) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
+    if (!code || !consumeOAuthState(state).ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰
     const tokenParams = new URLSearchParams({
@@ -167,7 +168,8 @@ function googleCallbackURL(req) {
 
 export function beginGoogleLogin(req, res) {
   if (!googleConfigured()) return res.status(503).json({ error: '구글 로그인이 아직 설정되지 않았습니다(.env)' });
-  const state = newOAuthState();
+  // ★설치형 PWA는 ?h=<nonce> 로 핸드오프를 건다 → state에 연결(콜백에서 이 nonce에 완료 기록).
+  const state = newOAuthState(req.query.h ? String(req.query.h) : null);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -184,7 +186,8 @@ export async function googleCallback(req, res) {
   try {
     if (!googleConfigured()) return res.status(503).send('구글 로그인 미설정');
     const { code, state } = req.query;
-    if (!code || !consumeOAuthState(state)) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
+    const stx = consumeOAuthState(state);
+    if (!code || !stx.ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰(폼 인코딩 POST)
     const body = new URLSearchParams({
@@ -214,11 +217,50 @@ export async function googleCallback(req, res) {
     touchLogin(user.id);
     const sessTok = createSession(user.id, req.headers['user-agent'] || '');
     setSessionCookie(req, res, sessTok);
+    // ★설치형 PWA 핸드오프: 이 로그인은 '브라우저'에서 일어났으므로 앱은 아직 세션이 없다.
+    //  이 nonce에 완료를 기록해 두면, 대기 중인 앱이 폴링으로 감지→교환해 앱 컨텍스트에 세션을 심는다.
+    if (stx.handoff) {
+      completeLoginHandoff(stx.handoff, user.id);
+      return res.send(handoffDonePage());
+    }
     res.redirect('/');
   } catch (e) {
     console.error('googleCallback 오류:', e.message);
     res.status(500).send('로그인 처리 중 오류가 발생했습니다.');
   }
+}
+
+// 브라우저에서 OAuth를 마친 뒤 보여줄 안내 페이지(앱으로 돌아가라고). 앱은 폴링으로 자동 로그인된다.
+function handoffDonePage() {
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>로그인 완료</title>
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+gap:14px;padding:32px;background:linear-gradient(180deg,#fbe6cf,#a9c58f);font-family:'Malgun Gothic',system-ui,sans-serif;color:#26331f;text-align:center}
+.ck{width:64px;height:64px;border-radius:50%;background:#2c3a24;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(50,50,20,.3)}
+.ck svg{stroke:#f3efe0;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+h1{font-size:20px;margin:6px 0 0}p{font-size:14px;line-height:1.7;color:#4a5340;margin:0;max-width:320px}
+b{color:#26331f}</style></head><body>
+<div class="ck"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M5 13l4 4L19 7"/></svg></div>
+<h1>로그인 완료</h1>
+<p><b>리버힐 캐디 앱으로 돌아가세요.</b><br>앱이 자동으로 로그인됩니다. 이 창은 닫으셔도 됩니다.</p>
+</body></html>`;
+}
+
+// ── 설치형 PWA 로그인 핸드오프 라우트(비로그인 통과) ──
+export function startLoginHandoff(req, res) {
+  if (!googleConfigured()) return res.status(503).json({ ok: false, error: '구글 로그인 미설정' });
+  res.json({ ok: true, nonce: newLoginHandoff() });
+}
+export function pollLoginHandoffRoute(req, res) {
+  res.json(pollLoginHandoff(req.query.h ? String(req.query.h) : ''));
+}
+export function exchangeLoginHandoff(req, res) {
+  const nonce = (req.body && req.body.nonce) ? String(req.body.nonce) : '';
+  const userId = redeemLoginHandoff(nonce);
+  if (!userId) return res.status(400).json({ ok: false, error: '만료되었거나 유효하지 않은 로그인입니다.' });
+  const tok = createSession(userId, req.headers['user-agent'] || '');
+  setSessionCookie(req, res, tok);   // ★이 응답이 '앱' 컨텍스트에서 오므로 쿠키가 앱 저장소에 심긴다.
+  res.json({ ok: true });
 }
 
 // 관리자 구글 이메일 화이트리스트(ADMIN_GOOGLE_EMAILS, 콤마구분). 소문자 정규화.
