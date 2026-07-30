@@ -1706,13 +1706,13 @@ function lgReportInner(o, S, opts) {
     // 지출 내역이 있을 때만 '지출 상세(증빙)' 표를 넣는다(없으면 빈 표가 페이지를 넘겨 순이익이 다음 장으로 밀림).
     const detailTable = exps.length ? `<h3>지출 상세(증빙)</h3>
       <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>` : '';
-    expBlock = `<h2${o.rev && exps.length ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
+    expBlock = `<h2${o.rev ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
       <table class="log half"><thead><tr><th>항목</th><th>금액</th></tr></thead><tbody>${catRows}</tbody><tfoot><tr class="tot"><td>지출 합계</td><td class="num">${w(expTot)}</td></tr></tfoot></table>
       ${detailTable}`;
   }
   let netBlock = '';
-  // 순이익 표는 지출이 실제로 있을 때만(지출 0이면 순이익=수입이라 중복 + 쓸데없이 페이지를 넘김).
-  if (o.rev && o.exp && (S.expenses || []).length) {
+  // 순이익 표 — 수입·지출 둘 다 선택 시 항상(지출 페이지에 함께 표시).
+  if (o.rev && o.exp) {
     const inc = o.tip ? workRev + tipTot : workRev, expTot = (S.expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     netBlock = `<table class="net"><tbody><tr><td>수입 합계</td><td class="num">${w(inc)}</td></tr><tr><td>지출 합계</td><td class="num">− ${w(expTot)}</td></tr><tr class="tot"><td>순이익</td><td class="num">${w(inc - expTot)}</td></tr></tbody></table>`;
   }
