@@ -172,12 +172,15 @@ function partsToDuty(set) {
 // ★모니터 전용 — 앱을 건드리지 않고 모니터가 '직접' 1·2·3부 부별 판독(온디맨드, board별 1회 캐시).
 //  3부는 앱이 저장한 lastboard.json(rawVerdict)을 재사용(추가 판독 0), 1·2부만 새로 판독.
 //  각 부 근무자(순번≤팀수)를 교차해 두 탕(🔁)도 산출. 관리자만 보는 판독검증 탭의 데이터.
-let _boardPartsCache = { id: null, data: null };
+let _boardPartsCache = { key: null, data: null };
 export async function computeBoardParts() {
   const lb = loadJSON('lastboard.json', null);
   if (!lb || !lb.article) return null;
   const id = String(lb.id || '');
-  if (_boardPartsCache.id === id) return _boardPartsCache.data;   // board별 1회만 판독(캐시)
+  // ★캐시 키에 판독시각(at) 포함 — 같은 배치표가 재판독(recheck/수정)되면 lastboard.at이 바뀌어
+  //  캐시가 자동 갱신된다. (id만으로 걸면 첫 판독본을 계속 보여줘 모니터가 스테일되던 문제 수정)
+  const key = `${id}|${lb.at || ''}`;
+  if (_boardPartsCache.key === key) return _boardPartsCache.data;   // 같은 배치표+같은 판독시각이면 캐시
   try {
     const article = lb.article;
     const v3 = lb.rawVerdict || {};
@@ -214,7 +217,7 @@ export async function computeBoardParts() {
     const twoRounds = Object.keys(crossByName).filter((nm) => crossByName[nm].parts.length >= 2);
     const parts = {}; const availableParts = [];
     for (const p of ['1', '2', '3']) { const view = buildPartView(partsSrc[p], crossByName); if (view) { parts[p] = view; availableParts.push(p); } }
-    if (!availableParts.length) { _boardPartsCache = { id, data: null }; return null; }
+    if (!availableParts.length) { _boardPartsCache = { key, data: null }; return null; }
     const art = article;
     const data = {
       at: lb.at || null, articleId: id, subject: art.subject || '', writer: art.writer || '',
@@ -224,7 +227,7 @@ export async function computeBoardParts() {
       comments: (Array.isArray(art.comments) ? art.comments : []).map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
       availableParts, twoRounds: twoRounds.map((nm) => ({ name: nm, duty: crossByName[nm].duty, pos: crossByName[nm].pos })), parts,
     };
-    _boardPartsCache = { id, data };
+    _boardPartsCache = { key, data };
     return data;
   } catch (e) { console.error('computeBoardParts 오류:', e.message); return _boardPartsCache.data || null; }
 }
