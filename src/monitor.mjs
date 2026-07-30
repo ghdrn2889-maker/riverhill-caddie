@@ -140,7 +140,8 @@ app.get('/api/user-dash', gate, (req, res) => {
 });
 // ── 회원 승인(관리자) — 실시간 승인신청 처리. 앱의 회원관리 대체. ──
 app.get('/api/members', gate, (req, res) => {
-  try { res.json({ ok: true, members: listMembersForAdmin(), pushReady }); }
+  // ★차단(disabled)은 '삭제된 것'으로 간주 — 명단에서 제외해 이름 칸을 차지하지 않게.
+  try { res.json({ ok: true, members: listMembersForAdmin().filter((m) => m.status !== 'disabled'), pushReady }); }
   catch (e) { console.error('members 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 app.post('/api/user-status', gate, async (req, res) => {
