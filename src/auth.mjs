@@ -187,6 +187,7 @@ export async function googleCallback(req, res) {
     if (!googleConfigured()) return res.status(503).send('구글 로그인 미설정');
     const { code, state } = req.query;
     const stx = consumeOAuthState(state);
+    console.log('[LT] cb code=' + (code ? 'Y' : 'N') + ' handoff=' + (stx.handoff || '-'));
     if (!code || !stx.ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰(폼 인코딩 POST)
@@ -221,8 +222,10 @@ export async function googleCallback(req, res) {
     //  이 nonce에 완료를 기록해 두면, 대기 중인 앱이 폴링으로 감지→교환해 앱 컨텍스트에 세션을 심는다.
     if (stx.handoff) {
       completeLoginHandoff(stx.handoff, user.id);
+      console.log('[LT] cb OK user=' + user.id + ' → donePage');
       return res.send(handoffDonePage());
     }
+    console.log('[LT] cb OK user=' + user.id + ' → redirect /');
     res.redirect('/');
   } catch (e) {
     console.error('googleCallback 오류:', e.message);
@@ -262,6 +265,7 @@ export function pollLoginHandoffRoute(req, res) {
 export function exchangeLoginHandoff(req, res) {
   const nonce = (req.body && req.body.nonce) ? String(req.body.nonce) : '';
   const userId = redeemLoginHandoff(nonce);
+  console.log('[LT] exchange nonce=' + nonce.slice(0, 8) + ' → userId=' + (userId || '-'));
   if (!userId) return res.status(400).json({ ok: false, error: '만료되었거나 유효하지 않은 로그인입니다.' });
   const tok = createSession(userId, req.headers['user-agent'] || '');
   setSessionCookie(req, res, tok);   // ★이 응답이 '앱' 컨텍스트에서 오므로 쿠키가 앱 저장소에 심긴다.

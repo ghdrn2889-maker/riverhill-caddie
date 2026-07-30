@@ -66,6 +66,8 @@ app.get('/api/login/poll', pollLoginHandoffRoute);
 app.post('/api/login/exchange', exchangeLoginHandoff);
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
+  const ck = req.headers.cookie || '';
+  console.log('[LT] /me cookie=' + (ck.includes('rh_sess=') ? (/rh_sess=[^;]/.test(ck) ? 'rh_sess-VALUE' : 'rh_sess-EMPTY') : (ck ? 'other' : 'NONE')) + ' → authed=' + (req.user ? 'Y(user' + req.user.id + ')' : 'N'));
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
   if (!req.user) return res.json({ ...base, authed: false });
   recordVisit(req.user.id, { role: req.user.role, status: req.user.status }); // 방문(앱 오픈) 기록 — 10분 스로틀
