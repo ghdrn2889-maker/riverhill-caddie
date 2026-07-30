@@ -51,6 +51,15 @@ export function snapName(name) {
   return snapWith(name, confirmedFrom(load()));
 }
 
+// 명부(확정 캐디 사전) 대조 — 오탈자 1글자 보정 후 확정 명단에 있으면 true.
+//  가입 자동승인 게이트에서 사용(저장된 caddies.json 조회일 뿐, 배치표 재판독 아님).
+export function isKnownCaddie(name) {
+  const s = String(name || '').trim();
+  if (!s) return false;
+  const conf = confirmedFrom(load());
+  return conf.includes(snapWith(s, conf));
+}
+
 // 순번 위치배열(빈칸 '' 유지) 보정 + 학습. 보정된 배열 반환.
 export function correctAndLearn(names) {
   const db = load();

@@ -22,6 +22,7 @@ import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin } from './users.mjs';
+import { isKnownCaddie } from './roster.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
@@ -107,9 +108,23 @@ app.post('/api/profile', requireAuth, (req, res) => {
   const prof = setProfile(req.user.id, {
     board_name: boardName, part, caddie_type: caddieType, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
   });
+  // ★자동 승인 게이트 — 현재 '가입 대기(pending)'인 신규가 명부(확정 캐디 사전)에 있으면 즉시 active + 관리자 알림.
+  //  저장된 caddies.json 조회일 뿐(배치표 재판독 아님). 미매칭이면 pending 유지 → 프론트가 '대기' 안내.
+  //  프로필 '수정'(이미 active)엔 걸리지 않음(pending 조건). 관리자는 알림 받고 모니터에서 사후 차단 가능.
+  let approved = false;
+  if (req.user.status === 'pending') {
+    if (isKnownCaddie(boardName)) {
+      setUserStatus(req.user.id, 'active');
+      approved = true;
+      console.log(`✅ [가입] #${req.user.id} ${boardName} 명부 매칭 → 자동 승인(active)`);
+      broadcastAdmins({ title: '새 캐디 가입', body: `${boardName}님이 명부 확인되어 자동 가입했어요. 문제 있으면 회원관리에서 차단하세요.`, url: '/' }).catch(() => {});
+    } else {
+      console.log(`⏳ [가입] #${req.user.id} ${boardName} 명부 미매칭 → 가입 대기(pending)`);
+    }
+  }
   // 가입/이름 변경 직후 현재 배치표를 즉시 소급 반영(백대기 중간 가입 등으로 상황판이 비는 빈틈 방지).
   backfillFromLastBoard(req.user.id, { name: prof.board_name, part: String(prof.part || '3'), commuteMin: Number(prof.commute_min) });
-  res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, caddieType: prof.caddie_type, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
+  res.json({ ok: true, approved, boardName: prof.board_name, profile: { boardName: prof.board_name, part: prof.part, caddieType: prof.caddie_type, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
 });
 
 // 기기·알림 상태 텔레메트리 — iOS/안드 비율·설치·권한·구독을 회원별로 기록(최신 상태 유지).
