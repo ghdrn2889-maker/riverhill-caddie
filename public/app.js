@@ -1497,7 +1497,7 @@ function lgAccHTML(d) {
   const empty = !d.worked && !d.expenses.length;
   const net = empty ? '기록 없음' : '순수입 ' + wonKo(lgNetOf(d));
   const brk = empty ? '' : lgBrkText(d);
-  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}${empty ? ' empty' : ''}" id="lgAcc-${d.date}">
+  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}${empty ? ' noday' : ''}" id="lgAcc-${d.date}">
     <div class="lg-ahead" data-tog="${d.date}">
       <div class="lg-cal"><span class="md">${lgMD(d.date)}</span><span class="dw">${lgDow(d.date)}</span></div>
       <div class="lg-amid"><div class="lg-anet" id="lgNetR-${d.date}">${net}</div>
