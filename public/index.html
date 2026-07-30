@@ -318,7 +318,7 @@
     .jcal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
     .jcal-wd { text-align:center; font-size:10px; font-weight:800; color:#9aa49c; padding:2px 0; }
     .jcal-wd.sun { color:#c0524a; } .jcal-wd.sat { color:#3f6ea8; }
-    .jcell { aspect-ratio:1/1.05; border:1px solid #eef1ec; border-radius:9px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:11px; cursor:pointer; background:#fff; }
+    .jcell { aspect-ratio:1/1.05; min-width:0; box-sizing:border-box; overflow:hidden; border:1px solid #eef1ec; border-radius:9px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:11px; cursor:pointer; background:#fff; }
     .jcell.empty { border:0; background:transparent; cursor:default; }
     .jcell .jcn { font-weight:700; color:#3a453d; }
     .jcell.none .jcn { color:#96a09a; }

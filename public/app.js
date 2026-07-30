@@ -477,6 +477,9 @@ function setOffTitle(text, animate) {
   if (!animate || !el.querySelector('.tt')) {
     el.innerHTML = `<span class="tt">${esc(text)}</span>`; return;
   }
+  // ★이전 전환이 안 끝나 남은 스트래글러 제거 — 가장 최근 것만 out으로 남긴다(문구가 쌓이던 버그 방지).
+  const spans = el.querySelectorAll('.tt');
+  for (let i = 0; i < spans.length - 1; i++) spans[i].remove();
   const out = el.querySelector('.tt');
   const inc = document.createElement('span');
   inc.className = 'tt enter';
@@ -1051,7 +1054,7 @@ function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.lengt
 // 하루 → [배지 색클래스, 라벨]. 기록 없으면 null.
 function jDayBadge(d) {
   if (!d) return null;
-  if (d.excluded) return ['removed', '순번 제외'];
+  if (d.excluded) return ['removed', '제외'];   // 셀은 좁아 짧게(편집기 칩은 '순번 제외' 그대로)
   if (d.kind === 'off') return d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
   if (d.kind === 'spare') return ['spare', '스페어'];
   if (d.kind === 'work') { const eff = (d.effParts && d.effParts.length) ? d.effParts : ['3']; return [jComboClass(eff), jCombo(eff)]; }
