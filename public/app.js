@@ -2177,6 +2177,11 @@ function showLogin() {
     showLogin._bound = true;
     $('googleLoginBtn').addEventListener('click', startPwaLogin);
   }
+  // 로그인하러 나간 사이 앱이 재시작돼도 이어받기: 저장된 핸드오프 nonce가 있으면 폴링 재개.
+  if (isStandalonePWA && !_pwaPoll) {
+    let pending = null; try { pending = localStorage.getItem('rh_pwa_nonce'); } catch {}
+    if (pending) { setLoginWaiting(true); pollPwaLogin(pending); }
+  }
   const lo = $('loginOv');
   lo.hidden = false;
   lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
@@ -2198,6 +2203,7 @@ function startPwaLogin(e) {
   setLoginWaiting(true);
   postJSON('/api/login/start').then((r) => {
     if (!r || !r.ok || !r.nonce) throw new Error('start');
+    try { localStorage.setItem('rh_pwa_nonce', r.nonce); } catch {}  // 앱이 재시작돼도 이어받도록 저장
     const url = '/api/auth/google?h=' + encodeURIComponent(r.nonce);
     if (w && !w.closed) w.location.href = url; else window.location.href = url;
     pollPwaLogin(r.nonce);
@@ -2208,16 +2214,17 @@ function pollPwaLogin(nonce) {
   if (_pwaPoll) clearInterval(_pwaPoll);
   let tries = 0;
   const tick = async () => {
-    if (++tries > 120) { clearInterval(_pwaPoll); _pwaPoll = null; setLoginWaiting(false, '시간이 초과됐어요. 다시 시도해주세요.'); return; }
+    if (++tries > 120) { clearInterval(_pwaPoll); _pwaPoll = null; try { localStorage.removeItem('rh_pwa_nonce'); } catch {} setLoginWaiting(false, '시간이 초과됐어요. 다시 시도해주세요.'); return; }
     try {
       const s = await (await fetch('/api/login/poll?h=' + encodeURIComponent(nonce), { cache: 'no-store' })).json();
       if (s.status === 'done') {
         clearInterval(_pwaPoll); _pwaPoll = null;
         const ex = await postJSON('/api/login/exchange', { nonce });
+        try { localStorage.removeItem('rh_pwa_nonce'); } catch {}
         if (ex && ex.ok) { setLoginWaiting(false); await loadMe(); }   // 쿠키가 앱에 심김 → authed
         else setLoginWaiting(false, '로그인 확정에 실패했어요. 다시 시도해주세요.');
       } else if (s.status === 'expired') {
-        clearInterval(_pwaPoll); _pwaPoll = null; setLoginWaiting(false, '로그인 요청이 만료됐어요. 다시 시도해주세요.');
+        clearInterval(_pwaPoll); _pwaPoll = null; try { localStorage.removeItem('rh_pwa_nonce'); } catch {} setLoginWaiting(false, '로그인 요청이 만료됐어요. 다시 시도해주세요.');
       }
     } catch { /* 네트워크 일시 오류 — 다음 틱에 재시도 */ }
   };
