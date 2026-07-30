@@ -826,6 +826,10 @@
     /* 흐름(flow) 유지 + 음수 마진으로 카드 좌우·바닥까지 풀블리드 → 절단선 제거(둥근 모서리 자연 클립). */
     .off-course, .off-sick { position:relative; height:186px; margin:12px -17px -17px; }
     .oc-hills { position:absolute; inset:0; width:100%; height:100%; display:block; }
+    /* ★병가·휴무 보드는 '지면 장면'이 핵심(카트·깃발이 능선에 섬) → 노을·새벽에도 지면 유지.
+       (노을/새벽 지면 숨김은 히어로 배경·순번제외 카드에만 적용되게 여기서 되살림) */
+    .hero.wx-dusk .off-course .oc-hills, .hero.wx-dusk .off-sick .oc-hills,
+    .hero.wx-dawn .off-course .oc-hills, .hero.wx-dawn .off-sick .oc-hills { display:block; }
     /* 미니 골프 카트 — 낮/밤 두 벌 중 하나만 표시. 모션 최소화 기기에선 숨김. */
     .gc-night { display:none; }
     .hero.wx-night .gc-day { display:none; }
