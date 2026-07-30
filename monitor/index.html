@@ -690,7 +690,7 @@
     var staleChip = u.stale? ' <span class="ud-chip stale">지난 날짜</span>' : '';
     return '<div class="ud-card k-'+esc(u.kind)+(warn?' warnrow':'')+'">'+
       '<div class="ud-head"><span class="ud-name">'+esc(u.name)+'</span><span class="ud-part">'+esc(u.part)+'</span>'+
-        (u.rosterFound?'':'<span class="ud-chip" style="color:var(--warn)">명단밖</span>')+
+        ((!u.rosterFound && (u.kind==='work'||u.kind==='spare'))?'<span class="ud-chip" style="color:var(--warn)">명단밖</span>':'')+
         '<span class="ud-when">'+subTag+' · '+rel(u.updatedAt)+'</span></div>'+
       '<div class="ud-hero">'+udBadge(u.badge)+'<span class="ud-htitle">'+esc(u.heroTitle)+'</span>'+staleChip+'</div>'+
       body + push +
