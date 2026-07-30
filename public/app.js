@@ -540,6 +540,47 @@ const OFF_WAVE = [   // 자유단이 위→아래로 물결치는 4위상(폴대
   'M9 8 C16 8 24 10 33 8 L33 17 C24 19 16 17 9 17 Z',
   'M9 8 C16 6 24 8.5 33 6 L33 15 C24 17.5 16 15 9 17 Z',
 ];
+// ── 미니 골프 카트 레이어 — 병가·휴무 보드의 언덕 능선(far-hill 상단선)을 따라 지나가는 카트. ──
+//  낮/밤 두 벌을 함께 넣고 CSS(.hero.wx-night)로 토글. prefers-reduced-motion이면 CSS로 숨김.
+//  경로=능선과 동일 곡선(양끝 접선 연속). 오르막 감속·내리막 가속(keyPoints/keyTimes), 살짝 통통(bounce), 능선 접선 회전(rotate=auto).
+const CART_MOTION = '<animateMotion dur="15s" repeatCount="indefinite" rotate="auto" calcMode="linear"'
+  + ' keyPoints="0;0.0851;0.1489;0.2128;0.2766;0.3404;0.4043;0.4681;0.5319;0.5957;0.6596;0.7234;0.7872;0.8511;0.9149;1"'
+  + ' keyTimes="0;0.0818;0.1568;0.2281;0.2959;0.3604;0.4218;0.4803;0.536;0.5914;0.6493;0.71;0.7743;0.8433;0.9182;1"'
+  + ' path="M-40 76.2 L0 66 Q110 38 210 54 Q310 70 390 48 L430 37"/>';
+const CART_BOUNCE = '<animateTransform attributeName="transform" type="translate" values="0 0;0 -1.3;0 .2;0 -.9;0 0" dur=".5s" repeatCount="indefinite" additive="sum"/>';
+const CART_DAY = '<rect x="-25" y="-23" width="6.6" height="14.6" rx="2.4" fill="#2f7d55"/><rect x="-24.2" y="-16" width="4.6" height="3.6" rx="1" fill="#256444"/>'
+  + '<g stroke="#c2a86e" stroke-width="1" stroke-linecap="round"><line x1="-23.6" y1="-22" x2="-24.6" y2="-31"/><line x1="-21.8" y1="-22.4" x2="-21.8" y2="-32"/><line x1="-20" y1="-22" x2="-19" y2="-30.6"/></g>'
+  + '<circle cx="-24.6" cy="-31" r="1.1" fill="#e2e7ea"/><circle cx="-21.8" cy="-32" r="1.1" fill="#e2e7ea"/><circle cx="-19" cy="-30.6" r="1.1" fill="#e2e7ea"/>'
+  + '<rect x="-17" y="-30.4" width="39" height="3.6" rx="1.8" fill="#4fae7f"/><path d="M21 -30 L24.5 -29.2 L24.5 -27.4 L21 -26.6 Z" fill="#4fae7f"/>'
+  + '<rect x="-15.6" y="-28" width="1.9" height="12.2" rx=".95" fill="#d7e4db"/><rect x="17.6" y="-28" width="1.9" height="10.5" rx=".95" fill="#d7e4db"/>'
+  + '<path d="M-18 -8 L-18 -14 Q-18 -17 -15 -17 L14 -17 Q17 -17 18.6 -14.6 L24 -12 Q25.6 -11.2 25.6 -9.5 L25.6 -8.4 Q25.6 -7 24 -7 L-16.4 -7 Q-18 -7 -18 -8 Z" fill="#fbfdfb"/>'
+  + '<rect x="-18" y="-9.3" width="43.6" height="1.8" rx=".9" fill="#3f9e73"/>'
+  + '<rect x="-16" y="-25.6" width="3.7" height="9.7" rx="1.6" fill="#e7d9bd"/><rect x="-14.6" y="-18.6" width="15.2" height="3.5" rx="1.4" fill="#e7d9bd"/><rect x="-14.6" y="-16.4" width="15.2" height="1" rx=".5" fill="#d8c39f"/>'
+  + '<line x1="11.5" y1="-16.5" x2="15.5" y2="-20.8" stroke="#cfd8d0" stroke-width="1.1" stroke-linecap="round"/><circle cx="16" cy="-21.2" r="1.7" fill="none" stroke="#cfd8d0" stroke-width="1"/>'
+  + '<circle cx="24.7" cy="-10.4" r="1.1" fill="#ffdf86"/>'
+  + '<circle cx="-11" cy="-5.1" r="5.1" fill="#374a41"/><circle cx="-11" cy="-5.1" r="2.5" fill="#cfe0d5"/><circle cx="-11" cy="-5.1" r=".9" fill="#374a41"/>'
+  + '<circle cx="16" cy="-5.1" r="5.1" fill="#374a41"/><circle cx="16" cy="-5.1" r="2.5" fill="#cfe0d5"/><circle cx="16" cy="-5.1" r=".9" fill="#374a41"/>';
+const CART_NIGHT = '<defs><radialGradient id="gcBeam" cx=".5" cy=".5" r=".5" fx=".2" fy=".5"><stop offset="0" stop-color="#fff1b6" stop-opacity=".8"/><stop offset=".4" stop-color="#ffe38f" stop-opacity=".34"/><stop offset="1" stop-color="#ffdf86" stop-opacity="0"/></radialGradient>'
+  + '<filter id="gcBeamBlur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.7"/></filter>'
+  + '<radialGradient id="gcHl"><stop offset="0" stop-color="#fff6cc" stop-opacity=".95"/><stop offset="1" stop-color="#fff6cc" stop-opacity="0"/></radialGradient></defs>'
+  + '<g filter="url(#gcBeamBlur)" transform="rotate(7 24.7 -10.4)"><ellipse cx="42" cy="-9.6" rx="25" ry="6.4" fill="url(#gcBeam)"/><ellipse cx="33" cy="-9.8" rx="12" ry="3.6" fill="#fff2b8" opacity=".42"/></g>'
+  + '<rect x="-25" y="-23" width="6.6" height="14.6" rx="2.4" fill="#2f7d55"/><rect x="-24.2" y="-16" width="4.6" height="3.6" rx="1" fill="#215c3e"/>'
+  + '<g stroke="#c2a86e" stroke-width="1" stroke-linecap="round"><line x1="-23.6" y1="-22" x2="-24.6" y2="-31"/><line x1="-21.8" y1="-22.4" x2="-21.8" y2="-32"/><line x1="-20" y1="-22" x2="-19" y2="-30.6"/></g>'
+  + '<circle cx="-24.6" cy="-31" r="1.1" fill="#cdd6dc"/><circle cx="-21.8" cy="-32" r="1.1" fill="#cdd6dc"/><circle cx="-19" cy="-30.6" r="1.1" fill="#cdd6dc"/>'
+  + '<rect x="-17" y="-30.4" width="39" height="3.6" rx="1.8" fill="#57b98a"/><path d="M21 -30 L24.5 -29.2 L24.5 -27.4 L21 -26.6 Z" fill="#57b98a"/>'
+  + '<rect x="-15.6" y="-28" width="1.9" height="12.2" rx=".95" fill="#7f9f8f"/><rect x="17.6" y="-28" width="1.9" height="10.5" rx=".95" fill="#7f9f8f"/>'
+  + '<path d="M-18 -8 L-18 -14 Q-18 -17 -15 -17 L14 -17 Q17 -17 18.6 -14.6 L24 -12 Q25.6 -11.2 25.6 -9.5 L25.6 -8.4 Q25.6 -7 24 -7 L-16.4 -7 Q-18 -7 -18 -8 Z" fill="#e9f2ea"/>'
+  + '<rect x="-18" y="-9.3" width="43.6" height="1.8" rx=".9" fill="#4fae7f"/>'
+  + '<rect x="-16" y="-25.6" width="3.7" height="9.7" rx="1.6" fill="#d6c8aa"/><rect x="-14.6" y="-18.6" width="15.2" height="3.5" rx="1.4" fill="#d6c8aa"/><rect x="-14.6" y="-16.4" width="15.2" height="1" rx=".5" fill="#c0af8e"/>'
+  + '<line x1="11.5" y1="-16.5" x2="15.5" y2="-20.8" stroke="#9fb0a4" stroke-width="1.1" stroke-linecap="round"/><circle cx="16" cy="-21.2" r="1.7" fill="none" stroke="#9fb0a4" stroke-width="1"/>'
+  + '<circle cx="-11" cy="-5.1" r="5.1" fill="#22322b"/><circle cx="-11" cy="-5.1" r="2.5" fill="#bcd3c4"/><circle cx="-11" cy="-5.1" r=".9" fill="#22322b"/>'
+  + '<circle cx="16" cy="-5.1" r="5.1" fill="#22322b"/><circle cx="16" cy="-5.1" r="2.5" fill="#bcd3c4"/><circle cx="16" cy="-5.1" r=".9" fill="#22322b"/>'
+  + '<circle cx="24.7" cy="-10.4" r="3.6" fill="url(#gcHl)"/><circle cx="24.7" cy="-10.4" r="1.5" fill="#fff4c2"/>';
+function cartLayerSVG() {
+  const wrap = (cls, shapes) => `<g class="${cls}">${CART_MOTION}<g transform="scale(0.5) translate(0,1.3)"><g>${CART_BOUNCE}${shapes}</g></g></g>`;
+  return wrap('gc-day', CART_DAY) + wrap('gc-night', CART_NIGHT);
+}
+
 function offCourseHTML() {
   const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wave = rm ? '' : `<animate attributeName="d" dur="2.8s" repeatCount="indefinite" calcMode="spline"
@@ -549,6 +590,7 @@ function offCourseHTML() {
     <svg class="oc-hills" viewBox="0 0 390 200" preserveAspectRatio="none" aria-hidden="true">
       <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
       <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
+      ${cartLayerSVG()}
     </svg>
     <svg class="oc-flag" viewBox="0 0 44 60" aria-hidden="true">
       <ellipse class="ftuft" cx="9" cy="55" rx="12" ry="3.4"/>
@@ -566,6 +608,7 @@ function sickBoardHTML() {
     <svg class="oc-hills" viewBox="0 0 390 200" preserveAspectRatio="none" aria-hidden="true">
       <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
       <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
+      ${cartLayerSVG()}
     </svg>
     <svg class="sick-flag" viewBox="0 0 70 84" aria-hidden="true">
       <line class="fp" x1="35" y1="40" x2="35" y2="80" stroke-width="2.8" stroke-linecap="round"/>
