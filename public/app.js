@@ -1703,7 +1703,7 @@ function lgReportInner(o, S, opts) {
     const expTot = exps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const catRows = Object.keys(byCat).length ? Object.entries(byCat).map(([c, a]) => `<tr><td>${esc(c)}</td><td class="num st">${w(a)}</td></tr>`).join('') : `<tr><td colspan="2" class="mid">등록된 지출이 없습니다.</td></tr>`;
     const detRows = exps.length ? exps.map((e, i) => `<tr><td>${i + 1}</td><td>${e.date}(${lgDow(e.date)})</td><td>${esc(e.category)}</td><td>${esc(e.vendor || '')}</td><td>${esc(e.method || '')}</td><td class="num st">${w(e.amount)}</td></tr>`).join('') : `<tr><td colspan="6" class="mid">—</td></tr>`;
-    expBlock = `<h2${o.rev ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
+    expBlock = `<h2${o.rev && exps.length ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
       <table class="log half"><thead><tr><th>항목</th><th>금액</th></tr></thead><tbody>${catRows}</tbody><tfoot><tr class="tot"><td>지출 합계</td><td class="num">${w(expTot)}</td></tr></tfoot></table>
       <h3>지출 상세(증빙)</h3>
       <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>`;
