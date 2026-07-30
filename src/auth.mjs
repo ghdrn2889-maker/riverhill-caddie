@@ -247,6 +247,11 @@ b{color:#26331f}</style></head><body>
 <div class="ck"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M5 13l4 4L19 7"/></svg></div>
 <h1>로그인 완료</h1>
 <p><b>리버힐 캐디 앱으로 돌아가세요.</b><br>앱이 자동으로 로그인됩니다. 이 창은 닫으셔도 됩니다.</p>
+<script>
+  // 같은 컨텍스트(팝업 차단 폴백 등)에서 열렸다면 이 응답에 이미 세션 쿠키가 심겨 있으므로 앱으로 자동 이동.
+  //  별도 컨텍스트(설치형 PWA→외부 브라우저)면 앱이 폴링으로 로그인되며, 이 창은 닫으면 된다.
+  setTimeout(function(){ try { location.replace('/'); } catch (e) { location.href = '/'; } }, 1600);
+</script>
 </body></html>`;
 }
 

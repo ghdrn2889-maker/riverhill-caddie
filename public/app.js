@@ -2166,6 +2166,10 @@ window.addEventListener('popstate', () => {
 // 설치형(홈화면 앱)인지 — OAuth가 앱 밖(브라우저)에서 돌아 쿠키가 앱에 안 심기는 환경.
 const isStandalonePWA = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
   || window.navigator.standalone === true;
+// ★모바일은 설치형(standalone) 감지가 실패해도 OAuth가 앱 밖(브라우저)에서 열려 쿠키가 앱에 안 심길 수 있다.
+//  그래서 설치형 감지에만 의존하지 말고, 터치·모바일 UA면 핸드오프(폴링→교환)를 쓴다. 데스크톱은 일반 리다이렉트로 충분.
+const wantHandoff = isStandalonePWA || (navigator.maxTouchPoints || 0) > 0
+  || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
 let _pwaPoll = null;
 
 function showLogin() {
@@ -2173,12 +2177,12 @@ function showLogin() {
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
   // ★설치형 PWA: 구글 버튼을 핸드오프 로그인으로(브라우저에서 로그인→앱이 폴링으로 세션 교환). 1회 바인딩.
-  if (isStandalonePWA && !showLogin._bound) {
+  if (wantHandoff && !showLogin._bound) {
     showLogin._bound = true;
     $('googleLoginBtn').addEventListener('click', startPwaLogin);
   }
   // 로그인하러 나간 사이 앱이 재시작돼도 이어받기: 저장된 핸드오프 nonce가 있으면 폴링 재개.
-  if (isStandalonePWA && !_pwaPoll) {
+  if (wantHandoff && !_pwaPoll) {
     let pending = null; try { pending = localStorage.getItem('rh_pwa_nonce'); } catch {}
     if (pending) { setLoginWaiting(true); pollPwaLogin(pending); }
   }
