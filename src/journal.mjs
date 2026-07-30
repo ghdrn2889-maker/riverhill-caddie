@@ -41,7 +41,15 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   const rounds = { ...(prev.rounds || {}) };
   rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };
   const kinds = Object.values(rounds).map((r) => r.kind);
-  const overall = kinds.includes('work') ? 'work' : kinds.includes('spare') ? 'spare' : kinds.includes('off') ? 'off' : kind;
+  // ★근태 확정 오프(병가·휴가)는 그날 전부 오프 — 다른 부의 스페어 오판독이 덮지 못하게 우선.
+  //  (일반 off는 '3부 부재 + 2부 스페어'처럼 교차부 정상 케이스가 있어 기존대로 spare 우선 유지.)
+  //  순서 무관: 이번 기록이 병가/휴가이거나 이전에 이미 병가/휴가로 확정된 날이면 적용.
+  const dutyRestOff = (info.status === 'off' && (info.offType === 'sick' || info.offType === 'vacation'))
+    || prev.offType === 'sick' || prev.offType === 'vacation';
+  const overall = kinds.includes('work') ? 'work'
+    : (dutyRestOff && kinds.includes('off')) ? 'off'
+    : kinds.includes('spare') ? 'spare'
+    : kinds.includes('off') ? 'off' : kind;
   // 대표 티오프: 근무 라운드 우선(3부>2부).
   const primary = (rounds['3']?.kind === 'work' && rounds['3'].teeTime) ? rounds['3']
     : Object.values(rounds).find((r) => r.kind === 'work' && r.teeTime) || null;
