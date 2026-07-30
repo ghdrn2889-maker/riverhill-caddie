@@ -1703,13 +1703,16 @@ function lgReportInner(o, S, opts) {
     const expTot = exps.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const catRows = Object.keys(byCat).length ? Object.entries(byCat).map(([c, a]) => `<tr><td>${esc(c)}</td><td class="num st">${w(a)}</td></tr>`).join('') : `<tr><td colspan="2" class="mid">등록된 지출이 없습니다.</td></tr>`;
     const detRows = exps.length ? exps.map((e, i) => `<tr><td>${i + 1}</td><td>${e.date}(${lgDow(e.date)})</td><td>${esc(e.category)}</td><td>${esc(e.vendor || '')}</td><td>${esc(e.method || '')}</td><td class="num st">${w(e.amount)}</td></tr>`).join('') : `<tr><td colspan="6" class="mid">—</td></tr>`;
+    // 지출 내역이 있을 때만 '지출 상세(증빙)' 표를 넣는다(없으면 빈 표가 페이지를 넘겨 순이익이 다음 장으로 밀림).
+    const detailTable = exps.length ? `<h3>지출 상세(증빙)</h3>
+      <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>` : '';
     expBlock = `<h2${o.rev && exps.length ? ' class="pb-before"' : ''}>${o.rev ? '2' : '1'}. 지출(업무 경비)</h2>
       <table class="log half"><thead><tr><th>항목</th><th>금액</th></tr></thead><tbody>${catRows}</tbody><tfoot><tr class="tot"><td>지출 합계</td><td class="num">${w(expTot)}</td></tr></tfoot></table>
-      <h3>지출 상세(증빙)</h3>
-      <table class="log"><thead><tr><th>No</th><th>일자</th><th>항목</th><th>사용처</th><th>결제</th><th>금액</th></tr></thead><tbody>${detRows}</tbody></table>`;
+      ${detailTable}`;
   }
   let netBlock = '';
-  if (o.rev && o.exp) {
+  // 순이익 표는 지출이 실제로 있을 때만(지출 0이면 순이익=수입이라 중복 + 쓸데없이 페이지를 넘김).
+  if (o.rev && o.exp && (S.expenses || []).length) {
     const inc = o.tip ? workRev + tipTot : workRev, expTot = (S.expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
     netBlock = `<table class="net"><tbody><tr><td>수입 합계</td><td class="num">${w(inc)}</td></tr><tr><td>지출 합계</td><td class="num">− ${w(expTot)}</td></tr><tr class="tot"><td>순이익</td><td class="num">${w(inc - expTot)}</td></tr></tbody></table>`;
   }
