@@ -1025,6 +1025,9 @@
 
     /* ── 로그인 진입(새벽 티오프) — 비로그인 랜딩 전체화면 ── */
     #loginOv { background:linear-gradient(180deg,#fbe6cf 0%,#f4d9bf 20%,#dfe4c0 50%,#a9c58f 100%); display:block; overflow:hidden; }
+    /* ★핵심 버그 수정: #loginOv(ID) display:block이 .ov[hidden] display:none을 특정성으로 눌러
+       hidden을 걸어도 로그인 오버레이가 안 사라지던 문제. ID 특정성으로 hidden을 되살린다. */
+    #loginOv[hidden] { display:none; }
     #loginOv .dl-stage { position:absolute; inset:0; overflow:hidden; }
     #loginOv .dl-sunwrap { position:absolute; left:50%; top:12.1vh; width:15.56vh; height:15.56vh; margin-left:-7.78vh; }
     #loginOv .dl-sun { position:absolute; inset:0; border-radius:50%;
