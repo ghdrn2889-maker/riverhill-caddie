@@ -1282,6 +1282,8 @@ export function interpretForMember(article, shared, member, today = null) {
     teamCount: shared.teamCount,
     teeGrid: shared.teeGrid,
     part3Roster: shared.part3Roster,
+    crewDuty: shared.crewDuty,             // ★조배치표 근태칸 맵 — 휴무 게이트·54/찾근 판단에 필수(누락 시 게이트 무력화)
+    guaranteedWork: shared.guaranteedWork, // ★명단 셀 태그 무조건근무(54/찾근) — 회원 경로에도 반영
     crossPartNames: shared.crossPartNames,
     subjectNames: shared.subjectNames,
     note: shared.note,
