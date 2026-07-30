@@ -44,6 +44,54 @@
   .pill.good{ background:color-mix(in srgb,var(--good) 18%,transparent); color:var(--good); }
   .pill.warn{ background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn); }
   .pill.bad{ background:color-mix(in srgb,var(--bad) 18%,transparent); color:var(--bad); }
+
+  /* 회원 대시보드 대조 */
+  .ud-legend{ display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:2px 0 14px; font-size:11.5px; color:var(--tx2); }
+  .ud-legend .lg{ display:inline-flex; align-items:center; gap:5px; }
+  .ud-legend .sw{ width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .ud-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:13px; }
+  .ud-card{ background:var(--panel); border:1px solid var(--bord); border-left:4px solid var(--tx3); border-radius:14px; padding:13px 15px; box-shadow:var(--shadow); }
+  .ud-card.k-work{ border-left-color:var(--good); }
+  .ud-card.k-spare{ border-left-color:var(--info); }
+  .ud-card.k-off{ border-left-color:var(--tx3); }
+  .ud-card.k-removed{ border-left-color:var(--warn); }
+  .ud-card.k-unknown{ border-left-color:var(--bad); }
+  .ud-card.warnrow{ box-shadow:0 0 0 2px color-mix(in srgb,var(--bad) 38%,transparent), var(--shadow); }
+  .ud-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ud-name{ font-weight:800; font-size:15px; letter-spacing:-.01em; }
+  .ud-part{ font-size:11px; color:var(--tx3); font-weight:700; }
+  .ud-when{ margin-left:auto; font-size:10.5px; color:var(--tx3); display:inline-flex; align-items:center; gap:6px; }
+  .ud-sub{ display:inline-flex; align-items:center; gap:4px; font-weight:700; }
+  .ud-sub .d{ width:7px; height:7px; border-radius:50%; background:var(--good); }
+  .ud-sub.no{ color:var(--bad); } .ud-sub.no .d{ background:var(--bad); }
+  .ud-hero{ display:flex; align-items:center; gap:9px; margin:12px 0 8px; flex-wrap:wrap; }
+  .ud-badge{ font-size:12px; font-weight:800; padding:4px 10px; border-radius:9px; white-space:nowrap; }
+  .ud-b-work{ background:color-mix(in srgb,var(--good) 16%,transparent); color:var(--good); }
+  .ud-b-spare{ background:color-mix(in srgb,var(--info) 16%,transparent); color:var(--info); }
+  .ud-b-off,.ud-b-vac{ background:var(--panel2); color:var(--tx2); border:1px solid var(--bord); }
+  .ud-b-sick{ background:color-mix(in srgb,var(--bad) 15%,transparent); color:var(--bad); }
+  .ud-b-removed{ background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); }
+  .ud-b-unk{ background:color-mix(in srgb,var(--bad) 12%,transparent); color:var(--bad); }
+  .ud-htitle{ font-size:15px; font-weight:800; letter-spacing:-.01em; }
+  .ud-body{ font-size:12.5px; color:var(--tx2); line-height:1.5; }
+  .ud-body b{ color:var(--tx); font-variant-numeric:tabular-nums; }
+  .ud-tl{ display:flex; gap:6px; margin-top:8px; }
+  .ud-leg{ flex:1; background:var(--panel2); border:1px solid var(--bord); border-radius:8px; padding:6px 4px; text-align:center; }
+  .ud-leg .l{ font-size:9.5px; color:var(--tx3); font-weight:700; letter-spacing:.02em; }
+  .ud-leg .v{ font-size:13px; font-weight:800; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .ud-spare{ display:flex; align-items:baseline; gap:8px; margin-top:4px; }
+  .ud-spare b{ font-size:23px; font-weight:800; color:var(--info); font-variant-numeric:tabular-nums; }
+  .ud-foot{ margin-top:11px; padding-top:10px; border-top:1px dashed var(--bord); }
+  .ud-frow{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--tx2); }
+  .ud-frow .lab{ color:var(--tx3); font-weight:700; }
+  .ud-mt{ font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:auto; }
+  .ud-mt.ok{ background:color-mix(in srgb,var(--good) 16%,transparent); color:var(--good); }
+  .ud-mt.bad{ background:color-mix(in srgb,var(--bad) 16%,transparent); color:var(--bad); }
+  .ud-mt.na,.ud-mt.none{ background:var(--panel2); color:var(--tx3); }
+  .ud-pushbody{ font-size:11.5px; color:var(--tx2); margin-top:5px; line-height:1.45; }
+  .ud-pushbody b{ color:var(--tx); }
+  .ud-chip{ display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px; background:var(--panel2); color:var(--tx2); }
+  .ud-chip.stale{ background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); }
   .pill.info{ background:color-mix(in srgb,var(--info) 18%,transparent); color:var(--info); }
 
   /* 패널 그리드 */
@@ -190,6 +238,7 @@
     <button class="tb" data-tab="board">📋 판독</button>
     <button class="tb" data-tab="members">👥 회원</button>
     <button class="tb" data-tab="push">🔔 알림</button>
+    <button class="tb" data-tab="userdash">📊 대시보드</button>
   </nav>
 </header>
 
@@ -253,6 +302,17 @@
     <div class="sectlab">알림 발송</div>
     <div class="grid">
       <div class="panel full"><h2>회원별 발송 알림</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+    </div>
+  </div>
+
+  <!-- ── 회원 대시보드 대조 탭 ── -->
+  <div class="tab-page" id="page-userdash">
+    <div class="sectlab">회원 대시보드 · 실시간 대조</div>
+    <div class="panel full">
+      <h2>회원별 현재 대시보드</h2>
+      <p class="desc">각 회원 앱에 지금 뜨는 화면을 그대로 재현 · 최근 발송 알림과 자동 대조(일치/불일치) · 구독·갱신시각 표기 · 카드 테두리가 빨간색이면 알림 불일치 또는 구독 없음</p>
+      <div id="userDashLegend" class="ud-legend"></div>
+      <div id="userDash"><div class="muted">불러오는 중…</div></div>
     </div>
   </div>
 
@@ -504,6 +564,7 @@
   async function tick(){
     try{ render(await loadStats()); }
     catch(e){ $('err').innerHTML = '<div class="err">집계를 불러오지 못했습니다: '+esc(e.message)+'</div>'; $('updated').textContent='오류'; $('statusDot').className='dot bad'; }
+    var ud=$('page-userdash'); if(ud && ud.classList.contains('on')) loadUserDash();
   }
   $('refreshBtn').addEventListener('click', function(){ tick(); loadMembers(); });
   function loop(){ clearInterval(timer); timer=setInterval(tick, REFRESH_MS); }
@@ -513,6 +574,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.classList.toggle('on', b.getAttribute('data-tab')===name); });
     Array.prototype.forEach.call(document.querySelectorAll('.tab-page'), function(p){ p.classList.toggle('on', p.id==='page-'+name); });
     try{ localStorage.setItem('monTab', name); }catch(e){}
+    if(name==='userdash') loadUserDash();
     window.scrollTo(0,0);
   }
   Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
@@ -585,6 +647,75 @@
     catch(e){ /* 무해 — 다음 폴링에서 재시도 */ } finally{ membersBusy=false; }
   }
   function memberLoop(){ clearInterval(mTimer); mTimer=setInterval(loadMembers, MEMBERS_MS); }
+
+  // ── 회원 대시보드 대조 ──
+  function udBadge(b){ return '<span class="ud-badge ud-b-'+esc(b.c||'unk')+'">'+esc(b.t)+'</span>'; }
+  function udCard(u){
+    var warn = (u.match.s==='bad') || (u.subCount===0);
+    var body='';
+    if(u.kind==='work' && u.commute){
+      var c=u.commute;
+      body = '<div class="ud-body">티오프 <b>'+esc(u.teeTime)+'</b>'+(u.course?' ('+esc(String(u.course).toUpperCase())+'코스)':'')+(u.myPos?' · 순번 <b>'+u.myPos+'</b>번':'')+'</div>'+
+        '<div class="ud-tl">'+
+          '<div class="ud-leg"><div class="l">집 출발</div><div class="v">'+esc(c.leave||'—')+'</div></div>'+
+          '<div class="ud-leg"><div class="l">도착</div><div class="v">'+esc(c.arrive||'—')+'</div></div>'+
+          '<div class="ud-leg"><div class="l">백대기</div><div class="v">'+esc(c.standby||'—')+'</div></div>'+
+        '</div>';
+    } else if(u.kind==='work'){
+      body = '<div class="ud-body">'+(u.myPos?'순번 <b>'+u.myPos+'</b>번 · ':'')+'티오프 매칭 전(근무 예정)</div>';
+    } else if(u.kind==='spare'){
+      body = '<div class="ud-spare"><b>'+u.ahead+'</b><span class="ud-body">명 · 내 앞 대기</span></div>'+
+        '<div class="ud-body">순번 <b>'+(u.myPos||'—')+'</b>번'+(u.cut?' · 확정선 '+u.cut+'번':'')+(u.teamCount?' · 현재 '+u.teamCount+'팀':'')+'</div>';
+    } else if(u.kind==='off'){
+      body = '<div class="ud-body">'+(u.badge.t==='병가'?'병가로 쉬는 날':u.badge.t==='휴가'?'휴가로 쉬는 날':'휴무 · 편히 쉬는 날')+'</div>';
+    } else if(u.kind==='removed'){
+      body = '<div class="ud-body">최신 배치표에서 순번이 빠졌어요'+(u.myPos?' (이전 '+u.myPos+'번)':'')+'.</div>';
+    } else {
+      body = '<div class="ud-body">'+(u.empty?'아직 판독된 상태가 없어요.':'상태 미상')+'</div>';
+    }
+    var push='';
+    if(u.lastPush){
+      var deliv = (u.lastPush.sent>0)?'<span class="ud-chip">도달 '+u.lastPush.sent+'</span>':'<span class="ud-chip" style="color:var(--bad)">미도달</span>';
+      push = '<div class="ud-foot">'+
+        '<div class="ud-frow"><span class="lab">최근 알림</span><span>'+rel(u.lastPush.at)+'</span>'+deliv+
+          '<span class="ud-mt '+esc(u.match.s)+'">'+esc(u.match.t)+'</span></div>'+
+        '<div class="ud-pushbody"><b>'+esc(u.lastPush.title||'')+'</b> — '+esc((u.lastPush.body||'').replace(/\n/g,' '))+'</div>'+
+      '</div>';
+    } else {
+      push = '<div class="ud-foot"><div class="ud-frow"><span class="lab">최근 알림</span><span class="ud-mt none">없음</span></div></div>';
+    }
+    var subTag = u.subCount>0
+      ? '<span class="ud-sub"><span class="d"></span>구독 '+u.subCount+'</span>'
+      : '<span class="ud-sub no"><span class="d"></span>구독없음</span>';
+    var staleChip = u.stale? ' <span class="ud-chip stale">지난 날짜</span>' : '';
+    return '<div class="ud-card k-'+esc(u.kind)+(warn?' warnrow':'')+'">'+
+      '<div class="ud-head"><span class="ud-name">'+esc(u.name)+'</span><span class="ud-part">'+esc(u.part)+'</span>'+
+        (u.rosterFound?'':'<span class="ud-chip" style="color:var(--warn)">명단밖</span>')+
+        '<span class="ud-when">'+subTag+' · '+rel(u.updatedAt)+'</span></div>'+
+      '<div class="ud-hero">'+udBadge(u.badge)+'<span class="ud-htitle">'+esc(u.heroTitle)+'</span>'+staleChip+'</div>'+
+      body + push +
+    '</div>';
+  }
+  function renderUserDash(j){
+    var el = $('userDash'); if(!el) return;
+    var us = (j&&j.users)||[];
+    if(!us.length){ el.innerHTML='<div class="muted">활성 회원이 없습니다.</div>'; if($('userDashLegend'))$('userDashLegend').innerHTML=''; return; }
+    var bad = us.filter(function(u){return u.match.s==='bad';}).length;
+    var nosub = us.filter(function(u){return u.subCount===0;}).length;
+    if($('userDashLegend')) $('userDashLegend').innerHTML =
+      '<span class="lg"><span class="sw" style="background:var(--good)"></span>근무</span>'+
+      '<span class="lg"><span class="sw" style="background:var(--info)"></span>스페어</span>'+
+      '<span class="lg"><span class="sw" style="background:var(--tx3)"></span>휴무·병가·휴가</span>'+
+      '<span class="lg"><span class="sw" style="background:var(--warn)"></span>순번 제외</span>'+
+      '<span class="lg" style="margin-left:auto">'+(bad?'<b style="color:var(--bad)">알림 불일치 '+bad+'명</b>':'')+(bad&&nosub?' · ':'')+(nosub?'<b style="color:var(--bad)">구독없음 '+nosub+'명</b>':'')+((!bad&&!nosub)?'<b style="color:var(--good)">모두 정상</b>':'')+'</span>';
+    el.innerHTML = '<div class="ud-grid">'+us.map(udCard).join('')+'</div>';
+  }
+  var userDashBusy=false;
+  async function loadUserDash(){
+    if(userDashBusy) return; userDashBusy=true;
+    try{ var r=await fetch(apiUrl('/api/user-dash'),{cache:'no-store'}); var j=await r.json(); if(j.ok) renderUserDash(j); else if($('userDash')) $('userDash').innerHTML='<div class="err">'+esc(j.error||'불러오기 실패')+'</div>'; }
+    catch(e){ /* 무해 — 다음 폴링에서 재시도 */ } finally{ userDashBusy=false; }
+  }
 
   // 저장된 탭 복원(기본: 승인)
   var savedTab=null; try{ savedTab=localStorage.getItem('monTab'); }catch(e){}

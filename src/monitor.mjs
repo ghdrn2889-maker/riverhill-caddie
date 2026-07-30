@@ -4,10 +4,15 @@
 //  보안:  MONITOR_TOKEN 설정 시 ?k=토큰 필요. 미설정이면 로컬/사설망 전용으로만 쓸 것.
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts } from './analytics.mjs';
-import { listMembersForAdmin, setUserStatus, getUser, getProfile } from './users.mjs';
-import { initPush, broadcast } from './push.mjs';
+import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers } from './users.mjs';
+import { initPush, broadcast, getSubscriptions } from './push.mjs';
+import { loadToday } from './today.mjs';
+import { commuteInfo, dayWordFor } from './judge.mjs';
+import * as worklog from './worklog.mjs';
+import { DATA_DIR } from './store.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -39,6 +44,99 @@ app.get('/api/stats', gate, (req, res) => {
 app.get('/api/board-parts', gate, async (req, res) => {
   try { res.json({ ok: true, board: await computeBoardParts() }); }
   catch (e) { console.error('board-parts 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+// ── 회원 대시보드 대조 — 각 회원 앱에 지금 뜨는 화면을 재현 + 최근 알림 대조(읽기 전용). ──
+//  앱의 GET /api/today 조립 로직을 그대로 재현(loadToday→상태·티오프·통근·순번). Gemini 재호출 없음.
+function todayISOkst() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); }
+function lastPushByUid() {
+  const map = {};
+  try {
+    const txt = fs.readFileSync(path.join(DATA_DIR, 'sent-push.jsonl'), 'utf8');
+    const lines = txt.trim().split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {           // 끝(최신)부터 — 회원별 첫(=가장 최근) 1건만
+      let r; try { r = JSON.parse(lines[i]); } catch { continue; }
+      const u = r.uid ?? r.userId;
+      if (u == null || map[u]) continue;
+      map[u] = r;
+    }
+  } catch { /* 로그 없음 */ }
+  return map;
+}
+// 알림 문구 → 상태 분류(대시보드 상태와 대조용). 판별 불가(소식/변경 등)면 null → '대조 보류'.
+function pushKind(p) {
+  if (!p) return null;
+  const s = `${p.title || ''} ${p.body || ''}`;
+  if (/휴무|병가|휴가|편히 쉬/.test(s)) return 'off';
+  if (/근무 배정|근무 확정|근무예요|근무 예정|근무권|출근 차례|티오프 시간 변경|티오프.*배정/.test(s)) return 'work';
+  if (/스페어|대기 현황|앞에 \d+명/.test(s)) return 'spare';
+  return null;
+}
+app.get('/api/user-dash', gate, (req, res) => {
+  try {
+    const lastMap = lastPushByUid();
+    const todayISO = todayISOkst();
+    const users = [];
+    for (const m of activeMembers()) {
+      const prof = getProfile(m.id) || {};
+      const commuteMin = Number(prof.commute_min ?? m.commute_min) || 0;
+      const bname = String(prof.board_name || m.board_name || '');
+      const st = loadToday(m.id) || {};
+      const status = st.status || 'unknown';
+      const isWork = ['assigned', 'work', 'your_turn'].includes(status);
+      const isSpare = ['spare', 'waiting', 'near'].includes(status);
+      const isOff = status === 'off';
+      const offRemoved = isOff && st.offReason === 'removed';
+      const offSick = isOff && st.offType === 'sick';
+      const offVac = isOff && st.offType === 'vacation';
+      const teeTime = st.teeTime || '';
+      const dayW = dayWordFor(st.date) || '';
+      // 순번: 명단에서 이름으로(괄호 점유자 반영), 없으면 저장된 myPosition
+      const roster = Array.isArray(st.roster3) ? st.roster3 : [];
+      const nk = bname.replace(/\s/g, '');
+      let rosterPos = 0;
+      for (let i = 0; i < roster.length; i++) {
+        const cell = String(roster[i] || '');
+        const mm = cell.match(/\(([^)]+)\)/);
+        const occ = (mm ? mm[1] : cell).replace(/\s/g, '');
+        if (nk && occ === nk) { rosterPos = i + 1; break; }
+      }
+      const myPos = rosterPos || Number(st.myPosition) || 0;
+      const cut = Number(st.cutLine) || 0;
+      const ahead = (cut && myPos > cut) ? Math.max(0, myPos - cut - 1) : Math.max(0, myPos - 1);
+      let kind, badge, heroTitle;
+      if (status === 'your_turn') { kind = 'work'; badge = { t: '출근 차례', c: 'work' }; heroTitle = '지금 출근 차례'; }
+      else if (isWork) { kind = 'work'; badge = { t: '근무', c: 'work' }; heroTitle = teeTime ? `${dayW} 근무 확정` : `${dayW} 근무 예정`; }
+      else if (offRemoved) { kind = 'removed'; badge = { t: '순번 제외', c: 'removed' }; heroTitle = '근무 없음 (순번 제외)'; }
+      else if (offSick) { kind = 'off'; badge = { t: '병가', c: 'sick' }; heroTitle = `${dayW} 병가`; }
+      else if (offVac) { kind = 'off'; badge = { t: '휴가', c: 'vac' }; heroTitle = `${dayW} 휴가`; }
+      else if (isOff) { kind = 'off'; badge = { t: '휴무', c: 'off' }; heroTitle = `${dayW} 휴무`; }
+      else if (isSpare) { kind = 'spare'; badge = { t: '스페어', c: 'spare' }; heroTitle = `${dayW} 스페어${myPos ? ` · ${myPos}번` : ''}`; }
+      else { kind = 'unknown'; badge = { t: '미상', c: 'unk' }; heroTitle = '상태 미상'; }
+      const commute = (isWork && teeTime) ? commuteInfo(teeTime, commuteMin) : null;
+      const subCount = (getSubscriptions(m.id) || []).length;
+      let stale = false;
+      try { const iso = worklog.labelToISO(st.date); if (iso && iso < todayISO) stale = true; } catch { /* 무해 */ }
+      const lp = lastMap[m.id] || null;
+      const pk = pushKind(lp);
+      const dk = kind === 'removed' ? 'off' : kind;
+      let match;
+      if (!lp) match = { s: 'none', t: '알림 없음' };
+      else if (!pk || dk === 'unknown') match = { s: 'na', t: '대조 보류' };
+      else match = (dk !== pk) ? { s: 'bad', t: '불일치' } : { s: 'ok', t: '일치' };
+      users.push({
+        id: m.id, name: bname || `#${m.id}`, part: st.part || `${m.part || 3}부`,
+        status, kind, badge, heroTitle,
+        date: st.date || '', dayW, stale, empty: !st.date && !st.status,
+        myPos, cut, ahead, teamCount: Number(st.teamCount) || 0,
+        teeTime, course: st.course || '', commute, commuteMin,
+        rosterFound: !!rosterPos, updatedAt: st.updatedAt || 0, subCount,
+        lastPush: lp ? { at: lp.at, title: lp.title || '', body: lp.body || '', level: lp.level || lp.push || '', sent: lp.sent ?? null, devices: lp.devices ?? null } : null,
+        match,
+      });
+    }
+    users.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    res.json({ ok: true, at: Date.now(), users });
+  } catch (e) { console.error('user-dash 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 // ── 회원 승인(관리자) — 실시간 승인신청 처리. 앱의 회원관리 대체. ──
 app.get('/api/members', gate, (req, res) => {
