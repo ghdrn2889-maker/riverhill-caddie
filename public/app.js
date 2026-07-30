@@ -568,7 +568,6 @@ function sickBoardHTML() {
       <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
     </svg>
     <svg class="sick-flag" viewBox="0 0 70 84" aria-hidden="true">
-      <ellipse class="ftuft" cx="35" cy="80" rx="11" ry="3.2"/>
       <line class="fp" x1="35" y1="40" x2="35" y2="80" stroke-width="2.8" stroke-linecap="round"/>
       <circle class="sign-ring" cx="35" cy="22" r="18"/>
       <circle class="sign-face" cx="35" cy="22" r="13"/>
