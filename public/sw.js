@@ -1,13 +1,55 @@
-// 서비스워커: 앱이 꺼져 있어도 백그라운드에서 푸시를 받아 알림을 띄운다.
+// 서비스워커: (1)백그라운드 푸시 알림 (2)network-first로 항상 최신 앱 서빙 + 자동 갱신.
+//  ★버전 문자열을 바꾸면 브라우저가 이 파일의 변경을 감지해 새 SW를 설치→활성화한다.
+const SW_VERSION = 'v2-netfirst-2026-07-30';
+const SHELL_CACHE = 'rh-shell-v2';
+
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  // 옛 셸 캐시 정리.
+  try {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== SHELL_CACHE).map((k) => caches.delete(k)));
+  } catch {}
+  await self.clients.claim();
+  // ★새 SW가 활성화되면, 열려 있는 앱 창을 새로고침해 최신 코드(index.html·app.js)를 즉시 반영.
+  //  설치형 PWA가 옛 화면을 물고 있던 문제를 자동 해소. (OAuth 진행 중인 창은 건드리지 않음)
+  try {
+    const wins = await self.clients.matchAll({ type: 'window' });
+    for (const w of wins) {
+      try { if (!new URL(w.url).pathname.startsWith('/api/')) w.navigate(w.url); } catch {}
+    }
+  } catch {}
+})()));
+
+// network-first: 문서(HTML)·스크립트·스타일은 항상 서버에서 최신을 받는다(캐시 무시).
+//  네트워크 실패 시에만 마지막으로 받은 셸 캐시로 폴백(오프라인 최소 동작).
+//  /api/* 는 SW가 관여하지 않는다(OAuth 리다이렉트·로그인 흐름을 그대로 통과).
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  let url;
+  try { url = new URL(req.url); } catch { return; }
+  if (url.origin !== location.origin) return;         // 외부(구글 OAuth 등)는 그대로
+  if (url.pathname.startsWith('/api/')) return;        // API는 관여 안 함
+  const isDoc = req.mode === 'navigate';
+  const isAsset = /\.(js|css|webmanifest)$/.test(url.pathname);
+  if (!isDoc && !isAsset) return;                      // 이미지 등은 브라우저 기본 처리
+  event.respondWith(
+    fetch(req, { cache: 'no-store' })
+      .then((res) => {
+        try { const clone = res.clone(); caches.open(SHELL_CACHE).then((c) => c.put(req, clone)).catch(() => {}); } catch {}
+        return res;
+      })
+      .catch(() => caches.match(req))
+  );
+});
 
 // 알림 중요도별 진동 패턴 — 카톡처럼 중요한 알림은 길고 세게 울린다.
-//  (기종/안드로이드 버전에 따라 OS 알림채널 설정이 우선할 수 있음 → 되는 기기에서만 적용)
 const VIBRATE = {
-  high:   [600, 150, 600, 150, 900], // 근무확정·곧차례: 길게 3번, 마지막은 더 길게
-  check:  [400, 150, 400],           // 확인필요: 중간
-  normal: [300, 150, 300],           // 리마인더 등
+  high:   [600, 150, 600, 150, 900],
+  check:  [400, 150, 400],
+  normal: [300, 150, 300],
 };
 
 self.addEventListener('push', (event) => {
@@ -18,24 +60,21 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icon-192.png',
-      badge: data.badge || '/badge-flag.png',  // 상태바 작은 아이콘(흰색·투명 실루엣). payload로 교체 가능(디자인 비교용)
+      badge: data.badge || '/badge-flag.png',
       data: { url: data.url },
       vibrate: VIBRATE[level] || VIBRATE.normal,
-      requireInteraction: level === 'high', // 중요 알림은 탭할 때까지 화면에 유지(자동으로 안 사라짐)
-      tag: data.tag || 'riverhill',       // 같은 소식 중복 방지(payload로 지정 가능)
-      renotify: true,         // 같은 tag라도 다시 울림
+      requireInteraction: level === 'high',
+      tag: data.tag || 'riverhill',
+      renotify: true,
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  // 카페 링크로 바로 튀지 않고, 항상 '앱(스코프 루트)'을 먼저 연다.
-  // 원문은 앱 안의 피드에서 탭해서 열도록 함.
-  const appUrl = self.registration.scope; // 예: https://xxx.ts.net/  → 설치된 PWA로 열림
+  const appUrl = self.registration.scope;
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-      // 이미 앱 창이 열려 있으면 그 창을 앞으로 가져온다
       for (const w of wins) {
         if ('focus' in w) { w.navigate?.(appUrl); return w.focus(); }
       }
