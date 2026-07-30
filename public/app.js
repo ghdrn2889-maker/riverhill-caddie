@@ -1809,16 +1809,13 @@ async function lgSaveWord() {
 async function lgSavePdf() {
   const name = lgDocName('pdf');
   if (typeof html2pdf === 'undefined') { lgPrintDoc(); return; }
-  // ★캡처 전용 오프스크린 컨테이너에서 뽑는다 — 모달의 스크롤·중앙정렬 컨텍스트 때문에 html2canvas가
-  //  .lgdoc를 아래로 밀린 좌표로 캡처해 '상단 대형 여백 + 표 행이 페이지 경계에서 잘림'이 생기던 문제 차단.
+  // ★캡처 컨테이너 = 0×0 overflow:hidden(fixed·left0·top0)로 감싸 화면엔 전혀 안 보이게 한다.
+  //  - 760px 문서가 화면 밖으로 삐져나와 '뒤 배경이 확대돼 보이던' 현상 제거(0×0가 클리핑).
+  //  - left:0/top:0 + html2canvas scrollX/scrollY:0 → x 치우침·상단 여백(스크롤 오프셋) 둘 다 방지.
   const { o, S, period, isYear, profile } = lgDocCtx;
-  // ★캡처 컨테이너 위치·스크롤 처리(둘 다 필수):
-  //  - position:absolute + left:0/top:0 → 문서 좌상단 기준(음수 오프스크린 금지: x 치우침 유발).
-  //  - html2canvas scrollX/scrollY:0 → 정산 화면을 아래로 스크롤한 상태에서 뽑아도 상단 여백이
-  //    생기지 않게(페이지 스크롤 오프셋 무시). 열린 미리보기 모달이 이 컨테이너를 덮어 가림.
   const holder = document.createElement('div');
-  holder.style.cssText = 'position:absolute;left:0;top:0;width:760px;background:#fff;z-index:1;';
-  holder.innerHTML = '<div class="lgdoc" style="width:760px;max-width:none;margin:0;box-shadow:none;padding:24px;box-sizing:border-box;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
+  holder.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:hidden;z-index:-1;';
+  holder.innerHTML = '<div class="lgdoc" style="width:760px;max-width:none;margin:0;box-shadow:none;padding:24px;box-sizing:border-box;background:#fff;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
   document.body.appendChild(holder);
   const el = holder.querySelector('.lgdoc');
   const opt = {
@@ -1827,9 +1824,11 @@ async function lgSavePdf() {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },   // 표 행·헤더가 페이지 경계에서 잘리지 않게
   };
-  try { const blob = await html2pdf().set(opt).from(el).outputPdf('blob'); await lgDeliver(blob, name, 'application/pdf'); }
-  catch (e) { try { await html2pdf().set(opt).from(el).save(); } catch (_) { lgPrintDoc(); } }
-  finally { holder.remove(); }
+  let blob = null;
+  try { blob = await html2pdf().set(opt).from(el).outputPdf('blob'); } catch (e) { /* 실패 → 아래 폴백 */ }
+  holder.remove();   // ★공유(share) 시트가 뜨기 '전에' 반드시 제거 — 뒤에 컨테이너가 비치지 않게
+  if (blob) await lgDeliver(blob, name, 'application/pdf');
+  else lgPrintDoc();
 }
 
 function initLedgerButtons() {
