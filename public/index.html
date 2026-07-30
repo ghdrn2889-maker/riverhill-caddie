@@ -22,7 +22,7 @@
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
     .date { font-size:10px; opacity:.72; }
-    main { max-width:600px; margin:0 auto; }
+    main { max-width:600px; margin:0 auto; overflow-x:hidden; }
     .body { padding:14px; }
     .view[hidden] { display:none; }
 
@@ -735,6 +735,8 @@
       body.anim-play .reveal { opacity:0; animation:enterRise .56s cubic-bezier(.22,.61,.36,1) both;
         animation-delay:calc(var(--i,0) * 66ms); }
       body.anim-play .nav.reveal { animation-name:enterNavUp; animation-timing-function:cubic-bezier(.2,.7,.3,1); }
+      /* 상단바: 위에서 아래로 자연스럽게 내려옴(기존 '아래에서 위로 붙는' 어색함 교정) */
+      body.anim-play .top.reveal { animation-name:enterDrop; animation-timing-function:cubic-bezier(.2,.7,.3,1); }
       /* 메인 대시보드: 우상단(해 위치)에서 원형으로 열리는 아이리스 — 1.2초 */
       body.anim-play #todayHero { animation:enterIris 1.2s cubic-bezier(.28,.62,.24,1) both; animation-delay:70ms; }
       /* 히어로 내부 문구·명단은 아이리스가 열리는 동안 딸려 들어와 카드와 함께 마무리(꼬리 딜레이 제거) */
@@ -744,7 +746,16 @@
     @keyframes enterRise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
     @keyframes enterRiseIn { from { opacity:0; transform:translateY(11px); } to { opacity:1; transform:none; } }
     @keyframes enterNavUp { from { opacity:0; transform:translateY(100%); } to { opacity:1; transform:none; } }
+    @keyframes enterDrop { from { opacity:0; transform:translateY(-18px); } to { opacity:1; transform:none; } }
     @keyframes enterIris { from { clip-path:circle(8% at 84% 20%); } to { clip-path:circle(150% at 84% 20%); } }
+
+    /* ===== 탭/달 전환 방향성 슬라이드 ===== */
+    @media (prefers-reduced-motion: no-preference) {
+      .slide-r { animation:slideInR .28s cubic-bezier(.22,.61,.36,1) both; }
+      .slide-l { animation:slideInL .28s cubic-bezier(.22,.61,.36,1) both; }
+    }
+    @keyframes slideInR { from { opacity:0; transform:translateX(26px); } to { opacity:1; transform:none; } }
+    @keyframes slideInL { from { opacity:0; transform:translateX(-26px); } to { opacity:1; transform:none; } }
 
     /* ===== 대기(스플래시) 화면 — 골프공 바운스. 실행/새로고침 로딩 동안 노출 후 페이드아웃 ===== */
     .ldg-screen { position:fixed; inset:0; z-index:1200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;

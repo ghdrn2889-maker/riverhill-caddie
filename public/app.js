@@ -31,9 +31,19 @@ function tickDate() {
 
 /* ── 하단 내비 / 뷰 전환 ── */
 const VIEWS = ['today', 'news', 'cart', 'worklog', 'settle'];
+let curView = 'today';
 function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
+  // 탭 순서 기준 방향성 슬라이드: 오른쪽 탭으로 가면 오른쪽에서, 왼쪽 탭이면 왼쪽에서 들어옴.
+  const from = VIEWS.indexOf(curView), to = VIEWS.indexOf(name);
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
+  if (name !== curView && from >= 0 && to >= 0) {
+    const el = $('view-' + name);
+    el.classList.remove('slide-l', 'slide-r');
+    void el.offsetWidth;                       // 리플로우 → 애니메이션 재생 보장
+    el.classList.add(to > from ? 'slide-r' : 'slide-l');
+  }
+  curView = name;
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'worklog') { loadJournal(); loadWorklog(); }
   if (name === 'cart') loadCartCheck();
@@ -1107,17 +1117,30 @@ async function renderJournalCal() {
     const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
     h += `<div class="jcell${jMap[key] ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}"><span class="jcn">${d}</span>${bd}</div>`;
   }
-  $('jCal').innerHTML = h;
-  $('jCal').querySelectorAll('.jcell[data-d]').forEach((c) => { c.onclick = () => openDayEditor(c.dataset.d); });
+  const cal = $('jCal');
+  cal.innerHTML = h;
+  cal.querySelectorAll('.jcell[data-d]').forEach((c) => { c.onclick = () => openDayEditor(c.dataset.d); });
+  // 달 넘김 슬라이드(탭·스와이프 공통): 다음달=오른쪽에서, 이전달=왼쪽에서 들어옴.
+  if (jSlideDir) { cal.classList.remove('slide-l', 'slide-r'); void cal.offsetWidth; cal.classList.add(jSlideDir > 0 ? 'slide-r' : 'slide-l'); jSlideDir = 0; }
+  // 좌우 스와이프로 달 넘기기(왼쪽으로 밀면 다음달, 오른쪽으로 밀면 이전달).
+  let sx = 0, sy = 0, tracking = false;
+  cal.ontouchstart = (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; tracking = true; };
+  cal.ontouchmove = (e) => { if (!tracking) return; const t = e.touches[0]; if (Math.abs(t.clientX - sx) > Math.abs(t.clientY - sy) && Math.abs(t.clientX - sx) > 12) e.preventDefault(); };
+  cal.ontouchend = (e) => {
+    if (!tracking) return; tracking = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) jMonthShift(dx < 0 ? 1 : -1);
+  };
 
   if (jSelDate && jSelDate.startsWith(pre)) drawDayEditor();
   else { jSelDate = null; if ($('jEditor')) $('jEditor').hidden = true; if ($('jHint')) $('jHint').hidden = false; }
 }
 
+let jSlideDir = 0;   // 다음 렌더에서 달력에 적용할 슬라이드 방향(+1 다음달 / -1 이전달)
 function jMonthShift(delta) {
   jViewM += delta;
   if (jViewM < 1) { jViewM = 12; jViewY--; } else if (jViewM > 12) { jViewM = 1; jViewY++; }
-  jSelDate = null; jEdit = null;
+  jSelDate = null; jEdit = null; jSlideDir = delta > 0 ? 1 : -1;
   renderJournalCal();
 }
 
