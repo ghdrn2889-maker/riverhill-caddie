@@ -4,6 +4,7 @@ loadEnv();
 
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import { initPush, addSubscription, broadcast } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
@@ -36,6 +37,21 @@ const app = express();
 app.use(express.json({ limit: '12mb' }));         // 계기판 사진(base64) 업로드 허용
 app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
 app.use(attachUser);                              // req.user 채움(세션 쿠키 or 솔로 폴백)
+
+// ★캐시 스톨 방지: index.html은 항상 새로 받게(no-cache) + app.js에 '수정시각' 버전을 자동 주입.
+//  → 새 배포가 즉시 반영됨(예전엔 브라우저가 /app.js 옛 버전을 붙들어 수정이 안 내려가던 문제).
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+function serveIndex(req, res) {
+  try {
+    let html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+    let ver = 0; try { ver = Math.floor(fs.statSync(path.join(PUBLIC_DIR, 'app.js')).mtimeMs); } catch { /* noop */ }
+    html = html.replace('src="/app.js"', `src="/app.js?v=${ver}"`);
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    res.type('html').send(html);
+  } catch (e) { res.status(500).send('index load error'); }
+}
+app.get(['/', '/index.html'], serveIndex);
+
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
 // ── 인증(네이버 로그인) ──
