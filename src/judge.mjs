@@ -301,6 +301,7 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     v.myStatus = 'off';
     v.teeTime = ''; v.course = '';
     v._teeSource = `duty-off(${dutyCd})`;
+    v._dutyOff = dutyCd;   // ★interpretForMember가 이 표식을 보고 표/명단 재해석을 건너뛰게(오프가 되살아나지 않게)
     v.offType = /병가/.test(dutyCd) ? 'sick' : /휴가|연차|반차|월차/.test(dutyCd) ? 'vacation' : 'off';
     delete v._uncertain;
     return;
@@ -1307,6 +1308,12 @@ export function interpretForMember(article, shared, member, today = null) {
   //  잘못 들어와 스페어에게 남의 티오프가 오배정되던 문제 차단(2026-07-30 도대영·조하빈 등 오배정 사고 방지).
   //  명단 없으면(텍스트 소식) no-op → memberPositionFromShared 값 유지(회귀 없음).
   fixMemberPosByRoster(v, member, today);
+  if (v._dutyOff) {
+    // ★근태칸 오프 확정(휴무/휴가/병가 등) — 이후 표/명단 재해석이 근무로 되살리지 못하게 여기서 종결.
+    //  (도대영·조하빈이 티오프표 오독으로 다시 'assigned'로 붙던 사고 차단.)
+    v.myStatus = 'off'; v.myPosition = 0; v.teeTime = ''; v.course = '';
+    return { ...decide(article, v, member), status: 'off', rawVerdict: v };
+  }
   applyBoardParts(v, member);             // ★표 헤더로 이 회원 부(部) 재검증(다른 부 표면 무관 처리)
   resolveTeeByGrid(v, member);            // 순번→티오프(구조·beyond-cut 스페어 등)
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];

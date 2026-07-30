@@ -322,8 +322,9 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
     }
   }
 
-  // 스페어/대기 상태엔 티오프가 없어야 함 — 잔여·오독 티오프 정리(상황판·저널 일관성).
-  if (next.status === 'spare' || next.status === 'waiting') { next.teeTime = ''; next.course = ''; }
+  // 스페어/대기/오프 상태엔 티오프가 없어야 함 — 잔여·오독 티오프 정리(상황판·저널 일관성).
+  //  ★off 포함: 휴무/휴가/병가 확정인데 이전 근무 판독의 티오프가 남아 리마인더가 울리던 문제 차단.
+  if (['spare', 'waiting', 'off'].includes(next.status)) { next.teeTime = ''; next.course = ''; }
 
   // ★순번 제외(off:removed) 표식 — 대시보드가 평소 휴무(시적 쉼)와 구분해 '담백한 안내' 화면을 띄우게.
   //  removed가 아닌 어떤 결론이든(근무·스페어·평소 휴무) 이전 removed 표식은 깨끗이 제거(오래 남지 않게).
