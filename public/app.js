@@ -1752,13 +1752,33 @@ async function lgOpenDoc(kind) {
     period = `${lgYear}년 전체`; isYear = true;
   }
   lgDocCtx = { o, S, period, isYear, profile, kind };
-  $('lgMFrame').innerHTML = '<div class="lgdoc">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
+  // ★미리보기 = 출력(WYSIWYG): PDF 캡처와 동일한 A4 문서 폭(760px)으로 렌더한 뒤 화면 폭에 맞게 축소.
+  //  (예전엔 .lgdoc가 폰 좁은 폭에 눌려 표가 세로로 쭈그러들어 실제 PDF와 딴판이었음)
+  $('lgMFrame').innerHTML = '<div class="lgdoc-wrap"><div class="lgdoc" id="lgDocEl" style="width:760px;max-width:none;margin:0;padding:24px;box-sizing:border-box;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div></div>';
   $('lgMTitle').textContent = (kind === 'pdf' ? 'PDF 미리보기 · ' : 'Word 미리보기 · ') + period;
   $('lgMNote').textContent = '인쇄 = 등록 프린터로 출력(그 창에서 "PDF로 저장"도 가능). 저장·공유 = 파일로 저장하거나 카톡 등으로 공유.';
   $('lgMSaveLbl').textContent = kind === 'word' ? 'Word(.doc) 저장·공유' : 'PDF 저장·공유';
   $('lgMSave').onclick = kind === 'word' ? lgSaveWord : lgSavePdf;
   $('lgModal').hidden = false;
   $('lgMFrame').scrollTop = 0;
+  requestAnimationFrame(lgScalePreview);   // 모달 표시 후 프레임 폭이 잡히면 축소 계산
+}
+
+// 미리보기 = 출력: 760px 문서를 프레임 폭에 맞춰 transform:scale로 축소(비율 유지 → PDF와 동일 모습).
+function lgScalePreview() {
+  const frame = $('lgMFrame'), docEl = $('lgDocEl');
+  if (!frame || !docEl) return;
+  const wrap = frame.querySelector('.lgdoc-wrap'); if (!wrap) return;
+  const avail = Math.max(120, frame.clientWidth - 24);   // 프레임 좌우 패딩(12*2) 제외
+  const scale = Math.min(1, avail / 760);
+  docEl.style.transformOrigin = 'top left';
+  docEl.style.transform = `scale(${scale})`;
+  wrap.style.width = (760 * scale) + 'px';
+  wrap.style.height = (docEl.offsetHeight * scale) + 'px';   // 축소분만큼 래퍼 높이 축소(빈공간 방지)
+  wrap.style.margin = '0 auto';
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => { if (!$('lgModal')?.hidden) lgScalePreview(); });
 }
 
 function lgPrintDoc() {
@@ -1792,16 +1812,18 @@ async function lgSavePdf() {
   // ★캡처 전용 오프스크린 컨테이너에서 뽑는다 — 모달의 스크롤·중앙정렬 컨텍스트 때문에 html2canvas가
   //  .lgdoc를 아래로 밀린 좌표로 캡처해 '상단 대형 여백 + 표 행이 페이지 경계에서 잘림'이 생기던 문제 차단.
   const { o, S, period, isYear, profile } = lgDocCtx;
-  // ★left:0(음수 오프스크린 금지)로 둔다 — left:-10000px면 html2canvas가 그 x오프셋을 캡처에 반영해
-  //  결과가 오른쪽으로 치우치고 우측이 잘림. 열려 있는 미리보기 모달(z-index 큼)이 이 컨테이너를 덮어 가림.
+  // ★캡처 컨테이너 위치·스크롤 처리(둘 다 필수):
+  //  - position:absolute + left:0/top:0 → 문서 좌상단 기준(음수 오프스크린 금지: x 치우침 유발).
+  //  - html2canvas scrollX/scrollY:0 → 정산 화면을 아래로 스크롤한 상태에서 뽑아도 상단 여백이
+  //    생기지 않게(페이지 스크롤 오프셋 무시). 열린 미리보기 모달이 이 컨테이너를 덮어 가림.
   const holder = document.createElement('div');
-  holder.style.cssText = 'position:fixed;left:0;top:0;width:760px;background:#fff;z-index:1;';
+  holder.style.cssText = 'position:absolute;left:0;top:0;width:760px;background:#fff;z-index:1;';
   holder.innerHTML = '<div class="lgdoc" style="width:760px;max-width:none;margin:0;box-shadow:none;padding:24px;box-sizing:border-box;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
   document.body.appendChild(holder);
   const el = holder.querySelector('.lgdoc');
   const opt = {
     margin: 10, filename: name, image: { type: 'jpeg', quality: 0.96 },   // 균일 여백 → 좌우 대칭
-    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
+    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, scrollX: 0, scrollY: 0 },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },   // 표 행·헤더가 페이지 경계에서 잘리지 않게
   };
