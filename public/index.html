@@ -824,7 +824,7 @@
     .hero-off #heroTitle .tt.leave { position:absolute; top:0; left:0; right:0; transform:translateY(-.72em); opacity:0; }  /* 기존 문구: 위로 빠짐 */
     @media (prefers-reduced-motion:reduce){ .hero-off #heroTitle .tt { transition:none; } }
     /* 흐름(flow) 유지 + 음수 마진으로 카드 좌우·바닥까지 풀블리드 → 절단선 제거(둥근 모서리 자연 클립). */
-    .off-course { position:relative; height:186px; margin:12px -17px -17px; }
+    .off-course, .off-sick { position:relative; height:186px; margin:12px -17px -17px; }
     .oc-hills { position:absolute; inset:0; width:100%; height:100%; display:block; }
     .oc-hills .hill-far { fill:#bfe3c9; }
     .oc-hills .hill-near { fill:#7cc596; }
@@ -837,6 +837,15 @@
     .hero.wx-night .oc-flag .fp { stroke:#9fd3b4; }
     .hero.wx-night .oc-flag .fpc { fill:#9fd3b4; }
     .hero.wx-night .oc-flag .ftuft { fill:#2f6a4c; }
+    /* 병가 케어 깃발 — 초록 십자 페넌트(밤엔 밝게) + 잔잔한 회복 문구(시간대별 색) */
+    .oc-flag .fcare { fill:#2f9e60; }
+    .oc-flag .fcarex { fill:#fff; }
+    .hero.wx-night .oc-flag .fcare { fill:#3fb877; }
+    .oc-sickcap { position:absolute; left:0; right:0; bottom:12px; text-align:center; font-size:11.5px; font-weight:700; color:#2c6b4c; z-index:3; }
+    .hero.wx-night.has-wx .oc-sickcap { color:#bfe6cf; text-shadow:0 1px 3px rgba(0,0,0,.45); }
+    .hero.wx-dusk.has-wx .oc-sickcap { color:#7a3f2c; }
+    .hero.wx-dawn.has-wx .oc-sickcap { color:#4a6b5c; }
+    @media (prefers-color-scheme:dark) { .oc-sickcap { color:#8fd6ab; } }
     /* 응원 한 줄 — 휴무엔 잔디 위로(겹침 방지) */
     .hero-off #heroCheer { position:absolute; left:0; right:0; bottom:0; z-index:4; margin:0; padding:10px 15px 13px;
       color:#123a24; text-shadow:none; }

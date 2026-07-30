@@ -559,6 +559,26 @@ function offCourseHTML() {
   </div>`;
 }
 
+// 병가 — 앱의 언덕·깃발 장면(off-course)을 그대로 쓰되 깃발을 '초록 십자(케어 깃발)'로 바꾼 보드.
+//  언덕·깃발은 공용 클래스(.oc-hills/.oc-flag)를 재사용 → 날씨 배경·밤(어두운 언덕·밝은 깃발)·노을/새벽(지면 숨김) 규칙이 그대로 적용됨.
+function sickBoardHTML() {
+  return `<div class="off-sick">
+    <svg class="oc-hills" viewBox="0 0 390 200" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
+      <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
+    </svg>
+    <svg class="oc-flag" viewBox="0 0 44 60" aria-hidden="true">
+      <ellipse class="ftuft" cx="9" cy="55" rx="12" ry="3.4"/>
+      <line class="fp" x1="9" y1="8" x2="9" y2="55" stroke-width="2.6" stroke-linecap="round"/>
+      <circle class="fpc" cx="9" cy="9.5" r="1.8"/>
+      <path class="fcare" d="M10 10 H40 L34 22 L40 34 H10 Z"/>
+      <rect class="fcarex" x="20.5" y="14" width="4" height="16" rx="1.3"/>
+      <rect class="fcarex" x="15" y="19.8" width="15" height="4" rx="1.3"/>
+    </svg>
+    <div class="oc-sickcap">회복 중 · 편히 쉬세요</div>
+  </div>`;
+}
+
 // 순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 판에서 이름이 사라짐(사유 미상).
 //  쉼·사유를 단정하지 않고 '사실만'. 날씨 배경 위 글래스 카드 + 은은한 언덕 스트립(노을/새벽엔 CSS로 숨김).
 function removedBoardHTML(s) {
@@ -910,6 +930,7 @@ function renderBoard(bd) {
   //  ★휴무 일러스트는 이미 떠 있으면 다시 안 꽂는다 — 깃발 SMIL이 폴링마다 리셋/정지되지 않게(끊김 없는 펄럭).
   if (st === 'off') {
     if (s.offReason === 'removed') slot.innerHTML = removedBoardHTML(s);
+    else if (s.offType === 'sick') { if (!slot.querySelector('.off-sick')) slot.innerHTML = sickBoardHTML(); }
     else if (!slot.querySelector('.off-course')) slot.innerHTML = offCourseHTML();
   }
   else if (st === 'spare' || st === 'waiting' || st === 'near') slot.innerHTML = renderSpareBoard(s, partLabel);
