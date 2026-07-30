@@ -567,13 +567,13 @@ function sickBoardHTML() {
       <path class="hill-far" d="M0 66 Q110 38 210 54 T390 48 V200 H0 Z"/>
       <path class="hill-near" d="M0 104 Q140 72 260 90 T390 84 V200 H0 Z"/>
     </svg>
-    <svg class="oc-flag" viewBox="0 0 44 60" aria-hidden="true">
-      <ellipse class="ftuft" cx="9" cy="55" rx="12" ry="3.4"/>
-      <line class="fp" x1="9" y1="8" x2="9" y2="55" stroke-width="2.6" stroke-linecap="round"/>
-      <circle class="fpc" cx="9" cy="9.5" r="1.8"/>
-      <path class="fcare" d="M10 10 H40 L34 22 L40 34 H10 Z"/>
-      <rect class="fcarex" x="20.5" y="14" width="4" height="16" rx="1.3"/>
-      <rect class="fcarex" x="15" y="19.8" width="15" height="4" rx="1.3"/>
+    <svg class="sick-flag" viewBox="0 0 70 84" aria-hidden="true">
+      <ellipse class="ftuft" cx="35" cy="80" rx="11" ry="3.2"/>
+      <line class="fp" x1="35" y1="40" x2="35" y2="80" stroke-width="2.8" stroke-linecap="round"/>
+      <circle class="sign-ring" cx="35" cy="22" r="18"/>
+      <circle class="sign-face" cx="35" cy="22" r="13"/>
+      <rect class="sign-cross" x="31.5" y="13" width="7" height="18" rx="2"/>
+      <rect class="sign-cross" x="25" y="19" width="20" height="7" rx="2"/>
     </svg>
     <div class="oc-sickcap">회복 중 · 편히 쉬세요</div>
   </div>`;
