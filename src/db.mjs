@@ -72,6 +72,9 @@ function migrate(d) {
   `);
   // 기존 DB(김홍구 등)에 새 컬럼 안전 추가 — 없을 때만 ALTER.
   addColumn(d, 'profiles', 'commute_min', 'INTEGER NOT NULL DEFAULT 60');
+  // ★캐디 구분(하우스/3부). 기존 회원은 part로 자동 변환: 1·2부 → house, 3부 → part3. (본인이 수정 가능)
+  addColumn(d, 'profiles', 'caddie_type', "TEXT NOT NULL DEFAULT ''");
+  d.exec("UPDATE profiles SET caddie_type = CASE WHEN part = '3' THEN 'part3' ELSE 'house' END WHERE caddie_type = '' OR caddie_type IS NULL");
   addColumn(d, 'users', 'google_id', 'TEXT');
   addColumn(d, 'users', 'block_reason', 'TEXT');   // 차단 사유(roster|other) — disabled일 때만 채움
   addColumn(d, 'users', 'last_seen', 'INTEGER');   // 마지막 활동(하트비트) — 접속중/나감 판별용(운영 모니터)

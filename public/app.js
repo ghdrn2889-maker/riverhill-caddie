@@ -2167,7 +2167,9 @@ function showLogin() {
   hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
-  $('loginOv').hidden = false;
+  const lo = $('loginOv');
+  lo.hidden = false;
+  lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
 }
 function hideLogin() { $('loginOv').hidden = true; }
 function renderAccount() {
@@ -2176,30 +2178,57 @@ function renderAccount() {
   btn.hidden = false;
   $('acctName').textContent = (meState.profile && meState.profile.boardName) || '회원';
 }
+// ── 캐디 구분 토글(하우스/3부) 공용 헬퍼 ──
+function bindToggle(id) {
+  const c = $(id); if (!c) return;
+  c.querySelectorAll('button[data-t]').forEach((b) => {
+    b.onclick = () => { c.querySelectorAll('button[data-t]').forEach((x) => x.classList.remove('on')); b.classList.add('on'); };
+  });
+}
+function setToggle(id, val) { const c = $(id); if (c) c.querySelectorAll('button[data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === val)); }
+function toggleVal(id) { const on = $(id) && $(id).querySelector('button.on'); return on ? on.dataset.t : 'part3'; }
+const caddieTypeOf = (p) => p.caddieType || (String(p.part) === '3' ? 'part3' : 'house');
+
 function fillProfileForm() {
   const p = (meState && meState.profile) || {};
   $('obName').value = p.boardName || '';
-  $('obPart').value = p.part || '3';
+  setToggle('acType', caddieTypeOf(p));
   $('obCommute').value = p.commuteMin != null && p.commuteMin !== 0 ? p.commuteMin : '';
   $('obKm').value = p.homeKm != null && p.homeKm !== 0 ? p.homeKm : '';
   $('obCar').value = p.carNo || '';
 }
+// 가입(온보딩) — 스코어카드 화면. 계정 오버레이(#ov)와 별개.
 function openOnboarding() {
   hideSplash();
-  $('ovTitle').textContent = '가입을 완성해주세요';
-  $('ovDesc').innerHTML = '근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.';
-  $('obSubmit').textContent = '가입 완료';
-  fillProfileForm();
-  $('ovActions').hidden = true;      // 신규 가입은 닫기 불가
-  $('obSwitch').hidden = true;       // 가입 화면에선 계정전환 숨김
-  $('ovErr').textContent = '';
+  $('ov').hidden = true;             // 계정 오버레이는 닫고 가입 화면만
+  const p = (meState && meState.profile) || {};
+  $('sgName').value = p.boardName || '';
+  setToggle('sgType', p.caddieType || 'part3');
+  $('sgCommute').value = p.commuteMin != null && p.commuteMin !== 0 ? p.commuteMin : '';
+  $('sgErr').textContent = '';
   ovDismissable = false;             // 가입 화면: 배경/뒤로가기로 닫히지 않게
-  $('ov').hidden = false;
+  $('obOv').hidden = false;
+}
+async function submitOnboarding() {
+  const boardName = $('sgName').value.trim();
+  if (!boardName) { $('sgErr').textContent = '배치표에 뜨는 실명을 입력해주세요.'; return; }
+  const body = { boardName, caddieType: toggleVal('sgType'), commuteMin: Number($('sgCommute').value) || 0 };
+  $('sgSubmit').disabled = true;
+  try {
+    const r = await postJSON('/api/profile', body);
+    if (!r || !r.ok) throw new Error((r && r.error) || '저장 실패');
+    $('obOv').hidden = true;
+    await loadMe();
+    loadToday();
+  } catch (e) { $('sgErr').textContent = e.message || '저장 실패'; }
+  finally { $('sgSubmit').disabled = false; }
 }
 function openAccount() {
+  $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
   $('ovTitle').textContent = '내 계정 · 프로필';
   const p = (meState && meState.profile) || {};
-  const who = p.boardName ? `${p.boardName} · ${p.part}부` : '회원';
+  const label = caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디';
+  const who = p.boardName ? `${p.boardName} · ${label}` : '회원';
   $('ovDesc').innerHTML = `현재 <b>${esc(who)}</b>로 로그인됨. 정보를 수정할 수 있어요.`;
   $('obSubmit').textContent = '저장';
   fillProfileForm();
@@ -2214,7 +2243,7 @@ function openAccount() {
 async function submitProfile() {
   const boardName = $('obName').value.trim();
   if (!boardName) { $('ovErr').textContent = '배치표에 뜨는 실명을 입력해주세요.'; return; }
-  const body = { boardName, part: $('obPart').value, commuteMin: Number($('obCommute').value) || 0, homeKm: Number($('obKm').value) || 0, carNo: $('obCar').value.trim() };
+  const body = { boardName, caddieType: toggleVal('acType'), commuteMin: Number($('obCommute').value) || 0, homeKm: Number($('obKm').value) || 0, carNo: $('obCar').value.trim() };
   $('obSubmit').disabled = true;
   try {
     const r = await postJSON('/api/profile', body);
@@ -2228,6 +2257,8 @@ async function submitProfile() {
 function initAccount() {
   $('acctBtn').onclick = openAccount;
   $('obSubmit').onclick = submitProfile;
+  bindToggle('acType'); bindToggle('sgType');
+  $('sgSubmit').onclick = submitOnboarding;
   $('ovEnableBtn').onclick = enableNotifications;
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).

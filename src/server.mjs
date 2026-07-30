@@ -72,7 +72,9 @@ app.get('/api/me', (req, res) => {
   res.json({ ...base, authed: true, pending, status: req.user.status,
     blockReason: req.user.status === 'disabled' ? (req.user.block_reason || 'other') : null,
     user: { id: req.user.id, role: req.user.role },
-    profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
+    profile: { boardName: prof.board_name, part: prof.part,
+      caddieType: prof.caddie_type || (String(prof.part) === '3' ? 'part3' : 'house'),
+      homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no,
       workplace: prof.workplace, kmPerL: prof.km_per_l, stationId: prof.station_id, fuelEnabled: !!prof.fuel_enabled },
     needsOnboarding });
 });
@@ -86,19 +88,24 @@ app.post('/api/ping', (req, res) => {
 app.post('/api/profile', requireAuth, (req, res) => {
   const b = req.body || {};
   const boardName = String(b.boardName || '').trim();
-  const part = ['1', '2', '3'].includes(String(b.part)) ? String(b.part) : '3';
   if (!boardName) return res.status(400).json({ ok: false, error: '배치표에 뜨는 실명을 입력해주세요.' });
+  const existing = getProfile(req.user.id) || {};
+  // ★캐디 구분(하우스/3부). 없으면 기존값·part에서 유추. part는 호환 위해 유지: 3부→'3', 하우스→기존 1·2부(없으면 '1').
+  const caddieType = ['house', 'part3'].includes(String(b.caddieType)) ? String(b.caddieType)
+    : (existing.caddie_type || (String(existing.part) === '3' ? 'part3' : 'house'));
+  const part = caddieType === 'part3' ? '3'
+    : (['1', '2'].includes(String(b.part)) ? String(b.part) : (['1', '2'].includes(String(existing.part)) ? String(existing.part) : '1'));
   // (이름+부) 유일 강제 — 같은 캐디가 계정 2개로 알림 2번 받는 중복 차단.
   if (boardNameTaken(boardName, part, req.user.id)) {
     return res.status(409).json({ ok: false,
-      error: `이미 등록된 이름이에요 (${boardName}·${part}부). 본인 계정이라면 그 계정으로 로그인하세요. 동명이인이면 관리자에게 문의해주세요.` });
+      error: `이미 등록된 이름이에요 (${boardName}). 본인 계정이라면 그 계정으로 로그인하세요. 동명이인이면 관리자에게 문의해주세요.` });
   }
   const prof = setProfile(req.user.id, {
-    board_name: boardName, part, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
+    board_name: boardName, part, caddie_type: caddieType, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
   });
   // 가입/이름 변경 직후 현재 배치표를 즉시 소급 반영(백대기 중간 가입 등으로 상황판이 비는 빈틈 방지).
   backfillFromLastBoard(req.user.id, { name: prof.board_name, part: String(prof.part || '3'), commuteMin: Number(prof.commute_min) });
-  res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
+  res.json({ ok: true, profile: { boardName: prof.board_name, part: prof.part, caddieType: prof.caddie_type, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
 });
 
 // 기기·알림 상태 텔레메트리 — iOS/안드 비율·설치·권한·구독을 회원별로 기록(최신 상태 유지).

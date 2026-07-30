@@ -944,6 +944,38 @@
     .ov[hidden] { display:none; }
     .ov-card { background:#fff; border-radius:20px; width:100%; max-width:390px; padding:22px 20px 20px;
       box-shadow:0 22px 55px rgba(0,0,0,.32); max-height:92vh; overflow-y:auto; }
+    /* 계정 폼의 캐디 구분 토글 */
+    .ac-parts { display:flex; gap:8px; }
+    .ac-parts button { flex:1; font-size:13px; font-weight:800; padding:11px 0; border-radius:10px; border:1.5px solid #d7e0d8; background:#fff; color:#8a948b; cursor:pointer; }
+    .ac-parts button.on { background:#0b5d34; color:#fff; border-color:#0b5d34; }
+    /* ── 가입(온보딩) · 스코어카드 ── */
+    .scov { padding:16px; }
+    .scov .sc-card { position:relative; width:100%; max-width:390px; max-height:92vh; overflow:auto; background:#f5efe0; border:1px solid #c9bfa2;
+      box-shadow:0 22px 55px rgba(40,32,15,.4); font-family:'Consolas','Malgun Gothic',monospace; }
+    .scov .sc-card::before { content:''; position:absolute; inset:0; background:repeating-linear-gradient(#f5efe0 0 30px,#eae2cc 30px 31px); opacity:.5; pointer-events:none; }
+    .scov .sc-hd { position:relative; padding:20px 22px 14px; border-bottom:2px solid #3a5a40; }
+    .scov .sc-t { font-size:11px; letter-spacing:.22em; color:#3a5a40; font-weight:700; }
+    .scov .sc-title { font-size:23px; color:#26331f; letter-spacing:.02em; margin:6px 0 0; font-weight:700; }
+    .scov .sc-stamp { position:absolute; top:14px; right:20px; width:44px; height:44px; border:2px solid #b23b2e; border-radius:50%;
+      display:flex; align-items:center; justify-content:center; transform:rotate(-12deg); opacity:.85; color:#b23b2e; }
+    .scov .sc-bd { position:relative; padding:8px 22px 22px; }
+    .scov .sc-rowh { display:flex; justify-content:space-between; font-size:9.5px; color:#a99a72; letter-spacing:.08em; padding:12px 0 4px; border-bottom:1px dashed #c7bd9e; }
+    .scov .sc-fld { padding:13px 0 4px; border-bottom:1px dashed #c7bd9e; }
+    .scov .sc-k { font-size:10px; color:#7a7050; letter-spacing:.05em; margin-bottom:7px; }
+    .scov .sc-k b { color:#b23b2e; }
+    .scov .sc-fld input { width:100%; font-size:16px; font-family:'Consolas',monospace; padding:2px 0 6px; border:0; background:transparent; color:#26331f; letter-spacing:.02em; }
+    .scov .sc-fld input:focus { outline:none; }
+    .scov .sc-parts { display:flex; border:1.5px solid #3a5a40; margin:3px 0 6px; }
+    .scov .sc-parts button { flex:1; font-family:'Consolas',monospace; font-size:13.5px; font-weight:700; padding:11px 0; border:0; border-right:1.5px solid #3a5a40; background:#f5efe0; color:#3a5a40; cursor:pointer; }
+    .scov .sc-parts button:last-child { border-right:0; }
+    .scov .sc-parts button.on { background:#3a5a40; color:#f5efe0; }
+    .scov .sc-ph { font-size:9px; color:#a99a72; letter-spacing:.02em; margin-top:2px; }
+    .scov .sc-err { position:relative; min-height:13px; font-size:10.5px; color:#b23b2e; padding-top:8px; font-family:'Malgun Gothic'; }
+    .scov .sc-cta { width:100%; margin-top:14px; padding:15px; border:2px solid #26331f; background:#26331f; color:#f5efe0;
+      font-family:'Consolas',monospace; font-size:15px; font-weight:700; letter-spacing:.14em; cursor:pointer; }
+    .scov .sc-cta:disabled { opacity:.6; }
+    .scov .sc-note { position:relative; margin-top:14px; font-size:9.5px; color:#7a7050; text-align:center; letter-spacing:.03em; line-height:1.6; }
+    .scov .sc-card svg { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
     .ov-badge { width:46px; height:46px; border-radius:14px; background:#e8f3eb; display:flex; align-items:center;
       justify-content:center; font-size:24px; margin-bottom:12px; }
     .ov-title { font-size:19px; letter-spacing:-.02em; margin:0 0 5px; color:#17231d; }
@@ -990,6 +1022,42 @@
     #installBar .ib-cta { flex-shrink:0; background:#ffd257; color:#3a2c00; border:0; border-radius:9px;
       padding:9px 15px; font-weight:850; font-size:13px; white-space:nowrap; cursor:pointer; }
     #installBar .ib-x { flex-shrink:0; background:transparent; border:0; color:#bcd9ca; font-size:15px; padding:4px 6px; cursor:pointer; }
+
+    /* ── 로그인 진입(새벽 티오프) — 비로그인 랜딩 전체화면 ── */
+    #loginOv { background:linear-gradient(180deg,#fbe6cf 0%,#f4d9bf 20%,#dfe4c0 50%,#a9c58f 100%); display:block; overflow:hidden; }
+    #loginOv .dl-stage { position:absolute; inset:0; overflow:hidden; }
+    #loginOv .dl-sunwrap { position:absolute; left:50%; top:20vh; width:104px; height:104px; margin-left:-52px; }
+    #loginOv .dl-sun { position:absolute; inset:0; border-radius:50%;
+      background:radial-gradient(circle,#ffe3a0 0%,#ffd57f 60%,rgba(255,213,127,0) 74%); }
+    #loginOv .dl-land { position:absolute; inset:0; transform-origin:50% 100%; }
+    #loginOv .dl-globe { position:absolute; left:50%; bottom:0; width:72vh; height:72vh; border-radius:50%; transform:translate(-50%,50%);
+      background:radial-gradient(120% 120% at 50% 22%,#88b06a 0%,#6a9350 40%,#4f7a41 100%);
+      box-shadow:inset 0 20px 40px rgba(255,255,255,.14), inset 0 -30px 60px rgba(20,40,15,.3); }
+    #loginOv .dl-flag { position:absolute; left:50%; bottom:27vh; margin-left:8px; }
+    #loginOv .dl-flag .dl-pole { position:absolute; left:22px; top:0; width:2.5px; height:62px; background:#33301f; border-radius:2px; }
+    #loginOv .dl-flag .dl-cloth { position:absolute; left:24px; top:0; width:0; height:0;
+      border-top:9px solid transparent; border-bottom:9px solid transparent; border-left:22px solid #b23b2e; }
+    #loginOv .dl-in { position:absolute; inset:0; display:flex; flex-direction:column; padding:0 32px 0; z-index:3; box-sizing:border-box; }
+    #loginOv .dl-mark { margin-top:37vh; }
+    #loginOv .dl-em { font-size:11px; letter-spacing:.32em; color:#8a6a3e; font-weight:800; }
+    #loginOv .dl-h { font-size:26px; margin:12px 0 0; letter-spacing:.01em; color:#33301f; line-height:1.28; font-weight:800; }
+    #loginOv .dl-sub { font-size:12.5px; color:#5a5b3f; margin-top:12px; line-height:1.7; }
+    #loginOv .dl-btnwrap { margin-top:auto; margin-bottom:9vh; }
+    #loginOv .dl-btnwrap .ov-submit.google { margin:0; }
+    #loginOv .dl-terms { text-align:center; font-size:10px; color:#6e6a4c; margin-top:14px; }
+    #loginOv.dl-play .dl-sunwrap { animation:dlSunX 2s cubic-bezier(.36,0,.36,1) .18s both; }
+    #loginOv.dl-play .dl-sun { animation:dlSunY 2s cubic-bezier(.18,.62,.32,1) .18s both; }
+    #loginOv.dl-play .dl-land { animation:dlLand 2s cubic-bezier(.2,.72,.24,1) .18s both; }
+    #loginOv.dl-play .dl-in > * { opacity:0; animation:dlRise .7s ease-out both; }
+    #loginOv.dl-play .dl-mark { animation-delay:1.5s; }
+    #loginOv.dl-play .dl-btnwrap { animation-delay:1.72s; }
+    @keyframes dlSunX { from{transform:translateX(-108px);} to{transform:translateX(0);} }
+    @keyframes dlSunY { 0%{transform:translateY(30vh);opacity:0;} 12%{opacity:1;} 100%{transform:translateY(0);opacity:1;} }
+    @keyframes dlLand { from{transform:rotate(31deg);} to{transform:rotate(0deg);} }
+    @keyframes dlRise { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:none;} }
+    @media (prefers-reduced-motion:reduce){
+      #loginOv.dl-play .dl-sunwrap,#loginOv.dl-play .dl-sun,#loginOv.dl-play .dl-land,#loginOv.dl-play .dl-in>*{animation:none;opacity:1;transform:none;}
+    }
   </style>
 </head>
 <body>
@@ -1026,8 +1094,8 @@
       <h2 class="ov-title" id="ovTitle">가입을 완성해주세요</h2>
       <p class="ov-desc" id="ovDesc">근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.</p>
       <label class="ov-field"><span>실명 (배치표 이름) <b class="req">*</b></span><input id="obName" type="text" placeholder="예: 홍길동" maxlength="20"></label>
-      <label class="ov-field"><span>소속 부 <b class="req">*</b></span>
-        <select id="obPart"><option value="1">1부</option><option value="2">2부</option><option value="3" selected>3부</option></select></label>
+      <label class="ov-field"><span>캐디 구분 <b class="req">*</b></span>
+        <div class="ac-parts" id="acType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3">3부 캐디</button></div></label>
       <label class="ov-field"><span>집→골프장 출근 소요시간 <b class="req">*</b> <small>(분)</small></span><input id="obCommute" type="number" inputmode="numeric" placeholder="60"></label>
       <label class="ov-field"><span>집→골프장 편도 (km)</span><input id="obKm" type="number" inputmode="numeric" placeholder="30"></label>
       <label class="ov-field"><span>차량번호 <small>(선택)</small></span><input id="obCar" type="text" placeholder="12가3456" maxlength="20"></label>
@@ -1043,15 +1111,48 @@
     </div>
   </div>
 
-  <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) -->
+  <!-- 가입(온보딩) · 스코어카드 -->
+  <div class="ov scov" id="obOv" hidden>
+    <div class="sc-card">
+      <div class="sc-hd">
+        <div class="sc-t">RIVERHILL CADDIE</div>
+        <h2 class="sc-title">SCORECARD 등록</h2>
+        <div class="sc-stamp"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 21V4"/><path d="M6 5h10l-2 3 2 3H6"/></svg></div>
+      </div>
+      <div class="sc-bd">
+        <div class="sc-rowh"><span>ITEM</span><span>ENTRY</span></div>
+        <div class="sc-fld"><div class="sc-k">실명 · 배치표 이름 <b>*</b></div><input id="sgName" placeholder="홍길동" maxlength="20"></div>
+        <div class="sc-fld"><div class="sc-k">캐디 구분 <b>*</b></div>
+          <div class="sc-parts" id="sgType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3" class="on">3부 캐디</button></div>
+          <div class="sc-ph">하우스 = 1·2부 근무 · 3부 = 3부 근무(2부 콜업 가능)</div></div>
+        <div class="sc-fld"><div class="sc-k">출근 소요시간 (분) <b>*</b></div><input id="sgCommute" inputmode="numeric" placeholder="60"></div>
+        <div class="sc-err" id="sgErr"></div>
+        <button class="sc-cta" id="sgSubmit">가입 신청</button>
+        <div class="sc-note">— 명부 대조 후 관리자 승인 시 이용 개시 —</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) — 새벽 티오프 랜딩 -->
   <div class="ov" id="loginOv" hidden>
-    <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#0b5d34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 5h11l-2.2 3.1L17 11.4H6"/></svg></div>
-      <h2 class="ov-title">리버힐 캐디 일정</h2>
-      <p class="ov-desc" style="text-align:center;">근무·스페어 알림을 받으려면 로그인하세요.</p>
-      <a class="ov-submit google" id="googleLoginBtn" href="/api/auth/google"><span class="glogo" aria-hidden="true"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span> Google로 로그인</a>
-      <div class="ov-naver-disabled" title="네이버 로그인은 검수 후 지원 예정입니다"><span>네이버로 로그인</span><small>곧 지원</small></div>
-      <div class="ov-err" id="loginErr" style="text-align:center;"></div>
+    <div class="dl-stage">
+      <div class="dl-sunwrap"><div class="dl-sun"></div></div>
+      <div class="dl-land">
+        <div class="dl-globe"></div>
+        <div class="dl-flag"><div class="dl-cloth"></div><div class="dl-pole"></div></div>
+      </div>
+      <div class="dl-in">
+        <div class="dl-mark">
+          <div class="dl-em">RIVERHILL CADDIE</div>
+          <h2 class="dl-h">편안한 캐디 라이프가<br>시작됩니다</h2>
+          <div class="dl-sub">배치·일정·정산을 한 곳에서.</div>
+        </div>
+        <div class="dl-btnwrap">
+          <a class="ov-submit google" id="googleLoginBtn" href="/api/auth/google"><span class="glogo" aria-hidden="true"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span> Google로 로그인</a>
+          <div class="ov-err" id="loginErr" style="text-align:center;color:#7a3b30;"></div>
+          <div class="dl-terms">계속 진행하면 이용약관에 동의하게 됩니다</div>
+        </div>
+      </div>
     </div>
   </div>
 

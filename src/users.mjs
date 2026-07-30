@@ -37,6 +37,8 @@ export function getProfile(userId) { return get('SELECT * FROM profiles WHERE us
 const PROFILE_FIELDS = {
   board_name: (v) => String(v).slice(0, 40),
   part: (v) => (['1', '2', '3'].includes(String(v)) ? String(v) : '3'),
+  caddie_type: (v) => (['house', 'part3'].includes(String(v)) ? String(v) : 'part3'), // 하우스(1·2부) / 3부 캐디
+
   home_km: (v) => Math.max(0, Number(v) || 0),
   commute_min: (v) => Math.min(300, Math.max(0, Math.round(Number(v) || 0))), // 출근 소요시간(분)
   car_no: (v) => String(v).slice(0, 20),
