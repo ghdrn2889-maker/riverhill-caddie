@@ -32,6 +32,7 @@ function tickDate() {
 /* ── 하단 내비 / 뷰 전환 ── */
 const VIEWS = ['today', 'news', 'cart', 'worklog', 'settle'];
 let curView = 'today';
+const _boxFxDone = new Set();   // 박스 스태거는 뷰별 최초 1회만(이후엔 가벼운 방향 슬라이드)
 function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
   // 탭 순서 기준 방향성 슬라이드: 오른쪽 탭으로 가면 오른쪽에서, 왼쪽 탭이면 왼쪽에서 들어옴.
@@ -39,8 +40,9 @@ function showView(name) {
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
   if (name !== curView && from >= 0 && to >= 0) {
     const el = $('view-' + name);
-    if (name === 'worklog' || name === 'settle') {
-      boxFx(el);                               // 카드 박스들이 순서대로 부드럽게 올라옴
+    if ((name === 'worklog' || name === 'settle') && !_boxFxDone.has(name)) {
+      _boxFxDone.add(name);
+      boxFx(el);                               // 최초 진입: 카드 박스들이 순서대로 부드럽게 올라옴(1회)
     } else {
       el.classList.remove('slide-l', 'slide-r');
       void el.offsetWidth;                     // 리플로우 → 애니메이션 재생 보장
@@ -56,12 +58,14 @@ function showView(name) {
   window.scrollTo(0, 0);
 }
 // 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션.
+//  ★1회만 — 재생이 끝나면 .boxfx 클래스를 떼서, 탭 복귀(hidden→표시) 때 재시작되지 않게 고정.
 function boxFx(view) {
   const items = view.querySelectorAll(':scope > .sect, :scope > .hero, :scope > .lg-seg, :scope > .lg-pager, :scope > #lgList');
   items.forEach((el, i) => el.style.setProperty('--bi', i));
   view.classList.remove('boxfx');
-  void view.offsetWidth;                        // 리플로우 → 매 진입마다 재생
+  void view.offsetWidth;                        // 리플로우 → 애니메이션 재생 보장
   view.classList.add('boxfx');
+  setTimeout(() => view.classList.remove('boxfx'), 1200);
 }
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
