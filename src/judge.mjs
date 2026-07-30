@@ -1285,6 +1285,11 @@ export function interpretForMember(article, shared, member, today = null) {
   // ★공유 board 판독이 표결에서 갈렸으면(shared._uncertain) 이 회원 순번도 그 흔들린 명단에서 뽑은 것 →
   //  이 회원에게도 정직하게 '확인 필요'를 전달(문구는 회원 본인 기준으로 일반화 — 1번 회원 시각·순번 노출 금지).
   if (shared._uncertain) v._uncertain = '배치표 판독이 불안정합니다 — 원문(배치표)을 직접 확인하세요';
+  // ★핵심 구조 가드를 '전 회원'에 동일 적용(1번 회원 judge()와 대칭) — 순번을 명단에서 이름으로 재도출하고
+  //  근무선(명시 커트라인/티오프표 최대순번/팀수−인턴) 밖이면 스페어 강제. 흔들린 순번이 근무선 안쪽 칸으로
+  //  잘못 들어와 스페어에게 남의 티오프가 오배정되던 문제 차단(2026-07-30 도대영·조하빈 등 오배정 사고 방지).
+  //  명단 없으면(텍스트 소식) no-op → memberPositionFromShared 값 유지(회귀 없음).
+  fixMemberPosByRoster(v, member, today);
   applyBoardParts(v, member);             // ★표 헤더로 이 회원 부(部) 재검증(다른 부 표면 무관 처리)
   resolveTeeByGrid(v, member);            // 순번→티오프(구조·beyond-cut 스페어 등)
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
