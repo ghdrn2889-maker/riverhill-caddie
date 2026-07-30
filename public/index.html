@@ -845,13 +845,6 @@
     .sick-flag .sign-cross { fill:#2f9e60; }
     .hero.wx-night .sick-flag .fp { stroke:#9fd3b4; }
     .hero.wx-night .sick-flag .sign-ring { fill:#3fb877; }
-    /* 밤 — 십자가에 노란 불빛이 잔잔하게 켜졌다 꺼짐. 꺼진 상태 기본색은 녹색, 켜질 때 노랑+빛번짐(블룸). */
-    .hero.wx-night .sick-flag .sign-cross { fill:#2f9e60; animation:sickGlow 3s ease-in-out infinite; }
-    @keyframes sickGlow {
-      0%, 100% { fill:#2f9e60; filter:drop-shadow(0 0 0px rgba(255,224,120,0)) drop-shadow(0 0 0px rgba(255,198,72,0)); }
-      50%      { fill:#ffe27a; filter:drop-shadow(0 0 3px rgba(255,228,130,.95)) drop-shadow(0 0 9px rgba(255,200,74,.72)); }
-    }
-    @media (prefers-reduced-motion: reduce) { .hero.wx-night .sick-flag .sign-cross { animation:none; fill:#2f9e60; } }
     .oc-sickcap { position:absolute; left:0; right:0; bottom:12px; text-align:center; font-size:11.5px; font-weight:700; color:#2c6b4c; z-index:3; }
     .hero.wx-night.has-wx .oc-sickcap { color:#bfe6cf; text-shadow:0 1px 3px rgba(0,0,0,.45); }
     .hero.wx-dusk.has-wx .oc-sickcap { color:#7a3f2c; }
