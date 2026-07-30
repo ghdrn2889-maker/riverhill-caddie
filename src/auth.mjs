@@ -170,7 +170,6 @@ export function beginGoogleLogin(req, res) {
   if (!googleConfigured()) return res.status(503).json({ error: '구글 로그인이 아직 설정되지 않았습니다(.env)' });
   // ★설치형 PWA는 ?h=<nonce> 로 핸드오프를 건다 → state에 연결(콜백에서 이 nonce에 완료 기록).
   const state = newOAuthState(req.query.h ? String(req.query.h) : null);
-  console.log('[LT] begin h=' + (req.query.h ? 'Y' : 'N') + ' ua=' + String(req.headers['user-agent'] || '').replace(/[^ -~]/g, '').slice(0, 55));
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -188,8 +187,7 @@ export async function googleCallback(req, res) {
     if (!googleConfigured()) return res.status(503).send('구글 로그인 미설정');
     const { code, state } = req.query;
     const stx = consumeOAuthState(state);
-    console.log('[LT] cb code=' + (code ? 'Y' : 'N') + ' stx.ok=' + stx.ok + ' handoff=' + (stx.handoff || '-'));
-    if (!code || !stx.ok) { console.log('[LT] cb REJECT (code/state 불일치)'); return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.'); }
+    if (!code || !stx.ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰(폼 인코딩 POST)
     const body = new URLSearchParams({
@@ -223,10 +221,8 @@ export async function googleCallback(req, res) {
     //  이 nonce에 완료를 기록해 두면, 대기 중인 앱이 폴링으로 감지→교환해 앱 컨텍스트에 세션을 심는다.
     if (stx.handoff) {
       completeLoginHandoff(stx.handoff, user.id);
-      console.log('[LT] cb OK user=' + user.id + ' → donePage (handoff=' + stx.handoff + ')');
       return res.send(handoffDonePage());
     }
-    console.log('[LT] cb OK user=' + user.id + ' → redirect / (핸드오프 없음=일반 리다이렉트)');
     res.redirect('/');
   } catch (e) {
     console.error('googleCallback 오류:', e.message);
@@ -258,19 +254,14 @@ b{color:#26331f}</style></head><body>
 // ── 설치형 PWA 로그인 핸드오프 라우트(비로그인 통과) ──
 export function startLoginHandoff(req, res) {
   if (!googleConfigured()) return res.status(503).json({ ok: false, error: '구글 로그인 미설정' });
-  const nonce = newLoginHandoff();
-  console.log('[LT] start nonce=' + nonce.slice(0, 8) + ' ua=' + String(req.headers['user-agent'] || '').replace(/[^ -~]/g, '').slice(0, 55));
-  res.json({ ok: true, nonce });
+  res.json({ ok: true, nonce: newLoginHandoff() });
 }
 export function pollLoginHandoffRoute(req, res) {
-  const r = pollLoginHandoff(req.query.h ? String(req.query.h) : '');
-  console.log('[LT] poll h=' + String(req.query.h || '').slice(0, 8) + ' → ' + r.status);
-  res.json(r);
+  res.json(pollLoginHandoff(req.query.h ? String(req.query.h) : ''));
 }
 export function exchangeLoginHandoff(req, res) {
   const nonce = (req.body && req.body.nonce) ? String(req.body.nonce) : '';
   const userId = redeemLoginHandoff(nonce);
-  console.log('[LT] exchange nonce=' + nonce.slice(0, 8) + ' userId=' + (userId || '-'));
   if (!userId) return res.status(400).json({ ok: false, error: '만료되었거나 유효하지 않은 로그인입니다.' });
   const tok = createSession(userId, req.headers['user-agent'] || '');
   setSessionCookie(req, res, tok);   // ★이 응답이 '앱' 컨텍스트에서 오므로 쿠키가 앱 저장소에 심긴다.
