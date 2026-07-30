@@ -756,6 +756,12 @@
     }
     @keyframes slideInR { from { opacity:0; transform:translateX(26px); } to { opacity:1; transform:none; } }
     @keyframes slideInL { from { opacity:0; transform:translateX(-26px); } to { opacity:1; transform:none; } }
+    /* 근무 기록·정산: 카드 박스 스태거 라이즈(순서대로 부드럽게 등장) */
+    @media (prefers-reduced-motion: no-preference) {
+      .boxfx > .sect, .boxfx > .hero, .boxfx > .lg-seg, .boxfx > .lg-pager, .boxfx > #lgList {
+        animation:boxRise .44s cubic-bezier(.22,.61,.36,1) both; animation-delay:calc(var(--bi,0) * 58ms); }
+    }
+    @keyframes boxRise { from { opacity:0; transform:translateY(13px); } to { opacity:1; transform:none; } }
 
     /* ===== 대기(스플래시) 화면 — 골프공 바운스. 실행/새로고침 로딩 동안 노출 후 페이드아웃 ===== */
     .ldg-screen { position:fixed; inset:0; z-index:1200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;

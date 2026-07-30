@@ -39,9 +39,13 @@ function showView(name) {
   VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
   if (name !== curView && from >= 0 && to >= 0) {
     const el = $('view-' + name);
-    el.classList.remove('slide-l', 'slide-r');
-    void el.offsetWidth;                       // 리플로우 → 애니메이션 재생 보장
-    el.classList.add(to > from ? 'slide-r' : 'slide-l');
+    if (name === 'worklog' || name === 'settle') {
+      boxFx(el);                               // 카드 박스들이 순서대로 부드럽게 올라옴
+    } else {
+      el.classList.remove('slide-l', 'slide-r');
+      void el.offsetWidth;                     // 리플로우 → 애니메이션 재생 보장
+      el.classList.add(to > from ? 'slide-r' : 'slide-l');
+    }
   }
   curView = name;
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
@@ -50,6 +54,14 @@ function showView(name) {
   if (name === 'settle') { lgPage = -1; loadLedger(); }
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
+}
+// 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션.
+function boxFx(view) {
+  const items = view.querySelectorAll(':scope > .sect, :scope > .hero, :scope > .lg-seg, :scope > .lg-pager, :scope > #lgList');
+  items.forEach((el, i) => el.style.setProperty('--bi', i));
+  view.classList.remove('boxfx');
+  void view.offsetWidth;                        // 리플로우 → 매 진입마다 재생
+  view.classList.add('boxfx');
 }
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
@@ -565,7 +577,11 @@ function removedBoardHTML(s) {
 function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
 function renderToday(t) {
-  if (!_heroEntered) { _heroEntered = true; hideSplash(); document.body.classList.add('anim-play'); }
+  if (!_heroEntered) {
+    _heroEntered = true; hideSplash(); document.body.classList.add('anim-play');
+    // 실행 등장 모션(reveal·아이리스)은 1회만 — 등장이 끝나면 클래스를 떼서 탭 복귀 때 재생되지 않게 고정.
+    setTimeout(() => document.body.classList.remove('anim-play'), 1500);
+  }
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';
