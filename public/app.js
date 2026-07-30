@@ -1792,14 +1792,16 @@ async function lgSavePdf() {
   // ★캡처 전용 오프스크린 컨테이너에서 뽑는다 — 모달의 스크롤·중앙정렬 컨텍스트 때문에 html2canvas가
   //  .lgdoc를 아래로 밀린 좌표로 캡처해 '상단 대형 여백 + 표 행이 페이지 경계에서 잘림'이 생기던 문제 차단.
   const { o, S, period, isYear, profile } = lgDocCtx;
+  // ★left:0(음수 오프스크린 금지)로 둔다 — left:-10000px면 html2canvas가 그 x오프셋을 캡처에 반영해
+  //  결과가 오른쪽으로 치우치고 우측이 잘림. 열려 있는 미리보기 모달(z-index 큼)이 이 컨테이너를 덮어 가림.
   const holder = document.createElement('div');
-  holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:760px;background:#fff;z-index:-1;';
-  holder.innerHTML = '<div class="lgdoc" style="max-width:none;margin:0;box-shadow:none;padding:24px;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
+  holder.style.cssText = 'position:fixed;left:0;top:0;width:760px;background:#fff;z-index:1;';
+  holder.innerHTML = '<div class="lgdoc" style="width:760px;max-width:none;margin:0;box-shadow:none;padding:24px;box-sizing:border-box;">' + lgReportInner(o, S, { period, isYear, profile }) + '</div>';
   document.body.appendChild(holder);
   const el = holder.querySelector('.lgdoc');
   const opt = {
-    margin: [10, 10, 12, 10], filename: name, image: { type: 'jpeg', quality: 0.96 },
-    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, windowWidth: 820, scrollX: 0, scrollY: 0 },
+    margin: 10, filename: name, image: { type: 'jpeg', quality: 0.96 },   // 균일 여백 → 좌우 대칭
+    html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },   // 표 행·헤더가 페이지 경계에서 잘리지 않게
   };
