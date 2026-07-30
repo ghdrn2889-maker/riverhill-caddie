@@ -37,16 +37,21 @@ function showView(name) {
   if (!VIEWS.includes(name)) name = 'today';
   // 탭 순서 기준 방향성 슬라이드: 오른쪽 탭으로 가면 오른쪽에서, 왼쪽 탭이면 왼쪽에서 들어옴.
   const from = VIEWS.indexOf(curView), to = VIEWS.indexOf(name);
-  VIEWS.forEach((v) => { $('view-' + v).hidden = v !== name; $('tab-' + v).setAttribute('aria-selected', String(v === name)); });
+  // 잔류 애니 클래스는 매 전환마다 전부 제거 → 뷰 재표시(hidden→display) 때 애니가 재시작되는 걸 원천 차단.
+  VIEWS.forEach((v) => {
+    const vw = $('view-' + v);
+    vw.hidden = v !== name;
+    vw.classList.remove('slide-l', 'slide-r', 'boxfx');
+    $('tab-' + v).setAttribute('aria-selected', String(v === name));
+  });
   if (name !== curView && from >= 0 && to >= 0) {
     const el = $('view-' + name);
+    void el.offsetWidth;                       // 리플로우 → 애니메이션 재생 보장
     if ((name === 'worklog' || name === 'settle') && !_boxFxDone.has(name)) {
       _boxFxDone.add(name);
-      boxFx(el);                               // 최초 진입: 카드 박스들이 순서대로 부드럽게 올라옴(1회)
+      boxFx(el);                               // 최초 진입 1회: 카드 박스들이 순서대로 부드럽게 올라옴
     } else {
-      el.classList.remove('slide-l', 'slide-r');
-      void el.offsetWidth;                     // 리플로우 → 애니메이션 재생 보장
-      el.classList.add(to > from ? 'slide-r' : 'slide-l');
+      el.classList.add(to > from ? 'slide-r' : 'slide-l');   // 재방문·기타 탭: 가벼운 방향 슬라이드
     }
   }
   curView = name;
@@ -57,15 +62,12 @@ function showView(name) {
   if (name === 'news') markAllRead();
   window.scrollTo(0, 0);
 }
-// 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션.
-//  ★1회만 — 재생이 끝나면 .boxfx 클래스를 떼서, 탭 복귀(hidden→표시) 때 재시작되지 않게 고정.
+// 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션(뷰별 최초 1회).
+//  잔류 클래스 제거는 showView가 매 전환마다 처리 → 여기선 부여만.
 function boxFx(view) {
   const items = view.querySelectorAll(':scope > .sect, :scope > .hero, :scope > .lg-seg, :scope > .lg-pager, :scope > #lgList');
   items.forEach((el, i) => el.style.setProperty('--bi', i));
-  view.classList.remove('boxfx');
-  void view.offsetWidth;                        // 리플로우 → 애니메이션 재생 보장
   view.classList.add('boxfx');
-  setTimeout(() => view.classList.remove('boxfx'), 1200);
 }
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
