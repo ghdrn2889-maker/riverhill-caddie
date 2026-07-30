@@ -405,6 +405,10 @@
     .lg-car { font-size:12px; color:#9aa49c; transition:transform .2s; }
     .lg-acc.open .lg-car { transform:rotate(180deg); }
     .lg-acc.saved { animation:lgflash .9s ease; }
+    .lg-acc.empty { border-color:#eef1ec; background:#fbfcfb; }
+    .lg-acc.empty .lg-cal { background:#f1f3f0; } .lg-acc.empty .lg-cal .md { color:#8a938b; }
+    .lg-acc.empty .lg-anet { font-size:13px; font-weight:700; color:#9aa49c; }
+    .lg-acc.empty .lg-hint { color:#7a857c; background:#f1f3f0; border-color:#e3e7e2; }
     @keyframes lgflash { 0%{background:#eafbf0;} 100%{background:#fff;} }
     .lg-abody { border-top:1px dashed #e2e9e0; padding:2px 14px 14px; }
     .lg-asub { font-size:10.5px; font-weight:800; color:#7a857c; margin:14px 0 7px; display:flex; align-items:center; gap:5px; }
@@ -1186,6 +1190,10 @@
       </section>
 
       <div class="sect"><span>날짜별 정산</span><span class="sect-sub">날짜를 탭하면 열려요</span></div>
+      <div class="lg-seg" id="lgFilter">
+        <button data-flt="all">전체 날짜</button>
+        <button data-flt="rec">근무·지출일만</button>
+      </div>
       <div class="lg-pager" id="lgPager"></div>
       <div id="lgList"></div>
 

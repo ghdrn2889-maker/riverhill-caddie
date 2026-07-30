@@ -1388,6 +1388,7 @@ let lgYear = null, lgMonth = null, lgData = null, lgProfile = { name: '', workpl
 let lgOpenDate = null;    // 펼쳐진 날짜 단락
 let lgExpForm = null;     // 지출 입력 폼 { id?, date, category, amount, vendor, method, photoData?, scanned?, _scanned? }
 let lgPage = -1;          // 7일 페이지네이션(오름차순). -1 = 첫 표시 → 가장 최근 페이지로 스냅
+let lgFilter = 'all';     // 날짜별 정산 필터: 'all'(그 달 전체 날짜) | 'rec'(근무·지출 있는 날만)
 let lgDocPeriod = 'month'; // 문서 대상: 'month' | 'year'
 let lgDocCtx = null;      // 미리보기/문서 컨텍스트
 let lgDayList = [];       // 이 달 날짜 목록(근무 or 지출) — 최신순
@@ -1427,6 +1428,17 @@ function lgBuildDays() {
     if (!d) { d = { date: e.date, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] }; map.set(e.date, d); }
     d.expenses.push(e);
   });
+  // '전체' 필터: 근무 안 한 날에도 지출을 기록할 수 있도록 그 달의 모든 날짜(오늘까지)를 빈 칸으로 채움.
+  if (lgFilter === 'all') {
+    const now = new Date();
+    const isCur = lgYear === now.getFullYear() && lgMonth === now.getMonth() + 1;
+    const last = new Date(lgYear, lgMonth, 0).getDate();
+    const cap = isCur ? Math.min(last, now.getDate()) : last;
+    for (let day = 1; day <= cap; day++) {
+      const iso = `${lgYear}-${String(lgMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (!map.has(iso)) map.set(iso, { date: iso, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] });
+    }
+  }
   return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
@@ -1482,12 +1494,15 @@ function renderLgList() {
 
 function lgAccHTML(d) {
   const open = d.date === lgOpenDate;
-  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}" id="lgAcc-${d.date}">
+  const empty = !d.worked && !d.expenses.length;
+  const net = empty ? '기록 없음' : '순수입 ' + wonKo(lgNetOf(d));
+  const brk = empty ? '탭해서 지출을 추가할 수 있어요' : lgBrkText(d);
+  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}${empty ? ' empty' : ''}" id="lgAcc-${d.date}">
     <div class="lg-ahead" data-tog="${d.date}">
       <div class="lg-cal"><span class="md">${lgMD(d.date)}</span><span class="dw">${lgDow(d.date)}</span></div>
-      <div class="lg-amid"><div class="lg-anet" id="lgNetR-${d.date}">순수입 ${wonKo(lgNetOf(d))}</div>
-        <div class="lg-abrk" id="lgBrk-${d.date}">${lgBrkText(d)}</div></div>
-      <div class="lg-chev"><span class="lg-hint">${open ? '닫기' : '수정'}</span><span class="lg-car">▾</span></div>
+      <div class="lg-amid"><div class="lg-anet" id="lgNetR-${d.date}">${net}</div>
+        <div class="lg-abrk" id="lgBrk-${d.date}">${brk}</div></div>
+      <div class="lg-chev"><span class="lg-hint">${open ? '닫기' : (empty ? '지출 추가' : '수정')}</span><span class="lg-car">▾</span></div>
     </div>${open ? lgBodyHTML(d) : ''}</div>`;
 }
 
@@ -1643,6 +1658,16 @@ function bindLg() {
     if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips();
     lgPage += b.dataset.pg === 'next' ? 1 : -1; lgOpenDate = null; lgExpForm = null;
     renderLgList();
+  });
+  // 필터(전체 날짜 / 근무·지출일만)
+  $('lgFilter').querySelectorAll('[data-flt]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.flt === lgFilter);
+    b.onclick = async () => {
+      if (lgFilter === b.dataset.flt) return;
+      if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips();
+      lgFilter = b.dataset.flt; lgOpenDate = null; lgExpForm = null; lgPage = -1;
+      lgDayList = lgBuildDays(); renderLgList();
+    };
   });
 }
 
