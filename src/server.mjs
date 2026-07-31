@@ -1025,9 +1025,33 @@ async function processForMember(userId, member, out, full, opts = {}) {
         offReason: merged.next.offReason, prevPosition: merged.next.prevPosition, offType: merged.next.offType }, userId);
     }
     if (v._uncertain) {
-      // ★불안정 판독 → 확정 변경알림 억제(피드/푸시 없음, 아래 low 리턴). baseline도 위에서 미갱신.
-      //  합의 판독·이미지 재판독으로 안정적으로 다시 읽힐 때 정식 알림. 흔들리는 순번을 '변경'으로 절대 단정하지 않는다.
+      // ★불안정 판독 → 흔들리는 순번/티오프는 반영 안 함(유령 변경 방지). baseline도 위에서 미갱신.
+      //  ── 단, '현재 N팀(팀수)'은 텍스트 근거라 판독 흔들림과 무관하게 안정적 → 그것 기반 커트라인·근무/스페어만
+      //     '저장된(직전 안정) 순번'으로 안전 갱신한다(티오프는 기존값 보존). 티오프 표 하나 흔들린다고 커트·근무전환
+      //     전체가 며칠씩 멈춰 수동교정이 필요하던 문제 해소 — 확실한 건 자동 반영, 불확실한 티오프만 보류.
       out.push = 'low';
+      const tcU = Number(v.teamCount);
+      const mypU = Number(today.myPosition) || 0;
+      if (Number.isFinite(tcU) && tcU > 0 && mypU > 0 && today.status !== 'off') {
+        const safe = { ...today };
+        const nowWork = mypU <= tcU;
+        const ns = nowWork ? (safe.teeTime ? 'assigned' : 'work') : 'spare';
+        const wasWait = ['spare', 'waiting', 'near'].includes(safe.status);
+        const wasWork = ['work', 'assigned', 'your_turn'].includes(safe.status);
+        const reversal = (wasWait && ['work', 'assigned', 'your_turn'].includes(ns)) || (wasWork && ns === 'spare');
+        safe.cutLine = tcU;
+        if (ns !== safe.status) { safe.status = ns; if (!nowWork) { safe.teeTime = ''; safe.course = ''; } }
+        safe.updatedAt = Date.now();
+        saveToday(safe, userId);   // ★불안정해도 커트/근무판정은 자동 반영(상황판만 조용히 정확하게)
+        if (reversal) {
+          // 팀수(안정)로 확정된 근무↔스페어 전환 → 티오프 불안정과 무관하게 확실 → 알림 발송.
+          title = nowWork ? `${member.part}부 근무 전환` : `${member.part}부 스페어 전환`;
+          body = nowWork
+            ? `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 근무권에 들었어요(커트라인 ${tcU}). 티오프 시각은 배치표에서 확인해주세요.`
+            : `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 스페어로 전환됐어요.`;
+          out.push = 'high';
+        }
+      }
     } else if (change.reversal) {
       const teeChg = (change.changes || []).find((c) => c.field === 'tee');
       if (teeChg) {
