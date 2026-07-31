@@ -935,6 +935,16 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   // ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
   const out = await judge(full, loadToday(1), primary);
 
+  // ★내일 예고(통합) 판단 — '전체 배치표'가 그 날짜로 처음 판독되면 previewMode:
+  //  개별 부 알림을 억제하고, 아래에서 판독된 전 회원에게 통합 예고 1건씩. (재판독은 dedup으로 재발송 안 함.)
+  const boardISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '');
+  const _isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
+  const _boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
+  const _isFullBoard = /전체|전부/.test(full.subject || '') || _boardTables.length >= 2;
+  const previewMode = !!(_isBoardImg && _isFullBoard && boardISO && out.rawVerdict?.rosterReliable && !isPreviewSent(boardISO));
+  opts = { ...opts, previewMode, boardISO };
+  if (previewMode) console.log(`📢 본배치표 최초(${boardISO}) — 개별 알림 억제 · 통합 예고 발송 예정: ${full.subject}`);
+
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
 
@@ -959,6 +969,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
     if (!minorPartOn) {
       if (full.images && full.images.length) console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 섀도 판독·교차확인 생략(크레딧 절약): ${full.subject}`);
+      if (opts.previewMode) await sendDailyPreview(boardISO, full);   // 1·2부 꺼져도 3부 기준 예고는 발송
       return primaryRet;
     }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
@@ -1012,22 +1023,23 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           });
         } catch (e) { console.error('[board-parts 저장 오류]', e.message); }
       }
-      // ★이번 배치표(부 판독) 날짜 — 옛 부 슬롯 잔재 정리 기준(processForMemberPart 최상단에서 사용).
-      const boardISO = worklog.labelToISO((outP.rawVerdict && outP.rawVerdict.dateLabel) || out.rawVerdict?.dateLabel || '');
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
-      //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
+      //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관). (opts.boardISO=이번 배치표 날짜)
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
-      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty, crossPart, boardISO });
+      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty, crossPart });
       for (const m of activeMembers()) {
         if (m.id === 1) continue;
         try {
           const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
           const moutP = interpretForMember(full, outP.rawVerdict, memberP, loadToday(m.id, p));
-          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart, boardISO });
+          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
+
+  // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
+  if (opts.previewMode) { try { await sendDailyPreview(boardISO, full); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
@@ -1247,6 +1259,11 @@ async function processForMember(userId, member, out, full, opts = {}) {
     saveUserJSON(userId, 'pushlog.json', log);
   }
 
+  // ★본배치표 최초(previewMode): 개별 부 알림을 억제 — 상태·저널·pushlog는 위에서 이미 반영, 통합 예고로 대체.
+  if (opts.previewMode) {
+    if (userId === 1) console.log(`·  (예고대기·회원${userId}) ${title} — 통합 예고로 발송`);
+    return { pushed: false, previewHeld: true, ...ret };
+  }
   await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
@@ -1263,6 +1280,85 @@ function workRoundPartsForDay(userId, dayISO) {
     parts.push(p);
   }
   return parts.sort();
+}
+
+// ── 내일 예고(통합) — 본배치표 최초 판독 시 '판독된 전 회원'에게 각자 1건씩 그날 배정 결과를 알린다. ──
+//  두 탕(1·3 등)은 한 건으로 통합. 스페어는 먼 순번도 포함(형식적 확인). 날짜별 dedup(재판독 재발송 방지).
+function previewDayWord(dayISO) {
+  const off = Math.round((Date.parse(dayISO) - Date.parse(todayISOKST())) / 86400000);
+  return off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레'
+    : `${Number(dayISO.slice(5, 7))}월 ${Number(dayISO.slice(8, 10))}일`;
+}
+// 그날 이 회원의 부별 슬롯(같은 날짜만) 모음.
+function daySlotsForMember(userId, dayISO) {
+  const slots = {};
+  for (const p of ['1', '2', '3']) {
+    const tp = loadToday(userId, p);
+    if (!tp) continue;
+    const iso = worklog.labelToISO(tp.date);
+    if (iso && dayISO && iso !== dayISO) continue;
+    slots[p] = tp;
+  }
+  return slots;
+}
+// 회원 1명의 예고 메시지 구성 → {title, body} 또는 null(그날 상태 파악 안 됨 = 예고 스킵).
+function composePreview(userId, dayISO, dayW) {
+  const prof = getProfile(userId) || {};
+  const name = prof.board_name || '';
+  const slots = daySlotsForMember(userId, dayISO);
+  const workParts = ['1', '2', '3'].filter((p) => slots[p] && ['assigned', 'work', 'your_turn'].includes(slots[p].status));
+  const partLabel = (p) => (p === '1' ? '1부(조출)' : `${p}부`);
+  if (workParts.length >= 2) {                                   // 두 탕(1·3 등) — 통합 1건
+    const combo = workParts.map((p) => `${p}부`).join('·');
+    const detail = workParts.map((p) => { const s = slots[p]; return `${p}부 ${s.teeTime || '티오프 미정'}${s.course ? `(${s.course})` : ''}`; }).join(' / ');
+    return { title: `${dayW} ${combo} 근무 배정!`, body: `${name}님, ${dayW} ${combo} 근무예요.\n${detail}\n출발·백대기 시각은 앱에서 확인하세요.` };
+  }
+  if (workParts.length === 1) {
+    const p = workParts[0], s = slots[p], pl = partLabel(p);
+    return { title: `${dayW} ${pl} 근무 배정!`, body: `${name}님, ${dayW} ${pl} 근무예요. 티오프 ${s.teeTime || '미정'}${s.course ? `(${s.course})` : ''}${s.myPosition ? ` · 순번 ${s.myPosition}번` : ''}. 배치표를 확인해주세요.` };
+  }
+  const t3 = slots['3'];
+  if (t3 && t3.status === 'off') {                               // 휴무
+    const kind = t3.offType === 'sick' ? '병가' : t3.offType === 'vacation' ? '휴가' : (t3.offReason === 'removed' ? '순번 제외' : '휴무');
+    return { title: `${dayW} ${kind}`, body: kind === '휴무' ? `${name}님, ${dayW}은 휴무로 확인됐어요. 편히 쉬세요.` : `${name}님, ${dayW}은 ${kind}로 확인됐어요.` };
+  }
+  for (const p of ['3', '1', '2']) {                             // 스페어(먼 순번 포함)
+    const s = slots[p];
+    if (s && ['spare', 'waiting', 'near'].includes(s.status) && Number(s.myPosition) > 0) {
+      const pos = Number(s.myPosition) || 0, cut = Number(s.cutLine) || 0;
+      const ahead = (cut && pos > cut) ? Math.max(0, pos - cut - 1) : Math.max(0, pos - 1);
+      return { title: `${dayW} ${p}부 스페어`, body: `${name}님, ${dayW} ${p}부 스페어(대기)예요. 순번 ${pos}번${ahead ? ` · 앞에 ${ahead}명` : ' · 대기 1순위'}. 팀이 차면 알려드릴게요.` };
+    }
+  }
+  return null;
+}
+function isPreviewSent(dayISO) {
+  if (!dayISO) return true;                                      // 날짜 불명 → 예고 안 함(개별 알림 유지)
+  const store = loadJSON('preview-sent.json', {});
+  return Array.isArray(store[dayISO]) && store[dayISO].length > 0;
+}
+// 본배치표 최초 판독 시 호출 — 판독된 전 회원에게 통합 예고 1건씩(이미 받은 회원·날짜는 건너뜀).
+async function sendDailyPreview(dayISO, full) {
+  if (!dayISO) return;
+  const store = loadJSON('preview-sent.json', {});
+  const today = todayISOKST();
+  for (const d of Object.keys(store)) if (d < today) delete store[d];   // 지난 날짜 정리
+  const sent = new Set(store[dayISO] || []);
+  const dayW = previewDayWord(dayISO);
+  let count = 0;
+  for (const m of activeMembers()) {
+    if (sent.has(m.id)) continue;
+    let msg = null;
+    try { msg = composePreview(m.id, dayISO, dayW); } catch (e) { console.error(`[예고 구성 오류 회원${m.id}]`, e.message); }
+    if (!msg) continue;                                          // 그날 상태 없음(판독 안 됨) → 스킵
+    try { await broadcast({ title: msg.title, body: msg.body, url: full.url, level: 'high' }, m.id); }
+    catch (e) { console.error(`[예고 발송 오류 회원${m.id}]`, e.message); continue; }
+    sent.add(m.id); count++;
+    console.log(`📢 [내일예고·회원${m.id}] ${msg.title} | ${msg.body.replace(/\n/g, ' ')}`);
+  }
+  store[dayISO] = [...sent];
+  saveJSON('preview-sent.json', store);
+  if (count) console.log(`📢 내일 예고 통합 발송: ${count}명 (${dayISO})`);
 }
 
 // ── 부(部)별 평행 슬롯 처리 — 1·2부 라운드(today1/today2.json). 3부(processForMember)와 완전 분리. ──
@@ -1442,6 +1538,8 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
     console.log(`🔕 [회원${userId}·${label}] 섀도(발송억제) — ${title} | ${String(body).replace(/\n/g, ' ').slice(0, 60)}`);
     return { pushed: false, shadow: true };
   }
+  // ★본배치표 최초(previewMode): 개별 부 알림 억제 → 통합 예고로 대체(두 탕도 한 건).
+  if (opts.previewMode) { if (userId === 1) console.log(`·  (예고대기·회원${userId}·${label}) ${title} — 통합 예고로 발송`); return { pushed: false, previewHeld: true }; }
   await broadcast({ title, body, url: full.url, level: push }, userId);
   console.log(`🔔 [회원${userId}·${label}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true };
