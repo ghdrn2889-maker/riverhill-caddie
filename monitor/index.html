@@ -145,6 +145,11 @@
   .br-save:disabled{ opacity:.55; cursor:default; }
   .br-msg{ font-size:12px; font-weight:700; width:100%; }
   .br-msg.ok{ color:var(--good); } .br-msg.err{ color:var(--bad); }
+  .ud-round{ margin-top:8px; padding:8px 9px; background:var(--panel2); border:1px solid var(--bord); border-left:3px solid var(--good); border-radius:8px; }
+  .ud-round + .ud-round{ margin-top:6px; }
+  .ud-round-h{ font-size:12.5px; color:var(--tx2); }
+  .ud-round-h b{ color:var(--tx); font-variant-numeric:tabular-nums; }
+  .ud-round .ud-tl{ margin-top:6px; }
   .ud-tl{ display:flex; gap:6px; margin-top:8px; }
   .ud-leg{ flex:1; background:var(--panel2); border:1px solid var(--bord); border-radius:8px; padding:6px 4px; text-align:center; }
   .ud-leg .l{ font-size:9.5px; color:var(--tx3); font-weight:700; letter-spacing:.02em; }
@@ -757,7 +762,17 @@
   function udCard(u){
     var warn = (u.match.s==='bad') || (u.subCount===0);
     var body='';
-    if(u.kind==='work' && u.commute){
+    if(u.combo && u.comboRounds && u.comboRounds.length){
+      body = u.comboRounds.map(function(r){
+        var c=r.commute||{};
+        return '<div class="ud-round"><div class="ud-round-h"><b>'+esc(r.part)+'부</b> 티오프 <b>'+esc(r.teeTime||'—')+'</b>'+(r.course?' ('+esc(String(r.course).toUpperCase())+'코스)':'')+(r.myPos?' · 순번 <b>'+r.myPos+'</b>번':'')+'</div>'+
+          '<div class="ud-tl">'+
+            '<div class="ud-leg"><div class="l">집 출발</div><div class="v">'+esc(c.leave||'—')+'</div></div>'+
+            '<div class="ud-leg"><div class="l">도착</div><div class="v">'+esc(c.arrive||'—')+'</div></div>'+
+            '<div class="ud-leg"><div class="l">백대기</div><div class="v">'+esc(c.standby||'—')+'</div></div>'+
+          '</div></div>';
+      }).join('');
+    } else if(u.kind==='work' && u.commute){
       var c=u.commute;
       body = '<div class="ud-body">티오프 <b>'+esc(u.teeTime)+'</b>'+(u.course?' ('+esc(String(u.course).toUpperCase())+'코스)':'')+(u.myPos?' · 순번 <b>'+u.myPos+'</b>번':'')+'</div>'+
         '<div class="ud-tl">'+

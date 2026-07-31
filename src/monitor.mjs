@@ -104,8 +104,33 @@ app.get('/api/user-dash', gate, (req, res) => {
       const myPos = rosterPos || Number(st.myPosition) || 0;
       const cut = Number(st.cutLine) || 0;
       const ahead = (cut && myPos > cut) ? Math.max(0, myPos - cut - 1) : Math.max(0, myPos - 1);
+      // ── 다중 라운드(같은 날 1·2·3부 조합) — 앱 /api/today 와 동일 규칙으로 모아 통합 카드로 재현. ──
+      //  3부 today.json 을 베이스로, 같은 날짜의 1·2부 근무(티오프 확정분)를 얹는다. 유령 방지: 낡음·티오프미정 제외.
+      const baseISO = (() => { try { return worklog.labelToISO(st.date); } catch { return null; } })();
+      const rounds = [];
+      for (const pp of ['1', '2', '3']) {
+        const tp = pp === '3' ? st : (loadToday(m.id, pp) || null);
+        if (!tp || !tp.status) continue;
+        const isW = ['assigned', 'work', 'your_turn'].includes(tp.status);
+        const isSp = ['spare', 'waiting', 'near'].includes(tp.status) && Number(tp.myPosition) > 0;
+        if (!isW && !isSp) continue;
+        let ppISO = null; try { ppISO = worklog.labelToISO(tp.date); } catch { /* 무해 */ }
+        if (ppISO && ppISO < todayISO) continue;                 // 낡음 제외
+        if (pp !== '3' && isW && !tp.teeTime) continue;          // 비3부 근무는 티오프 확정분만(유령 카드 방지)
+        if (baseISO && ppISO && ppISO !== baseISO) continue;     // 베이스(3부)와 다른 날짜 제외
+        rounds.push({
+          part: pp, work: isW, teeTime: tp.teeTime || '', course: tp.course || '',
+          myPos: Number(tp.myPosition) || 0,
+          commute: (isW && tp.teeTime) ? commuteInfo(tp.teeTime, commuteMin) : null,
+        });
+      }
+      const workRounds = rounds.filter((r) => r.work).sort((a, b) => String(a.teeTime).localeCompare(String(b.teeTime)) || Number(a.part) - Number(b.part));
+      const workParts = workRounds.map((r) => r.part);
+      const combo = workParts.length >= 2;         // 하루 두 부 이상 근무 = 통합 카드
+      const comboLabel = workParts.join('·') + '부';   // 예: 1·3부
       let kind, badge, heroTitle;
-      if (status === 'your_turn') { kind = 'work'; badge = { t: '출근 차례', c: 'work' }; heroTitle = '지금 출근 차례'; }
+      if (combo) { kind = 'work'; badge = { t: comboLabel, c: 'work' }; heroTitle = `${dayW} ${comboLabel} 근무`; }
+      else if (status === 'your_turn') { kind = 'work'; badge = { t: '출근 차례', c: 'work' }; heroTitle = '지금 출근 차례'; }
       else if (isWork) { kind = 'work'; badge = { t: '근무', c: 'work' }; heroTitle = teeTime ? `${dayW} 근무 확정` : `${dayW} 근무 예정`; }
       else if (offRemoved) { kind = 'removed'; badge = { t: '순번 제외', c: 'removed' }; heroTitle = '근무 없음 (순번 제외)'; }
       else if (offSick) { kind = 'off'; badge = { t: '병가', c: 'sick' }; heroTitle = `${dayW} 병가`; }
@@ -113,7 +138,7 @@ app.get('/api/user-dash', gate, (req, res) => {
       else if (isOff) { kind = 'off'; badge = { t: '휴무', c: 'off' }; heroTitle = `${dayW} 휴무`; }
       else if (isSpare) { kind = 'spare'; badge = { t: '스페어', c: 'spare' }; heroTitle = `${dayW} 스페어${myPos ? ` · ${myPos}번` : ''}`; }
       else { kind = 'unknown'; badge = { t: '미상', c: 'unk' }; heroTitle = '상태 미상'; }
-      const commute = (isWork && teeTime) ? commuteInfo(teeTime, commuteMin) : null;
+      const commute = (!combo && isWork && teeTime) ? commuteInfo(teeTime, commuteMin) : null;
       const subCount = (getSubscriptions(m.id) || []).length;
       let stale = false;
       try { const iso = worklog.labelToISO(st.date); if (iso && iso < todayISO) stale = true; } catch { /* 무해 */ }
@@ -125,7 +150,8 @@ app.get('/api/user-dash', gate, (req, res) => {
       else if (!pk || dk === 'unknown') match = { s: 'na', t: '대조 보류' };
       else match = (dk !== pk) ? { s: 'bad', t: '불일치' } : { s: 'ok', t: '일치' };
       users.push({
-        id: m.id, name: bname || `#${m.id}`, part: st.part || `${m.part || 3}부`,
+        id: m.id, name: bname || `#${m.id}`, part: combo ? comboLabel : (st.part || `${m.part || 3}부`),
+        combo, comboRounds: combo ? workRounds : null,
         status, kind, badge, heroTitle,
         date: st.date || '', dayW, stale, empty: !st.date && !st.status,
         myPos, cut, ahead, teamCount: Number(st.teamCount) || 0,
