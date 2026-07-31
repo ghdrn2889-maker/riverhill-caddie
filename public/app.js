@@ -2483,7 +2483,7 @@ async function obWelcomeFlow(name, my, isTest) {
   if (!isTest) { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
   await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
   obWelcomeMusic();                                 // 종소리(포근한 종)
-  await obSleep(500); if (obSeq !== my) return;      // 0.5초 뒤
+  await obSleep(200); if (obSeq !== my) return;      // 종소리 0.2초 뒤(문구 0.3초 앞당김)
   welT.classList.add('show');
   await obSleep(3200); if (obSeq !== my) return;             // 문구 유지 길게
   // 5) 문구 디졸브 아웃
