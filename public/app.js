@@ -2452,7 +2452,7 @@ async function obRunFlow(name, approved, isTest) {
 }
 async function obWelcomeFlow(name, my, isTest) {
   const scene = $('obWelScene'), wel = $('obWelcome'), welP = $('obWelPrinter'), welT = $('obWelText'), ov = $('obOv');
-  const irisMode = !isTest && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const irisMode = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   $('obWelName').textContent = name;
   $('obPrinter').style.display = 'none';                 // 폼 프린터 숨기고 전용 scene(프린터+백지) 표시(같은 위치라 이음새 없음)
   scene.style.display = 'block'; scene.style.transition = 'none'; scene.style.transform = 'scale(1)';
@@ -2482,10 +2482,11 @@ async function obWelcomeFlow(name, my, isTest) {
   // 3) 화면 가득(도착) → 출력음 1.5초 페이드 → (1초 뒤) 종소리 → (0.2초 뒤) '어서오세요'
   welP.classList.remove('run');
   obPrinterLoopFade(1.5);
-  // 진짜 홈을 백지 뒤에서 미리 준비. ★테스트캐디는 프로필이 비어 loadMe가 온보딩을 재트리거(연출 취소)하므로 건너뜀.
-  //  ★아이리스 모드: 등장 모션을 보류(_holdHomeAnim)하고 오브젝트를 숨긴 채(home-prep) 렌더 → 아이리스로 배경만 연 뒤 재생.
+  // 홈을 백지 뒤에서 미리 준비(오브젝트는 home-prep로 숨김 → 아이리스로 배경만 연 뒤 anim-play로 재생).
+  //  ★테스트캐디: 프로필이 비어 loadMe가 온보딩을 재트리거하므로, 서버 미저장 '데모 홈'을 렌더해 진입까지 보여줌.
   if (irisMode) { _holdHomeAnim = true; document.body.classList.add('home-prep'); }
-  if (!isTest) { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
+  if (isTest) { try { renderToday(demoHomeToday()); } catch (e) { try { renderToday(null); } catch (_) { /* 무해 */ } } }
+  else { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
   await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
   obWelcomeMusic();                                 // 종소리(포근한 종)
   await obSleep(200); if (obSeq !== my) return;      // 종소리 0.2초 뒤(문구 0.3초 앞당김)
@@ -2508,7 +2509,14 @@ async function obWelcomeFlow(name, my, isTest) {
   ov.hidden = true; ov.style.opacity = ''; ov.style.transition = ''; ov.style.webkitMask = ''; ov.style.mask = '';
   scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
   $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
-  if (isTest) openOnboarding();                         // 테스트캐디: 홈이 없으므로 가입 화면으로 리셋(반복 재생)
+  // ★테스트캐디도 홈까지 진입(데모 홈). 프로필은 서버에 저장 안 되므로 앱 종료·재실행 시 자동으로 온보딩으로 초기화됨.
+}
+// 테스트캐디 데모 홈(서버 미저장) — 실제 회원 홈과 같은 리치 진입 모션을 보여주기 위한 표본 데이터.
+function demoHomeToday() {
+  const st = { status: 'assigned', myPosition: 14, teeTime: '17:21', course: 'OUT', part: '3', date: '8월 1일 토요일' };
+  const cm = { leave: '15:51', arrive: '16:21', standby: '16:31', tee: '17:21' };
+  return { empty: false, dayOffset: 1, date: '8월 1일 토요일', primaryPart: '3', state: st, commute: cm,
+    rounds: [{ part: '3', teeTime: '17:21', state: st, commute: cm }] };
 }
 // 원형 아이리스로 가입 오버레이를 걷어 홈 '배경만' 드러냄(중앙에서 확장) — 마스크 구멍을 rAF로 키움.
 async function obIrisReveal(my) {
