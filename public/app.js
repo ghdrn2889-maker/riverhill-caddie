@@ -2434,7 +2434,7 @@ function obEjectFeed(feedEl) {
   requestAnimationFrame(() => { feedEl.style.transform = 'translate(-52px, calc(100vh + 560px)) rotate(7.5deg)'; });
 }
 // ── 시나리오 ──
-async function obRunFlow(name, approved) {
+async function obRunFlow(name, approved, isTest) {
   const my = ++obSeq;
   const stamp = $('obStamp'), paper = $('obFeed').firstElementChild, cta = $('sgSubmit');
   stamp.textContent = approved ? '완료!' : '대기';
@@ -2446,9 +2446,9 @@ async function obRunFlow(name, approved) {
   obEjectFeed($('obFeed'));                                  // 신청서 배출(왼쪽부터 비스듬히 뜯김)
   await obSleep(860); if (obSeq !== my) return;
   $('obFeed').style.display = 'none';
-  if (approved) await obWelcomeFlow(name, my); else await obPendingFlow(name, my);
+  if (approved) await obWelcomeFlow(name, my, isTest); else await obPendingFlow(name, my);
 }
-async function obWelcomeFlow(name, my) {
+async function obWelcomeFlow(name, my, isTest) {
   const scene = $('obWelScene'), wel = $('obWelcome'), welP = $('obWelPrinter'), welT = $('obWelText'), ov = $('obOv');
   $('obWelName').textContent = name;
   $('obPrinter').style.display = 'none';                 // 폼 프린터 숨기고 전용 scene(프린터+백지) 표시(같은 위치라 이음새 없음)
@@ -2479,7 +2479,8 @@ async function obWelcomeFlow(name, my) {
   // 3) 화면 가득 → 출력음 1.5초에 걸쳐 서서히 꺼짐 → (1초 뒤) 종소리 → (0.5초 뒤) '어서오세요'
   welP.classList.remove('run');
   obPrinterLoopFade(1.5);
-  try { await loadMe(); loadToday(); } catch { /* 무해 */ }
+  // 진짜 홈을 백지 뒤에서 미리 준비. ★테스트캐디는 프로필이 비어 loadMe가 온보딩을 재트리거(연출 취소)하므로 건너뜀.
+  if (!isTest) { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
   await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
   obWelcomeMusic();                                 // 종소리(포근한 종)
   await obSleep(500); if (obSeq !== my) return;      // 0.5초 뒤
@@ -2495,6 +2496,7 @@ async function obWelcomeFlow(name, my) {
   ov.hidden = true; ov.style.opacity = ''; ov.style.transition = '';
   scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
   $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
+  if (isTest) openOnboarding();                         // 테스트캐디: 홈이 없으므로 가입 화면으로 리셋(반복 재생)
 }
 async function obPendingFlow(name, my) {
   $('obNoticeName').textContent = name;
@@ -2540,7 +2542,7 @@ async function obSubmitClick() {
   try { r = await postJSON('/api/profile', body); }
   catch (e) { cta.disabled = false; $('sgErr').textContent = (e && e.message) || '저장 실패'; return; }
   if (!r || !r.ok) { cta.disabled = false; $('sgErr').textContent = (r && r.error) || '저장 실패'; return; }
-  obRunFlow(boardName, !!r.approved);
+  obRunFlow(boardName, !!r.approved, !!r.test);
 }
 // 대기 안내문 → 안내문을 뜯어 배출한 뒤 폼으로 복귀(이름 다시 기재)
 async function obNoticeRetryClick() {
