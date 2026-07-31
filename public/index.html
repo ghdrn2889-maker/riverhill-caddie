@@ -993,6 +993,78 @@
     .scov .sc-cta:disabled { opacity:.6; }
     .scov .sc-note { position:relative; margin-top:14px; font-size:9.5px; color:#7a7050; text-align:center; letter-spacing:.03em; line-height:1.6; }
     .scov .sc-card svg { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+    /* ── 가입 신청서 출력 연출(프린터·도장·배출·백지→홈) — 샘플 e6c82dd0 이식 ── */
+    #obOv.scov { padding:0; background:#fbfbf9; overflow:hidden; }
+    #obOv.scov:not([hidden]) { display:block; }
+    #obOv .stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:6vh 16px 92px; }
+    /* 프린터 */
+    #obOv .printer { position:relative; width:420px; max-width:94vw; height:38px; z-index:5;
+      background:linear-gradient(#37493a,#26331f); border-radius:13px 13px 7px 7px; box-shadow:0 10px 22px rgba(20,30,20,.28); }
+    #obOv .printer .slot { position:absolute; left:50%; transform:translateX(-50%); bottom:5px; width:340px; max-width:84%; height:7px; background:#0c120c; border-radius:5px; box-shadow:inset 0 1px 3px #000; }
+    #obOv .printer .light { position:absolute; right:16px; top:13px; width:7px; height:7px; border-radius:50%; background:#5f7050; transition:background .1s; }
+    #obOv .printer.run .light { background:#c6f24e; box-shadow:0 0 8px #c6f24e; animation:ob-blink .28s steps(1) infinite; }
+    #obOv .printer .brand { position:absolute; left:16px; top:12px; font-size:9px; letter-spacing:.16em; color:#9fb08f; font-weight:700; }
+    @keyframes ob-blink { 50% { opacity:.35; } }
+    @keyframes ob-shake { 0%,100% { transform:translateY(0) } 25% { transform:translateY(-.6px) } 75% { transform:translateY(.6px) } }
+    #obOv .printer.run { animation:ob-shake .08s linear infinite; }
+    /* 피드(용지가 슬롯에서 아래로 밀려나오도록: 클립 창 + 내부 용지 이동) */
+    #obOv .feed { width:390px; max-width:94vw; overflow:hidden; margin-top:-3px; filter:drop-shadow(0 10px 20px rgba(40,32,15,.22)); }
+    #obOv .feed > * { will-change:transform; }
+    /* 종이(영수증) */
+    #obOv .paper { position:relative; background:#f5efe0; border:1px solid #c9bfa2; border-top:0; overflow:hidden; max-width:none; max-height:none;
+      -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;
+              mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x; }
+    #obOv .paper.sc-card { box-shadow:none; overflow:hidden; }
+    /* 도장 — 평소 숨김, 결과에 따라 완료!/대기 가 쾅 찍힘 (샘플 크기 54px로 override) */
+    #obOv .sc-stamp { top:8px; right:16px; width:54px; height:54px; border:2.5px solid #b23b2e; border-radius:50%;
+      display:flex; align-items:center; justify-content:center; color:#b23b2e;
+      font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif; font-size:16px; font-weight:800; letter-spacing:-.02em;
+      box-shadow:inset 0 0 0 1.5px rgba(178,59,46,.4); text-shadow:0 0 1px rgba(178,59,46,.3);
+      opacity:0; transform:rotate(-12deg) scale(2.7); pointer-events:none; transform-origin:center; }
+    #obOv .sc-stamp.pending { color:#b7791f; border-color:#b7791f; box-shadow:inset 0 0 0 1.5px rgba(183,121,31,.42); text-shadow:0 0 1px rgba(183,121,31,.3); }
+    #obOv .sc-stamp.stamped { animation:ob-stampSlam .4s cubic-bezier(.2,.85,.3,1.35) forwards; }
+    @keyframes ob-stampSlam {
+      0% { opacity:0; transform:rotate(-22deg) scale(2.7); }
+      52% { opacity:0; transform:rotate(-13deg) scale(1.16); }
+      58% { opacity:.95; transform:rotate(-12deg) scale(1.06); }
+      74% { transform:rotate(-12deg) scale(.93); }
+      100% { opacity:.9; transform:rotate(-12deg) scale(1); }
+    }
+    #obOv .paper.thump { animation:ob-thump .3s ease; }
+    @keyframes ob-thump { 0%,100% { transform:translateY(0) } 32% { transform:translateY(1.6px) } }
+    /* 미기재 경고 */
+    #obOv .sc-warn { display:none; margin-top:10px; font-size:11px; color:#b23b2e; text-align:center; font-weight:700; letter-spacing:.01em; }
+    #obOv .sc-warn.show { display:block; animation:ob-warnShake .4s; }
+    @keyframes ob-warnShake { 0%,100% { transform:translateX(0) } 20% { transform:translateX(-5px) } 40% { transform:translateX(5px) } 60% { transform:translateX(-3px) } 80% { transform:translateX(3px) } }
+    #obOv .sc-fld.miss { border-bottom-color:#b23b2e; } #obOv .sc-fld.miss .sc-k { color:#b23b2e; } #obOv .sc-fld.miss input::placeholder { color:#d99b93; }
+    /* 대기 안내문 */
+    #obOv .notice-paper .sc-hd { border-color:#b7791f; } #obOv .notice-paper .sc-t { color:#b7791f; } #obOv .notice-paper .sc-title { color:#7a5310; }
+    #obOv .nt-row { display:flex; justify-content:space-between; align-items:center; padding:13px 0; border-bottom:1px dashed #c7bd9e; }
+    #obOv .nt-k { font-size:10px; color:#7a7050; letter-spacing:.05em; }
+    #obOv .nt-v { font-size:15px; color:#26331f; font-weight:700; }
+    #obOv .nt-msg { font-size:12px; color:#4a4326; line-height:1.65; padding:13px 0; border-bottom:1px dashed #c7bd9e; }
+    #obOv .nt-msg b { color:#b7791f; }
+    #obOv .nt-admin { display:flex; justify-content:space-between; align-items:center; padding:15px 0 4px; }
+    #obOv .nt-admin-v { font-size:18px; color:#7a3f34; font-weight:800; letter-spacing:.02em; }
+    #obOv .nt-retry { width:100%; margin-top:15px; padding:13px; border:2px solid #b7791f; background:#f5efe0; color:#7a5310;
+      font-family:inherit; font-size:13px; font-weight:800; letter-spacing:.08em; cursor:pointer; }
+    #obOv .nt-retry:active { background:#efe6cf; }
+    /* 완료 — 앱 배경색 백지가 프린터에서 내려오며 중앙으로 확대되어 화면을 채움(하단은 영수증처럼 삐쭉) */
+    #obOv .welcome { position:fixed; top:calc(6vh + 40px); left:0; right:0; margin:0 auto; width:390px; max-width:94vw; height:0;
+      overflow:hidden; z-index:60; transform-origin:center center; display:none;
+      background:linear-gradient(170deg,#bfe2ff,#e8f5ff 55%,#fbfdff); box-shadow:0 14px 34px rgba(30,55,55,.18);
+      -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;
+              mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x; }
+    /* 어서오세요 문구 — 화면이 다 찬 뒤 디졸브로 등장 */
+    #obOv .welmsg { position:fixed; inset:0; z-index:65; display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .7s ease; }
+    #obOv .welmsg.show { opacity:1; }
+    #obOv .welmsg-in { font-family:'Consolas','Menlo',monospace; font-weight:800; font-size:clamp(20px,5.6vw,34px);
+      color:#173a28; letter-spacing:.01em; text-align:center; line-height:1.42; padding:0 24px; }
+    #obOv .welmsg-in .nm { color:#2f7d55; } #obOv .welmsg-in .cur { display:inline-block; margin-left:1px; color:#2f7d55; animation:ob-cur 1s steps(1) infinite; }
+    @keyframes ob-cur { 50% { opacity:0; } }
+    @media (prefers-reduced-motion:reduce) { #obOv .feed, #obOv .welcome { transition-duration:.01s; } #obOv .printer.run { animation:none; } }
+
     .ov-badge { width:46px; height:46px; border-radius:14px; background:#e8f3eb; display:flex; align-items:center;
       justify-content:center; font-size:24px; margin-bottom:12px; }
     .ov-title { font-size:19px; letter-spacing:-.02em; margin:0 0 5px; color:#17231d; }
@@ -1134,26 +1206,56 @@
     </div>
   </div>
 
-  <!-- 가입(온보딩) · 스코어카드 -->
+  <!-- 가입(온보딩) · 가입 신청서 출력 연출 -->
   <div class="ov scov" id="obOv" hidden>
-    <div class="sc-card">
-      <div class="sc-hd">
-        <div class="sc-t">RIVERHILL CADDIE</div>
-        <h2 class="sc-title">SCORECARD 등록</h2>
-        <div class="sc-stamp"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 21V4"/><path d="M6 5h10l-2 3 2 3H6"/></svg></div>
+    <div class="stage">
+      <div class="printer" id="obPrinter">
+        <span class="brand">RIVERHILL</span><span class="light"></span>
+        <span class="slot"></span>
       </div>
-      <div class="sc-bd">
-        <div class="sc-rowh"><span>ITEM</span><span>ENTRY</span></div>
-        <div class="sc-fld"><div class="sc-k">실명 · 배치표 이름 <b>*</b></div><input id="sgName" placeholder="홍길동" maxlength="20"></div>
-        <div class="sc-fld"><div class="sc-k">캐디 구분 <b>*</b></div>
-          <div class="sc-parts" id="sgType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3" class="on">3부 캐디</button></div>
-          <div class="sc-ph">하우스 = 1·2부 근무 · 3부 = 3부 근무(2부 콜업 가능)</div></div>
-        <div class="sc-fld"><div class="sc-k">출근 소요시간 (분) <b>*</b></div><input id="sgCommute" inputmode="numeric" placeholder="60"></div>
-        <div class="sc-err" id="sgErr"></div>
-        <button class="sc-cta" id="sgSubmit">가입 신청</button>
-        <div class="sc-note">— 명부 대조 후 관리자 승인 시 이용 개시 —</div>
+      <div class="feed" id="obFeed">
+        <div class="paper sc-card">
+          <div class="sc-hd">
+            <div class="sc-t">RIVERHILL CADDIE</div>
+            <h2 class="sc-title">가입 신청 등록</h2>
+            <div class="sc-stamp" id="obStamp">완료!</div>
+          </div>
+          <div class="sc-bd">
+            <div class="sc-rowh"><span>ITEM</span><span>ENTRY</span></div>
+            <div class="sc-fld"><div class="sc-k">실명 · 배치표 이름 <b>*</b></div><input id="sgName" placeholder="홍길동" maxlength="20"></div>
+            <div class="sc-fld"><div class="sc-k">캐디 구분 <b>*</b></div>
+              <div class="sc-parts" id="sgType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3" class="on">3부 캐디</button></div>
+              <div class="sc-ph">하우스 = 1·2부 근무 · 3부 = 3부 근무(2부 콜업 가능)</div></div>
+            <div class="sc-fld"><div class="sc-k">출근 소요시간 (분) <b>*</b></div><input id="sgCommute" inputmode="numeric" placeholder="60"></div>
+            <button class="sc-cta" id="sgSubmit">가입 신청</button>
+            <div class="sc-warn" id="obWarn">모든 항목을 기재해 주세요</div>
+            <div class="sc-err" id="sgErr"></div>
+            <div class="sc-note">— 명부 대조 후 관리자 승인 시 이용 개시 —</div>
+          </div>
+        </div>
+      </div>
+      <!-- 대기 안내문 -->
+      <div class="feed" id="obNoticeFeed" style="display:none">
+        <div class="paper notice-paper">
+          <div class="sc-hd">
+            <div class="sc-t">RIVERHILL CADDIE</div>
+            <h2 class="sc-title">가입 대기 안내</h2>
+            <div class="sc-stamp pending" style="opacity:.9;transform:rotate(-12deg) scale(1);animation:none">대기</div>
+          </div>
+          <div class="sc-bd">
+            <div class="nt-row"><div class="nt-k">신청자</div><div class="nt-v" id="obNoticeName">홍길동</div></div>
+            <div class="nt-msg"><b>명부에서 성함을 확인하지 못해</b> 가입이 보류되었습니다. 리버힐에 정식 등록된 캐디만 이용할 수 있어요.</div>
+            <div class="nt-msg">이름 오기재 또는 신규 등록이면, 아래 관리자에게 문의해 확인받아 주세요.</div>
+            <div class="nt-admin"><div class="nt-k">관리자 문의</div><div class="nt-admin-v">김홍구</div></div>
+            <button class="nt-retry" id="obNoticeRetry">이름 다시 기재하기 ▶</button>
+            <div class="sc-note">— 관리자 확인 후 승인되면 이용 개시 —</div>
+          </div>
+        </div>
       </div>
     </div>
+    <!-- 완료: 앱 배경색 백지가 내려오며 중앙 확대 → 화면 가득 → 문구 디졸브 → 진짜 홈 -->
+    <div class="welcome" id="obWelcome"></div>
+    <div class="welmsg" id="obWelText"><div class="welmsg-in"><span class="nm" id="obWelName">홍길동</span> 캐디님<br>어서오세요! <span class="cur">▮</span></div></div>
   </div>
 
   <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) — 새벽 티오프 랜딩 -->

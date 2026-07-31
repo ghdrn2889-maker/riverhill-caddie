@@ -2284,7 +2284,187 @@ function fillProfileForm() {
   $('obKm').value = p.homeKm != null && p.homeKm !== 0 ? p.homeKm : '';
   $('obCar').value = p.carNo || '';
 }
-// 가입(온보딩) — 스코어카드 화면. 계정 오버레이(#ov)와 별개.
+// ── 가입(온보딩) · 가입 신청서 출력 연출 ─────────────────────────────────
+//  샘플 e6c82dd0 그대로 이식: 프린터에서 신청서가 밑쪽부터 출력 → 가입 신청 시
+//  명부 매칭이면 '완료!' 도장 + 백지가 화면을 채우며 '어서오세요' → 진짜 앱 홈,
+//  미매칭이면 '대기' 도장 + 대기 안내문(관리자 김홍구) + 이름 다시 기재하기.
+//  ★백엔드 /api/profile 응답의 approved 플래그로만 완료/대기를 분기.
+const OB_DUR = 1600;
+let obSeq = 0;
+const obSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function obReqFields() {
+  return [...$('obFeed').querySelectorAll('.sc-fld')].filter((f) => f.querySelector('input'));
+}
+// ── 오디오(웹오디오 합성) ──
+let obAc;
+function obActx() {
+  if (!obAc) { try { obAc = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
+  if (obAc.state === 'suspended') obAc.resume();
+  return obAc;
+}
+function obTick(c, at) {
+  const d = 0.02, buf = c.createBuffer(1, Math.max(1, c.sampleRate * d), c.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+  const s = c.createBufferSource(); s.buffer = buf; const g = c.createGain(); g.gain.value = 0.05; s.connect(g); g.connect(c.destination); s.start(at);
+}
+function obSound(dur) {                                      // 프린터 인쇄음
+  const c = obActx(); if (!c) return;
+  const t0 = c.currentTime, d = (dur || OB_DUR) / 1000;
+  const osc = c.createOscillator(), g = c.createGain();
+  osc.type = 'square'; osc.frequency.value = 112; osc.connect(g); g.connect(c.destination);
+  osc.start(t0); osc.stop(t0 + d + 0.05);
+  const step = 0.072;
+  for (let x = 0; x < d; x += step) { g.gain.setValueAtTime(0.05, t0 + x); g.gain.setValueAtTime(0.0, t0 + x + step * 0.5); obTick(c, t0 + x); }
+  g.gain.setValueAtTime(0.0, t0 + d);
+}
+function obThunk() {                                         // 도장 '쿵'
+  const c = obActx(); if (!c) return;
+  const t0 = c.currentTime;
+  const o = c.createOscillator(), g = c.createGain(); o.type = 'sine';
+  o.frequency.setValueAtTime(190, t0); o.frequency.exponentialRampToValueAtTime(58, t0 + .12);
+  g.gain.setValueAtTime(.2, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .19);
+  o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + .22);
+  const b = c.createBuffer(1, Math.max(1, c.sampleRate * .03), c.sampleRate), ch = b.getChannelData(0);
+  for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length);
+  const s = c.createBufferSource(); s.buffer = b; const ng = c.createGain(); ng.gain.value = .12; s.connect(ng); ng.connect(c.destination); s.start(t0);
+}
+function obEjectSound() {                                    // 영수증 뽑는 '쫙' — 뜯기는 결의 그레인
+  const c = obActx(); if (!c) return;
+  const t0 = c.currentTime, dur = .4, N = Math.floor(c.sampleRate * dur);
+  const b = c.createBuffer(1, N, c.sampleRate), ch = b.getChannelData(0);
+  for (let i = 0; i < N; i++) {
+    const e = i / N;
+    const buzz = (Math.sin(2 * Math.PI * e * 95) > -0.25) ? 1 : 0.28;
+    const env = Math.pow(1 - e, 1.35) * (e < 0.035 ? e / 0.035 : 1);
+    ch[i] = (Math.random() * 2 - 1) * buzz * env;
+  }
+  const s = c.createBufferSource(); s.buffer = b;
+  const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.setValueAtTime(1200, t0); hp.frequency.linearRampToValueAtTime(2300, t0 + dur);
+  const g = c.createGain(); g.gain.value = .34;
+  s.connect(hp); hp.connect(g); g.connect(c.destination); s.start(t0); s.stop(t0 + dur + .02);
+}
+// ── 출력 유틸 ──
+let obPrTimer;
+function obPrinterRun(ms) { const p = $('obPrinter'); p.classList.add('run'); clearTimeout(obPrTimer); obPrTimer = setTimeout(() => p.classList.remove('run'), ms + 60); }
+// 용지가 슬롯에서 아래로 밀려나옴 — 처음엔 슬롯 위(숨김)에 있다가 밑쪽부터 드러나며 전체가 나옴
+function obPrintOut(feedEl, dur) {
+  const p = feedEl.firstElementChild;
+  feedEl.style.display = ''; feedEl.style.transition = 'none'; feedEl.style.transform = ''; feedEl.style.transformOrigin = '';
+  p.style.transition = 'none';
+  const H = p.scrollHeight + 6; p.style.transform = 'translateY(-' + H + 'px)';
+  void p.offsetWidth;
+  requestAnimationFrame(() => { p.style.transition = 'transform ' + (dur || OB_DUR) + 'ms steps(22)'; p.style.transform = 'translateY(0)'; });
+}
+// 출력물을 왼쪽부터 비스듬히 뜯어 자연스럽게 배출
+function obEjectFeed(feedEl) {
+  obEjectSound();
+  feedEl.style.transformOrigin = 'left top';
+  feedEl.style.transition = 'transform .8s cubic-bezier(.42,.03,.58,1)';
+  requestAnimationFrame(() => { feedEl.style.transform = 'translate(-52px, calc(100vh + 560px)) rotate(7.5deg)'; });
+}
+// ── 시나리오 ──
+async function obRunFlow(name, approved) {
+  const my = ++obSeq;
+  const stamp = $('obStamp'), paper = $('obFeed').firstElementChild, cta = $('sgSubmit');
+  stamp.textContent = approved ? '완료!' : '대기';
+  stamp.classList.toggle('pending', !approved);
+  stamp.classList.remove('stamped'); void stamp.offsetWidth; stamp.classList.add('stamped');
+  setTimeout(() => { if (obSeq !== my) return; paper.classList.add('thump'); obThunk(); setTimeout(() => paper.classList.remove('thump'), 320); }, 205);
+  cta.textContent = approved ? '승인 완료' : '가입 대기'; cta.disabled = true;
+  await obSleep(1000); if (obSeq !== my) return;
+  obEjectFeed($('obFeed'));                                  // 신청서 배출(왼쪽부터 비스듬히 뜯김)
+  await obSleep(860); if (obSeq !== my) return;
+  $('obFeed').style.display = 'none';
+  if (approved) await obWelcomeFlow(name, my); else await obPendingFlow(name, my);
+}
+async function obWelcomeFlow(name, my) {
+  const wel = $('obWelcome'), welT = $('obWelText'), ov = $('obOv');
+  $('obWelName').textContent = name;
+  wel.style.display = 'block'; wel.style.transition = 'none';
+  wel.style.height = '0'; wel.style.transform = 'none'; wel.style.opacity = '1';
+  welT.classList.remove('show'); welT.style.display = 'flex';
+  void wel.offsetWidth;
+  // 1) 백지가 프린터에서 내려옴 + 인쇄음(화면 다 찰 때까지만)
+  obPrinterRun(2600); obSound(2600);
+  wel.style.transition = 'height 1s steps(16)';
+  requestAnimationFrame(() => { wel.style.height = '300px'; });
+  // 2) 어느정도 내려오면 중앙으로 천천히 확대 시작(내려옴과 동시에)
+  await obSleep(460); if (obSeq !== my) return;
+  wel.style.transition = 'height .58s steps(9), transform 2.1s cubic-bezier(.42,0,.22,1)';
+  requestAnimationFrame(() => { wel.style.transform = 'scale(16)'; });
+  // 3) 화면 가득 → 인쇄음 종료 · 잠깐 정지
+  await obSleep(2160); if (obSeq !== my) return;
+  $('obPrinter').classList.remove('run');
+  // 진짜 앱 홈을 백지 뒤에서 미리 준비(승인됐으니 needsOnboarding=false)
+  try { await loadMe(); loadToday(); } catch { /* 무해 */ }
+  await obSleep(300); if (obSeq !== my) return;
+  // 4) 어서오세요 문구 디졸브 인
+  welT.classList.add('show');
+  await obSleep(3200); if (obSeq !== my) return;             // 문구 유지 길게
+  // 5) 문구 디졸브 아웃
+  welT.classList.remove('show');
+  await obSleep(720); if (obSeq !== my) return;
+  welT.style.display = 'none';
+  // 6) 온보딩(흰 화면) 페이드아웃 → 진짜 배포된 앱 홈이 자연 등장
+  ov.style.transition = 'opacity .55s ease'; ov.style.opacity = '0';
+  await obSleep(580); if (obSeq !== my) return;
+  ov.hidden = true; ov.style.opacity = ''; ov.style.transition = '';
+  wel.style.display = 'none';
+}
+async function obPendingFlow(name, my) {
+  $('obNoticeName').textContent = name;
+  obPrinterRun(OB_DUR); obSound();                           // 대기 안내문 출력
+  obPrintOut($('obNoticeFeed'), OB_DUR);                     // 슬롯에서 아래로 밀려나옴
+  await obSleep(OB_DUR + 200);
+}
+// 신청서(또는 대기 안내문) 재출력 — 모든 상태 초기화 후 신청서 다시 출력
+function obPrintCard(withSound) {
+  obSeq++;                                                   // 진행 중 시나리오 취소
+  const wel = $('obWelcome'), welT = $('obWelText');
+  wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.opacity = '1'; wel.style.transform = 'none'; wel.style.height = '0';
+  welT.classList.remove('show'); welT.style.display = 'none';
+  const nf = $('obNoticeFeed');
+  nf.style.display = 'none'; nf.style.transition = 'none'; nf.style.transform = ''; nf.style.transformOrigin = '';
+  nf.firstElementChild.style.transition = 'none'; nf.firstElementChild.style.transform = '';
+  $('obStamp').classList.remove('stamped', 'pending');
+  $('obWarn').classList.remove('show'); obReqFields().forEach((f) => f.classList.remove('miss'));
+  const cta = $('sgSubmit'); cta.textContent = '가입 신청'; cta.disabled = false;
+  $('obPrinter').classList.remove('run');
+  if (withSound) obSound();
+  obPrinterRun(OB_DUR);
+  obPrintOut($('obFeed'), OB_DUR);                           // 슬롯에서 아래로 밀려나오는 출력
+}
+// 가입 신청 클릭 — 미기재 검증 → /api/profile → approved 로 완료/대기 분기
+async function obSubmitClick() {
+  const cta = $('sgSubmit'); if (cta.disabled) return;
+  const reqFields = obReqFields();
+  let missing = false;
+  reqFields.forEach((f) => { const inp = f.querySelector('input'); if (!inp.value.trim()) { f.classList.add('miss'); missing = true; } else f.classList.remove('miss'); });
+  const warn = $('obWarn');
+  if (missing) {
+    warn.classList.add('show'); warn.style.animation = 'none'; void warn.offsetWidth; warn.style.animation = '';
+    const first = reqFields.find((f) => f.classList.contains('miss')); if (first) first.querySelector('input').focus();
+    return;
+  }
+  warn.classList.remove('show'); $('sgErr').textContent = '';
+  const boardName = $('sgName').value.trim();
+  const body = { boardName, caddieType: toggleVal('sgType'), commuteMin: Number($('sgCommute').value) || 0 };
+  cta.disabled = true;
+  let r;
+  try { r = await postJSON('/api/profile', body); }
+  catch (e) { cta.disabled = false; $('sgErr').textContent = (e && e.message) || '저장 실패'; return; }
+  if (!r || !r.ok) { cta.disabled = false; $('sgErr').textContent = (r && r.error) || '저장 실패'; return; }
+  obRunFlow(boardName, !!r.approved);
+}
+// 대기 안내문 → 안내문을 뜯어 배출한 뒤 폼으로 복귀(이름 다시 기재)
+async function obNoticeRetryClick() {
+  const my = ++obSeq;
+  obEjectFeed($('obNoticeFeed'));                            // 안내문 배출 애니메이션
+  await obSleep(840); if (obSeq !== my) return;
+  $('obNoticeFeed').style.display = 'none';
+  obPrintCard(true); $('sgName').value = '';                // 폼 다시 출력 + 이름 비움
+  setTimeout(() => $('sgName').focus(), OB_DUR + 80);
+}
 function openOnboarding() {
   hideSplash();
   $('ov').hidden = true;             // 계정 오버레이는 닫고 가입 화면만
@@ -2294,21 +2474,9 @@ function openOnboarding() {
   $('sgCommute').value = p.commuteMin != null && p.commuteMin !== 0 ? p.commuteMin : '';
   $('sgErr').textContent = '';
   ovDismissable = false;             // 가입 화면: 배경/뒤로가기로 닫히지 않게
+  $('obOv').style.opacity = ''; $('obOv').style.transition = '';
   $('obOv').hidden = false;
-}
-async function submitOnboarding() {
-  const boardName = $('sgName').value.trim();
-  if (!boardName) { $('sgErr').textContent = '배치표에 뜨는 실명을 입력해주세요.'; return; }
-  const body = { boardName, caddieType: toggleVal('sgType'), commuteMin: Number($('sgCommute').value) || 0 };
-  $('sgSubmit').disabled = true;
-  try {
-    const r = await postJSON('/api/profile', body);
-    if (!r || !r.ok) throw new Error((r && r.error) || '저장 실패');
-    $('obOv').hidden = true;
-    await loadMe();
-    loadToday();
-  } catch (e) { $('sgErr').textContent = e.message || '저장 실패'; }
-  finally { $('sgSubmit').disabled = false; }
+  obPrintCard(false);                // 신청서가 프린터에서 출력되며 등장
 }
 function openAccount() {
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
@@ -2345,7 +2513,15 @@ function initAccount() {
   $('acctBtn').onclick = openAccount;
   $('obSubmit').onclick = submitProfile;
   bindToggle('acType'); bindToggle('sgType');
-  $('sgSubmit').onclick = submitOnboarding;
+  $('sgSubmit').onclick = obSubmitClick;
+  $('obNoticeRetry').onclick = obNoticeRetryClick;
+  // 입력하면 미기재 표시 해제(모두 채워지면 경고도 숨김)
+  obReqFields().forEach((f) => {
+    const inp = f.querySelector('input');
+    inp.addEventListener('input', () => {
+      if (inp.value.trim()) { f.classList.remove('miss'); if (!obReqFields().some((x) => x.classList.contains('miss'))) $('obWarn').classList.remove('show'); }
+    });
+  });
   $('ovEnableBtn').onclick = enableNotifications;
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
