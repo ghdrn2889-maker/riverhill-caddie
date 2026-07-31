@@ -2519,6 +2519,7 @@ function initAccount() {
   obReqFields().forEach((f) => {
     const inp = f.querySelector('input');
     inp.addEventListener('input', () => {
+      $('sgErr').textContent = '';   // 다시 입력하면 이전 경고(중복 이름 등) 지움
       if (inp.value.trim()) { f.classList.remove('miss'); if (!obReqFields().some((x) => x.classList.contains('miss'))) $('obWarn').classList.remove('show'); }
     });
   });

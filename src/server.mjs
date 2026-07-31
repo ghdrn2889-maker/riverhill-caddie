@@ -100,7 +100,7 @@ app.post('/api/profile', requireAuth, (req, res) => {
     : (existing.caddie_type || (String(existing.part) === '3' ? 'part3' : 'house'));
   const part = caddieType === 'part3' ? '3'
     : (['1', '2'].includes(String(b.part)) ? String(b.part) : (['1', '2'].includes(String(existing.part)) ? String(existing.part) : '1'));
-  // (이름+부) 유일 강제 — 같은 캐디가 계정 2개로 알림 2번 받는 중복 차단.
+  // 이름 유일 강제(부 무관) — 이미 가입된 이름이면 어느 부로 넣든 중복 차단(계정 2개로 알림 2번 방지).
   if (boardNameTaken(boardName, part, req.user.id)) {
     return res.status(409).json({ ok: false,
       error: `이미 등록된 이름이에요 (${boardName}). 본인 계정이라면 그 계정으로 로그인하세요. 동명이인이면 관리자에게 문의해주세요.` });

@@ -186,9 +186,12 @@ export function adminUserIds() {
 export function boardNameTaken(boardName, part, exceptUserId = 0) {
   const name = String(boardName || '').trim();
   if (!name) return false; // 빈 이름(가입 전)은 중복 대상 아님
+  // ★이름 기준(부 무관) 유일 강제 — 같은 이름이 이미 가입돼 있으면 어느 부로 넣든 중복으로 본다.
+  //  (배치표 판독은 이름으로 사람을 구분하므로, 같은 이름 두 계정은 부가 달라도 알림이 겹친다.)
+  //  part 인자는 호환을 위해 유지하되 검사에는 쓰지 않음.
   const row = get(`SELECT u.id FROM users u JOIN profiles p ON p.user_id = u.id
-                   WHERE p.board_name = ? AND p.part = ? AND u.status = 'active' AND u.id != ?`,
-    name, String(part || '3'), exceptUserId);
+                   WHERE p.board_name = ? AND u.status = 'active' AND u.id != ?`,
+    name, exceptUserId);
   return !!row;
 }
 
