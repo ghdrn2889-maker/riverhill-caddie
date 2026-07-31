@@ -948,7 +948,9 @@ async function readBoardConsensus(article, member) {
   //  결정하므로 표결은 relevant/스페어-근무 갈림 방어용 최소치면 충분(26763 실측: 1회=3회 판정 동일).
   //  · 3부(알림 발송·홈): 기본 2회(합의로 갈림만 방어, 조기종료 유지). · 1·2부(섀도·구조도출): 1회.
   const primary = String(member.part) === '3';
-  const MAX = primary ? Math.max(1, Math.min(5, Number(process.env.BOARD_READ_MAX ?? 2))) : 1;
+  // ★기본 1회로 하향(크레딧 절감) — 수동 '배치표 검수' 도구가 정확도 백스톱이 된 뒤로 표결 2회의 이득이 작아짐.
+  //  갈림이 잦은 특정일엔 서버 .env에서 BOARD_READ_MAX=2로 즉시 상향 가능(재시작). 1·2부(비-primary)는 원래 1회.
+  const MAX = primary ? Math.max(1, Math.min(5, Number(process.env.BOARD_READ_MAX ?? 1))) : 1;
   const posOf = (r) => (Number(r?.myPosition) > 0 ? Number(r.myPosition) : null);
   const reads = [];
   for (let i = 0; i < MAX; i++) {

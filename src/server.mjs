@@ -944,6 +944,14 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
   //   + 텍스트-only(이미지 없이 글로 온 변동). 3부 판독의 boardTables 재사용 → "그 부 표가 있나" 판단은 추가 비용 0.
   try {
+    // ★크레딧 절감(최대 레버) — 1·2부는 아직 섀도(대시보드·알림에서 숨김, MINOR_PART_PUSH로 게이트).
+    //  꺼져 있으면 결과를 '버릴 뿐'인 1·2부 판독 2회 + 교차확인(board당 비싼 Gemini ~10회)을 아예 생략한다.
+    //  → board당 Gemini 호출 ~15회 → ~5회. Phase 2에서 MINOR_PART_PUSH=1 켜면 자동 재개(3부 경로는 무관).
+    const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
+    if (!minorPartOn) {
+      if (full.images && full.images.length) console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 섀도 판독·교차확인 생략(크레딧 절약): ${full.subject}`);
+      return primaryRet;
+    }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
     const isFullBoard = /전체|전부/.test(full.subject || '');
     const txt = `${full.subject || ''} ${full.text || ''}`;
