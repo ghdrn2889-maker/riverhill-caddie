@@ -10,7 +10,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap } from './judge.mjs';
+import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
@@ -1025,31 +1025,73 @@ async function processForMember(userId, member, out, full, opts = {}) {
         offReason: merged.next.offReason, prevPosition: merged.next.prevPosition, offType: merged.next.offType }, userId);
     }
     if (v._uncertain) {
-      // ★불안정 판독 → 흔들리는 순번/티오프는 반영 안 함(유령 변경 방지). baseline도 위에서 미갱신.
-      //  ── 단, '현재 N팀(팀수)'은 텍스트 근거라 판독 흔들림과 무관하게 안정적 → 그것 기반 커트라인·근무/스페어만
-      //     '저장된(직전 안정) 순번'으로 안전 갱신한다(티오프는 기존값 보존). 티오프 표 하나 흔들린다고 커트·근무전환
-      //     전체가 며칠씩 멈춰 수동교정이 필요하던 문제 해소 — 확실한 건 자동 반영, 불확실한 티오프만 보류.
+      // ★불안정 판독 처리 — 두 갈래.
       out.push = 'low';
-      const tcU = Number(v.teamCount);
-      const mypU = Number(today.myPosition) || 0;
-      if (Number.isFinite(tcU) && tcU > 0 && mypU > 0 && today.status !== 'off') {
-        const safe = { ...today };
-        const nowWork = mypU <= tcU;
-        const ns = nowWork ? (safe.teeTime ? 'assigned' : 'work') : 'spare';
-        const wasWait = ['spare', 'waiting', 'near'].includes(safe.status);
-        const wasWork = ['work', 'assigned', 'your_turn'].includes(safe.status);
-        const reversal = (wasWait && ['work', 'assigned', 'your_turn'].includes(ns)) || (wasWork && ns === 'spare');
-        safe.cutLine = tcU;
-        if (ns !== safe.status) { safe.status = ns; if (!nowWork) { safe.teeTime = ''; safe.course = ''; } }
-        safe.updatedAt = Date.now();
-        saveToday(safe, userId);   // ★불안정해도 커트/근무판정은 자동 반영(상황판만 조용히 정확하게)
+      const grid = Array.isArray(v.teeGrid) ? v.teeGrid : [];
+      // 티오프표가 '신뢰 가능': 행번호 오독(1,2,3…같은코스)이 아니고 충분한 행 → 표(순번→시각) 자체는 안정.
+      //  이때 불확실은 색/경계 투표만 갈린 것 → 정상 판독 결과(merged.next)를 그대로 반영해 '판독=대시보드' 일치.
+      const gridReliable = grid.length >= 3 && !gridLooksRownumbered(grid);
+      const mypN = Number(merged?.next?.myPosition) || 0;
+      if (gridReliable && merged && merged.next && mypN > 0 && today.status !== 'off') {
+        const next = { ...merged.next };
+        // ★근무선 = '실제 티오프가 배정된 최대 순번'(gridMax). 그 뒤 순번은 티오프 예약이 없으니 스페어(사용자 원칙).
+        //   ("38팀" 텍스트가 있어도, 티오프표에 없는 순번은 아직 팀이 안 차 대기 — 예: 스페어1.)
+        const gridMax = grid.reduce((mx, g) => (/\d{1,2}:\d{2}/.test(String(g?.time || '')) ? Math.max(mx, Number(g?.pos) || 0) : mx), 0);
+        if (gridMax > 0) {
+          const hasTee = !!(next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime)));
+          const inWork = mypN <= gridMax;
+          next.cutLine = gridMax;
+          next.status = (inWork && hasTee) ? 'assigned' : (inWork ? 'work' : 'spare');
+          if (!inWork) { next.teeTime = ''; next.course = ''; }
+        }
+        next.updatedAt = Date.now();
+        const wasWait = ['spare', 'waiting', 'near'].includes(today.status);
+        const wasWork = ['work', 'assigned', 'your_turn'].includes(today.status);
+        const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status);
+        const nowSpare = ['spare', 'waiting', 'near'].includes(next.status);
+        const reversal = (wasWait && nowWork) || (wasWork && nowSpare);
+        const teeChanged = wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime;
+        saveToday(next, userId);   // ★신뢰 grid → 정상 판독 그대로(순번·티오프·커트 전부 grid 일치)
+        const jIso2 = worklog.labelToISO(next.date);
+        if (jIso2) journal.recordDayStatus(jIso2, { status: next.status, teeTime: next.teeTime,
+          course: next.course, myPosition: next.myPosition, cutoffName: next.cutoffName,
+          offReason: next.offReason, prevPosition: next.prevPosition, offType: next.offType }, userId);
         if (reversal) {
-          // 팀수(안정)로 확정된 근무↔스페어 전환 → 티오프 불안정과 무관하게 확실 → 알림 발송.
           title = nowWork ? `${member.part}부 근무 전환` : `${member.part}부 스페어 전환`;
           body = nowWork
-            ? `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 근무권에 들었어요(커트라인 ${tcU}). 티오프 시각은 배치표에서 확인해주세요.`
-            : `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 스페어로 전환됐어요.`;
+            ? `${member.name}님, ${member.part}부 근무권에 들었어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`
+            : `${member.name}님, ${member.part}부 스페어로 전환됐어요.`;
           out.push = 'high';
+          if (nowWork && next.teeTime) rearmTimelineReminders(userId);
+        } else if (teeChanged) {
+          title = '티오프 시간 변경!';
+          body = `${member.name}님, 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요. 출발·백대기 시각도 바뀌었으니 확인해주세요.`;
+          out.push = 'high';
+          rearmTimelineReminders(userId);
+        }
+      } else {
+        // ── 티오프표 자체가 불안정(행번호 오독 등) → 보수 로직: '현재 N팀(텍스트)' 기반 커트/근무판정만,
+        //     저장된 직전 순번으로 안전 갱신하고 티오프는 기존값 보존(흔들리는 표를 반영하지 않음). ──
+        const tcU = Number(v.teamCount);
+        const mypU = Number(today.myPosition) || 0;
+        if (Number.isFinite(tcU) && tcU > 0 && mypU > 0 && today.status !== 'off') {
+          const safe = { ...today };
+          const nowWork = mypU <= tcU;
+          const ns = nowWork ? (safe.teeTime ? 'assigned' : 'work') : 'spare';
+          const wasWait = ['spare', 'waiting', 'near'].includes(safe.status);
+          const wasWork = ['work', 'assigned', 'your_turn'].includes(safe.status);
+          const reversal = (wasWait && ['work', 'assigned', 'your_turn'].includes(ns)) || (wasWork && ns === 'spare');
+          safe.cutLine = tcU;
+          if (ns !== safe.status) { safe.status = ns; if (!nowWork) { safe.teeTime = ''; safe.course = ''; } }
+          safe.updatedAt = Date.now();
+          saveToday(safe, userId);
+          if (reversal) {
+            title = nowWork ? `${member.part}부 근무 전환` : `${member.part}부 스페어 전환`;
+            body = nowWork
+              ? `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 근무권에 들었어요(커트라인 ${tcU}). 티오프 시각은 배치표에서 확인해주세요.`
+              : `현재 ${member.part}부 ${tcU}팀 — 순번 ${mypU}번이 스페어로 전환됐어요.`;
+            out.push = 'high';
+          }
         }
       }
     } else if (change.reversal) {

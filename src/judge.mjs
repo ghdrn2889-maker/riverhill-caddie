@@ -702,7 +702,7 @@ export function extractBareTeamCount(subject, text, member = memberFromEnv()) {
   return (n >= 1 && n <= 40) ? n : null;
 }
 
-function gridLooksRownumbered(grid) {
+export function gridLooksRownumbered(grid) {
   if (!Array.isArray(grid) || grid.length < 4) return false;
   const pos = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
   if (pos.length < 4) return false;
