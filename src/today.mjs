@@ -48,15 +48,19 @@ function dayKey(label) {
 }
 
 // ── 관리자 수동 교정 잠금(override) ──
-//  관리자가 모니터에서 고친 값(status/teeTime/course/cutLine/myPosition)은 그날 자동 판독이 덮지 않는다.
-//  lock = { dk:'MM-DD', fields:{status:1,...}, by, at }. 날짜가 바뀌면 자동 만료(그날만 유효).
+//  관리자가 고친 값(status/teeTime/course/cutLine/myPosition)은 자동 판독이 덮지 않는다.
+//  lock = { dk:'MM-DD', articleId?, fields:{status:1,...}, by, at }
+//   · articleId 없음(회원별 교정: 휴무 등) → 그날 내내 유효(배치표가 바뀌어도 유지).
+//   · articleId 있음(배치표 검수 교정) → 같은 배치표(글) 재판독만 덮지 않고, '새 배치표(다른 글)'가 오면 해제.
+//  날짜가 바뀌면 무조건 만료(그날만 유효).
 export function applyAdminLock(next, prev) {
+  if (!next) return next;
   const lock = prev && prev._adminLock;
-  if (!lock || !lock.fields || !next) return next;
-  if (dayKey(next.date) !== lock.dk) return next; // 다른 날 → 잠금 만료(복원 안 함)
-  for (const f of Object.keys(lock.fields)) {
-    if (lock.fields[f]) next[f] = prev[f];
-  }
+  delete next._adminLock;                                   // 캐리된 옛 잠금 제거(아래서 유효하면 다시 설정)
+  if (!lock || !lock.fields) return next;
+  if (dayKey(next.date) !== lock.dk) return next;           // 다른 날 → 만료
+  if (lock.articleId && String(next.articleId) !== String(lock.articleId)) return next; // 새 배치표 → 배치표잠금 해제
+  for (const f of Object.keys(lock.fields)) if (lock.fields[f]) next[f] = prev[f];
   next._adminLock = lock;
   return next;
 }

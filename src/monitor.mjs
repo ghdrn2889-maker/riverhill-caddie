@@ -9,8 +9,8 @@ import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts } from './analytics.mjs';
 import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
-import { loadToday, saveToday, dayKey } from './today.mjs';
-import { commuteInfo, dayWordFor } from './judge.mjs';
+import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
+import { commuteInfo, dayWordFor, interpretForMember } from './judge.mjs';
 import * as worklog from './worklog.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -260,6 +260,96 @@ app.get('/api/corrections', gate, (req, res) => {
     const rows = raw.trim().split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
     res.json({ ok: true, corrections: rows.slice(-200).reverse() });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── 배치표 검수: 시스템 판독을 표로 재구성 → 관리자가 원본과 대조해 틀린 칸만 교정 ──
+//  교정은 '근원(배치표 판독)' 한 곳에서 → 저장 시 전 회원을 다시 계산해 일관 반영(회원별 꼬임 원천 차단).
+function loadLastBoard() {
+  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'lastboard.json'), 'utf8')); } catch { return null; }
+}
+app.get('/api/board-review', gate, (req, res) => {
+  try {
+    const lb = loadLastBoard();
+    if (!lb || !lb.rawVerdict) return res.json({ ok: true, board: null });
+    const v = lb.rawVerdict;
+    const roster = Array.isArray(v.part3Roster) ? v.part3Roster : [];
+    const grid = Array.isArray(v.teeGrid) ? v.teeGrid : [];
+    const teeAt = (p) => { const g = grid.find((x) => Number(x.pos) === p); return g ? { time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(g.course)) ? 'IN' : 'OUT') } : { time: '', course: '' }; };
+    const gridMax = grid.reduce((mx, g) => (/\d{1,2}:\d{2}/.test(String(g?.time || '')) ? Math.max(mx, Number(g?.pos) || 0) : mx), 0);
+    const cutLine = Number(v.cutLine) || gridMax || 0;
+    const maxPos = Math.max(roster.length, grid.reduce((mx, g) => Math.max(mx, Number(g.pos) || 0), 0));
+    const rows = [];
+    for (let p = 1; p <= maxPos; p++) { const t = teeAt(p); rows.push({ pos: p, name: roster[p - 1] || '', tee: t.time, course: t.course }); }
+    res.json({ ok: true, board: {
+      articleId: lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
+      image: (lb.article && lb.article.images && lb.article.images[0]) || '', url: (lb.article && lb.article.url) || '',
+      at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0, cutLine, rows,
+    } });
+  } catch (e) { console.error('board-review 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/board-correct', gate, async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+  const cutLine = Number(req.body?.cutLine) || 0;
+  const notify = !!req.body?.notify;
+  if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
+  const lb = loadLastBoard();
+  if (!lb || !lb.rawVerdict) return res.status(400).json({ ok: false, error: '현재 배치표가 없어요.' });
+  const v = JSON.parse(JSON.stringify(lb.rawVerdict));
+  const origRoster = Array.isArray(v.part3Roster) ? v.part3Roster.slice() : [];
+  const origGrid = {}; (v.teeGrid || []).forEach((g) => { origGrid[Number(g.pos)] = { time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(g.course)) ? 'IN' : 'OUT') }; });
+  const roster = []; const grid = []; const cellDiffs = [];
+  for (const r of rows) {
+    const p = Number(r.pos); if (!p) continue;
+    const nm = String(r.name || '').trim();
+    const teeM = String(r.tee || '').match(/\d{1,2}:\d{2}/); const tee = teeM ? teeM[0] : '';
+    const course = /IN/i.test(String(r.course || '')) ? 'IN' : (tee ? 'OUT' : '');
+    roster[p - 1] = nm;
+    if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
+    if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
+    const og = origGrid[p] || { time: '' }; if (tee !== og.time) cellDiffs.push({ pos: p, field: 'tee', model: og.time, admin: tee });
+  }
+  v.part3Roster = roster; v.teeGrid = grid; if (cutLine) v.cutLine = cutLine;
+  v._adminCorrected = { at: Date.now(), by: 'admin' }; delete v._uncertain;
+  lb.rawVerdict = v;
+  try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
+  if (cellDiffs.length) {
+    const line = { at: Date.now(), type: 'board', boardArticleId: lb.id, date: v.dateLabel || '', cutLine, changes: cellDiffs };
+    try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
+  }
+  const dk = dayKey(v.dateLabel || lb.dateLabel || '');
+  let updated = 0, notified = 0;
+  for (const m of activeMembers()) {
+    const today = loadToday(m.id) || {};
+    if (today.status === 'off') continue; // 휴무는 배치표가 안 건드림
+    const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };
+    let next;
+    try {
+      const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, today);
+      next = applyVerdict(today, mout.rawVerdict, lb.article).next;
+    } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
+    const pos = Number(next.myPosition) || 0;
+    if (pos > 0 && cutLine > 0) {
+      next.cutLine = cutLine;
+      const hasTee = next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime));
+      const inWork = pos <= cutLine;
+      next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
+      if (!inWork) { next.teeTime = ''; next.course = ''; }
+    }
+    next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1 }, by: 'admin', at: Date.now() };
+    next.updatedAt = Date.now();
+    const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status);
+    const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status);
+    saveToday(next, m.id); updated++;
+    if (notify && pushReady && pos > 0) {
+      let title = '', body = '';
+      if (wasWait && nowWork) { title = `${member.part}부 근무 전환`; body = `${m.board_name}님, 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
+      else if (wasWork && nowSpare) { title = `${member.part}부 스페어 전환`; body = `${m.board_name}님, 스페어(대기)로 전환됐어요.`; }
+      else if (wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime) { title = '티오프 시간 변경!'; body = `${m.board_name}님, 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
+      if (title) { try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, m.id); notified++; } catch (e) { console.error('교정 알림 실패:', e.message); } }
+    }
+  }
+  console.log(`📋 [monitor] 배치표 #${lb.id} 관리자 교정: 칸 ${cellDiffs.length}건 · 커트 ${cutLine} · 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
+  res.json({ ok: true, cellChanges: cellDiffs.length, updated, notified });
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));
