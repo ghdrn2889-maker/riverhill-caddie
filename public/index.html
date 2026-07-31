@@ -997,7 +997,7 @@
     /* ── 가입 신청서 출력 연출(프린터·도장·배출·백지→홈) — 샘플 e6c82dd0 이식 ── */
     #obOv.scov { padding:0; background:#fbfbf9; overflow:hidden; }
     #obOv.scov:not([hidden]) { display:block; }
-    #obOv .stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:6vh 16px 92px; }
+    #obOv .stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:11vh 16px 44px; }
     /* 프린터 */
     #obOv .printer { position:relative; width:420px; max-width:94vw; height:38px; z-index:5;
       background:linear-gradient(#37493a,#26331f); border-radius:13px 13px 7px 7px; box-shadow:0 10px 22px rgba(20,30,20,.28); }
@@ -1051,7 +1051,7 @@
       font-family:inherit; font-size:13px; font-weight:800; letter-spacing:.08em; cursor:pointer; }
     #obOv .nt-retry:active { background:#efe6cf; }
     /* 완료 — 앱 배경색 백지가 프린터에서 내려오며 중앙으로 확대되어 화면을 채움(하단은 영수증처럼 삐쭉) */
-    #obOv .welcome { position:fixed; top:calc(6vh + 40px); left:0; right:0; margin:0 auto; width:390px; max-width:94vw; height:0;
+    #obOv .welcome { position:fixed; top:calc(11vh + 40px); left:0; right:0; margin:0 auto; width:390px; max-width:94vw; height:0;
       overflow:hidden; z-index:60; transform-origin:center center; display:none;
       background:linear-gradient(170deg,#bfe2ff,#e8f5ff 55%,#fbfdff); box-shadow:0 14px 34px rgba(30,55,55,.18);
       -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;

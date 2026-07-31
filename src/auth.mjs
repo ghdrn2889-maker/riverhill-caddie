@@ -136,7 +136,8 @@ export async function naverCallback(req, res) {
     setSessionCookie(req, res, sessTok);
 
     // 온보딩 필요 여부: board_name(실명) 비어있으면 가입 완성 화면으로.
-    res.redirect('/');
+    //  ?new=1 = '방금 로그인함' 마커 — 미완료 가입자가 앱을 닫았다 다시 열면(마커 없음) 자동 로그아웃하기 위함.
+    res.redirect('/?new=1');
   } catch (e) {
     console.error('naverCallback 오류:', e.message);
     res.status(500).send('로그인 처리 중 오류가 발생했습니다.');
@@ -223,7 +224,8 @@ export async function googleCallback(req, res) {
       completeLoginHandoff(stx.handoff, user.id);
       return res.send(handoffDonePage());
     }
-    res.redirect('/');
+    // ?new=1 = '방금 로그인함' 마커(미완료 가입자 재방문 시 자동 로그아웃 판별용).
+    res.redirect('/?new=1');
   } catch (e) {
     console.error('googleCallback 오류:', e.message);
     res.status(500).send('로그인 처리 중 오류가 발생했습니다.');

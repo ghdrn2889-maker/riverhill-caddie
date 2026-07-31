@@ -2198,7 +2198,7 @@ async function loadMe() {
   // ★가입 승인 대기(pending): 이름부터 입력(온보딩) → 이후엔 '승인 대기' 화면. 앱 데이터는 게이트에서 잠김.
   if (meState && meState.pending) {
     renderAccount();
-    if (meState.needsOnboarding) { hidePending(); openOnboarding(); }
+    if (meState.needsOnboarding) { hidePending(); await enterOnboarding(); }
     else showPending();
     return;
   }
@@ -2207,8 +2207,25 @@ async function loadMe() {
   if (lastToday) renderToday(lastToday); // 내 이름(profile)이 늦게 로드돼도 보드를 다시 그려 순번 리스트가 뜨게(레이스 방지)
   renderNotifyNudge();               // 알림 미설정이면 유도 카드 노출
   sendTelemetry();                   // 기기·알림 상태 기록
-  if (meState && meState.authed && meState.needsOnboarding) openOnboarding();
+  if (meState && meState.authed && meState.needsOnboarding) await enterOnboarding();
   else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
+}
+// '방금 로그인함' 판별 — 콜백의 ?new 마커(부팅 때 캡처) 또는 이번 세션 플래그.
+//  새로고침엔 세션 플래그가 남아 폼 유지, 앱을 완전히 닫으면 sessionStorage가 비워져 자동 로그아웃된다.
+let _freshLogin = false;
+function isFreshLogin() {
+  try { return _freshLogin || sessionStorage.getItem('rhFresh') === '1'; }
+  catch { return true; }   // 저장소가 막혀 있으면 안전하게 폼을 보여줌(로그아웃 루프 방지)
+}
+// 미완료 가입(이름 미제출) 진입 — 방금 로그인이면 신청서, 아니면(닫았다 다시 엶) 자동 로그아웃→로그인 화면.
+async function enterOnboarding() {
+  if (!isFreshLogin()) {
+    try { await postJSON('/api/logout', {}); } catch { /* 무해 */ }
+    location.reload();     // 쿠키 지워진 뒤 재부팅 → /api/me 비로그인 → 로그인 화면
+    return;
+  }
+  try { sessionStorage.setItem('rhFresh', '1'); } catch { /* 무해 */ }
+  openOnboarding();
 }
 let _pendTimer = null;
 function showPending() {
@@ -2437,6 +2454,7 @@ function obPrintCard(withSound) {
 // 가입 신청 클릭 — 미기재 검증 → /api/profile → approved 로 완료/대기 분기
 async function obSubmitClick() {
   const cta = $('sgSubmit'); if (cta.disabled) return;
+  obActx();   // ★탭 순간(동기) 오디오 잠금 해제 — 이후 await 뒤의 배출·도장·환영 소리가 나도록(모바일 자동재생 정책)
   const reqFields = obReqFields();
   let missing = false;
   reqFields.forEach((f) => { const inp = f.querySelector('input'); if (!inp.value.trim()) { f.classList.add('miss'); missing = true; } else f.classList.remove('miss'); });
@@ -2536,6 +2554,11 @@ function initAccount() {
 
 /* ── 부팅 ── */
 async function main() {
+  // 로그인 콜백의 '방금 로그인함' 마커(?new) 캡처 후 URL에서 제거(주소창 깔끔 + 이후 판별은 sessionStorage로).
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.has('new')) { _freshLogin = true; q.delete('new'); const s = q.toString(); history.replaceState(null, '', location.pathname + (s ? '?' + s : '') + location.hash); }
+  } catch { /* 무해 */ }
   tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount();
   initInstallPrompt();
   $('readAll').onclick = markAllRead;
