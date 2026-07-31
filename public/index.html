@@ -742,6 +742,11 @@
       /* 히어로 내부 문구·명단은 아이리스가 열리는 동안 딸려 들어와 카드와 함께 마무리(꼬리 딜레이 제거) */
       body.anim-play #todayHero .in { opacity:0; animation:enterRiseIn .46s cubic-bezier(.22,.61,.36,1) both;
         animation-delay:calc(360ms + var(--j,0) * 64ms); }
+      /* 가입완료 아이리스 진입: 홈 배경만 먼저 보이도록 오브젝트를 '등장 전 상태'로 보류(아이리스 후 anim-play로 재생) */
+      body.home-prep .reveal { opacity:0; }
+      body.home-prep .top.reveal { opacity:0; transform:translateY(-18px); }
+      body.home-prep #todayHero { clip-path:circle(8% at 84% 20%); -webkit-clip-path:circle(8% at 84% 20%); }
+      body.home-prep #todayHero .in { opacity:0; }
     }
     @keyframes enterRise { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
     @keyframes enterRiseIn { from { opacity:0; transform:translateY(11px); } to { opacity:1; transform:none; } }

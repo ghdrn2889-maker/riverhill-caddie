@@ -667,8 +667,10 @@ function removedBoardHTML(s) {
 // 대기(스플래시) 화면 감추기 — 준비되면 페이드아웃. 여러 곳에서 불려도 무해(idempotent).
 function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
+let _holdHomeAnim = false;  // ★가입완료 흐름: 오버레이 뒤에서 등장 모션을 낭비하지 않게 보류 → 아이리스 후 수동 재생.
 function renderToday(t) {
-  if (!_heroEntered) {
+  if (_holdHomeAnim) { hideSplash(); }   // 스플래시만 내리고 등장 모션은 보류(홈 오브젝트는 home-prep로 숨겨둠)
+  else if (!_heroEntered) {
     _heroEntered = true; hideSplash(); document.body.classList.add('anim-play');
     // 실행 등장 모션(reveal·아이리스)은 1회만 — 등장이 끝나면 클래스를 떼서 탭 복귀 때 재생되지 않게 고정.
     setTimeout(() => document.body.classList.remove('anim-play'), 1500);
@@ -2450,6 +2452,7 @@ async function obRunFlow(name, approved, isTest) {
 }
 async function obWelcomeFlow(name, my, isTest) {
   const scene = $('obWelScene'), wel = $('obWelcome'), welP = $('obWelPrinter'), welT = $('obWelText'), ov = $('obOv');
+  const irisMode = !isTest && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   $('obWelName').textContent = name;
   $('obPrinter').style.display = 'none';                 // 폼 프린터 숨기고 전용 scene(프린터+백지) 표시(같은 위치라 이음새 없음)
   scene.style.display = 'block'; scene.style.transition = 'none'; scene.style.transform = 'scale(1)';
@@ -2480,23 +2483,50 @@ async function obWelcomeFlow(name, my, isTest) {
   welP.classList.remove('run');
   obPrinterLoopFade(1.5);
   // 진짜 홈을 백지 뒤에서 미리 준비. ★테스트캐디는 프로필이 비어 loadMe가 온보딩을 재트리거(연출 취소)하므로 건너뜀.
+  //  ★아이리스 모드: 등장 모션을 보류(_holdHomeAnim)하고 오브젝트를 숨긴 채(home-prep) 렌더 → 아이리스로 배경만 연 뒤 재생.
+  if (irisMode) { _holdHomeAnim = true; document.body.classList.add('home-prep'); }
   if (!isTest) { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
   await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
   obWelcomeMusic();                                 // 종소리(포근한 종)
   await obSleep(200); if (obSeq !== my) return;      // 종소리 0.2초 뒤(문구 0.3초 앞당김)
   welT.classList.add('show');
-  await obSleep(3200); if (obSeq !== my) return;             // 문구 유지 길게
+  await obSleep(2600); if (obSeq !== my) return;             // 문구 유지
   // 5) 문구 디졸브 아웃
   welT.classList.remove('show');
-  await obSleep(720); if (obSeq !== my) return;
+  await obSleep(680); if (obSeq !== my) return;
   welT.style.display = 'none';
-  // 6) 온보딩(흰 화면) 페이드아웃 → 진짜 배포된 앱 홈이 자연 등장
-  ov.style.transition = 'opacity .55s ease'; ov.style.opacity = '0';
-  await obSleep(580); if (obSeq !== my) return;
-  ov.hidden = true; ov.style.opacity = ''; ov.style.transition = '';
+  // 6) 홈 진입 — 아이리스로 홈 '배경만' 열고 → 앱 홈 오브젝트 등장 모션(anim-play) 그대로 재생
+  if (irisMode) {
+    await obIrisReveal(my); if (obSeq !== my) return;
+    document.body.classList.remove('home-prep'); _holdHomeAnim = false; _heroEntered = true;
+    document.body.classList.add('anim-play');
+    setTimeout(() => document.body.classList.remove('anim-play'), 1500);
+  } else {
+    ov.style.transition = 'opacity .55s ease'; ov.style.opacity = '0';
+    await obSleep(580); if (obSeq !== my) return;
+  }
+  ov.hidden = true; ov.style.opacity = ''; ov.style.transition = ''; ov.style.webkitMask = ''; ov.style.mask = '';
   scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
   $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
   if (isTest) openOnboarding();                         // 테스트캐디: 홈이 없으므로 가입 화면으로 리셋(반복 재생)
+}
+// 원형 아이리스로 가입 오버레이를 걷어 홈 '배경만' 드러냄(중앙에서 확장) — 마스크 구멍을 rAF로 키움.
+async function obIrisReveal(my) {
+  const ov = $('obOv');
+  const cx = window.innerWidth * 0.5, cy = window.innerHeight * 0.46;
+  const maxR = Math.hypot(window.innerWidth, window.innerHeight) * 0.62;
+  const DUR = 900, t0 = performance.now();
+  await new Promise((res) => {
+    (function step() {
+      if (obSeq !== my) { res(); return; }
+      const p = Math.min(1, (performance.now() - t0) / DUR);
+      const e = p * p * (3 - 2 * p);                       // smoothstep
+      const r = Math.max(0.001, e * maxR);
+      const m = 'radial-gradient(circle ' + r + 'px at ' + cx + 'px ' + cy + 'px, transparent 0, transparent ' + Math.max(0, r - 2) + 'px, #000 ' + r + 'px)';
+      ov.style.webkitMask = m; ov.style.mask = m;
+      if (p < 1) requestAnimationFrame(step); else res();
+    })();
+  });
 }
 async function obPendingFlow(name, my) {
   $('obNoticeName').textContent = name;
@@ -2574,6 +2604,7 @@ function obPromptTap() {
   const nf = $('obNoticeFeed'); nf.style.display = 'none'; nf.style.transition = 'none'; nf.style.transform = ''; nf.firstElementChild.style.transform = '';
   const wel = $('obWelcome'); wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.height = '0'; wel.style.transform = 'none';
   const wsc = $('obWelScene'); wsc.style.display = 'none'; wsc.style.transform = 'scale(1)';   // 가입완료 무대 초기화
+  document.body.classList.remove('home-prep', 'anim-play'); _holdHomeAnim = false;             // 홈 등장 보류 상태 원복
   $('obPrinter').style.display = '';                 // 폼 프린터 복원(중단된 완료 연출 대비)
   $('obWelText').classList.remove('show'); $('obWelText').style.display = 'none';
   $('obStamp').classList.remove('stamped', 'pending');
