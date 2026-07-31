@@ -331,7 +331,6 @@ async function loadToday() {
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
   loadWeather();
   loadCheer();
-  maybeShowNotice();   // 온보딩 지연 등으로 첫 시도가 보류됐으면 여기서 재시도(1회만 실행)
 }
 // WMO 코드 → 배경 카테고리 / 한글 설명.
 function wmoCategory(code) {
@@ -2705,8 +2704,6 @@ async function main() {
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
   setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
   startHeartbeat();
-  nzInit();
-  setTimeout(maybeShowNotice, 1500);   // 홈 진입 직후 공지 자동 출력(온보딩 중이면 보류·재시도)
 }
 
 // 접속 하트비트 — 앱이 화면에 떠 있는 동안 30초마다 핑(운영 모니터의 접속중/나감 표시).
@@ -2719,120 +2716,4 @@ function startHeartbeat() {
   document.addEventListener('visibilitychange', () => (document.hidden ? leave() : alive()));
   window.addEventListener('pagehide', leave);
 }
-
-// ══ 홈 출력기: 관리자 공지 자동 출력 + 신고·수정요청·아이디어 양식 ══
-let _nzChecked = false, _nzBusy = false, _nzSeq = 0;
-function nzEl() { return { pop: $('nzPop'), prt: $('nzPrinter'), feed: $('nzFeed'), paper: $('nzPaper'), toast: $('nzToast') }; }
-function nzEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function nzFmtDate(ts) { const d = new Date(ts || Date.now()); const wd = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]; return `${d.getMonth() + 1}월 ${d.getDate()}일 (${wd})`; }
-function nzToastMsg(msg) { const { toast } = nzEl(); if (!toast) return; toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2400); }
-// 공지 알림 종 — 가입 인트로보다 담백한 세 음(진입 즉시 울려 시선을 출력기로).
-function nzChime() {
-  const c = obActx(); if (!c) return;
-  const t0 = c.currentTime, bus = c.createGain(); bus.gain.value = 0.85; bus.connect(c.destination);
-  const tone = (f, t, dur, g) => { const o = c.createOscillator(), ga = c.createGain(); o.type = 'triangle'; o.frequency.value = f;
-    o.connect(ga); ga.connect(bus); const s = t0 + t; ga.gain.setValueAtTime(0.0001, s);
-    ga.gain.linearRampToValueAtTime(g, s + 0.01); ga.gain.exponentialRampToValueAtTime(0.0001, s + dur); o.start(s); o.stop(s + dur + 0.05); };
-  tone(392.0, 0, 0.85, 0.12); tone(523.25, 0.11, 1.05, 0.11); tone(659.25, 0.22, 1.15, 0.08);
-}
-// 용지가 슬롯에서 아래로 내려오며 대시보드를 덮음.
-function nzPrintOut(dur) {
-  const { paper, feed } = nzEl();
-  feed.classList.add('on');
-  paper.style.transition = 'none'; const H = paper.scrollHeight + 12; paper.style.transform = 'translateY(-' + H + 'px)';
-  void paper.offsetWidth;
-  requestAnimationFrame(() => { paper.style.transition = 'transform ' + (dur || 2200) + 'ms steps(26)'; paper.style.transform = 'translateY(0)'; });
-}
-async function nzEject() { const { feed } = nzEl(); obEjectSound(); feed.classList.add('eject'); await obSleep(840); feed.classList.remove('on', 'eject'); }
-
-// 관리자 공지 — 진입 즉시 종 → 끝난 뒤 0.2초 → 출력(공지+답신칸 한 장) → 확인 시 왼쪽부터 뜯겨 배출.
-async function nzShowNotice(notice) {
-  if (_nzBusy) return; _nzBusy = true; const my = ++_nzSeq;
-  const { prt, paper } = nzEl();
-  paper.innerHTML =
-    '<div class="n-top"><span class="n-tag">관리자 공지</span><span class="n-date">' + nzFmtDate(notice.createdAt) + '</span></div>'
-    + (notice.title ? '<div class="n-title">' + nzEsc(notice.title) + '</div>' : '')
-    + '<div class="n-body">' + nzEsc(notice.body) + '</div>'
-    + '<div class="n-from"><span class="k">보낸사람</span><span class="v">' + nzEsc(notice.by || '관리자') + '</span></div>'
-    + '<div class="fb"><div class="fb-lb">관리자에게 의견 남기기 (선택)</div>'
-    + '<textarea class="fb-ta" id="nzReply" placeholder="답신을 남기면 관리자에게 전달됩니다. (관리자만 봅니다)"></textarea>'
-    + '<div class="fb-note">· 다른 사용자에게는 보이지 않습니다.</div>'
-    + '<button class="send-btn" id="nzAck">확인</button></div>';
-  prt.classList.add('busy');
-  nzChime();
-  await obSleep(1600); if (_nzSeq !== my) { _nzBusy = false; return; }
-  prt.classList.add('run'); obPrinterLoopStart(2.8); nzPrintOut(2200);
-  await obSleep(2200); if (_nzSeq !== my) { _nzBusy = false; return; }
-  prt.classList.remove('run'); obPrinterLoopFade(0.7);
-  const ack = $('nzAck');
-  if (ack) ack.onclick = async () => {
-    ack.disabled = true;
-    const reply = (($('nzReply') || {}).value || '').trim();
-    try { await fetch('/api/notice/ack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: notice.id, reply }) }); } catch {}
-    await nzEject(); prt.classList.remove('busy'); _nzBusy = false;
-  };
-}
-
-// 신고·수정요청·아이디어 양식.
-const NZ_FORMS = {
-  report: { tagCls: 'report', tag: '신고', h: '무엇을 신고하시겠어요?',
-    body: '<div class="r-klb">유형</div><div class="chips" id="nzChips"><div class="chip sel">앱 오류</div><div class="chip">부적절 내용</div><div class="chip">기타</div></div><div class="r-klb">내용</div><textarea class="r-ta" id="nzTa" placeholder="상황을 구체적으로 적어 주세요."></textarea>' },
-  fix: { tagCls: 'fix', tag: '수정 요청', h: '어떤 내용을 수정할까요?',
-    body: '<div class="r-klb">대상 (날짜·부)</div><input class="r-in" id="nzSubj" placeholder="예: 8월 1일 토요일 · 3부"><div class="r-klb">수정 요청 내용</div><textarea class="r-ta" id="nzTa" placeholder="예: 순번이 14번이 아니라 12번입니다."></textarea>' },
-  idea: { tagCls: 'idea', tag: '아이디어 건의', h: '어떤 아이디어가 있으신가요?',
-    body: '<div class="r-klb">내용</div><textarea class="r-ta" id="nzTa" placeholder="앱에 있으면 좋을 기능·개선 아이디어를 자유롭게 적어 주세요."></textarea>' }
-};
-async function nzPrintForm(type) {
-  if (_nzBusy) return; _nzBusy = true; const my = ++_nzSeq;
-  const f = NZ_FORMS[type]; if (!f) { _nzBusy = false; return; }
-  const { prt, paper } = nzEl();
-  paper.innerHTML =
-    '<div class="stamp" id="nzStamp">발송</div>'
-    + '<div class="r-top"><span class="r-tag ' + f.tagCls + '">' + f.tag + '</span><span class="r-sub">관리자 접수</span></div>'
-    + '<div class="r-h">' + f.h + '</div>' + f.body
-    + '<div class="r-note">· 작성자 이름과 함께 관리자에게만 전달됩니다.</div>'
-    + '<button class="send-btn" id="nzSend">발 송</button><div class="r-warn" id="nzWarn">내용을 입력해 주세요.</div>';
-  const chips = $('nzChips');
-  if (chips) chips.addEventListener('click', (e) => { const ch = e.target.closest('.chip'); if (!ch) return; chips.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); ch.classList.add('sel'); });
-  prt.classList.add('busy', 'run'); obPrinterLoopStart(2.4); nzPrintOut(2000);
-  await obSleep(2000); if (_nzSeq !== my) { _nzBusy = false; return; }
-  prt.classList.remove('run'); obPrinterLoopFade(0.7); _nzBusy = false;
-  const send = $('nzSend');
-  if (send) send.onclick = () => nzSubmitForm(type, my);
-}
-async function nzSubmitForm(type, my) {
-  const { paper, prt } = nzEl();
-  const ta = $('nzTa'), warn = $('nzWarn'), stamp = $('nzStamp');
-  if (!ta || !ta.value.trim()) { if (warn) warn.classList.add('show'); if (ta) ta.focus(); return; }
-  if (_nzBusy) return; _nzBusy = true; if (warn) warn.classList.remove('show');
-  const subjEl = $('nzSubj'), catEl = document.querySelector('#nzChips .chip.sel');
-  stamp.classList.add('on');
-  setTimeout(() => { paper.classList.add('thump'); obThunk(); setTimeout(() => paper.classList.remove('thump'), 320); }, 205);
-  const payload = { kind: type, text: ta.value.trim(), subject: subjEl ? subjEl.value.trim() : '', category: catEl ? catEl.textContent.trim() : '' };
-  try { await fetch('/api/inbox/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch {}
-  await obSleep(1000);
-  await nzEject(); prt.classList.remove('busy'); _nzBusy = false;
-  nzToastMsg('접수되었습니다. 확인 후 반영하겠습니다.');
-}
-
-function nzOpenPop() { if (_nzBusy) return; obActx(); const { pop } = nzEl(); if (pop) pop.classList.add('on'); }
-function nzClosePop() { const { pop } = nzEl(); if (pop) pop.classList.remove('on'); }
-function nzInit() {
-  const { prt, pop } = nzEl(); if (!prt || !pop) return;
-  prt.addEventListener('click', nzOpenPop);
-  prt.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nzOpenPop(); } });
-  const cancel = $('nzPopCancel'); if (cancel) cancel.onclick = nzClosePop;
-  pop.addEventListener('click', (e) => { if (e.target === pop) nzClosePop(); });
-  pop.querySelectorAll('.nzp-opt').forEach((b) => { b.onclick = () => { nzClosePop(); setTimeout(() => nzPrintForm(b.dataset.k), 220); }; });
-}
-// 홈이 실제로 보일 때(온보딩·타탭 아님) 1회: 확인 안 한 최신 공지를 출력.
-async function maybeShowNotice() {
-  if (_nzChecked || _nzBusy) return;
-  const ob = $('obOv'), tv = $('view-today');
-  if (ob && !ob.hidden) return;         // 온보딩 진행 중 — 다음 기회에
-  if (!tv || tv.hidden) return;         // 홈이 아직 안 보임
-  _nzChecked = true;
-  try { const r = await (await fetch('/api/notice')).json(); if (r && r.ok && r.notice) nzShowNotice(r.notice); } catch {}
-}
-
 main();

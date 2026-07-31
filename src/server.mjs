@@ -24,7 +24,6 @@ import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
 import { isKnownCaddie } from './roster.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
-import { noticeForUser, ackNotice, addSubmission } from './notices.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -134,37 +133,6 @@ app.post('/api/profile', requireAuth, (req, res) => {
   // 가입/이름 변경 직후 현재 배치표를 즉시 소급 반영(백대기 중간 가입 등으로 상황판이 비는 빈틈 방지).
   backfillFromLastBoard(req.user.id, { name: prof.board_name, part: String(prof.part || '3'), commuteMin: Number(prof.commute_min) });
   res.json({ ok: true, approved, boardName: prof.board_name, profile: { boardName: prof.board_name, part: prof.part, caddieType: prof.caddie_type, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
-});
-
-// ── 관리자 공지 + 건의함(신고·수정요청·아이디어) ──
-//  홈 진입 시 최신 활성 공지를 출력기로 인쇄. 확인하면 그 회원에겐 다시 안 뜸(회원별 ack).
-app.get('/api/notice', requireAuth, (req, res) => {
-  res.json({ ok: true, notice: noticeForUser(req.user.id) });
-});
-// 공지 확인 처리(+선택적 답신). 답신을 남기면 관리자 받은함으로 전달.
-app.post('/api/notice/ack', requireAuth, (req, res) => {
-  const id = Number(req.body?.id);
-  if (!id) return res.status(400).json({ ok: false, error: 'id 필요' });
-  ackNotice(req.user.id, id);
-  const reply = String(req.body?.reply || '').trim();
-  if (reply && req.user.role !== 'test') {
-    const prof = getProfile(req.user.id) || {};
-    addSubmission({ kind: 'notice-reply', noticeId: id, userId: req.user.id,
-      name: prof.board_name || '', part: String(prof.part || ''), text: reply });
-  }
-  res.json({ ok: true });
-});
-// 신고·수정요청·아이디어 제출 → 관리자 받은함.
-app.post('/api/inbox/submit', requireAuth, (req, res) => {
-  const kind = String(req.body?.kind || '');
-  if (!['report', 'fix', 'idea'].includes(kind)) return res.status(400).json({ ok: false, error: 'kind(report|fix|idea) 필요' });
-  const text = String(req.body?.text || '').trim();
-  if (!text) return res.status(400).json({ ok: false, error: '내용을 입력해주세요.' });
-  if (req.user.role === 'test') return res.json({ ok: true, test: true }); // 테스트캐디 — 저장 안 함
-  const prof = getProfile(req.user.id) || {};
-  addSubmission({ kind, userId: req.user.id, name: prof.board_name || '', part: String(prof.part || ''),
-    subject: String(req.body?.subject || '').trim(), category: String(req.body?.category || '').trim(), text });
-  res.json({ ok: true });
 });
 
 // 기기·알림 상태 텔레메트리 — iOS/안드 비율·설치·권한·구독을 회원별로 기록(최신 상태 유지).
