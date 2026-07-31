@@ -267,36 +267,51 @@ app.get('/api/corrections', gate, (req, res) => {
 function loadLastBoard() {
   try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'lastboard.json'), 'utf8')); } catch { return null; }
 }
+const nkey = (s) => String(s || '').replace(/\s/g, '');
+const dutyKind = (code) => { const c = String(code || ''); if (/병가/.test(c)) return '병가'; if (/휴가|연차|반차|월차/.test(c)) return '휴가'; if (/휴무|격리/.test(c)) return '휴무'; return ''; };
 app.get('/api/board-review', gate, (req, res) => {
   try {
+    const part = String(req.query.part || '3');
+    if (part !== '3') return res.json({ ok: true, part, board: null }); // 1·2부 배치표 저장은 멀티라운드 가동 시(현재 3부만 라이브)
     const lb = loadLastBoard();
-    if (!lb || !lb.rawVerdict) return res.json({ ok: true, board: null });
+    if (!lb || !lb.rawVerdict) return res.json({ ok: true, part, board: null });
     const v = lb.rawVerdict;
     const roster = Array.isArray(v.part3Roster) ? v.part3Roster : [];
     const grid = Array.isArray(v.teeGrid) ? v.teeGrid : [];
+    const crew = v.crewDuty || {};
+    const memberSet = new Set(activeMembers().map((m) => nkey(m.board_name)));
     const teeAt = (p) => { const g = grid.find((x) => Number(x.pos) === p); return g ? { time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(g.course)) ? 'IN' : 'OUT') } : { time: '', course: '' }; };
     const gridMax = grid.reduce((mx, g) => (/\d{1,2}:\d{2}/.test(String(g?.time || '')) ? Math.max(mx, Number(g?.pos) || 0) : mx), 0);
-    const cutLine = Number(v.cutLine) || gridMax || 0;
+    const cutLine = Number(v.cutoffPosition) || Number(v.cutLine) || gridMax || 0;
     const maxPos = Math.max(roster.length, grid.reduce((mx, g) => Math.max(mx, Number(g.pos) || 0), 0));
     const rows = [];
-    for (let p = 1; p <= maxPos; p++) { const t = teeAt(p); rows.push({ pos: p, name: roster[p - 1] || '', tee: t.time, course: t.course }); }
-    res.json({ ok: true, board: {
+    for (let p = 1; p <= maxPos; p++) {
+      const t = teeAt(p); const name = roster[p - 1] || '';
+      rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
+    }
+    const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+    res.json({ ok: true, part, board: {
       articleId: lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
       image: (lb.article && lb.article.images && lb.article.images[0]) || '', url: (lb.article && lb.article.url) || '',
-      at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0, cutLine, rows,
+      at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
+      cutLine, cutoffName: v.cutoffName || '', rows, interns,
     } });
   } catch (e) { console.error('board-review 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 app.post('/api/board-correct', gate, async (req, res) => {
+  const part = String(req.body?.part || '3');
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+  const interns = Array.isArray(req.body?.interns) ? req.body.interns : [];
   const cutLine = Number(req.body?.cutLine) || 0;
   const notify = !!req.body?.notify;
+  if (part !== '3') return res.status(400).json({ ok: false, error: '현재는 3부만 지원해요.' });
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) return res.status(400).json({ ok: false, error: '현재 배치표가 없어요.' });
   const v = JSON.parse(JSON.stringify(lb.rawVerdict));
   const origRoster = Array.isArray(v.part3Roster) ? v.part3Roster.slice() : [];
-  const origGrid = {}; (v.teeGrid || []).forEach((g) => { origGrid[Number(g.pos)] = { time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(g.course)) ? 'IN' : 'OUT') }; });
+  const origGrid = {}; (v.teeGrid || []).forEach((g) => { origGrid[Number(g.pos)] = (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0]; });
+  const crew = { ...(v.crewDuty || {}) };
   const roster = []; const grid = []; const cellDiffs = [];
   for (const r of rows) {
     const p = Number(r.pos); if (!p) continue;
@@ -305,10 +320,18 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const course = /IN/i.test(String(r.course || '')) ? 'IN' : (tee ? 'OUT' : '');
     roster[p - 1] = nm;
     if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
+    // ── 근태(휴무/병가/휴가) 오버라이드: crewDuty 반영. 54·1,3(타부 근무) 코드는 보존. ──
+    const d = String(r.duty || ''); const key = nkey(nm);
+    if (key) {
+      if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
+      else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) { cellDiffs.push({ pos: p, field: 'duty', model: crew[key], admin: '' }); crew[key] = ''; } // 배치표대로 → 잘못 읽은 off 해제
+    }
     if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
-    const og = origGrid[p] || { time: '' }; if (tee !== og.time) cellDiffs.push({ pos: p, field: 'tee', model: og.time, admin: tee });
+    if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
   }
-  v.part3Roster = roster; v.teeGrid = grid; if (cutLine) v.cutLine = cutLine;
+  const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
+  v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
+  if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
   v._adminCorrected = { at: Date.now(), by: 'admin' }; delete v._uncertain;
   lb.rawVerdict = v;
   try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
@@ -316,40 +339,44 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const line = { at: Date.now(), type: 'board', boardArticleId: lb.id, date: v.dateLabel || '', cutLine, changes: cellDiffs };
     try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
   }
+  const rosterNk = new Set(roster.map(nkey).filter(Boolean));
   const dk = dayKey(v.dateLabel || lb.dateLabel || '');
   let updated = 0, notified = 0;
   for (const m of activeMembers()) {
     const today = loadToday(m.id) || {};
-    if (today.status === 'off') continue; // 휴무는 배치표가 안 건드림
+    // 이 배치표에 없는 휴무자(다른 근태로 쉬는 사람)는 건드리지 않음 — 배치표에 이름이 있으면 재계산.
+    if (today.status === 'off' && !rosterNk.has(nkey(m.board_name))) continue;
     const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };
     let next;
     try {
       const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, today);
       next = applyVerdict(today, mout.rawVerdict, lb.article).next;
     } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
+    const isOff = next.status === 'off'; // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정
     const pos = Number(next.myPosition) || 0;
-    if (pos > 0 && cutLine > 0) {
+    if (!isOff && pos > 0 && cutLine > 0) {
       next.cutLine = cutLine;
       const hasTee = next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime));
       const inWork = pos <= cutLine;
       next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
       if (!inWork) { next.teeTime = ''; next.course = ''; }
     }
-    next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1 }, by: 'admin', at: Date.now() };
+    next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() };
     next.updatedAt = Date.now();
-    const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status);
-    const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status);
+    const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
+    const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
     saveToday(next, m.id); updated++;
-    if (notify && pushReady && pos > 0) {
+    if (notify && pushReady) {
       let title = '', body = '';
-      if (wasWait && nowWork) { title = `${member.part}부 근무 전환`; body = `${m.board_name}님, 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
+      if (nowOff && !wasOff) { title = `${member.part}부 휴무`; body = `${m.board_name}님, 오늘은 휴무로 확인됐어요. 편히 쉬세요.`; }
+      else if ((wasWait || wasOff) && nowWork && pos > 0) { title = `${member.part}부 근무 전환`; body = `${m.board_name}님, 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
       else if (wasWork && nowSpare) { title = `${member.part}부 스페어 전환`; body = `${m.board_name}님, 스페어(대기)로 전환됐어요.`; }
       else if (wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime) { title = '티오프 시간 변경!'; body = `${m.board_name}님, 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
       if (title) { try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, m.id); notified++; } catch (e) { console.error('교정 알림 실패:', e.message); } }
     }
   }
-  console.log(`📋 [monitor] 배치표 #${lb.id} 관리자 교정: 칸 ${cellDiffs.length}건 · 커트 ${cutLine} · 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
-  res.json({ ok: true, cellChanges: cellDiffs.length, updated, notified });
+  console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
+  res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));
