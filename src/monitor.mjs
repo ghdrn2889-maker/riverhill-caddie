@@ -13,6 +13,7 @@ import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
 import { commuteInfo, dayWordFor, interpretForMember } from './judge.mjs';
 import * as worklog from './worklog.mjs';
 import { DATA_DIR } from './store.mjs';
+import { listNotices, createNotice, setNoticeActive, listInbox } from './notices.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -377,6 +378,28 @@ app.post('/api/board-correct', gate, async (req, res) => {
   }
   console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
   res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
+});
+
+// ── 관리자 공지 + 받은함(건의·신고·수정요청·아이디어·공지답신) ──
+app.get('/api/notices', gate, (req, res) => {
+  try { res.json({ ok: true, ...listNotices() }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/notice', gate, (req, res) => {
+  const title = String(req.body?.title || '').trim();
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ ok: false, error: '공지 내용을 입력하세요.' });
+  const id = createNotice({ title, body, by: '관리자 김홍구' });
+  console.log(`📢 [monitor] 공지 #${id} 발송: ${title || '(제목없음)'}`);
+  res.json({ ok: true, id });
+});
+app.post('/api/notice-active', gate, (req, res) => {
+  const ok = setNoticeActive(Number(req.body?.id), !!req.body?.active);
+  res.json({ ok });
+});
+app.get('/api/inbox', gate, (req, res) => {
+  try { res.json({ ok: true, items: listInbox(300) }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));

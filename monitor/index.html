@@ -313,6 +313,8 @@
     <button class="tb" data-tab="push">🔔 알림</button>
     <button class="tb" data-tab="userdash">📊 대시보드</button>
     <button class="tb" data-tab="review">🔍 배치표 검수</button>
+    <button class="tb" data-tab="notice">📢 공지</button>
+    <button class="tb" data-tab="inbox">📮 받은함</button>
   </nav>
 </header>
 
@@ -398,6 +400,64 @@
       <div id="boardReview"><div class="muted">불러오는 중…</div></div>
     </div>
   </div>
+
+  <!-- ── 공지 탭 ── -->
+  <div class="tab-page" id="page-notice">
+    <div class="sectlab">공지 작성 · 발송</div>
+    <div class="panel full">
+      <h2>새 공지 보내기</h2>
+      <p class="desc">발송하면 회원이 앱 홈에 진입할 때 출력기에서 공지가 인쇄됩니다. 확인한 회원에겐 다시 뜨지 않습니다.</p>
+      <div class="nc-form">
+        <input id="ncTitle" class="nc-in" placeholder="제목 (선택)" maxlength="60">
+        <textarea id="ncBody" class="nc-ta" placeholder="공지 내용을 입력하세요."></textarea>
+        <div class="nc-row"><button class="btn primary" id="ncSend">공지 발송</button><span id="ncMsg" class="nc-msg"></span></div>
+      </div>
+    </div>
+    <div class="panel full" style="margin-top:14px">
+      <h2>보낸 공지</h2>
+      <p class="desc">활성 공지만 회원에게 노출됩니다 · 내리면 더 이상 출력되지 않습니다.</p>
+      <div id="ncList"><div class="muted">불러오는 중…</div></div>
+    </div>
+  </div>
+
+  <!-- ── 받은함 탭 ── -->
+  <div class="tab-page" id="page-inbox">
+    <div class="sectlab">받은함 · 회원 건의</div>
+    <div class="panel full">
+      <h2>신고 · 수정요청 · 아이디어 · 공지답신</h2>
+      <p class="desc">회원이 앱 출력기에서 보낸 내용입니다 · 최신순</p>
+      <div id="inboxList"><div class="muted">불러오는 중…</div></div>
+    </div>
+  </div>
+
+  <style>
+    .nc-form{ display:flex; flex-direction:column; gap:10px; }
+    .nc-in,.nc-ta{ width:100%; background:var(--panel2); border:1px solid var(--bord); border-radius:10px; color:var(--tx); font:inherit; font-size:14px; padding:11px 13px; }
+    .nc-ta{ min-height:120px; resize:vertical; line-height:1.6; }
+    .nc-in:focus,.nc-ta:focus{ outline:none; border-color:var(--acc); }
+    .nc-row{ display:flex; align-items:center; gap:12px; }
+    .btn.primary{ background:var(--acc); border-color:var(--acc); color:#04120b; font-weight:800; }
+    .nc-msg{ font-size:13px; color:var(--tx2); }
+    .nc-item{ display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-top:1px solid var(--bord); }
+    .nc-item:first-child{ border-top:0; }
+    .nc-main{ flex:1; min-width:0; }
+    .nc-t{ font-weight:800; color:var(--tx); }
+    .nc-b{ color:var(--tx2); font-size:13px; margin-top:3px; white-space:pre-wrap; word-break:break-word; }
+    .nc-meta{ font-size:11px; color:var(--tx3); margin-top:5px; }
+    .nc-toggle{ font:inherit; font-size:12px; font-weight:700; padding:6px 11px; border-radius:8px; border:1px solid var(--bord); background:var(--panel2); color:var(--tx2); cursor:pointer; white-space:nowrap; }
+    .ibx{ display:flex; flex-direction:column; gap:10px; }
+    .ibx-item{ background:var(--panel2); border:1px solid var(--bord); border-radius:12px; padding:12px 14px; }
+    .ibx-top{ display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+    .ibx-badge{ font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; }
+    .ibx-name{ font-weight:800; color:var(--tx); font-size:13px; }
+    .ibx-time{ font-size:11px; color:var(--tx3); margin-left:auto; }
+    .ibx-subj{ font-size:12px; color:var(--tx2); margin-bottom:4px; }
+    .ibx-text{ color:var(--tx); font-size:13.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+    .bd-report{ background:rgba(178,59,46,.16); color:#ff9d90; }
+    .bd-fix{ background:rgba(183,121,31,.18); color:#f0c274; }
+    .bd-idea{ background:rgba(47,125,85,.2); color:#7fdca9; }
+    .bd-reply{ background:rgba(90,140,220,.18); color:#9fc0f5; }
+  </style>
 
   <p class="note" id="footnote"></p>
 </div>
@@ -659,9 +719,62 @@
     try{ localStorage.setItem('monTab', name); }catch(e){}
     if(name==='userdash') loadUserDash();
     if(name==='review') loadBoardReview();
+    if(name==='notice') loadNotices();
+    if(name==='inbox') loadInbox();
     window.scrollTo(0,0);
   }
   Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
+
+  // ── 공지 · 받은함 ──
+  var KIND = { report:['신고','bd-report'], fix:['수정요청','bd-fix'], idea:['아이디어','bd-idea'], 'notice-reply':['공지답신','bd-reply'] };
+  async function loadNotices(){
+    try{
+      var r=await fetch(apiUrl('/api/notices'),{cache:'no-store'}); var j=await r.json(); if(!j.ok) throw new Error(j.error||'실패');
+      var items=(j.items||[]).slice().reverse();
+      $('ncList').innerHTML = items.length ? items.map(function(it){
+        return '<div class="nc-item"><div class="nc-main"><div class="nc-t">'+(it.title?esc(it.title):'(제목 없음)')+
+          (it.active?'':' <span style="color:var(--tx3);font-weight:600">· 내림</span>')+'</div>'+
+          '<div class="nc-b">'+esc(it.body)+'</div><div class="nc-meta">'+clock(it.createdAt)+' · '+esc(it.createdBy||'관리자')+'</div></div>'+
+          '<button class="nc-toggle" data-id="'+it.id+'" data-a="'+(it.active?0:1)+'">'+(it.active?'내리기':'다시 노출')+'</button></div>';
+      }).join('') : '<div class="muted">보낸 공지가 없습니다.</div>';
+      Array.prototype.forEach.call($('ncList').querySelectorAll('.nc-toggle'), function(b){
+        b.onclick=async function(){
+          await fetch(apiUrl('/api/notice-active'),{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({id:Number(b.getAttribute('data-id')),active:b.getAttribute('data-a')==='1'})});
+          loadNotices();
+        };
+      });
+    }catch(e){ $('ncList').innerHTML='<div class="err">불러오기 실패: '+esc(e.message)+'</div>'; }
+  }
+  async function sendNotice(){
+    var title=$('ncTitle').value.trim(), body=$('ncBody').value.trim();
+    if(!body){ $('ncMsg').textContent='내용을 입력하세요.'; return; }
+    $('ncSend').disabled=true; $('ncMsg').textContent='발송 중…';
+    try{
+      var r=await fetch(apiUrl('/api/notice'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:title,body:body})});
+      var j=await r.json();
+      if(j.ok){ $('ncTitle').value=''; $('ncBody').value=''; $('ncMsg').textContent='발송되었습니다.'; loadNotices(); }
+      else $('ncMsg').textContent=j.error||'실패';
+    }catch(e){ $('ncMsg').textContent='오류: '+e.message; }
+    $('ncSend').disabled=false;
+    setTimeout(function(){ $('ncMsg').textContent=''; }, 3000);
+  }
+  async function loadInbox(){
+    try{
+      var r=await fetch(apiUrl('/api/inbox'),{cache:'no-store'}); var j=await r.json(); if(!j.ok) throw new Error(j.error||'실패');
+      var items=j.items||[];
+      $('inboxList').innerHTML = items.length ? '<div class="ibx">'+items.map(function(it){
+        var k=KIND[it.kind]||[it.kind,'bd-reply'];
+        var subj = it.subject ? '<div class="ibx-subj">대상: '+esc(it.subject)+'</div>'
+          : (it.category ? '<div class="ibx-subj">유형: '+esc(it.category)+'</div>' : '');
+        return '<div class="ibx-item"><div class="ibx-top"><span class="ibx-badge '+k[1]+'">'+k[0]+'</span>'+
+          '<span class="ibx-name">'+esc(it.name||'(이름없음)')+(it.part?' · '+esc(it.part)+'부':'')+'</span>'+
+          '<span class="ibx-time">'+clock(it.at)+'</span></div>'+subj+
+          '<div class="ibx-text">'+esc(it.text||'')+'</div></div>';
+      }).join('')+'</div>' : '<div class="muted">받은 건의가 없습니다.</div>';
+    }catch(e){ $('inboxList').innerHTML='<div class="err">불러오기 실패: '+esc(e.message)+'</div>'; }
+  }
+  if($('ncSend')) $('ncSend').onclick = sendNotice;
 
   // ── 회원 승인(실시간) ──
   var BLOCK_KO = { roster:'명부에 없는 이름', other:'기타' };
