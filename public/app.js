@@ -2449,33 +2449,35 @@ async function obRunFlow(name, approved) {
   if (approved) await obWelcomeFlow(name, my); else await obPendingFlow(name, my);
 }
 async function obWelcomeFlow(name, my) {
-  const wel = $('obWelcome'), welT = $('obWelText'), ov = $('obOv');
+  const scene = $('obWelScene'), wel = $('obWelcome'), welP = $('obWelPrinter'), welT = $('obWelText'), ov = $('obOv');
   $('obWelName').textContent = name;
+  $('obPrinter').style.display = 'none';                 // 폼 프린터 숨기고 전용 scene(프린터+백지) 표시(같은 위치라 이음새 없음)
+  scene.style.display = 'block'; scene.style.transition = 'none'; scene.style.transform = 'scale(1)';
   wel.style.display = 'block'; wel.style.transition = 'none';
   wel.style.height = '0'; wel.style.transform = 'none'; wel.style.opacity = '1';
   welT.classList.remove('show'); welT.style.display = 'flex';
   void wel.offsetWidth;
-  // 1) 백지가 프린터에 붙은 채 '계속' 출력 — 화면 대부분(76vh)까지 길게 밀려나옴 + 출력음 지속
-  obPrinterRun(7200); obPrinterLoopStart(7.5);
+  // 1) 백지가 프린터 슬롯에 붙은 채 '계속' 출력 — 76vh까지 길게 + 출력음 지속
+  welP.classList.add('run'); obPrinterLoopStart(7.5);
   wel.style.transition = 'height 2s steps(28)';
   requestAnimationFrame(() => { wel.style.height = '76vh'; });
   await obSleep(2080); if (obSeq !== my) return;
-  // 2) 아래(종이 본체 ≈53vh)를 축으로 아주 완만하게 확대 — 프린터를 덮으며 화면을 가득 채움(느리게)
+  // 2) 프린터+백지 한 덩어리로 아래축(≈54vh) 아주 완만하게 확대 — 화면을 가득 채움(느리게)
   const pw = wel.offsetWidth || 360, ph = wel.offsetHeight || (window.innerHeight * 0.76);
   const cover = Math.max(window.innerWidth / pw, window.innerHeight / ph) * 1.3;
-  wel.style.transition = 'none';
+  scene.style.transition = 'none';
   const expT0 = performance.now();
   await new Promise((res) => {
     (function step() {
       if (obSeq !== my) { res(); return; }
       const p = Math.min(1, (performance.now() - expT0) / 4200);
-      wel.style.transform = 'scale(' + (1 + (cover - 1) * Math.pow(p, 1.8)) + ')';
+      scene.style.transform = 'scale(' + (1 + (cover - 1) * Math.pow(p, 1.8)) + ')';  // 프린터+백지 함께
       if (p < 1) requestAnimationFrame(step); else res();
     })();
   });
   if (obSeq !== my) return;
   // 3) 화면 가득 → 출력음 1.5초에 걸쳐 서서히 꺼짐 → (1초 뒤) 종소리 → (0.5초 뒤) '어서오세요'
-  $('obPrinter').classList.remove('run');
+  welP.classList.remove('run');
   obPrinterLoopFade(1.5);
   try { await loadMe(); loadToday(); } catch { /* 무해 */ }
   await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
@@ -2491,7 +2493,8 @@ async function obWelcomeFlow(name, my) {
   ov.style.transition = 'opacity .55s ease'; ov.style.opacity = '0';
   await obSleep(580); if (obSeq !== my) return;
   ov.hidden = true; ov.style.opacity = ''; ov.style.transition = '';
-  wel.style.display = 'none';
+  scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
+  $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
 }
 async function obPendingFlow(name, my) {
   $('obNoticeName').textContent = name;
@@ -2568,6 +2571,8 @@ function obPromptTap() {
   $('obFeed').style.display = 'none';
   const nf = $('obNoticeFeed'); nf.style.display = 'none'; nf.style.transition = 'none'; nf.style.transform = ''; nf.firstElementChild.style.transform = '';
   const wel = $('obWelcome'); wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.height = '0'; wel.style.transform = 'none';
+  const wsc = $('obWelScene'); wsc.style.display = 'none'; wsc.style.transform = 'scale(1)';   // 가입완료 무대 초기화
+  $('obPrinter').style.display = '';                 // 폼 프린터 복원(중단된 완료 연출 대비)
   $('obWelText').classList.remove('show'); $('obWelText').style.display = 'none';
   $('obStamp').classList.remove('stamped', 'pending');
   $('obWarn').classList.remove('show'); obReqFields().forEach((f) => f.classList.remove('miss'));

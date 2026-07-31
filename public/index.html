@@ -1056,6 +1056,10 @@
       background:#f7f6f0; box-shadow:0 14px 34px rgba(30,55,55,.18);
       -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;
               mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x; }
+    /* 가입완료 무대: 프린터+백지를 한 덩어리로 아래축(≈54vh) 확대 */
+    #obOv .wel-scene { position:fixed; inset:0; z-index:60; transform-origin:50% 54vh; display:none; will-change:transform; }
+    #obOv .wel-scene .wel-printer { position:absolute; top:14vh; left:0; right:0; margin:0 auto; z-index:2; }
+    #obOv .wel-scene .welcome { position:absolute; display:block; top:calc(14vh + 35px); left:0; right:0; margin:0 auto; transform:none; transform-origin:center top; z-index:1; }
     /* 어서오세요 문구 — 화면이 다 찬 뒤 디졸브로 등장 */
     #obOv .welmsg { position:fixed; inset:0; z-index:65; display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .7s ease; }
     #obOv .welmsg.show { opacity:1; }
@@ -1267,8 +1271,11 @@
         </div>
       </div>
     </div>
-    <!-- 완료: 앱 배경색 백지가 내려오며 중앙 확대 → 화면 가득 → 문구 디졸브 → 진짜 홈 -->
-    <div class="welcome" id="obWelcome"></div>
+    <!-- 완료: 프린터+백지가 한 덩어리로 아래축 확대 → 화면 가득 → 문구 디졸브 → 진짜 홈 -->
+    <div class="wel-scene" id="obWelScene">
+      <div class="printer wel-printer" id="obWelPrinter"><span class="brand">RIVERHILL</span><span class="light"></span><span class="slot"></span></div>
+      <div class="welcome" id="obWelcome"></div>
+    </div>
     <div class="welmsg" id="obWelText"><div class="welmsg-in"><span class="nm" id="obWelName">홍길동</span> 캐디님<br>어서오세요! <span class="cur">▮</span></div></div>
   </div>
 
