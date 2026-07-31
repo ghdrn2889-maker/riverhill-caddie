@@ -2387,6 +2387,33 @@ function obWelcomeMusic() {
   ['C4', 'E4', 'G4', 'B4'].forEach((n) => tone(n, 1.35, 2.1, 0.07, 'sine', 0.7, 0.9));                          // 메이저7 해소
   tone('C6', 2.5, 1.1, 0.07, 'sine', 0.02, 0.9);                                                                // 반짝 상단
 }
+// 프린터 출력음(연속 루프, 페이드아웃 가능) — 가입완료 출력~확대 내내 지속하다 화면 가득 차면 서서히 꺼짐.
+let obPrLoop = null;
+function obPrinterLoopStart(maxSec) {
+  const c = obActx(); if (!c) return;
+  const t0 = c.currentTime, secs = maxSec || 8;
+  const master = c.createGain(); master.gain.value = 1; master.connect(c.destination);
+  const inner = c.createGain(); inner.connect(master);
+  const osc = c.createOscillator(); osc.type = 'square'; osc.frequency.value = 112; osc.connect(inner); osc.start(t0);
+  const step = 0.072, N = Math.ceil(secs / step);
+  for (let i = 0; i < N; i++) {
+    const t = t0 + i * step;
+    inner.gain.setValueAtTime(0.05, t); inner.gain.setValueAtTime(0.0, t + step * 0.5);
+    const dn = 0.02, buf = c.createBuffer(1, Math.max(1, Math.floor(c.sampleRate * dn)), c.sampleRate), ch = buf.getChannelData(0);
+    for (let k = 0; k < ch.length; k++) ch[k] = (Math.random() * 2 - 1) * (1 - k / ch.length);
+    const sn = c.createBufferSource(); sn.buffer = buf; const ng = c.createGain(); ng.gain.value = 0.05; sn.connect(ng); ng.connect(master); sn.start(t);
+  }
+  osc.stop(t0 + secs + 0.2);
+  obPrLoop = { master, osc };
+}
+function obPrinterLoopFade(dur) {
+  const c = obActx(); if (!c || !obPrLoop) return;
+  const d = dur || 1.5, t = c.currentTime, g = obPrLoop.master;
+  g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value || 1, t);
+  g.gain.linearRampToValueAtTime(0.0001, t + d);
+  try { obPrLoop.osc.stop(t + d + 0.1); } catch (e) { /* 이미 정지 */ }
+  obPrLoop = null;
+}
 // ── 출력 유틸 ──
 let obPrTimer;
 function obPrinterRun(ms) { const p = $('obPrinter'); p.classList.add('run'); clearTimeout(obPrTimer); obPrTimer = setTimeout(() => p.classList.remove('run'), ms + 60); }
@@ -2428,22 +2455,32 @@ async function obWelcomeFlow(name, my) {
   wel.style.height = '0'; wel.style.transform = 'none'; wel.style.opacity = '1';
   welT.classList.remove('show'); welT.style.display = 'flex';
   void wel.offsetWidth;
-  // 1) 백지가 프린터에서 차분히 내려옴 + 인쇄음(내려오는 동안만)
-  obPrinterRun(1080); obSound(1000);
-  wel.style.transition = 'height .9s steps(15)';
-  requestAnimationFrame(() => { wel.style.height = '300px'; });
-  // 2) 다 내려오면 잠깐 멈췄다가, 인트로 음악(포근한 종)과 함께 서서히 → 차분히 가속하며 확대
-  await obSleep(1040); if (obSeq !== my) return;
+  // 1) 백지가 프린터에 붙은 채 '계속' 출력 — 화면 대부분(76vh)까지 길게 밀려나옴 + 출력음 지속
+  obPrinterRun(7200); obPrinterLoopStart(7.5);
+  wel.style.transition = 'height 2s steps(28)';
+  requestAnimationFrame(() => { wel.style.height = '76vh'; });
+  await obSleep(2080); if (obSeq !== my) return;
+  // 2) 아래(종이 본체 ≈53vh)를 축으로 아주 완만하게 확대 — 프린터를 덮으며 화면을 가득 채움(느리게)
+  const pw = wel.offsetWidth || 360, ph = wel.offsetHeight || (window.innerHeight * 0.76);
+  const cover = Math.max(window.innerWidth / pw, window.innerHeight / ph) * 1.3;
+  wel.style.transition = 'none';
+  const expT0 = performance.now();
+  await new Promise((res) => {
+    (function step() {
+      if (obSeq !== my) { res(); return; }
+      const p = Math.min(1, (performance.now() - expT0) / 4200);
+      wel.style.transform = 'scale(' + (1 + (cover - 1) * Math.pow(p, 1.8)) + ')';
+      if (p < 1) requestAnimationFrame(step); else res();
+    })();
+  });
+  if (obSeq !== my) return;
+  // 3) 화면 가득 → 출력음 1.5초에 걸쳐 서서히 꺼짐 → (1초 뒤) 종소리 → (0.5초 뒤) '어서오세요'
   $('obPrinter').classList.remove('run');
-  obWelcomeMusic();
-  wel.style.transition = 'transform 3.4s cubic-bezier(.42,0,.78,.16)';
-  requestAnimationFrame(() => { wel.style.transform = 'scale(16)'; });
-  // 3) 화면 가득 → 잠깐 정지
-  await obSleep(3450); if (obSeq !== my) return;
-  // 진짜 앱 홈을 백지 뒤에서 미리 준비(승인됐으니 needsOnboarding=false)
+  obPrinterLoopFade(1.5);
   try { await loadMe(); loadToday(); } catch { /* 무해 */ }
-  await obSleep(300); if (obSeq !== my) return;
-  // 4) 어서오세요 문구 디졸브 인
+  await obSleep(2500); if (obSeq !== my) return;   // 페이드 1.5s + 여운 1s
+  obWelcomeMusic();                                 // 종소리(포근한 종)
+  await obSleep(500); if (obSeq !== my) return;      // 0.5초 뒤
   welT.classList.add('show');
   await obSleep(3200); if (obSeq !== my) return;             // 문구 유지 길게
   // 5) 문구 디졸브 아웃
