@@ -2459,12 +2459,12 @@ async function obWelcomeFlow(name, my, isTest) {
   void wel.offsetWidth;
   // 1) 백지가 프린터 슬롯에 붙은 채 '계속' 출력 — 76vh까지 길게 + 출력음 지속
   welP.classList.add('run'); obPrinterLoopStart(7.5);
-  wel.style.transition = 'height 1.6s steps(24)';
-  requestAnimationFrame(() => { wel.style.height = '76vh'; });
+  wel.style.transition = 'height 1.9s steps(30)';
+  requestAnimationFrame(() => { wel.style.height = '120vh'; });   // 프레임 아래로 계속 출력(바닥에서 안 멈추고 밑으로 넘어감)
   await obSleep(1300); if (obSeq !== my) return;         // 확대 시작을 앞으로 당김(출력 중반부터 확대)
   // 2) 프린터+백지 한 덩어리로 아래축(≈54vh) 아주 완만하게 확대 — 화면을 가득 채움(느리게)
-  const pw = wel.offsetWidth || 360, ph = window.innerHeight * 0.76;   // 최종 높이 기준(확대 중 height 애니 무관)
-  const cover = Math.max(window.innerWidth / pw, window.innerHeight / ph) * 1.3;
+  const pw = wel.offsetWidth || 360, ph = window.innerHeight * 1.2;   // 최종 높이 기준(프레임 초과)
+  const cover = Math.max(window.innerWidth / pw, window.innerHeight / ph) * 1.5;
   scene.style.transition = 'none';
   const expT0 = performance.now();
   await new Promise((res) => {
