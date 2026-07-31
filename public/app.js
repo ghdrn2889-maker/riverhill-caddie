@@ -2494,7 +2494,30 @@ function openOnboarding() {
   ovDismissable = false;             // 가입 화면: 배경/뒤로가기로 닫히지 않게
   $('obOv').style.opacity = ''; $('obOv').style.transition = '';
   $('obOv').hidden = false;
-  obPrintCard(false);                // 신청서가 프린터에서 출력되며 등장
+  obPromptTap();                     // 프린터만 띄우고 '눌러서 출력' 유도 → 탭 시 소리와 함께 출력
+}
+// 로그인 직후 — 폼을 바로 뽑지 않고 프린터만 + 탭 유도. 사용자가 출력기를 누르면(제스처)
+//  오디오가 잠금 해제되면서 신청서가 소리와 함께 출력된다(모바일 autoplay 정책 우회).
+function obPromptTap() {
+  obSeq++;                           // 진행 중 시나리오 취소
+  $('obFeed').style.display = 'none';
+  const nf = $('obNoticeFeed'); nf.style.display = 'none'; nf.style.transition = 'none'; nf.style.transform = ''; nf.firstElementChild.style.transform = '';
+  const wel = $('obWelcome'); wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.height = '0'; wel.style.transform = 'none';
+  $('obWelText').classList.remove('show'); $('obWelText').style.display = 'none';
+  $('obStamp').classList.remove('stamped', 'pending');
+  $('obWarn').classList.remove('show'); obReqFields().forEach((f) => f.classList.remove('miss'));
+  const cta = $('sgSubmit'); cta.textContent = '가입 신청'; cta.disabled = false;
+  const printer = $('obPrinter');
+  printer.classList.remove('run'); printer.classList.add('await');
+  $('obTapHint').hidden = false;
+  const onTap = () => {
+    printer.removeEventListener('click', onTap);
+    printer.classList.remove('await');
+    $('obTapHint').hidden = true;
+    obActx();                        // 탭 제스처 → 오디오 잠금 해제
+    obPrintCard(true);               // 소리와 함께 신청서 출력
+  };
+  printer.addEventListener('click', onTap);
 }
 function openAccount() {
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게

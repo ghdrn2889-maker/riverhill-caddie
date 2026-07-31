@@ -1063,7 +1063,19 @@
       color:#173a28; letter-spacing:.01em; text-align:center; line-height:1.42; padding:0 24px; }
     #obOv .welmsg-in .nm { color:#2f7d55; } #obOv .welmsg-in .cur { display:inline-block; margin-left:1px; color:#2f7d55; animation:ob-cur 1s steps(1) infinite; }
     @keyframes ob-cur { 50% { opacity:0; } }
-    @media (prefers-reduced-motion:reduce) { #obOv .feed, #obOv .welcome { transition-duration:.01s; } #obOv .printer.run { animation:none; } }
+    /* 출력기 탭 유도 — 로그인 직후 사용자 탭으로 오디오 잠금 해제(첫 출력도 소리와 함께) */
+    #obOv .ob-taphint { margin-top:20px; display:flex; flex-direction:column; align-items:center; gap:5px; text-align:center;
+      font-family:'Malgun Gothic'; font-size:13.5px; font-weight:800; color:#2f5136; letter-spacing:.01em;
+      animation:ob-hintpulse 1.5s ease-in-out infinite; pointer-events:none; }
+    #obOv .ob-taphint[hidden] { display:none; }
+    #obOv .ob-taphint small { font-weight:600; font-size:11px; color:#7a8a70; letter-spacing:0; }
+    #obOv .ob-taphint svg { fill:none; stroke:#3a7a4a; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    @keyframes ob-hintpulse { 0%,100% { opacity:.5; transform:translateY(2px); } 50% { opacity:1; transform:translateY(-1px); } }
+    #obOv .printer.await { cursor:pointer; }
+    #obOv .printer.await::after { content:''; position:absolute; inset:-3px; border-radius:15px; pointer-events:none;
+      box-shadow:0 0 0 0 rgba(120,197,150,.5); animation:ob-printerpulse 1.5s ease-out infinite; }
+    @keyframes ob-printerpulse { 0% { box-shadow:0 0 0 0 rgba(120,197,150,.5); } 70% { box-shadow:0 0 0 13px rgba(120,197,150,0); } 100% { box-shadow:0 0 0 0 rgba(120,197,150,0); } }
+    @media (prefers-reduced-motion:reduce) { #obOv .feed, #obOv .welcome { transition-duration:.01s; } #obOv .printer.run, #obOv .ob-taphint, #obOv .printer.await::after { animation:none; } }
 
     .ov-badge { width:46px; height:46px; border-radius:14px; background:#e8f3eb; display:flex; align-items:center;
       justify-content:center; font-size:24px; margin-bottom:12px; }
@@ -1212,6 +1224,11 @@
       <div class="printer" id="obPrinter">
         <span class="brand">RIVERHILL</span><span class="light"></span>
         <span class="slot"></span>
+      </div>
+      <div class="ob-taphint" id="obTapHint" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+        출력기를 눌러 가입 신청서를 받으세요
+        <small>위 출력기를 톡 누르면 신청서가 출력됩니다</small>
       </div>
       <div class="feed" id="obFeed">
         <div class="paper sc-card">
