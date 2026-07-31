@@ -10,9 +10,10 @@ import { computeStats, computeBoardParts } from './analytics.mjs';
 import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
-import { commuteInfo, dayWordFor, interpretForMember } from './judge.mjs';
+import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge.mjs';
 import * as worklog from './worklog.mjs';
 import { DATA_DIR } from './store.mjs';
+import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -272,7 +273,29 @@ const dutyKind = (code) => { const c = String(code || ''); if (/병가/.test(c))
 app.get('/api/board-review', gate, (req, res) => {
   try {
     const part = String(req.query.part || '3');
-    if (part !== '3') return res.json({ ok: true, part, board: null }); // 1·2부 배치표 저장은 멀티라운드 가동 시(현재 3부만 라이브)
+    // ★1·2부 — 메인 파이프라인이 저장한 board 순번표(board-parts-store)에서 3부와 동일한 검수 뷰 구성.
+    if (part !== '3') {
+      const bp = loadBoardPartsStore();
+      const pd = bp && bp.parts && bp.parts[part];
+      if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) return res.json({ ok: true, part, board: null });
+      const roster = pd.roster, grid = Array.isArray(pd.teeGrid) ? pd.teeGrid : [], crew = pd.crewDuty || {};
+      const memberSet = new Set(activeMembers().map((m) => nkey(m.board_name)));
+      const teeAt = (p) => { const g = grid.find((x) => Number(x.pos) === p); return g ? { time: (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(g.course)) ? 'IN' : 'OUT') } : { time: '', course: '' }; };
+      const gridMax = grid.reduce((mx, g) => (/\d{1,2}:\d{2}/.test(String(g?.time || '')) ? Math.max(mx, Number(g?.pos) || 0) : mx), 0);
+      const cutLine = Number(pd.cutoffPosition) || gridMax || 0;
+      const maxPos = Math.max(roster.length, grid.reduce((mx, g) => Math.max(mx, Number(g.pos) || 0), 0));
+      const rows = [];
+      for (let p = 1; p <= maxPos; p++) {
+        const t = teeAt(p); const name = roster[p - 1] || '';
+        rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
+      }
+      const interns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+      return res.json({ ok: true, part, board: {
+        articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
+        image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
+        uncertain: pd.uncertain || '', teamCount: Number(pd.teamCount) || 0, cutLine, cutoffName: pd.cutoffName || '', rows, interns,
+      } });
+    }
     const lb = loadLastBoard();
     if (!lb || !lb.rawVerdict) return res.json({ ok: true, part, board: null });
     const v = lb.rawVerdict;
@@ -304,8 +327,86 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const interns = Array.isArray(req.body?.interns) ? req.body.interns : [];
   const cutLine = Number(req.body?.cutLine) || 0;
   const notify = !!req.body?.notify;
-  if (part !== '3') return res.status(400).json({ ok: false, error: '현재는 3부만 지원해요.' });
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
+  // ★1·2부 — board-parts-store에 교정 반영 + 그 부 회원 today{part}.json 재계산(3부는 아래 lastboard 경로).
+  if (part !== '3') {
+    const bp = loadBoardPartsStore();
+    const pd = bp && bp.parts && bp.parts[part];
+    if (!pd) return res.status(400).json({ ok: false, error: `${part}부 배치표가 아직 없어요.` });
+    const origRoster = Array.isArray(pd.roster) ? pd.roster.slice() : [];
+    const origGrid = {}; (pd.teeGrid || []).forEach((g) => { origGrid[Number(g.pos)] = (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0]; });
+    const crew = { ...(pd.crewDuty || {}) };
+    const roster = [], grid = [], cellDiffs = [];
+    for (const r of rows) {
+      const p = Number(r.pos); if (!p) continue;
+      const nm = String(r.name || '').trim();
+      const teeM = String(r.tee || '').match(/\d{1,2}:\d{2}/); const tee = teeM ? teeM[0] : '';
+      const course = /IN/i.test(String(r.course || '')) ? 'IN' : (tee ? 'OUT' : '');
+      roster[p - 1] = nm;
+      if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
+      const d = String(r.duty || ''); const key = nkey(nm);
+      if (key) {
+        if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
+        else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) { cellDiffs.push({ pos: p, field: 'duty', model: crew[key], admin: '' }); crew[key] = ''; }
+      }
+      if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
+      if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
+    }
+    const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
+    pd.roster = roster; pd.teeGrid = grid; pd.crewDuty = crew; pd.internTees = iTees; pd.internCount = iTees.length;
+    if (cutLine) { pd.cutLine = cutLine; pd.cutoffPosition = cutLine; pd.cutoffName = roster[cutLine - 1] || pd.cutoffName || ''; }
+    pd._adminCorrected = { at: Date.now(), by: 'admin' }; pd.rosterReliable = true; delete pd.uncertain;
+    saveBoardPartsStore(bp);
+    if (cellDiffs.length) {
+      const line = { at: Date.now(), type: 'board', part, boardArticleId: bp.articleId, date: pd.dateLabel || bp.dateLabel || '', cutLine, changes: cellDiffs };
+      try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
+    }
+    // 그 부 회원 today{part}.json 재계산(3부 경로와 동일 구조, 부 창·부 슬롯).
+    const win = partWindow(part);
+    const article = bp.article || { id: bp.articleId, subject: bp.subject || '', images: bp.image ? [bp.image] : [], comments: [] };
+    const vpart = { part3Roster: roster, teeGrid: grid, crewDuty: crew, teamCount: Number(pd.teamCount) || 0,
+      cutoffPosition: cutLine || null, cutoffName: pd.cutoffName || '', rosterReliable: true,
+      dateLabel: pd.dateLabel || bp.dateLabel || '', internTees: iTees, internCount: iTees.length };
+    const rosterNk = new Set(roster.map(nkey).filter(Boolean));
+    const dk = dayKey(vpart.dateLabel);
+    let updated = 0, notified = 0;
+    for (const m of activeMembers()) {
+      const today = loadToday(m.id, part) || {};
+      const hadState = !!(today.myPosition || today.teeTime || (today.status && today.status !== 'unknown'));
+      if (!rosterNk.has(nkey(m.board_name)) && !hadState) continue;   // 이 부와 무관 + 기존 상태도 없음 → 건드리지 않음
+      const member = { name: m.board_name, part, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+      let next;
+      try {
+        const mout = interpretForMember(article, JSON.parse(JSON.stringify(vpart)), member, today);
+        next = applyVerdict(today, mout.rawVerdict, article, { teeMin: win.min, teeMax: win.max }).next;
+      } catch (e) { console.error(`${part}부교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
+      const isOff = next.status === 'off';
+      const pos = Number(next.myPosition) || 0;
+      if (!isOff && pos > 0 && cutLine > 0) {
+        next.cutLine = cutLine;
+        const hasTee = next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime));
+        const inWork = pos <= cutLine;
+        next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
+        if (!inWork) { next.teeTime = ''; next.course = ''; }
+      }
+      next._adminLock = { dk, articleId: String(bp.articleId), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now(), part };
+      next.updatedAt = Date.now();
+      const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
+      const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
+      saveToday(next, m.id, part); updated++;
+      if (notify && pushReady) {
+        const pl = part === '1' ? '1부(조출)' : `${part}부`;
+        let title = '', body = '';
+        if (nowOff && !wasOff) { title = `${pl} 휴무`; body = `${m.board_name}님, ${pl} 오늘은 휴무로 확인됐어요. 편히 쉬세요.`; }
+        else if ((wasWait || wasOff) && nowWork && pos > 0) { title = `${pl} 근무 전환`; body = `${m.board_name}님, ${pl} 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
+        else if (wasWork && nowSpare) { title = `${pl} 스페어 전환`; body = `${m.board_name}님, ${pl} 스페어(대기)로 전환됐어요.`; }
+        else if (wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime) { title = `${pl} 티오프 변경!`; body = `${m.board_name}님, ${pl} 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요.`; }
+        if (title) { try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, m.id); notified++; } catch (e) { console.error('교정 알림 실패:', e.message); } }
+      }
+    }
+    console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
+    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
+  }
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) return res.status(400).json({ ok: false, error: '현재 배치표가 없어요.' });
   const v = JSON.parse(JSON.stringify(lb.rawVerdict));

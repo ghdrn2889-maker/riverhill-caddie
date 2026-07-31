@@ -908,7 +908,7 @@
   function renderBoardReview(b){
     var el=$('boardReview'); if(!el) return;
     var tabs=brPartTabs();
-    if(!b){ el.innerHTML=tabs+'<div class="muted" style="padding:18px 2px">'+(brPart==='3'?'아직 판독된 배치표가 없어요.':brPart+'부는 아직 판독된 배치표가 없어요. (멀티라운드 가동 시 여기에 표시됩니다)')+'</div>'; brWirePartTabs(el); return; }
+    if(!b){ el.innerHTML=tabs+'<div class="muted" style="padding:18px 2px">'+(brPart==='3'?'아직 판독된 배치표가 없어요.':brPart+'부 표가 있는 전체 배치표가 아직 안 올라왔어요. (그 부가 포함된 배치표가 판독되면 여기서 수정할 수 있어요)')+'</div>'; brWirePartTabs(el); return; }
     var meta='<div class="br-meta"><span class="chip">글 #'+esc(String(b.articleId||'-'))+'</span>'+
       (b.dateLabel?'<span class="chip">'+esc(b.dateLabel)+'</span>':'')+
       (b.teamCount?'<span class="chip">'+b.teamCount+'팀</span>':'')+

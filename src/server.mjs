@@ -24,6 +24,7 @@ import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
 import { isKnownCaddie } from './roster.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
+import { setBoardPart } from './boardparts.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -992,6 +993,25 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       const win = partWindow(p);
       const mp = { name: primary.name, part: p, commuteMin: primary.commuteMin, teeMin: win.min, teeMax: win.max };
       const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
+      // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
+      const vp = outP.rawVerdict || {};
+      if (Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
+        try {
+          setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || out.rawVerdict?.dateLabel || '',
+            subject: full.subject || '', image: (full.images && full.images[0]) || '', url: full.url || '' }, full, p, {
+            roster: vp.part3Roster.slice(),
+            teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
+            teamCount: Number(vp.teamCount) || 0,
+            internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
+            internCount: Number(vp.internCount) || 0,
+            cutoffPosition: Number(vp.cutoffPosition) || null,
+            cutoffName: vp.cutoffName || '',
+            crewDuty: crewDuty || {},
+            rosterReliable: !!vp.rosterReliable,
+            uncertain: vp._uncertain || '',
+          });
+        } catch (e) { console.error('[board-parts 저장 오류]', e.message); }
+      }
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
       //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));

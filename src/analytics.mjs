@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DATA_DIR, appendJSONL, loadJSON, loadUserJSON } from './store.mjs';
 import { all, get, run } from './db.mjs';
 import { analyzeRoster, analyzeInterns, analyzePartTeams } from './gemini.mjs';
+import { getBoardPart } from './boardparts.mjs';
 
 // ── 기록(본 앱에서 호출) ────────────────────────────────
 const VISIT_THROTTLE_MS = 10 * 60 * 1000; // 같은 회원 10분 내 재방문은 1건으로
@@ -195,11 +196,15 @@ export async function computeBoardParts() {
         internCount = Number(v3.internCount) || 0; internTees = Array.isArray(v3.internTees) ? v3.internTees : [];
         cutoffName = v3.cutoffName || ''; cutoffPosition = Number(v3.cutoffPosition) || null;
         swaps = Array.isArray(v3._swaps) ? v3._swaps : []; reliable = !!v3.rosterReliable; uncertain = v3._uncertain || '';
-      } else {                                                    // 1·2부는 모니터가 직접 판독
-        if (!tc) continue;                                        // 그 부 없음(헤더 팀수 0)
-        roster = (await analyzeRoster(article, p)).map((r) => r.name);
-        const it = await analyzeInterns(article, p); internCount = it?.internCount || 0; internTees = it?.internTees || [];
-        reliable = roster.length > 0;
+      } else {                                                    // ★1·2부는 메인 파이프라인이 저장한 board 순번표 재사용(재판독 0)
+        const pd = getBoardPart(p);
+        if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue; // 저장된 그 부 배치표 없음
+        roster = pd.roster.slice();
+        teeGrid = Array.isArray(pd.teeGrid) ? pd.teeGrid : [];
+        internCount = Number(pd.internCount) || 0; internTees = Array.isArray(pd.internTees) ? pd.internTees : [];
+        cutoffName = pd.cutoffName || ''; cutoffPosition = Number(pd.cutoffPosition) || null;
+        reliable = !!pd.rosterReliable || roster.length > 0; uncertain = pd.uncertain || '';
+        tc = Number(pd.teamCount) || tc;                          // 헤더 재판독 대신 저장된 팀수
       }
       if (!roster.length) continue;
       partsSrc[p] = { roster, teamCount: tc || null, teeGrid, internCount, internTees, cutoffName, cutoffPosition, swaps, reliable, uncertain };
