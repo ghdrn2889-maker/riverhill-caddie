@@ -2360,6 +2360,33 @@ function obEjectSound() {                                    // 영수증 뽑는
   const g = c.createGain(); g.gain.value = .34;
   s.connect(hp); hp.connect(g); g.connect(c.destination); s.start(t0); s.stop(t0 + dur + .02);
 }
+// 가입 완료 인트로 음악 — '포근한 종'(벨 상승 아르페지오 → 메이저7 화음 해소 → 반짝). 전부 웹오디오 합성.
+function obWelcomeMusic() {
+  const c = obActx(); if (!c) return;
+  const t0 = c.currentTime;
+  const bus = c.createGain(); bus.gain.value = 0.9; bus.connect(c.destination);
+  // 은은한 공간감(피드백 딜레이)
+  const dl = c.createDelay(); dl.delayTime.value = 0.16;
+  const fb = c.createGain(); fb.gain.value = 0.26;
+  const wet = c.createGain(); wet.gain.value = 0.22;
+  bus.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(c.destination);
+  const HZ = { C3: 130.81, C4: 261.63, E4: 329.63, G4: 392.0, B4: 493.88, C5: 523.25, C6: 1046.5 };
+  const tone = (note, t, dur, gain, type, atk, rel) => {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type || 'triangle'; o.frequency.value = HZ[note];
+    o.connect(g); g.connect(bus);
+    const s = t0 + t, a = atk == null ? 0.005 : atk, r = rel == null ? 0.3 : rel;
+    g.gain.setValueAtTime(0.0001, s);
+    g.gain.linearRampToValueAtTime(gain, s + a);
+    g.gain.setValueAtTime(gain, s + Math.max(a, dur - r));
+    g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+    o.start(s); o.stop(s + dur + 0.05);
+  };
+  ['C4', 'E4', 'G4', 'B4', 'C5'].forEach((n, i) => tone(n, 0.05 + i * 0.2, 1.2, 0.15, 'triangle', 0.004, 0.9)); // 상승 벨
+  tone('C3', 0.2, 3.0, 0.10, 'sine', 0.8, 1.0);                                                                 // 저음 드론
+  ['C4', 'E4', 'G4', 'B4'].forEach((n) => tone(n, 1.35, 2.1, 0.07, 'sine', 0.7, 0.9));                          // 메이저7 해소
+  tone('C6', 2.5, 1.1, 0.07, 'sine', 0.02, 0.9);                                                                // 반짝 상단
+}
 // ── 출력 유틸 ──
 let obPrTimer;
 function obPrinterRun(ms) { const p = $('obPrinter'); p.classList.add('run'); clearTimeout(obPrTimer); obPrTimer = setTimeout(() => p.classList.remove('run'), ms + 60); }
@@ -2401,17 +2428,18 @@ async function obWelcomeFlow(name, my) {
   wel.style.height = '0'; wel.style.transform = 'none'; wel.style.opacity = '1';
   welT.classList.remove('show'); welT.style.display = 'flex';
   void wel.offsetWidth;
-  // 1) 백지가 프린터에서 내려옴 + 인쇄음(화면 다 찰 때까지만)
-  obPrinterRun(2600); obSound(2600);
-  wel.style.transition = 'height 1s steps(16)';
+  // 1) 백지가 프린터에서 차분히 내려옴 + 인쇄음(내려오는 동안만)
+  obPrinterRun(1080); obSound(1000);
+  wel.style.transition = 'height .9s steps(15)';
   requestAnimationFrame(() => { wel.style.height = '300px'; });
-  // 2) 어느정도 내려오면 중앙으로 천천히 확대 시작(내려옴과 동시에)
-  await obSleep(460); if (obSeq !== my) return;
-  wel.style.transition = 'height .58s steps(9), transform 2.1s cubic-bezier(.42,0,.22,1)';
-  requestAnimationFrame(() => { wel.style.transform = 'scale(16)'; });
-  // 3) 화면 가득 → 인쇄음 종료 · 잠깐 정지
-  await obSleep(2160); if (obSeq !== my) return;
+  // 2) 다 내려오면 잠깐 멈췄다가, 인트로 음악(포근한 종)과 함께 서서히 → 차분히 가속하며 확대
+  await obSleep(1040); if (obSeq !== my) return;
   $('obPrinter').classList.remove('run');
+  obWelcomeMusic();
+  wel.style.transition = 'transform 3.4s cubic-bezier(.42,0,.78,.16)';
+  requestAnimationFrame(() => { wel.style.transform = 'scale(16)'; });
+  // 3) 화면 가득 → 잠깐 정지
+  await obSleep(3450); if (obSeq !== my) return;
   // 진짜 앱 홈을 백지 뒤에서 미리 준비(승인됐으니 needsOnboarding=false)
   try { await loadMe(); loadToday(); } catch { /* 무해 */ }
   await obSleep(300); if (obSeq !== my) return;
