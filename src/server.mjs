@@ -11,7 +11,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
-import { loadToday, saveToday, applyVerdict, statusKo } from './today.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -1051,6 +1051,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
         const nowSpare = ['spare', 'waiting', 'near'].includes(next.status);
         const reversal = (wasWait && nowWork) || (wasWork && nowSpare);
         const teeChanged = wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime;
+        applyAdminLock(next, today); // ★관리자 수동 교정값은 유지
         saveToday(next, userId);   // ★신뢰 grid → 정상 판독 그대로(순번·티오프·커트 전부 grid 일치)
         const jIso2 = worklog.labelToISO(next.date);
         if (jIso2) journal.recordDayStatus(jIso2, { status: next.status, teeTime: next.teeTime,
@@ -1084,6 +1085,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
           safe.cutLine = tcU;
           if (ns !== safe.status) { safe.status = ns; if (!nowWork) { safe.teeTime = ''; safe.course = ''; } }
           safe.updatedAt = Date.now();
+          applyAdminLock(safe, today); // ★관리자 수동 교정값은 유지
           saveToday(safe, userId);
           if (reversal) {
             title = nowWork ? `${member.part}부 근무 전환` : `${member.part}부 스페어 전환`;

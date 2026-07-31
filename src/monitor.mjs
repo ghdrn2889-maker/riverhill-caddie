@@ -9,7 +9,7 @@ import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts } from './analytics.mjs';
 import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
-import { loadToday } from './today.mjs';
+import { loadToday, saveToday, dayKey } from './today.mjs';
 import { commuteInfo, dayWordFor } from './judge.mjs';
 import * as worklog from './worklog.mjs';
 import { DATA_DIR } from './store.mjs';
@@ -128,6 +128,7 @@ app.get('/api/user-dash', gate, (req, res) => {
         status, kind, badge, heroTitle,
         date: st.date || '', dayW, stale, empty: !st.date && !st.status,
         myPos, cut, ahead, teamCount: Number(st.teamCount) || 0,
+        locked: (st._adminLock && dayKey(st.date) === dayKey(st._adminLock.dk)) ? Object.keys(st._adminLock.fields || {}).filter((k) => st._adminLock.fields[k]) : [],
         teeTime, course: st.course || '', commute, commuteMin,
         rosterFound: !!rosterPos, updatedAt: st.updatedAt || 0, subCount,
         lastPush: lp ? { at: lp.at, title: lp.title || '', body: lp.body || '', level: lp.level || lp.push || '', sent: lp.sent ?? null, devices: lp.devices ?? null } : null,
@@ -184,6 +185,81 @@ app.post('/api/user-delete', gate, (req, res) => {
   try { fs.rmSync(path.join(DATA_DIR, 'users', String(id)), { recursive: true, force: true }); } catch (e) { /* 폴더 없거나 무해 */ }
   console.log(`🗑️ [monitor] 회원 #${id}(${r.boardName || '이름없음'}) 완전 삭제 — 계정·프로필·세션·구독·데이터`);
   res.json({ ok: true, id, boardName: r.boardName });
+});
+
+// ── 관리자 수동 교정: 판독이 틀렸을 때 관리자가 실제 배치표를 보고 대시보드를 바로잡음 ──
+//  교정값은 그날 자동 판독이 덮지 않도록 today.json 에 _adminLock 으로 잠근다(applyAdminLock).
+//  모든 교정은 '모델값 vs 관리자값' diff 로 admin-corrections.jsonl 에 남겨 정확도 진단에 쓴다.
+function correctionMessage(name, t, changes) {
+  const st = t.status;
+  const statusChg = changes.find((c) => c.field === 'status');
+  const teeChg = changes.find((c) => c.field === 'teeTime');
+  if (statusChg && ['assigned', 'work', 'your_turn'].includes(st))
+    return { title: '근무 확정', body: `${name}님, 근무로 확정됐어요${t.teeTime ? ` — 티오프 ${t.teeTime}` : ''}. 배치표를 확인해주세요.` };
+  if (statusChg && ['spare', 'waiting', 'near'].includes(st))
+    return { title: '스페어 전환', body: `${name}님, 스페어(대기)로 전환됐어요.` };
+  if (statusChg && st === 'off')
+    return { title: '휴무', body: `${name}님, 오늘은 휴무로 처리됐어요.` };
+  if (teeChg)
+    return { title: '티오프 시간 변경!', body: `${name}님, 티오프가 ${teeChg.from || '-'} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
+  return { title: '배치표 수정', body: `${name}님, 배치표 정보가 갱신됐어요. 확인해주세요.` };
+}
+app.post('/api/member-correct', gate, async (req, res) => {
+  const id = Number(req.body?.id);
+  const fields = req.body?.fields || {};
+  const notify = !!req.body?.notify;
+  if (!id) return res.status(400).json({ ok: false, error: 'id 필요' });
+  const target = getUser(id);
+  if (!target) return res.status(404).json({ ok: false, error: '회원을 찾을 수 없어요.' });
+  const t = loadToday(id) || {};
+  const name = (getProfile(id) || {}).board_name || `#${id}`;
+  const next = { ...t };
+  const prevLock = (t._adminLock && dayKey(t.date) === dayKey(t._adminLock.dk)) ? t._adminLock.fields : {};
+  const lockFields = { ...prevLock };
+  const changes = [];
+  for (const f of ['status', 'teeTime', 'course', 'cutLine', 'myPosition']) {
+    if (!(f in fields)) continue;
+    let val = fields[f];
+    if (f === 'cutLine' || f === 'myPosition') val = Number(val) || 0;
+    else val = String(val == null ? '' : val).trim();
+    const from = t[f] ?? '';
+    if (String(from) === String(val)) { lockFields[f] = 1; continue; } // 값 같아도 관리자 확정으로 잠금
+    next[f] = val;
+    lockFields[f] = 1;
+    changes.push({ field: f, from, to: val });
+  }
+  // 스페어/휴무로 바꾸면 티오프 정리(일관성) + 티오프도 잠금
+  const ns = String(fields.status || t.status || '');
+  if ('status' in fields && (['spare', 'waiting', 'near'].includes(ns) || ns === 'off')) {
+    if (next.teeTime) changes.push({ field: 'teeTime', from: next.teeTime, to: '' });
+    next.teeTime = ''; next.course = ''; lockFields.teeTime = 1; lockFields.course = 1;
+  }
+  next._adminLock = { dk: dayKey(t.date), fields: lockFields, by: 'admin', at: Date.now() };
+  next.updatedAt = Date.now();
+  saveToday(next, id);
+  // ★교정 로그(모델 원본값 → 관리자 정답) — 정확도 저하 원인 진단용 데이터셋
+  if (changes.length) {
+    const line = { at: Date.now(), userId: id, name, date: t.date || '', boardArticleId: t.articleId || '', changes };
+    try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); }
+    catch (e) { console.error('교정로그 기록 실패:', e.message); }
+  }
+  let notified = false;
+  if (notify && pushReady) {
+    const { title, body } = correctionMessage(name, next, changes);
+    try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, id); notified = true; }
+    catch (e) { console.error('교정 알림 발송 실패:', e.message); }
+  }
+  console.log(`✏️ [monitor] 회원 #${id}(${name}) 관리자 교정: ${changes.map((c) => `${c.field} ${c.from || '-'}→${c.to || '-'}`).join(', ') || '(값 동일·잠금만)'}${notified ? ' · 알림발송' : ''}`);
+  res.json({ ok: true, changed: changes.length, notified, locked: Object.keys(lockFields) });
+});
+// 교정 이력 조회(정확도 진단용) — 최근 200건.
+app.get('/api/corrections', gate, (req, res) => {
+  try {
+    const p = path.join(DATA_DIR, 'admin-corrections.jsonl');
+    const raw = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
+    const rows = raw.trim().split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    res.json({ ok: true, corrections: rows.slice(-200).reverse() });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));

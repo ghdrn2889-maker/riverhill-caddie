@@ -47,6 +47,21 @@ function dayKey(label) {
   return m ? `${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : String(label || '').trim();
 }
 
+// ── 관리자 수동 교정 잠금(override) ──
+//  관리자가 모니터에서 고친 값(status/teeTime/course/cutLine/myPosition)은 그날 자동 판독이 덮지 않는다.
+//  lock = { dk:'MM-DD', fields:{status:1,...}, by, at }. 날짜가 바뀌면 자동 만료(그날만 유효).
+export function applyAdminLock(next, prev) {
+  const lock = prev && prev._adminLock;
+  if (!lock || !lock.fields || !next) return next;
+  if (dayKey(next.date) !== lock.dk) return next; // 다른 날 → 잠금 만료(복원 안 함)
+  for (const f of Object.keys(lock.fields)) {
+    if (lock.fields[f]) next[f] = prev[f];
+  }
+  next._adminLock = lock;
+  return next;
+}
+export { dayKey };
+
 // 티오프표를 '시각 오름차순(동시각이면 OUT→IN)'으로 정렬해 순번 1..N 재부여.
 //  ★당추(당일추가)로 예약이 중간에 끼면, 전체를 다시 시각순으로 세우고 순번을 다시 매긴다
 //   → 뒤 순번은 한 칸씩 이른 시간으로 당겨지고, 새 막차가 마지막 슬롯을 받는다(리버힐 운영 규칙).
@@ -356,6 +371,8 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   if (next.timeline.length > 40) next.timeline = next.timeline.slice(-40);
   next.updatedAt = Date.now();
   next.articleId = article.id;
+
+  applyAdminLock(next, prev); // ★관리자 수동 교정값은 그날 자동 판독이 덮지 않음
 
   return {
     next,
