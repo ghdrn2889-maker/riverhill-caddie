@@ -5,6 +5,17 @@ import { loadJSON } from './store.mjs';
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 90);
 
+// ★테스트캐디 — '가입 성공 애니메이션'만 확인하는 테스트 전용 이름. 이 이름으로 가입하면
+//  실제 가입·저장·로그 없이 애니메이션만 재생하고, 계정은 role='test'로 격리 + 늘 초기화(온보딩 반복).
+export const TEST_CADDIE_NAME = process.env.TEST_CADDIE_NAME || '테스트캐디';
+export function isTestCaddieName(name) { return String(name || '').trim() === TEST_CADDIE_NAME; }
+// 테스트 계정 격리·초기화: role='test'로 표시(목록·활성회원·알림에서 제외) + 프로필 이름 비워 늘 온보딩 상태로 되돌림.
+export function markTestAccount(id) {
+  const uid = Number(id); if (!uid) return;
+  run("UPDATE users SET role = 'test' WHERE id = ?", uid);
+  run("UPDATE profiles SET board_name = '', updated_at = ? WHERE user_id = ?", Date.now(), uid);
+}
+
 // ── 회원 ────────────────────────────────────────────────
 export function getUser(id) { return get('SELECT * FROM users WHERE id = ?', id); }
 export function getUserByNaver(naverId) { return get('SELECT * FROM users WHERE naver_id = ?', naverId); }
@@ -182,7 +193,7 @@ function getLegacyWorklogSettings() {
 export function activeMembers() {
   return all(`SELECT u.id, p.board_name, p.part, p.commute_min
               FROM users u JOIN profiles p ON p.user_id = u.id
-              WHERE u.status = 'active' AND p.board_name != ''
+              WHERE u.status = 'active' AND p.board_name != '' AND u.role != 'test'
               ORDER BY u.id`);
 }
 
@@ -231,7 +242,8 @@ export function caddieNameKnown(name) {
 // 관리자 회원관리 화면용 — 전체 회원 + 상태 + 명부 일치 여부.
 export function listMembersForAdmin() {
   const rows = all(`SELECT u.id, u.role, u.status, u.created_at, u.last_login, u.block_reason, p.board_name, p.part
-                    FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.status='pending' DESC, u.id`);
+                    FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+                    WHERE u.role != 'test' ORDER BY u.status='pending' DESC, u.id`);
   return rows.map((r) => ({
     id: r.id, role: r.role, status: r.status, createdAt: r.created_at, lastLogin: r.last_login,
     boardName: r.board_name || '', part: r.part || '', nameKnown: caddieNameKnown(r.board_name),

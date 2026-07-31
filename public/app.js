@@ -2529,7 +2529,7 @@ function openAccount() {
   $('obSubmit').textContent = '저장';
   fillProfileForm();
   $('ovActions').hidden = false;
-  $('obSwitch').hidden = false;      // 계정 화면에선 '다른 계정으로 로그인' 노출
+  $('obSwitch').hidden = true;       // '다른 계정으로 로그인' 미노출(프로필 팝업에서 제거)
   updateNotifyButton();              // 계정 팝업 열 때 알림 버튼 상태(켜기/켜짐/차단) 갱신
   $('ovErr').textContent = '';
   ovDismissable = true;              // 계정 화면: 배경 클릭·뒤로가기로 닫힘

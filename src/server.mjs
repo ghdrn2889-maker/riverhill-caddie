@@ -21,7 +21,7 @@ import { analyzeReceiptLocal } from './ollama.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
-import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin } from './users.mjs';
+import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
 import { isKnownCaddie } from './roster.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 
@@ -94,6 +94,14 @@ app.post('/api/profile', requireAuth, (req, res) => {
   const b = req.body || {};
   const boardName = String(b.boardName || '').trim();
   if (!boardName) return res.status(400).json({ ok: false, error: '배치표에 뜨는 실명을 입력해주세요.' });
+  // ★테스트캐디 — 가입 성공 애니메이션 확인 전용. 실제 가입·저장·승인·관리자알림·소급 없이 approved만 반환.
+  //  계정은 role='test'로 격리(회원목록·활성회원·알림 제외) + 프로필 이름 비워 늘 초기화(온보딩 반복 가능).
+  if (isTestCaddieName(boardName)) {
+    markTestAccount(req.user.id);
+    console.log(`🧪 [테스트캐디] #${req.user.id} 가입 애니메이션(미저장·미기록·초기화)`);
+    return res.json({ ok: true, approved: true, test: true,
+      profile: { boardName: '', part: '', caddieType: 'part3', homeKm: 0, commuteMin: 0, carNo: '' } });
+  }
   const existing = getProfile(req.user.id) || {};
   // ★캐디 구분(하우스/3부). 없으면 기존값·part에서 유추. part는 호환 위해 유지: 3부→'3', 하우스→기존 1·2부(없으면 '1').
   const caddieType = ['house', 'part3'].includes(String(b.caddieType)) ? String(b.caddieType)
