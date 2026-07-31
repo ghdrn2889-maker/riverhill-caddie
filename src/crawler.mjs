@@ -38,31 +38,40 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
     notifiedError = false;
 
     const fresh = articles.filter((a) => !seen.has(a.id));
-    for (const a of articles) seen.add(a.id);
-    saveJSON(SEEN_FILE, [...seen].slice(-MAX_SEEN));
     // heartbeat: 감시가 살아있음을 기록(앱이 /api/health 로 확인).
     saveJSON('health.json', { lastPollAt: Date.now(), lastOkAt: Date.now(), fresh: fresh.length, failStreak: 0, lastError: null });
 
+    // ★seen 기록은 '글 처리 성공 후에만' 한다 — 판독(Gemini) 도중 재시작/크래시로 죽어도 그 글이
+    //  유실되지 않고 다음 폴링에서 자동 재처리된다. (처리 '전에' seen 기록하던 옛 방식은 배치표 판독 중
+    //  프로세스가 재시작되면 그 배치표를 영구히 놓쳐 시스템이 옛 배치표에 동결되는 버그가 있었다.)
+    const markSeen = (id) => { seen.add(id); saveJSON(SEEN_FILE, [...seen].slice(-MAX_SEEN)); };
+
     if (baseline) {
       baseline = false;
+      for (const a of articles) seen.add(a.id);
+      saveJSON(SEEN_FILE, [...seen].slice(-MAX_SEEN));
       console.log(`[기준선] 현재 글 ${articles.length}건 기록. 지금부터 새 글만 알립니다.`);
       return;
     }
 
     const staleMs = Number(process.env.STALE_HOURS ?? 24) * 3600 * 1000;
     for (const a of fresh.reverse()) { // 오래된 것부터
-      // 하루 지난 글은 알림 제외(어제 소식이 되살아나지 않게). seen 처리는 이미 됨.
+      // 하루 지난 글은 알림 제외(어제 소식이 되살아나지 않게).
       if (a.ts && Date.now() - a.ts > staleMs) {
         console.log(`·  (오래된 글, 알림 제외) ${a.subject}`);
+        markSeen(a.id);
         continue;
       }
       const result = analyze(a);
       const who = [a.writer, a.writeDate].filter(Boolean).join(' · ');
       if (result.relevant) {
         console.log(`🔔 [${result.priority}] ${a.subject}  (${result.hits.join(', ')})  — ${who}`);
-        try { await onMatch(a, result); } catch (e) { console.error('onMatch 오류:', e.message); }
+        // ★처리(onMatch)가 성공해야 seen 기록. 실패·재시작 시 seen에 안 남아 다음 폴링에서 재시도된다.
+        try { await onMatch(a, result); markSeen(a.id); }
+        catch (e) { console.error(`onMatch 오류(seen 미기록 → 다음 폴링 재시도): ${e.message}`); }
       } else {
         console.log(`·  (무관) ${a.subject}  — ${who}`);
+        markSeen(a.id);
       }
     }
 
