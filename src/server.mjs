@@ -885,16 +885,11 @@ const envMember = () => {
 const BOARD_WATCH_FILE = 'boardwatch.json';
 let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at }
 const imgFingerprint = (full) => (full.images || []).map((u) => String(u).split('?')[0]).join('|');
-function rememberBoard(full, out, anyUncertain = false) {
+function rememberBoard(full, out) {
   const v = out && out.rawVerdict;
   const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
-  // ★자동 재시도(self-healing): 이 판독이 불안정했으면 uncTries++, 안정됐으면 0으로 리셋.
-  //  recheckBoard가 uncTries>0이면 이미지 그대로여도 재판독해, 안정될 때까지(최대 N회) 스스로 다시 읽는다.
-  const sameBoard = boardWatch && boardWatch.id === String(full.id) && imgFingerprint(full) === boardWatch.fp;
-  const prevTries = sameBoard ? Number(boardWatch.uncTries || 0) : 0;
-  const uncTries = anyUncertain ? prevTries + 1 : 0;
-  boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now(), uncTries };
+  boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
   saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now() });
@@ -933,7 +928,6 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
-  let anyUncertain = !!primaryRet.uncertain;   // ★한 명이라도 불안정 판독이면 자동 재시도 대상
 
   // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict를 코드로 재해석.
   for (const m of activeMembers()) {
@@ -941,11 +935,10 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     try {
       const member = { name: m.board_name, part: String(m.part || '3'), commuteMin: Number(m.commute_min) };
       const mout = interpretForMember(full, out.rawVerdict, member, loadToday(m.id));
-      const r = await processForMember(m.id, member, mout, full, opts);
-      if (r && r.uncertain) anyUncertain = true;
+      await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
-  rememberBoard(full, out, anyUncertain); // 이 글이 본배치표면 감시 기록 + 불안정하면 자동 재시도 카운트
+  rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
 
   // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
@@ -1125,8 +1118,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
     confidence: v.confidence ?? null, uncertain: !!v._uncertain, relevant: !!out.relevant });
 
   const ret = { push: out.push, title, body, status: out.status, relevant: out.relevant,
-    category: v?.category || null, change: change.message || null, reversal: change.reversal,
-    uncertain: !!(v && v._uncertain) };   // ★자동 재시도 판단용 — 이 회원 판독이 불안정했는지
+    category: v?.category || null, change: change.message || null, reversal: change.reversal };
 
   // ★판독 불확실(check) 발생 사유를 진단 로그에 기록 — 얼리액세스 동안 이걸 분석해 불확실 케이스를 줄여간다.
   //  (불확실 알림 자체가 '앱이 덜 완성됐다'는 신호 → 사유별 빈도를 보고 근본 원인에 대응)
@@ -1569,21 +1561,14 @@ async function recheckBoard() {
   try { full = await fetchArticle(boardWatch.id); }
   catch (e) { console.error('배치표 재확인 조회 실패:', e.message); return; }
   const fp = imgFingerprint(full);
-  // ★자동 재시도(self-healing): 직전 판독이 불안정(uncTries>0)했으면 이미지가 그대로여도 안정될 때까지 다시 읽는다.
-  //  (판독이 한 번 흔들렸다고 며칠씩 옛 값에 멈춰 수동교정이 필요하던 문제 해소 — 스스로 재판독해 자동으로 알림.)
-  const RETRY_MAX = Number(process.env.BOARD_UNC_RETRY_MAX ?? 4);
-  const tries = Number(boardWatch.uncTries || 0);
-  const wantRetry = tries > 0 && tries <= RETRY_MAX;
-  if (fp === boardWatch.fp && !wantRetry) return;          // 이미지 그대로 + 재시도 불필요 → Gemini 미호출(무비용)
-  console.log(fp !== boardWatch.fp
-    ? `🔁 배치표 이미지 교체 감지(같은 글 #${boardWatch.id}) → 재판독`
-    : `🔁 불안정 판독 자동 재시도(${tries}/${RETRY_MAX}) — #${boardWatch.id} 다시 읽어 안정화 시도`);
+  if (fp === boardWatch.fp) return;                        // 이미지 그대로 → Gemini 미호출(무비용)
+  console.log(`🔁 배치표 이미지 교체 감지(같은 글 #${boardWatch.id}) → 재판독`);
   boardWatch.fp = fp; boardWatch.at = Date.now();
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   recheckBusy = true;
   try {
     full.writer = full.writer || '';
-    // 변동/재시도 시 회원별 재판독 → 티오프 변경·근무전환이면 ⚠️ 강한 알림(dedup이 중복 차단). 안정되면 uncTries=0으로 종료.
+    // 변동 시에만 회원별 재판독 → 본인 티오프가 바뀌었으면 ⚠️ 강한 알림. (안 바뀐 회원은 dedup이 차단)
     await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
   } catch (e) { console.error('배치표 재판독 오류:', e.message); }
   finally { recheckBusy = false; }
