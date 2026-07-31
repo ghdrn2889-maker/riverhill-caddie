@@ -997,7 +997,7 @@
     /* ── 가입 신청서 출력 연출(프린터·도장·배출·백지→홈) — 샘플 e6c82dd0 이식 ── */
     #obOv.scov { padding:0; background:#fbfbf9; overflow:hidden; }
     #obOv.scov:not([hidden]) { display:block; }
-    #obOv .stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:11vh 16px 44px; }
+    #obOv .stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:14vh 16px 44px; }
     /* 프린터 */
     #obOv .printer { position:relative; width:420px; max-width:94vw; height:38px; z-index:5;
       background:linear-gradient(#37493a,#26331f); border-radius:13px 13px 7px 7px; box-shadow:0 10px 22px rgba(20,30,20,.28); }
@@ -1051,7 +1051,7 @@
       font-family:inherit; font-size:13px; font-weight:800; letter-spacing:.08em; cursor:pointer; }
     #obOv .nt-retry:active { background:#efe6cf; }
     /* 완료 — 앱 배경색 백지가 프린터에서 내려오며 중앙으로 확대되어 화면을 채움(하단은 영수증처럼 삐쭉) */
-    #obOv .welcome { position:fixed; top:calc(11vh + 40px); left:0; right:0; margin:0 auto; width:390px; max-width:94vw; height:0;
+    #obOv .welcome { position:fixed; top:calc(14vh + 40px); left:0; right:0; margin:0 auto; width:390px; max-width:94vw; height:0;
       overflow:hidden; z-index:60; transform-origin:center center; display:none;
       background:linear-gradient(170deg,#bfe2ff,#e8f5ff 55%,#fbfdff); box-shadow:0 14px 34px rgba(30,55,55,.18);
       -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;
@@ -1063,14 +1063,15 @@
       color:#173a28; letter-spacing:.01em; text-align:center; line-height:1.42; padding:0 24px; }
     #obOv .welmsg-in .nm { color:#2f7d55; } #obOv .welmsg-in .cur { display:inline-block; margin-left:1px; color:#2f7d55; animation:ob-cur 1s steps(1) infinite; }
     @keyframes ob-cur { 50% { opacity:0; } }
-    /* 출력기 탭 유도 — 로그인 직후 사용자 탭으로 오디오 잠금 해제(첫 출력도 소리와 함께) */
-    #obOv .ob-taphint { margin-top:20px; display:flex; flex-direction:column; align-items:center; gap:5px; text-align:center;
-      font-family:'Malgun Gothic'; font-size:13.5px; font-weight:800; color:#2f5136; letter-spacing:.01em;
-      animation:ob-hintpulse 1.5s ease-in-out infinite; pointer-events:none; }
+    /* 출력기 탭 유도 — 말풍선(꼬리는 위 프린터를 가리킴). 탭으로 오디오 잠금 해제(첫 출력도 소리와 함께) */
+    #obOv .ob-taphint { position:relative; margin-top:22px; align-self:center;
+      background:#2f5136; color:#f3efe0; font-family:'Malgun Gothic'; font-size:14.5px; font-weight:800; letter-spacing:.01em;
+      padding:11px 20px; border-radius:16px; box-shadow:0 7px 18px rgba(30,50,30,.24);
+      animation:ob-hintpulse 1.4s ease-in-out infinite; pointer-events:none; white-space:nowrap; }
     #obOv .ob-taphint[hidden] { display:none; }
-    #obOv .ob-taphint small { font-weight:600; font-size:11px; color:#7a8a70; letter-spacing:0; }
-    #obOv .ob-taphint svg { fill:none; stroke:#3a7a4a; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
-    @keyframes ob-hintpulse { 0%,100% { opacity:.5; transform:translateY(2px); } 50% { opacity:1; transform:translateY(-1px); } }
+    #obOv .ob-taphint::before { content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%);
+      border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:9px solid #2f5136; }
+    @keyframes ob-hintpulse { 0%,100% { opacity:.72; transform:translateY(2px); } 50% { opacity:1; transform:translateY(-2px); } }
     #obOv .printer.await { cursor:pointer; }
     #obOv .printer.await::after { content:''; position:absolute; inset:-3px; border-radius:15px; pointer-events:none;
       box-shadow:0 0 0 0 rgba(120,197,150,.5); animation:ob-printerpulse 1.5s ease-out infinite; }
@@ -1225,11 +1226,7 @@
         <span class="brand">RIVERHILL</span><span class="light"></span>
         <span class="slot"></span>
       </div>
-      <div class="ob-taphint" id="obTapHint" hidden>
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
-        출력기를 눌러 가입 신청서를 받으세요
-        <small>위 출력기를 톡 누르면 신청서가 출력됩니다</small>
-      </div>
+      <div class="ob-taphint" id="obTapHint" hidden>출력기를 눌러보세요!</div>
       <div class="feed" id="obFeed">
         <div class="paper sc-card">
           <div class="sc-hd">

@@ -31,6 +31,23 @@ export function setUserStatus(id, status, reason = null) {
 
 export function touchLogin(id) { run('UPDATE users SET last_login = ? WHERE id = ?', Date.now(), id); }
 
+// ★회원 완전 삭제 — 계정·프로필·세션·푸시구독까지 DB에서 제거(관리자 제외).
+//  (개인 데이터 폴더 data/users/<id> 는 호출측에서 별도 삭제.)
+export function deleteUser(id) {
+  const uid = Number(id);
+  if (!uid) return { ok: false, error: 'id 필요' };
+  const u = getUser(uid);
+  if (!u) return { ok: false, error: '회원을 찾을 수 없어요.' };
+  if (u.role === 'admin') return { ok: false, error: '관리자 계정은 삭제할 수 없어요.' };
+  const prof = get('SELECT board_name FROM profiles WHERE user_id = ?', uid) || {};
+  const boardName = prof.board_name || '';
+  run('DELETE FROM sessions WHERE user_id = ?', uid);
+  run('DELETE FROM push_subscriptions WHERE user_id = ?', uid);
+  run('DELETE FROM profiles WHERE user_id = ?', uid);
+  run('DELETE FROM users WHERE id = ?', uid);
+  return { ok: true, id: uid, boardName };
+}
+
 // ── 프로필 ──────────────────────────────────────────────
 export function getProfile(userId) { return get('SELECT * FROM profiles WHERE user_id = ?', userId); }
 

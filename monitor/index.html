@@ -228,6 +228,9 @@
   .ab.approve:hover{ filter:brightness(1.06); }
   .ab.wait:hover{ border-color:var(--warn); color:var(--warn); }
   .ab.block:hover{ border-color:var(--bad); color:var(--bad); }
+  .ab.del{ border-color:var(--bad); color:var(--bad); }
+  .ab.del:hover{ background:var(--bad); border-color:var(--bad); color:#fff; }
+  .ab.del.confirm{ background:var(--bad); border-color:var(--bad); color:#fff; }
 </style>
 </head>
 <body>
@@ -594,8 +597,8 @@
     var btns = m.role==='admin'
       ? '<span style="color:var(--tx3);font-size:12px;padding:8px 2px;">관리자 계정</span>'
       : '<button class="ab approve" data-id="'+m.id+'" data-s="active">승인</button>'
-      + '<button class="ab wait" data-id="'+m.id+'" data-s="pending">대기</button>'
-      + '<button class="ab block" data-id="'+m.id+'" data-s="disabled">차단</button>';
+      + '<button class="ab block" data-id="'+m.id+'" data-s="disabled">차단</button>'
+      + '<button class="ab del" data-id="'+m.id+'" data-s="delete">삭제</button>';
     return '<div class="mcard'+(pend?' pend':'')+'">'+
       '<div class="mc-top"><span class="mc-name">'+esc(m.boardName||'(이름 없음)')+'</span>'+
         (m.part?'<span class="mc-part">'+esc(m.part)+'부</span>':'')+
@@ -607,8 +610,28 @@
   function bindMemberBtns(){
     Array.prototype.forEach.call(document.querySelectorAll('.mc-btns .ab'), function(b){
       b.onclick = function(){ var id=Number(b.getAttribute('data-id')), s=b.getAttribute('data-s');
-        if(s==='disabled') askBlock(id, b); else setMember(id, s); };
+        if(s==='disabled') askBlock(id, b); else if(s==='delete') askDelete(id, b); else setMember(id, s); };
     });
+  }
+  // 삭제 확인 — 인라인(구글 계정·이름·데이터 완전 삭제, 되돌릴 수 없음)
+  function askDelete(id, btn){
+    var name = (btn.closest('.mcard').querySelector('.mc-name')||{}).textContent || '';
+    var box = btn.parentNode;
+    box.innerHTML = '<div style="width:100%;font-size:12px;color:var(--bad);font-weight:800;margin-bottom:1px;">'+esc(name)+' 완전 삭제? (구글 계정·이름·데이터 제거 · 되돌릴 수 없음)</div>'+
+      '<button class="ab del confirm" data-r="yes">삭제 확정</button>'+
+      '<button class="ab" data-r="cancel">취소</button>';
+    Array.prototype.forEach.call(box.querySelectorAll('.ab'), function(b){
+      b.onclick = function(){ var r=b.getAttribute('data-r'); if(r==='cancel'){ loadMembers(); return; } deleteMember(id); };
+    });
+  }
+  async function deleteMember(id){
+    try{
+      var r = await fetch(apiUrl('/api/user-delete'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:id}) });
+      var j = await r.json();
+      if(!j.ok) throw new Error(j.error||'삭제 실패');
+      toast('삭제 완료 — '+(j.boardName||'계정')+' · 구글 계정·이름·데이터 제거됨');
+      loadMembers();
+    }catch(e){ alert(e.message||'삭제 실패'); }
   }
   function askBlock(id, btn){
     var box = btn.parentNode;

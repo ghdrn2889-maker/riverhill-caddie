@@ -7,7 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts } from './analytics.mjs';
-import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers } from './users.mjs';
+import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday } from './today.mjs';
 import { commuteInfo, dayWordFor } from './judge.mjs';
@@ -170,6 +170,20 @@ app.post('/api/user-status', gate, async (req, res) => {
   }
   console.log(`👤 [monitor] 회원 #${id} 상태 → ${status}${status === 'disabled' ? `(${u.block_reason})` : ''}${notified ? ' · 승인알림 발송' : ''}`);
   res.json({ ok: true, id, status, notified, blockReason: u.block_reason || null });
+});
+// ★회원 완전 삭제 — 신청한 구글 계정·이름·개인 데이터까지 전부 제거(관리자 제외). '보류'는 무동작(현행 유지).
+app.post('/api/user-delete', gate, (req, res) => {
+  const id = Number(req.body?.id);
+  if (!id) return res.status(400).json({ ok: false, error: 'id 필요' });
+  const target = getUser(id);
+  if (!target) return res.status(404).json({ ok: false, error: '회원을 찾을 수 없어요.' });
+  if (target.role === 'admin') return res.status(400).json({ ok: false, error: '관리자 계정은 삭제할 수 없어요.' });
+  const r = deleteUser(id);
+  if (!r.ok) return res.status(400).json({ ok: false, error: r.error || '삭제 실패' });
+  // 개인 데이터 폴더까지 제거(today.json 등).
+  try { fs.rmSync(path.join(DATA_DIR, 'users', String(id)), { recursive: true, force: true }); } catch (e) { /* 폴더 없거나 무해 */ }
+  console.log(`🗑️ [monitor] 회원 #${id}(${r.boardName || '이름없음'}) 완전 삭제 — 계정·프로필·세션·구독·데이터`);
+  res.json({ ok: true, id, boardName: r.boardName });
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));
