@@ -2458,7 +2458,7 @@ async function obWelcomeFlow(name, my, isTest) {
   welT.classList.remove('show'); welT.style.display = 'flex';
   void wel.offsetWidth;
   // 1) 백지가 프린터 슬롯에 붙은 채 '계속' 출력 — 76vh까지 길게 + 출력음 지속
-  welP.classList.add('run'); obPrinterLoopStart(7.5);
+  welP.classList.add('run'); wel.classList.add('feeding'); obPrinterLoopStart(7.5);
   wel.style.transition = 'height 1.9s steps(30)';
   requestAnimationFrame(() => { wel.style.height = '120vh'; });   // 프레임 아래로 계속 출력(바닥에서 안 멈추고 밑으로 넘어감)
   await obSleep(1300); if (obSeq !== my) return;         // 확대 시작을 앞으로 당김(출력 중반부터 확대)
@@ -2476,8 +2476,8 @@ async function obWelcomeFlow(name, my, isTest) {
     })();
   });
   if (obSeq !== my) return;
-  // 3) 화면 가득 → 출력음 1.5초에 걸쳐 서서히 꺼짐 → (1초 뒤) 종소리 → (0.5초 뒤) '어서오세요'
-  welP.classList.remove('run');
+  // 3) 화면 가득(도착) → 이송 점선 멈춤 + 출력음 1.5초 페이드 → (1초 뒤) 종소리 → (0.2초 뒤) '어서오세요'
+  welP.classList.remove('run'); wel.classList.remove('feeding');
   obPrinterLoopFade(1.5);
   // 진짜 홈을 백지 뒤에서 미리 준비. ★테스트캐디는 프로필이 비어 loadMe가 온보딩을 재트리거(연출 취소)하므로 건너뜀.
   if (!isTest) { try { await loadMe(); loadToday(); } catch { /* 무해 */ } }
@@ -2572,7 +2572,7 @@ function obPromptTap() {
   obSeq++;                           // 진행 중 시나리오 취소
   $('obFeed').style.display = 'none';
   const nf = $('obNoticeFeed'); nf.style.display = 'none'; nf.style.transition = 'none'; nf.style.transform = ''; nf.firstElementChild.style.transform = '';
-  const wel = $('obWelcome'); wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.height = '0'; wel.style.transform = 'none';
+  const wel = $('obWelcome'); wel.classList.remove('feeding'); wel.style.display = 'none'; wel.style.transition = 'none'; wel.style.height = '0'; wel.style.transform = 'none';
   const wsc = $('obWelScene'); wsc.style.display = 'none'; wsc.style.transform = 'scale(1)';   // 가입완료 무대 초기화
   $('obPrinter').style.display = '';                 // 폼 프린터 복원(중단된 완료 연출 대비)
   $('obWelText').classList.remove('show'); $('obWelText').style.display = 'none';

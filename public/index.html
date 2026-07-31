@@ -1060,6 +1060,13 @@
     #obOv .wel-scene { position:fixed; inset:0; z-index:60; transform-origin:50% 54vh; display:none; will-change:transform; }
     #obOv .wel-scene .wel-printer { position:absolute; top:14vh; left:0; right:0; margin:0 auto; z-index:2; }
     #obOv .wel-scene .welcome { position:absolute; display:block; top:calc(14vh + 35px); left:0; right:0; margin:0 auto; transform:none; transform-origin:center top; z-index:1; }
+    /* 계속 출력되는 이송감 — 희미한 가로 점선이 아래로 흐름(출력·확대 중). 도착(화면 가득)하면 JS가 feeding 제거로 멈춤 */
+    #obOv .wel-scene .welcome.feeding::after { content:''; position:absolute; inset:0; pointer-events:none;
+      background:repeating-linear-gradient(0deg, rgba(120,95,55,.085) 0 1.4px, transparent 1.4px 40px);
+      -webkit-mask:repeating-linear-gradient(90deg,#000 0 6px, transparent 6px 13px);
+              mask:repeating-linear-gradient(90deg,#000 0 6px, transparent 6px 13px);
+      animation:ob-feed 1s linear infinite; }
+    @keyframes ob-feed { to { background-position:0 40px; } }
     /* 어서오세요 문구 — 화면이 다 찬 뒤 디졸브로 등장 */
     #obOv .welmsg { position:fixed; inset:0; z-index:65; display:none; align-items:center; justify-content:center; padding-bottom:12vh; opacity:0; transition:opacity .7s ease; }
     #obOv .welmsg.show { opacity:1; }
