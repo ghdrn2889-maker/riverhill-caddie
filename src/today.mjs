@@ -2,7 +2,9 @@
 //  하루 동안 "김홍구"의 상황을 하나의 살아있는 그림으로 유지한다.
 //  각 새 글을 이 그림에 '비추어' 병합하고, 바뀐 점(번복)을 감지해 알린다.
 //  원칙: 원본 판독은 피드(recent.json)에 그대로 보존 → 상황판은 언제든 재생성 가능.
-import { loadUserJSON, saveUserJSON } from './store.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadUserJSON, saveUserJSON, userDataDir } from './store.mjs';
 
 const FILE = 'today.json';
 
@@ -16,6 +18,15 @@ function fileFor(part) {
 // ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화. part='2'면 2부 슬롯.
 export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, fileFor(part), null); }
 export function saveToday(s, userId = 1, part = '3') { saveUserJSON(userId, fileFor(part), s); }
+
+// 부별 슬롯 삭제 — 옛 날짜 잔재(예: 1,3 근무자의 지난주 2부 today2) 정리용.
+//  ★1·2부 슬롯만 정리한다(3부 기본 today.json은 '스테일 표시' 기능 보존 위해 삭제하지 않음).
+export function clearTodayPart(userId, part) {
+  const p = String(part);
+  if (p !== '1' && p !== '2') return false;
+  try { fs.rmSync(path.join(userDataDir(userId), fileFor(p)), { force: true }); return true; }
+  catch { return false; }
+}
 
 export function statusKo(s) {
   return (s === 'assigned' || s === 'work') ? '근무 확정'

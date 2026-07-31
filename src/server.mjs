@@ -11,7 +11,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
-import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock } from './today.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -1012,16 +1012,18 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           });
         } catch (e) { console.error('[board-parts 저장 오류]', e.message); }
       }
+      // ★이번 배치표(부 판독) 날짜 — 옛 부 슬롯 잔재 정리 기준(processForMemberPart 최상단에서 사용).
+      const boardISO = worklog.labelToISO((outP.rawVerdict && outP.rawVerdict.dateLabel) || out.rawVerdict?.dateLabel || '');
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
       //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관).
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
-      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty, crossPart });
+      await processForMemberPart(1, mp, m1outP, full, { ...opts, crewDuty, crossPart, boardISO });
       for (const m of activeMembers()) {
         if (m.id === 1) continue;
         try {
           const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
           const moutP = interpretForMember(full, outP.rawVerdict, memberP, loadToday(m.id, p));
-          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart });
+          await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart, boardISO });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
     }
@@ -1270,6 +1272,20 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   const v = out.rawVerdict;
   if (!out.relevant || !v) return { pushed: false };
   const part = String(member.part || '2');
+  // ★★옛 라운드 잔재 뿌리 정리 — 이 부 슬롯이 '이번 배치표 날짜'보다 과거면, 이 회원이 이번에 이 부를
+  //  안 뛰어(아래 근무표시·교차 게이트로 스킵)든 뛰든 상관없이 '먼저' 비운다.
+  //  (예: 1,3 근무자의 지난주 2부 today2가 안 지워져 남던 문제 → 게이트 전에 정리해 근본 차단.)
+  try {
+    const boardISO = opts.boardISO || worklog.labelToISO(v.dateLabel || '');
+    const prev = loadToday(userId, part);
+    if (prev && boardISO) {
+      const prevISO = worklog.labelToISO(prev.date || '');
+      if (prevISO && prevISO < boardISO) {
+        clearTodayPart(userId, part);
+        if (userId === 1) console.log(`·  [${part}부] ${member.name} 옛 슬롯(${prev.date}) 정리 — 이번 배치표(${v.dateLabel || boardISO})보다 과거`);
+      }
+    }
+  } catch (e) { /* 정리는 부가기능 — 실패해도 본 처리 계속 */ }
   // ★근무표시 게이트 — 조 배치표에 이 회원의 근무표시가 있고, 그 표시가 '이 부'를 명시적으로 안 하면 스킵.
   //  (예: 조하빈 근무표시="3부" → 2부 처리 자체를 안 함. 슬롯·상태·알림 전부 생성 안 됨.)
   //  근무표시가 없거나(회원이 조배치표 밖) 애매하면 개입 안 함(기존 명단 기반 판단에 맡김).
