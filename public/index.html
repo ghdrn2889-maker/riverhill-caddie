@@ -15,14 +15,18 @@
   <style>
     /* ===== 확정 시안(sandbox/hybrid-prototypes.html · HYBRID 02 행동 진행 보드) CSS 그대로 이식 ===== */
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    /* ★앱 셸: 문서(body)는 스크롤하지 않고 flex 컬럼 — 상단 헤더 고정 / 가운데(main)만 스크롤 / 하단 탭바 고정.
+       iOS standalone에서 body 오버스크롤(고무줄 튕김)에 하단 탭바가 딸려 올라가던 문제를 원천 차단. */
+    html { height:100%; }
     body { margin:0; background:#f7f6f0; color:#17231d;
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
-           padding-bottom:64px; }
-    .top { background:#104d31; color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
+           height:100%; overflow:hidden; display:flex; flex-direction:column; }
+    .top { flex-shrink:0; background:#104d31; color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
     .date { font-size:10px; opacity:.72; }
-    main { max-width:600px; margin:0 auto; overflow-x:hidden; }
+    main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
+           overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
     .body { padding:14px; }
     .view[hidden] { display:none; }
 
@@ -946,7 +950,7 @@
     .cc-hint { font-size:9px; color:#79847d; margin-top:8px; line-height:1.5; }
 
     /* 하단 내비 (확정 시안 .nav 그대로, 실제 탭으로만 전환) */
-    nav.nav { position:fixed; left:0; right:0; bottom:0; z-index:20; max-width:600px; margin:0 auto;
+    nav.nav { flex-shrink:0; width:100%; max-width:600px; margin:0 auto;
               background:rgba(255,255,255,.96); border-top:1px solid #dce3de; display:flex; justify-content:space-around;
               padding:11px 3px calc(15px + env(safe-area-inset-bottom,0)); font-size:9px; color:#748079; }
     nav.nav button { background:transparent; border:0; color:#748079; font-size:11px; font-weight:750; padding:5px 14px; }

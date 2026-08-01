@@ -60,7 +60,9 @@ function showView(name) {
   if (name === 'cart') loadCartCheck();
   if (name === 'settle') { lgPage = -1; loadLedger(); }
   if (name === 'news') markAllRead();
-  window.scrollTo(0, 0);
+  // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
+  const _sc = document.querySelector('main');
+  if (_sc) _sc.scrollTo(0, 0); else window.scrollTo(0, 0);
 }
 // 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션(뷰별 최초 1회).
 //  잔류 클래스 제거는 showView가 매 전환마다 처리 → 여기선 부여만.
