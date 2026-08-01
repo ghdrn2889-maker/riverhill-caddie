@@ -54,6 +54,13 @@ function serveIndex(req, res) {
 }
 app.get(['/', '/index.html'], serveIndex);
 
+// ── Play Store(TWA) Digital Asset Links — 앱↔웹 인증 파일. express.static은 점(.)폴더를 무시하므로 명시 라우트로 서빙.
+//  빌드 후 서명키 SHA-256 지문을 public/.well-known/assetlinks.json 에 채우면 즉시 반영(재배포 불필요).
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.type('application/json');
+  res.sendFile(path.join(ROOT_DIR, 'public', '.well-known', 'assetlinks.json'), (err) => { if (err) res.status(404).json([]); });
+});
+
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
 // ── 인증(네이버 로그인) ──
