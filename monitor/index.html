@@ -653,8 +653,9 @@
     try{ render(await loadStats()); }
     catch(e){ $('err').innerHTML = '<div class="err">집계를 불러오지 못했습니다: '+esc(e.message)+'</div>'; $('updated').textContent='오류'; $('statusDot').className='dot bad'; }
     var ud=$('page-userdash'); if(ud && ud.classList.contains('on')) loadUserDash();
+    var rv=$('page-review'); if(rv && rv.classList.contains('on')) loadBoardReview();   // 검수 탭도 대시보드처럼 자동 갱신(편집 중이면 내부에서 보류)
   }
-  $('refreshBtn').addEventListener('click', function(){ tick(); loadMembers(); });
+  $('refreshBtn').addEventListener('click', function(){ tick(); loadMembers(); var rv=$('page-review'); if(rv && rv.classList.contains('on')){ brDirty=false; loadBoardReview(true); } });
   function loop(){ clearInterval(timer); timer=setInterval(tick, REFRESH_MS); }
 
   // ── 상단 탭 전환 ──
@@ -663,7 +664,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tab-page'), function(p){ p.classList.toggle('on', p.id==='page-'+name); });
     try{ localStorage.setItem('monTab', name); }catch(e){}
     if(name==='userdash') loadUserDash();
-    if(name==='review') loadBoardReview();
+    if(name==='review'){ brDirty=false; loadBoardReview(true); }
     window.scrollTo(0,0);
   }
   Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
@@ -919,7 +920,7 @@
     });
   }
   function brPartTabs(){ return '<div class="br-parts">'+['1','2','3'].map(function(p){return '<button class="br-pt'+(p===brPart?' on':'')+'" data-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
-  function brWirePartTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.br-pt'), function(b){ b.onclick=function(){ brPart=b.getAttribute('data-p'); loadBoardReview(); }; }); }
+  function brWirePartTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.br-pt'), function(b){ b.onclick=function(){ brPart=b.getAttribute('data-p'); brDirty=false; loadBoardReview(true); }; }); }
   function renderBoardReview(b){
     var el=$('boardReview'); if(!el) return;
     var tabs=brPartTabs();
@@ -967,21 +968,35 @@
     try{
       var r=await fetch(apiUrl('/api/board-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:brPart,rows:rows,interns:interns,cutLine:cut,notify:notify})});
       var j=await r.json();
-      if(j.ok){ msg.className='br-msg ok'; msg.textContent='저장됨 · '+j.updated+'명 재계산'+(j.notified?' · 알림 '+j.notified+'명':'')+(j.cellChanges?' · 교정 '+j.cellChanges+'칸':' · 변경 없음'); btn.disabled=false; }
+      if(j.ok){ msg.className='br-msg ok'; msg.textContent='저장됨 · '+j.updated+'명 재계산'+(j.notified?' · 알림 '+j.notified+'명':'')+(j.cellChanges?' · 교정 '+j.cellChanges+'칸':' · 변경 없음'); btn.disabled=false; brDirty=false; brSig=''; setTimeout(function(){ loadBoardReview(true); }, 700); }
       else { msg.className='br-msg err'; msg.textContent=j.error||'실패'; btn.disabled=false; }
     }catch(e){ msg.className='br-msg err'; msg.textContent='통신 오류'; btn.disabled=false; }
   }
-  var boardReviewBusy=false;
-  async function loadBoardReview(){
-    if(boardReviewBusy) return; boardReviewBusy=true;
+  var boardReviewBusy=false, brDirty=false, brSig='';
+  async function loadBoardReview(force){
+    if(boardReviewBusy) return;
+    if(!force && brDirty) return;   // 관리자가 교정 입력 중 — 폴링이 입력값을 덮어쓰지 않게 보류(저장·부전환·새로고침 때 재개)
+    boardReviewBusy=true;
     var u=apiUrl('/api/board-review'); u+=(u.indexOf('?')>=0?'&':'?')+'part='+brPart;
-    try{ var r=await fetch(u,{cache:'no-store'}); var j=await r.json(); if(j.ok) renderBoardReview(j.board); else if($('boardReview')) $('boardReview').innerHTML='<div class="err">'+esc(j.error||'불러오기 실패')+'</div>'; }
+    try{
+      var r=await fetch(u,{cache:'no-store'}); var j=await r.json();
+      if(j.ok){
+        var b=j.board;
+        var sig=brPart+'|'+(b?(String(b.articleId||'')+'|'+(b.at||0)+'|'+(b.corrected?b.corrected.at:0)):'none');
+        if(!force && sig===brSig) return;   // 바뀐 게 없으면 재렌더 생략(깜빡임·스크롤 튐 방지)
+        brSig=sig; brDirty=false;
+        renderBoardReview(b);
+      } else if($('boardReview')) $('boardReview').innerHTML='<div class="err">'+esc(j.error||'불러오기 실패')+'</div>';
+    }
     catch(e){ if($('boardReview')) $('boardReview').innerHTML='<div class="err">통신 오류</div>'; } finally{ boardReviewBusy=false; }
   }
 
   // 저장된 탭 복원(기본: 승인)
   var savedTab=null; try{ savedTab=localStorage.getItem('monTab'); }catch(e){}
   if(savedTab && document.getElementById('page-'+savedTab)) switchTab(savedTab);
+
+  // 검수 폼을 관리자가 건드리면 dirty 표시 — 자동 폴링이 입력 중인 교정을 덮어쓰지 않게(#boardReview는 재렌더돼도 컨테이너는 유지되므로 위임 1회 등록).
+  (function(){ var rv=$('boardReview'); if(rv){ rv.addEventListener('input', function(){ brDirty=true; }); rv.addEventListener('change', function(){ brDirty=true; }); } })();
 
   tick(); loop();
   loadMembers(); memberLoop();
