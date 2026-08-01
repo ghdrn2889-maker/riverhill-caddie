@@ -21,7 +21,7 @@
     body { margin:0; background:#f7f6f0; color:#17231d;
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
            height:100%; overflow:hidden; display:flex; flex-direction:column; }
-    .top { flex-shrink:0; background:#104d31; color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
+    .top { background:#104d31; color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
     .date { font-size:10px; opacity:.72; }
@@ -1191,16 +1191,6 @@
     <div class="ldg-brand"><div class="ldg-wm">RIVERHILL CADDIE</div><div class="ldg-sub">일정 불러오는 중</div></div>
   </div>
 
-  <header class="top reveal" style="--i:0">
-    <div class="toprow">
-      <span class="brand">RIVERHILL CADDIE</span>
-      <div class="topright">
-        <span class="date" id="date">—</span>
-        <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
-      </div>
-    </div>
-  </header>
-
   <!-- 설치 안내 배너 (iOS 사파리 미설치 안내 / 안드로이드 설치 버튼) — JS가 상황 판단해 노출 -->
   <div id="installBar" hidden>
     <div class="ib-inner">
@@ -1345,6 +1335,17 @@
   <!-- (회원 관리는 관리자 모니터 :3100 승인 탭으로 이관됨) -->
 
   <main>
+    <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
+    <header class="top reveal" style="--i:0">
+      <div class="toprow">
+        <span class="brand">RIVERHILL CADDIE</span>
+        <div class="topright">
+          <span class="date" id="date">—</span>
+          <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
+        </div>
+      </div>
+    </header>
+
     <!-- 오늘 -->
     <section class="view body" id="view-today" role="tabpanel" aria-labelledby="tab-today">
       <section class="hero" id="todayHero">
