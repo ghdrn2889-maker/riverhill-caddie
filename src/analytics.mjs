@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DATA_DIR, appendJSONL, loadJSON, loadUserJSON } from './store.mjs';
 import { all, get, run } from './db.mjs';
 import { analyzeRoster, analyzeInterns, analyzePartTeams } from './gemini.mjs';
-import { getBoardPart } from './boardparts.mjs';
+import { getBoardPart, loadBoardPartsStore } from './boardparts.mjs';
 
 // ── 기록(본 앱에서 호출) ────────────────────────────────
 const VISIT_THROTTLE_MS = 10 * 60 * 1000; // 같은 회원 10분 내 재방문은 1건으로
@@ -180,7 +180,11 @@ export async function computeBoardParts() {
   const id = String(lb.id || '');
   // ★캐시 키에 판독시각(at) 포함 — 같은 배치표가 재판독(recheck/수정)되면 lastboard.at이 바뀌어
   //  캐시가 자동 갱신된다. (id만으로 걸면 첫 판독본을 계속 보여줘 모니터가 스테일되던 문제 수정)
-  const key = `${id}|${lb.at || ''}`;
+  //  ★★1·2부는 board-parts-store에 lastboard와 '독립적으로'(3부 저장 뒤) 채워지므로, 그 상태도 키에 포함해야
+  //     1·2부가 뒤늦게 들어오거나 교정돼도 캐시가 갱신된다. (안 넣으면 판독검증이 3부만 뜨고 굳던 버그)
+  const bpStore = loadBoardPartsStore();
+  const bpSig = bpStore ? `${bpStore.articleId || ''}:${bpStore.at || ''}:${Object.keys(bpStore.parts || {}).sort().join(',')}` : '';
+  const key = `${id}|${lb.at || ''}|${bpSig}`;
   if (_boardPartsCache.key === key) return _boardPartsCache.data;   // 같은 배치표+같은 판독시각이면 캐시
   try {
     const article = lb.article;
