@@ -717,7 +717,10 @@ app.get('/api/cartcheck/photo/:fname', (req, res) => {
 });
 
 const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, () => console.log(`🌐 서버 실행: http://localhost:${PORT}`));
+// HOST 기본값은 '0.0.0.0'(기존과 동일 — 홈서버·Tailscale Funnel 무영향). Lightsail 공존 배치에선
+//  .env에 HOST=127.0.0.1 로 두어 Apache 리버스 프록시 뒤 로컬 전용 바인딩(외부 직결 차단).
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => console.log(`🌐 서버 실행: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`));
 
 function saveRecent(article, result, ai) {
   const recent = loadJSON('recent.json', []);
