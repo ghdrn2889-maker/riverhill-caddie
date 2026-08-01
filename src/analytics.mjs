@@ -192,7 +192,7 @@ export async function computeBoardParts() {
     const teams = await analyzePartTeams(article);                 // 상단 헤더 "N부 M" 팀수
     const partsSrc = {};
     for (const p of ['1', '2', '3']) {
-      const tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || 0) : 0);
+      let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
       let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, swaps = [], reliable = false, uncertain = '';
       if (p === '3') {                                             // 3부는 앱 저장분 재사용(추가 판독 없음)
         roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : await analyzeRoster(article, '3');
