@@ -930,7 +930,8 @@
       (b.teamCount?'<span class="chip">'+b.teamCount+'팀</span>':'')+
       '<span class="chip">판독 '+rel(b.at)+'</span>'+
       (b.corrected?'<span class="chip ok">관리자 교정됨</span>':(b.uncertain?'<span class="chip warn">불확실 판독 — 검수 권장</span>':''))+'</div>';
-    var img = b.image ? '<div class="br-imgbox"><div class="lbl">원본 배치표</div><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본 배치표"></div>'
+    var imgNote = (b.imageId && String(b.imageId)!==String(b.articleId)) ? ' <span class="chip warn" style="font-size:10px">변동 반영 #'+esc(String(b.imageId))+'</span>' : '';
+    var img = b.image ? '<div class="br-imgbox"><div class="lbl">원본 배치표'+imgNote+'</div><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본 배치표"></div>'
       : '<div class="br-imgbox"><div class="lbl">원본 배치표</div><div class="noimg">이 배치표엔 이미지가 없어요<br>(텍스트 공지). 표만 보고 교정하세요.</div></div>';
     var interns=(b.interns||[]).map(brInternRow).join('');
     el.innerHTML = tabs + meta +

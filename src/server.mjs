@@ -908,18 +908,32 @@ function rememberBoard(full, out) {
   const v = out && out.rawVerdict;
   const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
+  const newImg = (full.images || [])[0] || '';
   // ★약한 변동 판독이 정본 배치표를 덮지 않도록 가드(board 스냅샷 보호 — 회원 처리·푸시엔 무관).
-  //  기존이 정본이고 이번이 정본이 아니면 유지. 단, 날짜가 명백히 다른 '새 날짜 배치표'는 통과.
+  //  기존이 정본이고 이번이 정본이 아니면 구조 데이터는 유지. 단, 날짜가 명백히 다른 '새 날짜 배치표'는 통과.
   const prev = loadJSON('lastboard.json', null);
   if (prev && isAuthoritativeBoard(prev.rawVerdict) && !isAuthoritativeBoard(v)) {
     const pd = String(prev.dateLabel || '').trim(), nd = String(v.dateLabel || '').trim();
     const newDay = pd && nd && pd !== nd;
-    if (!newDay) { console.log(`·  lastboard 유지 — 약한 변동 판독(#${full.id})이 정본 배치표(#${prev.id})를 덮지 않음`); return; }
+    if (!newDay) {
+      // ★구조(순번·커트)는 정본 유지하되 '원본 배치표'로 띄울 최신 3부 이미지는 갱신 —
+      //  당추가 그려진 변동본 이미지가 옛 기본 이미지에 가려지지 않게(검수·판독의 원본 이미지 신선도).
+      if (newImg && String(prev.latestImageId || prev.id) !== String(full.id)) {
+        prev.latestImage = newImg; prev.latestImageId = String(full.id); prev.latestImageAt = Date.now();
+        saveJSON('lastboard.json', prev);
+        console.log(`·  lastboard 구조 유지 + 최신 3부 이미지 갱신(#${full.id}) — 정본 #${prev.id}`);
+      } else {
+        console.log(`·  lastboard 유지 — 약한 변동 판독(#${full.id})이 정본 배치표(#${prev.id})를 덮지 않음`);
+      }
+      return;
+    }
   }
   boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
-  saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now() });
+  //  latestImage* = '원본 배치표' 표시 이미지 추적(정본 판독이면 자기 이미지가 곧 최신).
+  saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now(),
+    latestImage: newImg, latestImageId: String(full.id), latestImageAt: Date.now() });
 }
 
 // 가입/프로필 저장 직후: 현재 감시 중인 최신 배치표를 이 회원 기준으로 즉시 소급 반영.

@@ -339,9 +339,12 @@ app.get('/api/board-review', gate, (req, res) => {
       rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
     }
     const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+    // ★원본 이미지: 구조 데이터(정본)와 별개로 '최신 3부 이미지'(당추 반영 변동본)를 우선 표시.
+    const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
     res.json({ ok: true, part, board: {
       articleId: lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
-      image: (lb.article && lb.article.images && lb.article.images[0]) || '', url: (lb.article && lb.article.url) || '',
+      image: lb.latestImage || baseImg, imageId: lb.latestImageId || lb.id, imageAt: lb.latestImageAt || lb.at,
+      url: (lb.article && lb.article.url) || '',
       at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
       cutLine, cutoffName: v.cutoffName || '', rows, interns,
     } });
