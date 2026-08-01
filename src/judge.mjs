@@ -518,6 +518,9 @@ function titleFor(status) {
     default:          return '3부 소식';
   }
 }
+// 회원에게 '푸시할 만한' 구체 상태. 이 집합에 없으면(=decide가 회원별 문구를 못 만든 일반 소식)
+//  피드에만 남기고 푸시 안 함 — 알맹이 없는 "3부 소식"이 회원들에게 스팸처럼 발송되던 문제 차단.
+const PUSH_STATUSES = new Set(['your_turn', 'near', 'assigned', 'work', 'waiting', 'spare', 'off']);
 
 // verdict(raw) → { relevant, push, title, body, status, verdict, computed }
 //  push: 'high'(바로 알림) | 'low'(피드만) | 'check'(확인필요 알림)
@@ -623,6 +626,11 @@ export function decide(article, verdict, member = memberFromEnv()) {
   let push = (Number(verdict.confidence) || 0) < 0.4 ? 'check' : 'high';
   // ★불확실이면 '구체적인 이유'를 그대로 보여준다(막연한 "판독 불확실"보다 불안이 덜하고 행동이 명확).
   if (verdict._uncertain) { push = 'check'; body = `${verdict._uncertain}\n${body}`; }
+  // ★일반 '소식'(구체적 내 상태 변화 아님)은 푸시 안 하고 피드에만 — 회원별 문구가 안 만들어진(status
+  //  기본값) 배치표 댓글이 "3부 소식 | <글제목>"으로 여러 회원에게 발송되던 노이즈 차단. actionable만 푸시.
+  if (!PUSH_STATUSES.has(status)) {
+    return { relevant: false, push: 'low', status, verdict, title: '', body: verdict.summary || article.subject || '' };
+  }
   const title = push === 'check' ? '3부 소식 — 확인' : titleFor(status);
   return { relevant: true, push, status, verdict, title, body };
 }
