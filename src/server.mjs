@@ -894,10 +894,28 @@ const envMember = () => {
 const BOARD_WATCH_FILE = 'boardwatch.json';
 let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at }
 const imgFingerprint = (full) => (full.images || []).map((u) => String(u).split('?')[0]).join('|');
+// '전체(정본) 배치표' 판독인지 — 순번표 신뢰 + 날짜 + (팀수 또는 커트) + 최소 순번수.
+//  '금일 변동 사항입니다' 류 부분 글은 teeGrid는 있어도 dateLabel·teamCount·cutoff가 비어,
+//  이걸로 정본을 덮으면 배치표 검수·판독 스냅샷(lastboard)이 옛/부분 표로 오염된다.
+function isAuthoritativeBoard(v) {
+  if (!v || v.rosterReliable !== true) return false;
+  if (!String(v.dateLabel || '').trim()) return false;
+  if (!(Number(v.teamCount) > 0 || Number(v.cutoffPosition) > 0)) return false;
+  return Array.isArray(v.part3Roster) && v.part3Roster.length >= 9;
+}
+
 function rememberBoard(full, out) {
   const v = out && out.rawVerdict;
   const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
+  // ★약한 변동 판독이 정본 배치표를 덮지 않도록 가드(board 스냅샷 보호 — 회원 처리·푸시엔 무관).
+  //  기존이 정본이고 이번이 정본이 아니면 유지. 단, 날짜가 명백히 다른 '새 날짜 배치표'는 통과.
+  const prev = loadJSON('lastboard.json', null);
+  if (prev && isAuthoritativeBoard(prev.rawVerdict) && !isAuthoritativeBoard(v)) {
+    const pd = String(prev.dateLabel || '').trim(), nd = String(v.dateLabel || '').trim();
+    const newDay = pd && nd && pd !== nd;
+    if (!newDay) { console.log(`·  lastboard 유지 — 약한 변동 판독(#${full.id})이 정본 배치표(#${prev.id})를 덮지 않음`); return; }
+  }
   boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
