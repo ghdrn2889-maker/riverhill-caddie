@@ -296,6 +296,20 @@ function loadLastBoard() {
 }
 const nkey = (s) => String(s || '').replace(/\s/g, '');
 const dutyKind = (code) => { const c = String(code || ''); if (/병가/.test(c)) return '병가'; if (/휴가|연차|반차|월차/.test(c)) return '휴가'; if (/휴무|격리/.test(c)) return '휴무'; return ''; };
+// ★쌍둥이 이름 오독 플래그 — 명단 칸 이름이 '회원 본명과 한 글자 차이'인데 그 회원 본명은 명단에 아예 없으면,
+//  그 칸이 회원의 오독일 가능성이 큼(서동명↔서동환). 자동 개명은 안 하고(둘 다 실존 캐디) 관리자에게 콕 집어 표시만.
+function flagMisreads(rows) {
+  const members = activeMembers().map((m) => ({ key: nkey(m.board_name), name: m.board_name })).filter((m) => m.key.length >= 2);
+  const rosterKeys = new Set(rows.map((r) => nkey(r.name)).filter(Boolean));
+  const ham1 = (a, b) => { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length && d <= 1; i++) if (a[i] !== b[i]) d++; return d === 1; };
+  for (const r of rows) {
+    const k = nkey(r.name);
+    if (!k || members.some((m) => m.key === k)) continue;                 // 빈칸/회원 본인이면 스킵
+    const suspect = members.find((m) => ham1(m.key, k) && !rosterKeys.has(m.key));  // 회원 본명이 명단에 없어야 오독 후보
+    if (suspect) r.misread = suspect.name;
+  }
+  return rows;
+}
 app.get('/api/board-review', gate, (req, res) => {
   try {
     const part = String(req.query.part || '3');
@@ -316,6 +330,7 @@ app.get('/api/board-review', gate, (req, res) => {
         rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
       }
       const interns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+      flagMisreads(rows);   // 쌍둥이 이름 오독 표시(1·2부)
       return res.json({ ok: true, part, board: {
         articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
@@ -342,6 +357,7 @@ app.get('/api/board-review', gate, (req, res) => {
       rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
     }
     const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+    flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
     // ★원본 이미지: 구조 데이터(정본)와 별개로 '최신 3부 이미지'(당추 반영 변동본)를 우선 표시.
     const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
     res.json({ ok: true, part, board: {

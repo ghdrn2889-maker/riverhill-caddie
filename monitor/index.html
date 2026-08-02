@@ -115,6 +115,10 @@
   .br-row input,.br-row select{ font:inherit; font-size:12.5px; padding:6px 7px; border:1px solid var(--bord); border-radius:7px; background:var(--panel); color:var(--tx); min-width:0; width:100%; }
   .br-row .no2{ font-weight:800; color:var(--tx3); text-align:center; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center; justify-content:center; gap:3px; }
   .br-mine{ width:6px; height:6px; border-radius:50%; background:var(--acc); display:inline-block; }
+  .br-warn{ color:var(--bad); font-weight:900; font-style:normal; }
+  .br-row.br-misread .nm{ border-color:var(--bad); background:color-mix(in srgb,var(--bad) 8%,var(--panel)); }
+  .br-warnline{ font-size:11px; color:var(--bad); line-height:1.45; padding:3px 6px 7px 52px; }
+  .br-warnline b{ font-weight:800; }
   .br-row .tee{ font-variant-numeric:tabular-nums; }
   .br-row .dty{ color:var(--tx2); }
   .br-row.work{ background:color-mix(in srgb,var(--good) 6%,transparent); border-radius:8px; }
@@ -899,13 +903,16 @@
   var brPart='3';
   function dtyOpt(v,label,cur){ return '<option value="'+v+'"'+(String(cur||'')===v?' selected':'')+'>'+label+'</option>'; }
   function brRow(r){
-    return '<div class="br-row" data-pos="'+r.pos+'">'+
-      '<span class="no2">'+r.pos+(r.isMember?'<i class="br-mine" title="우리 회원"></i>':'')+'</span>'+
+    var row='<div class="br-row'+(r.misread?' br-misread':'')+'" data-pos="'+r.pos+'">'+
+      '<span class="no2">'+r.pos+(r.isMember?'<i class="br-mine" title="우리 회원"></i>':'')+(r.misread?'<i class="br-warn" title="'+esc(r.misread)+' 오독 의심">!</i>':'')+'</span>'+
       '<input class="nm" value="'+esc(r.name||'')+'" placeholder="이름">'+
       '<input class="tee" value="'+esc(r.tee||'')+'" placeholder="—">'+
       '<select class="crs"><option value="OUT"'+(r.course!=='IN'?' selected':'')+'>OUT</option><option value="IN"'+(r.course==='IN'?' selected':'')+'>IN</option></select>'+
       '<select class="dty">'+dtyOpt('','배치표대로',r.duty)+dtyOpt('휴무','휴무',r.duty)+dtyOpt('병가','병가',r.duty)+dtyOpt('휴가','휴가',r.duty)+'</select>'+
       '<span class="br-badge"></span></div>';
+    if(!r.misread) return row;
+    // 오독 의심(회원 이름과 한 글자 차이) — 모바일에서도 보이게 텍스트 경고 줄. 자동 개명 아님(관리자가 확인 후 교정).
+    return '<div class="br-rw">'+row+'<div class="br-warnline">⚠ 회원 <b>'+esc(r.misread)+'</b>와(과) 한 글자 차이 — 오독 의심. 이 칸이 <b>'+esc(r.misread)+'</b>이면 이름을 고쳐 저장하세요.</div></div>';
   }
   function brInternRow(it){
     var isIn=it&&it.course==='IN';
