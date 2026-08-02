@@ -90,7 +90,9 @@ function buildPartView(pv, crossByName) {
   const teeByPos = new Map(teeGrid.map((g) => [Number(g.pos), g]));
   const cutoffPos = Number(pv.cutoffPosition) > 0 ? Number(pv.cutoffPosition) : 0;
   const teamCount = Number(pv.teamCount) > 0 ? Number(pv.teamCount) : null;
-  const workLimit = cutoffPos || teamCount || 0;   // 근무 확정선(없으면 티오프표 유무로)
+  // ★근무 확정선: 대시보드가 쓰는 live cutLine(당추·팀추가로 전진) 최우선 → 커트공지 → 헤더 팀수 → 티오프표 유무.
+  const cutLine = Number(pv.cutLine) > 0 ? Number(pv.cutLine) : 0;
+  const workLimit = cutLine || cutoffPos || teamCount || 0;
   const rows = roster.map((cell, i) => {
     const pos = i + 1;
     const g = teeByPos.get(pos);
@@ -121,18 +123,30 @@ function buildLatestBoard() {
   const lbp = loadJSON('lastboard-parts.json', null);   // 부별 판독(server가 배치표 처리 시 저장)
   const lb = loadJSON('lastboard.json', null);          // 3부 메인(하위호환 폴백)
   const crossByName = (lbp && lbp.crossPart && lbp.crossPart.byName) || {};
-  // 부별 데이터 소스: 신형(lastboard-parts) 우선, 없으면 구형(lastboard 3부 + user1 today).
+  // 부별 데이터 소스: 신형(lastboard-parts) 우선, 없으면 ★대시보드와 같은 최신본(today.json 3부 + board-parts-store 1·2부).
+  //  ★★핵심: 3부는 effectivePart3Verdict로 today.json(대시보드 소스)을 얹어 '얼어붙은 lastboard'가 아닌 최신 상태를 쓴다.
   let partsSrc = (lbp && lbp.parts) || null;
   if (!partsSrc) {
-    const v = (lb && lb.rawVerdict) ? lb.rawVerdict : {};
-    const t1 = loadUserJSON(1, 'today.json', null) || {};
+    const v = effectivePart3Verdict(lb) || {};      // 대시보드와 동일한 최신 3부
+    const bp = loadBoardPartsStore();               // 1·2부: 메인 파이프라인 저장분(재판독 0)
     partsSrc = { 3: {
-      roster: (Array.isArray(v.part3Roster) && v.part3Roster.length) ? v.part3Roster : (Array.isArray(t1.roster3) ? t1.roster3 : []),
-      teamCount: v.teamCount, teeGrid: (Array.isArray(v.teeGrid) && v.teeGrid.length) ? v.teeGrid : t1.teeGrid,
-      cutoffName: v.cutoffName || t1.cutoffName, cutoffPosition: v.cutoffPosition || t1.cutoffPosition,
-      internCount: v.internCount || t1.internCount, internTees: (v.internTees && v.internTees.length) ? v.internTees : t1.internTees,
+      roster: (Array.isArray(v.part3Roster) && v.part3Roster.length) ? v.part3Roster : [],
+      teamCount: v.teamCount, teeGrid: Array.isArray(v.teeGrid) ? v.teeGrid : [],
+      cutoffName: v.cutoffName, cutoffPosition: v.cutoffPosition, cutLine: v.cutLine,
+      internCount: v.internCount, internTees: v.internTees,
       swaps: v._swaps, reliable: v.rosterReliable, uncertain: v._uncertain,
     } };
+    for (const p of ['1', '2']) {                   // 1·2부도 즉시 렌더(store에 있으면) — 3부만 뜨던 지연 제거
+      const pd = bp && bp.parts && bp.parts[p];
+      if (pd && Array.isArray(pd.roster) && pd.roster.length) {
+        partsSrc[p] = {
+          roster: pd.roster, teamCount: pd.teamCount, teeGrid: pd.teeGrid,
+          cutoffName: pd.cutoffName, cutoffPosition: pd.cutoffPosition,
+          internCount: pd.internCount, internTees: pd.internTees,
+          reliable: pd.rosterReliable || pd.roster.length > 0, uncertain: pd.uncertain,
+        };
+      }
+    }
   }
   const parts = {};
   const availableParts = [];
@@ -157,6 +171,9 @@ function buildLatestBoard() {
     model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
     comments: (Array.isArray(art.comments) ? art.comments : [])
       .map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+    // ★신선도 서명 — 얼어붙은 articleId/at이 아니라 today.json·store 상태가 바뀌면 값이 달라져 프런트가 재렌더·재요청.
+    //  computeBoardParts와 '동일 포맷'(boardSyncSig)이라 프런트 게이트가 정확히 맞물린다.
+    syncSig: boardSyncSig(lb, loadBoardPartsStore()),
     availableParts, twoRounds, parts,
   };
 }
@@ -170,8 +187,47 @@ function partsToDuty(set) {
   return '';
 }
 
+// ★★검수·판독검증이 '대시보드와 같은 최신 3부'를 보게 하는 핵심 병합.
+//  문제: lastboard.rawVerdict(정본 스냅샷)은 rememberBoard의 clobber 가드로 '얼어' 있어
+//   당추·커트 같은 변동을 못 따라간다. 반면 1번 회원 today.json은 applyVerdict가 매 글마다
+//   지능적으로 병합(불안정 baseline 보존·당추 티오프 재매칭)해 갱신 → 대시보드가 읽는 '적용된 최신 3부'.
+//  해법: 변동에 민감한 board-level 필드(순번명단·티오프표·확정선·커트·인턴)는 today.json 우선,
+//   없으면 스냅샷 폴백. today.json에 없는 것(crewDuty 근무표시맵·teamCount 헤더)만 스냅샷 유지.
+//  ※member-specific(myPosition/status/teeTime)은 절대 안 씀 — board-level만 취함.
+export function effectivePart3Verdict(lb) {
+  const v = (lb && lb.rawVerdict) ? { ...lb.rawVerdict } : {};
+  const t1 = loadUserJSON(1, 'today.json', null);
+  if (!t1) { v._t1Sig = ''; return v; }
+  // ★날짜 안전장치: today.json이 '다음 날'로 넘어갔으면(월-일 다름) 오늘 배치표에 안 얹는다.
+  const dayNums = (s) => (String(s || '').match(/\d+/g) || []).slice(0, 2).join('-');
+  const dLb = dayNums(lb && (lb.dateLabel || (lb.rawVerdict && lb.rawVerdict.dateLabel)));
+  const dT1 = dayNums(t1.date);
+  if (dLb && dT1 && dLb !== dT1) { v._t1Sig = ''; return v; }
+  // today.json이 채워진 board-level 필드만 덮는다(비었으면 스냅샷 유지 = 회귀 0).
+  if (Array.isArray(t1.roster3) && t1.roster3.length) v.part3Roster = t1.roster3.slice();
+  if (Array.isArray(t1.teeGrid) && t1.teeGrid.length) v.teeGrid = t1.teeGrid.slice();
+  if (Array.isArray(t1.internTees)) v.internTees = t1.internTees.slice();
+  if (Number.isFinite(Number(t1.internCount))) v.internCount = Number(t1.internCount);
+  if (t1.cutoffName) v.cutoffName = t1.cutoffName;
+  if (Number(t1.cutoffPosition) > 0) v.cutoffPosition = Number(t1.cutoffPosition);
+  if (Number(t1.cutLine) > 0) v.cutLine = Number(t1.cutLine);
+  // ★캐시 신선도 서명 — today.json이 갱신되면(당추로 teeGrid 시각이 바뀌는 등) 이 값이 달라져 캐시가 뚫린다.
+  v._t1Sig = `${(t1.roster3 || []).length}|${t1.cutLine || 0}|${t1.cutoffPosition || 0}|${t1.rosterAt || 0}|${t1.updatedAt || 0}|`
+    + `${(t1.teeGrid || []).map((g) => `${g.pos}:${g.time}`).join(',')}`;
+  return v;
+}
+
+// ★검수·판독검증·즉시렌더가 '같은 신선도 기준'으로 비교되도록 단일 서명 — 3부(today.json _t1Sig) + 1·2부(store 상태).
+//  얼어붙은 articleId/at이 아니라 대시보드 소스(today.json·board-parts-store)가 바뀌면 값이 달라진다.
+//  buildLatestBoard·computeBoardParts가 '동일 포맷'으로 내보내야 프런트 게이트(재요청 판단)가 정확히 맞물린다.
+export function boardSyncSig(lb, bpStore) {
+  const v = effectivePart3Verdict(lb);
+  const keys = (bpStore && bpStore.parts) ? Object.keys(bpStore.parts).sort().join('') : '';
+  return `${v._t1Sig || ''}|${(bpStore && bpStore.at) || ''}|${keys}`;
+}
+
 // ★모니터 전용 — 앱을 건드리지 않고 모니터가 '직접' 1·2·3부 부별 판독(온디맨드, board별 1회 캐시).
-//  3부는 앱이 저장한 lastboard.json(rawVerdict)을 재사용(추가 판독 0), 1·2부만 새로 판독.
+//  3부는 대시보드와 동일한 최신 상태(effectivePart3Verdict)를 재사용(추가 판독 0), 1·2부만 새로 판독.
 //  각 부 근무자(순번≤팀수)를 교차해 두 탕(🔁)도 산출. 관리자만 보는 판독검증 탭의 데이터.
 let _boardPartsCache = { key: null, data: null };
 export async function computeBoardParts() {
@@ -184,21 +240,24 @@ export async function computeBoardParts() {
   //     1·2부가 뒤늦게 들어오거나 교정돼도 캐시가 갱신된다. (안 넣으면 판독검증이 3부만 뜨고 굳던 버그)
   const bpStore = loadBoardPartsStore();
   const bpSig = bpStore ? `${bpStore.articleId || ''}:${bpStore.at || ''}:${Object.keys(bpStore.parts || {}).sort().join(',')}` : '';
-  const key = `${id}|${lb.at || ''}|${bpSig}`;
+  // ★3부는 이제 대시보드와 같은 today.json 최신본을 얹으므로(effectivePart3Verdict), 그 신선도 서명(_t1Sig)도
+  //  캐시 키에 포함 — 안 넣으면 당추로 대시보드가 바뀌어도 판독검증 캐시가 옛 스냅샷에 굳는다.
+  const v3 = effectivePart3Verdict(lb);
+  const key = `${id}|${lb.at || ''}|${bpSig}|${v3._t1Sig || ''}`;
   if (_boardPartsCache.key === key) return _boardPartsCache.data;   // 같은 배치표+같은 판독시각이면 캐시
   try {
     const article = lb.article;
-    const v3 = lb.rawVerdict || {};
     const teams = await analyzePartTeams(article);                 // 상단 헤더 "N부 M" 팀수
     const partsSrc = {};
     for (const p of ['1', '2', '3']) {
       let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
-      let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, swaps = [], reliable = false, uncertain = '';
-      if (p === '3') {                                             // 3부는 앱 저장분 재사용(추가 판독 없음)
+      let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, cutLine = 0, swaps = [], reliable = false, uncertain = '';
+      if (p === '3') {                                             // 3부는 대시보드와 같은 최신본(v3) 재사용(추가 판독 없음)
         roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : await analyzeRoster(article, '3');
         teeGrid = Array.isArray(v3.teeGrid) ? v3.teeGrid : [];
         internCount = Number(v3.internCount) || 0; internTees = Array.isArray(v3.internTees) ? v3.internTees : [];
         cutoffName = v3.cutoffName || ''; cutoffPosition = Number(v3.cutoffPosition) || null;
+        cutLine = Number(v3.cutLine) || 0;                        // ★대시보드 live 확정선(당추·팀추가 반영)
         swaps = Array.isArray(v3._swaps) ? v3._swaps : []; reliable = !!v3.rosterReliable; uncertain = v3._uncertain || '';
       } else {                                                    // ★1·2부는 메인 파이프라인이 저장한 board 순번표 재사용(재판독 0)
         const pd = getBoardPart(p);
@@ -211,7 +270,7 @@ export async function computeBoardParts() {
         tc = Number(pd.teamCount) || tc;                          // 헤더 재판독 대신 저장된 팀수
       }
       if (!roster.length) continue;
-      partsSrc[p] = { roster, teamCount: tc || null, teeGrid, internCount, internTees, cutoffName, cutoffPosition, swaps, reliable, uncertain };
+      partsSrc[p] = { roster, teamCount: tc || null, teeGrid, internCount, internTees, cutoffName, cutoffPosition, cutLine, swaps, reliable, uncertain };
     }
     // 교차확인(두 탕): 각 부 근무자(순번≤팀수) 이름을 교차. baseName으로 듀티태그 제거.
     const acc = {};
@@ -234,6 +293,8 @@ export async function computeBoardParts() {
       image: (Array.isArray(art.images) && art.images[0]) || '', url: art.url || '',
       model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
       comments: (Array.isArray(art.comments) ? art.comments : []).map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
+      // ★신선도 서명 — buildLatestBoard와 동일 포맷(boardSyncSig) → 프런트 재요청 게이트가 정확히 맞물림.
+      syncSig: boardSyncSig(lb, bpStore),
       availableParts, twoRounds: twoRounds.map((nm) => ({ name: nm, duty: crossByName[nm].duty, pos: crossByName[nm].pos })), parts,
     };
     _boardPartsCache = { key, data };

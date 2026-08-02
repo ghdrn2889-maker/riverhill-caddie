@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
-import { computeStats, computeBoardParts } from './analytics.mjs';
+import { computeStats, computeBoardParts, effectivePart3Verdict } from './analytics.mjs';
 import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
@@ -319,12 +319,15 @@ app.get('/api/board-review', gate, (req, res) => {
       return res.json({ ok: true, part, board: {
         articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
+        syncSig: `${bp.at || ''}|${(pd._adminCorrected && pd._adminCorrected.at) || ''}`,   // 신선도(store 기준)
         uncertain: pd.uncertain || '', teamCount: Number(pd.teamCount) || 0, cutLine, cutoffName: pd.cutoffName || '', rows, interns,
       } });
     }
     const lb = loadLastBoard();
     if (!lb || !lb.rawVerdict) return res.json({ ok: true, part, board: null });
-    const v = lb.rawVerdict;
+    // ★검수 3부도 대시보드와 같은 최신 상태를 본다 — lastboard 스냅샷(얼어있음)에 1번 회원 today.json(적용된 최신본)을 병합.
+    //  당추·커트 변동이 대시보드엔 반영되는데 검수만 옛 배치표에 멈추던 근본원인 제거.
+    const v = effectivePart3Verdict(lb);
     const roster = Array.isArray(v.part3Roster) ? v.part3Roster : [];
     const grid = Array.isArray(v.teeGrid) ? v.teeGrid : [];
     const crew = v.crewDuty || {};
@@ -345,6 +348,8 @@ app.get('/api/board-review', gate, (req, res) => {
       articleId: lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
       image: lb.latestImage || baseImg, imageId: lb.latestImageId || lb.id, imageAt: lb.latestImageAt || lb.at,
       url: (lb.article && lb.article.url) || '',
+      // ★신선도 서명 — 얼어붙은 at 대신 today.json(_t1Sig) 기준 → 당추·커트로 대시보드가 바뀌면 검수도 재렌더.
+      syncSig: `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`,
       at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
       cutLine, cutoffName: v.cutoffName || '', rows, interns,
     } });

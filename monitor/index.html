@@ -523,9 +523,13 @@
     } catch(e){ /* 실패 시 3부 폴백 유지 */ } finally { boardPartsLoading = false; }
   }
   function render(s){
-    // 판독검증: 즉시 3부(빠른 sync) 표시 → /api/board-parts로 1·2·3부 전체 탭 채움(모니터 온디맨드 판독).
+    // 판독검증: 즉시 최신본(today.json 병합 3부 + store 1·2부) 표시 → /api/board-parts로 두 탕·전체 탭 보강.
+    //  ★재요청 트리거 = articleId가 아니라 syncSig(대시보드 소스 today.json·store 상태) — 당추·커트로 배치표가
+    //   바뀌면 articleId/at은 얼어 있어도 syncSig가 달라져 판독검증이 대시보드처럼 따라 갱신된다.
     var lb = s.latestBoard;
-    if (boardPartsData && lb && boardPartsData.articleId === lb.articleId) renderBoard(boardPartsData);
+    var lbSig = lb ? (String(lb.articleId||'')+'|'+(lb.syncSig||'')) : '';
+    var bpSig = boardPartsData ? (String(boardPartsData.articleId||'')+'|'+(boardPartsData.syncSig||'')) : '';
+    if (boardPartsData && lb && bpSig === lbSig) renderBoard(boardPartsData);
     else { renderBoard(lb); if (lb && lb.articleId) loadBoardParts(); }
     // 상태 점
     var h = s.health||{}; var failed = (h.failStreak||0)>0; var stale = h.lastOkAt && (Date.now()-h.lastOkAt > 20*60000);
@@ -983,7 +987,7 @@
       var r=await fetch(u,{cache:'no-store'}); var j=await r.json();
       if(j.ok){
         var b=j.board;
-        var sig=brPart+'|'+(b?(String(b.articleId||'')+'|'+(b.at||0)+'|'+(b.corrected?b.corrected.at:0)):'none');
+        var sig=brPart+'|'+(b?(String(b.articleId||'')+'|'+(b.at||0)+'|'+(b.syncSig||'')+'|'+(b.corrected?b.corrected.at:0)):'none');
         if(!force && sig===brSig) return;   // 바뀐 게 없으면 재렌더 생략(깜빡임·스크롤 튐 방지)
         brSig=sig; brDirty=false;
         renderBoardReview(b);
