@@ -76,10 +76,13 @@ function logSentPush(userId, { title, body, level }, sent, devices) {
 }
 
 export async function broadcast({ title, body, url, level, bypassQuiet }, userId = 1) {
-  // ★PUSH_DISABLED — 이 서버는 알림을 '보내지 않는다'(크롤링·웹·대시보드·모니터는 정상 동작).
-  //  중복 알림 방지: 두 서버가 같은 구독으로 같은 폰에 쏘던 것을 '한 서버만 발송'하게. 되돌리려면 플래그만 제거.
-  if (['1', 'true', 'yes'].includes(String(process.env.PUSH_DISABLED || '').toLowerCase())) {
-    console.log(`🚫 PUSH_DISABLED — 이 서버는 알림 비발송: [회원${userId}] ${title}`);
+  // ★알림 비발송 스위치 — 이 서버는 푸시를 '보내지 않는다'(크롤링·웹·대시보드·모니터는 정상 동작).
+  //  두 서버가 같은 구독으로 같은 폰에 쏘던 중복을 '한 서버만 발송'하게. 켜는 법: data/push-disabled 파일 생성
+  //  (또는 env PUSH_DISABLED=1). 파일 방식은 재시작 없이 즉시 토글·복구 — touch로 켜고 rm으로 끈다.
+  const envOff = ['1', 'true', 'yes'].includes(String(process.env.PUSH_DISABLED || '').toLowerCase());
+  const fileOff = (() => { try { return fs.existsSync(path.join(DATA_DIR, 'push-disabled')); } catch { return false; } })();
+  if (envOff || fileOff) {
+    console.log(`🚫 알림 비발송(${fileOff ? 'push-disabled 파일' : 'PUSH_DISABLED'}): [회원${userId}] ${title}`);
     return;
   }
   if (!bypassQuiet && inQuietHours()) {
