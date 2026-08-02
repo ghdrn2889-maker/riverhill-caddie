@@ -76,6 +76,12 @@ function logSentPush(userId, { title, body, level }, sent, devices) {
 }
 
 export async function broadcast({ title, body, url, level, bypassQuiet }, userId = 1) {
+  // ★PUSH_DISABLED — 이 서버는 알림을 '보내지 않는다'(크롤링·웹·대시보드·모니터는 정상 동작).
+  //  중복 알림 방지: 두 서버가 같은 구독으로 같은 폰에 쏘던 것을 '한 서버만 발송'하게. 되돌리려면 플래그만 제거.
+  if (['1', 'true', 'yes'].includes(String(process.env.PUSH_DISABLED || '').toLowerCase())) {
+    console.log(`🚫 PUSH_DISABLED — 이 서버는 알림 비발송: [회원${userId}] ${title}`);
+    return;
+  }
   if (!bypassQuiet && inQuietHours()) {
     console.log(`🔕 조용시간(${QUIET_START}~${QUIET_END}시) — 발송 보류: [회원${userId}] ${title}`);
     return;
