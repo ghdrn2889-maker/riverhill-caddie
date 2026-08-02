@@ -196,6 +196,9 @@ function partsToDuty(set) {
 //  ※member-specific(myPosition/status/teeTime)은 절대 안 씀 — board-level만 취함.
 export function effectivePart3Verdict(lb) {
   const v = (lb && lb.rawVerdict) ? { ...lb.rawVerdict } : {};
+  // ★관리자 교정 배치표(_adminCorrected)는 그 자체가 정본 — today.json 오버레이로 절대 덮지 않는다.
+  //  (검수에서 서동명→서동환 교정한 이름을, 자동 판독이 담긴 today.json이 다시 서동명으로 되돌리던 사고 방지.)
+  if (v._adminCorrected) { v._t1Sig = `corrected:${v._adminCorrected.at || ''}`; return v; }
   const t1 = loadUserJSON(1, 'today.json', null);
   if (!t1) { v._t1Sig = ''; return v; }
   // ★날짜 안전장치: today.json이 '다음 날'로 넘어갔으면(월-일 다름) 오늘 배치표에 안 얹는다.
@@ -203,8 +206,9 @@ export function effectivePart3Verdict(lb) {
   const dLb = dayNums(lb && (lb.dateLabel || (lb.rawVerdict && lb.rawVerdict.dateLabel)));
   const dT1 = dayNums(t1.date);
   if (dLb && dT1 && dLb !== dT1) { v._t1Sig = ''; return v; }
-  // today.json이 채워진 board-level 필드만 덮는다(비었으면 스냅샷 유지 = 회귀 0).
-  if (Array.isArray(t1.roster3) && t1.roster3.length) v.part3Roster = t1.roster3.slice();
+  // ★이름(명단)은 절대 today.json에서 안 읽는다 — roster3는 관리자 잠금에 안 들어가고 근무 회원만 갱신돼
+  //  교정이 안 보이거나 되돌아가는 사고의 원인. 이름은 교정 가능한 lastboard(part3Roster) 그대로 두고,
+  //  당추로 실제 바뀌는 '시간민감 값'(티오프표·커트·인턴)만 today.json으로 최신화한다.
   if (Array.isArray(t1.teeGrid) && t1.teeGrid.length) v.teeGrid = t1.teeGrid.slice();
   if (Array.isArray(t1.internTees)) v.internTees = t1.internTees.slice();
   if (Number.isFinite(Number(t1.internCount))) v.internCount = Number(t1.internCount);

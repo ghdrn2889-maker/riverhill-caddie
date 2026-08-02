@@ -940,6 +940,18 @@ function rememberBoard(full, out) {
   }
   boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
+  // ★관리자 교정 보존 — 같은 배치표(같은 id·같은 날) 재판독이면, 검수에서 고친 이름(part3Roster)·근태·교정표식을
+  //  유지한다. 자동 판독이 다시 '서동명'으로 읽어도 관리자가 '서동환'으로 고친 걸 되돌리지 않게. (다른 글/다른 날이면 정상 갱신.)
+  if (prev && prev.rawVerdict && prev.rawVerdict._adminCorrected && String(prev.id) === String(full.id)) {
+    const pv = prev.rawVerdict;
+    const pd = String(prev.dateLabel || '').trim(), nd = String(v.dateLabel || '').trim();
+    if (!(pd && nd && pd !== nd)) {   // 같은 날
+      if (Array.isArray(pv.part3Roster) && pv.part3Roster.length) v.part3Roster = pv.part3Roster.slice();
+      if (pv.crewDuty) v.crewDuty = pv.crewDuty;
+      v._adminCorrected = pv._adminCorrected;
+      console.log(`·  lastboard 재판독(#${full.id}) — 관리자 교정 이름·표식 보존`);
+    }
+  }
   // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
   //  latestImage* = '원본 배치표' 표시 이미지 추적(정본 판독이면 자기 이미지가 곧 최신).
   saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now(),
