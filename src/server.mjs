@@ -1109,6 +1109,9 @@ async function processForMember(userId, member, out, full, opts = {}) {
     // ★불안정 판독(_uncertain)은 상황판 baseline을 갱신하지 않는다 — 흔들리는 순번/상태가
     //  다음 안정 판독과 비교돼 '유령 변경(순번 15→29 등)'을 만드는 것을 원천 차단. (읽기 기록·진단 로그는 아래에서 별도.)
     if (!v._uncertain) saveToday(merged.next, userId);
+    // ★_absent(명단에 이름 없음/오독 의심): _uncertain이라 위 baseline 저장은 건너뛰지만, 여기선 '순번 비운 중립(대기)'
+    //  상태를 저장해야 대시보드가 스테일 근무(순번7)를 계속 보여주지 않는다. 알림은 아래 low로 억제.
+    else if (v._absent) saveToday(merged.next, userId);
     change = merged.change;
     const jIso = worklog.labelToISO(merged.next.date);
     if (jIso && !v._uncertain && out.push !== 'check') {
@@ -1167,7 +1170,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
         //     저장된 직전 순번으로 안전 갱신하고 티오프는 기존값 보존(흔들리는 표를 반영하지 않음). ──
         const tcU = Number(v.teamCount);
         const mypU = Number(today.myPosition) || 0;
-        if (Number.isFinite(tcU) && tcU > 0 && mypU > 0 && today.status !== 'off') {
+        // ★_absent면 today.myPosition은 '스테일'이라 신뢰 불가 — 이 보수 재계산을 건너뛴다(순번7 근무 되살림 차단).
+        if (!v._absent && Number.isFinite(tcU) && tcU > 0 && mypU > 0 && today.status !== 'off') {
           const safe = { ...today };
           const nowWork = mypU <= tcU;
           const ns = nowWork ? (safe.teeTime ? 'assigned' : 'work') : 'spare';

@@ -320,26 +320,43 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     return;
   }
   if (rp <= 0) {
-    // ★신뢰할 만큼 완전한 명단(rosterReliable)인데 회원이 없다 = 오늘 이 부(部)에 없음.
-    //  메인 판독이 다른 부(예: 3부 명단의 김홍구 순번28)에서 붙인 '유령 순번'을 제거해
-    //  2부처럼 회원이 대개 없는 부에서 헛 슬롯/카드가 생기지 않게 한다. (3부 홈에선 부재=off라 순번0이 정답.)
-    if (v.rosterReliable) {
-      const prevPos = Number(v.myPosition) || 0;
-      if (prevPos > 0) v._posFixed = `명단 대조: 순번 ${prevPos}→없음(이 부 명단에 부재)`;
-      v.myPosition = 0;
-      // ★오늘 이전엔 순번/근무로 배치표에 있었는데(same day) 신뢰할 만한 최신 배치표에서 이름이 사라짐
-      //  = 협의하 순번 제외(개인사·부상·휴무 — 사유는 알 수 없음). '스페어'가 아니라 'off(빠짐)'로 확정.
-      //  (판독 실패는 rosterReliable로 이미 배제. 이름이 다시 오르면 다음 판독에서 근무로 자동 복귀.)
-      const todayPos = Number(today?.myPosition) || 0;
-      const wasOnBoard = todayPos > 0 || ['assigned', 'work', 'your_turn', 'spare', 'waiting', 'near'].includes(String(today?.status || ''));
-      if (wasOnBoard && sameDayLabel(today?.date, v.dateLabel)) {
-        v.myStatus = 'off';
-        v._offReason = 'removed';
-        v._prevPosition = todayPos || prevPos || null;
-        v.teeTime = ''; v.course = '';
-      } else if (['assigned', 'work', 'your_turn'].includes(v.myStatus)) {
-        v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
-      }
+    // ── 회원이 명단에서 '정확히' 안 잡힘. 옛(스테일) 순번으로 근무 오알림을 내보내지 않는 게 핵심. ──
+    //  ★비-주회원(interpretForMember)은 v.rosterReliable이 안 실려 undefined → 옛 가드가 아예 발동 못 했다.
+    //   그래서 서동환(오독)이 스테일 순번7로 새 근무 오알림을 냈다. 아래는 rosterReliable에 의존하지 않는다.
+    const near = findNearName(v.part3Roster, member.name);                    // 한 글자 차이 쌍둥이 이름(오독 의심)
+    const rosterLen = Array.isArray(v.part3Roster) ? v.part3Roster.filter(Boolean).length : 0;
+    const trustAbsent = v.rosterReliable || rosterLen >= 9 || !!near;         // 부재로 다룰 근거(짧은·텍스트 소식이면 false)
+    if (!trustAbsent) return;                                                 // → 옛 순번 유지(회귀 없음)
+
+    const prevPos = Number(v.myPosition) || 0;
+    const todayPos = Number(today?.myPosition) || 0;
+    const hadState = prevPos > 0 || todayPos > 0
+      || ['assigned', 'work', 'your_turn', 'spare', 'waiting', 'near'].includes(String(today?.status || ''));
+    v.myPosition = 0;
+    if (!hadState) return;   // ★지켜야 할 스테일 상태 없음(대개 1·2부·신규) → 순번만 0, 헛 '확인필요' 노이즈·오알림 없음
+
+    // ── 여기부터: 최신 명단에 이름 없음 + 지켜야 할 스테일 상태 있음 = 스테일 근무 오알림 위험. ──
+    if (near || !v.rosterReliable) {
+      // ★오독/불안정 부재 — '빠짐(off)' 단정 금지(실제 근무 중일 수 있음). 중립(대기)+'확인 필요' + 스테일 순번 비움.
+      if (near) v._nameMisread = `명단에 '${near.name}'(순번 ${near.pos}) — '${member.name}'과(와) 한 글자 차이. 이름 오독 의심`;
+      v._uncertain = v._uncertain || (near
+        ? `배치표에서 '${member.name}' 이름 판독이 불확실합니다(유사 이름 '${near.name}') — 원문(배치표)을 직접 확인하세요`
+        : '배치표 명단에서 이름을 찾지 못했습니다 — 원문(배치표)을 직접 확인하세요');
+      v._posFixed = near ? `명단 대조: 순번 ${prevPos || '?'}→불명(이름 오독 의심)` : `명단 대조(불안정): 순번 ${prevPos || '?'}→없음`;
+      v._absent = true;                                    // ★applyVerdict·processForMember가 스테일 순번으로 근무 되살리기 차단
+      v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
+      return;
+    }
+
+    // ── 신뢰 판독(주회원) + 쌍둥이 이름 없음 = 진짜 부재 확정(기존 도대영·조하빈 off 보호와 동일). ──
+    if (prevPos > 0) v._posFixed = `명단 대조: 순번 ${prevPos}→없음(이 부 명단에 부재)`;
+    if (sameDayLabel(today?.date, v.dateLabel)) {
+      v.myStatus = 'off';
+      v._offReason = 'removed';
+      v._prevPosition = todayPos || prevPos || null;
+      v.teeTime = ''; v.course = '';
+    } else {
+      v.myStatus = 'spare'; v.teeTime = ''; v.course = '';
     }
     return;
   }
@@ -845,6 +862,24 @@ function rosterHitsOf(roster, name) {
   }
   return out;
 }
+// ★쌍둥이 이름(한 글자 차이) 탐지 — 회원 이름이 명단에 '정확히' 없을 때 오독 의심 신호.
+//  같은 길이 + 정확히 한 음절만 다름(Hamming 1). OCR 이름 오독은 대개 한 음절 치환(서동환↔서동명).
+//  이 함수는 '자동 교정'이 아니라 '확인 필요' 표식·스테일 순번 차단 판단에만 쓴다(둘 다 실존 캐디라 자동확정 금지).
+function findNearName(roster, name) {
+  const key = String(name || '').replace(/\s/g, '');
+  if (key.length < 2 || !Array.isArray(roster)) return null;
+  for (let i = 0; i < roster.length; i++) {
+    const cell = String(roster[i] || '').replace(/\s/g, '');
+    if (!cell) continue;
+    const m = cell.match(/\(([^)]+)\)/);
+    const occ = (m ? m[1] : cell.replace(/\(.*$/, '')).trim();
+    if (!occ || occ === key || occ.length !== key.length) continue;
+    let diff = 0;
+    for (let c = 0; c < key.length && diff <= 1; c++) if (occ[c] !== key[c]) diff++;
+    if (diff === 1) return { name: occ, pos: i + 1 };
+  }
+  return null;
+}
 // 회원 명단 위치 해석 — 같은 이름이 여러 순번에 있을 때 '재인쇄' vs '동명이인' 구분.
 //  · 이름이 한 번만 → 그 자리.
 //  · 여러 번 등장 →
@@ -1325,6 +1360,11 @@ export function interpretForMember(article, shared, member, today = null) {
     //  (도대영·조하빈이 티오프표 오독으로 다시 'assigned'로 붙던 사고 차단.)
     v.myStatus = 'off'; v.myPosition = 0; v.teeTime = ''; v.course = '';
     return { ...decide(article, v, member), status: 'off', rawVerdict: v };
+  }
+  if (v._absent) {
+    // ★명단에 이름 없음/오독 의심(fixMemberPosByRoster에서 확정) — 순번·티오프 재해석을 건너뛰고 중립(대기·확인필요)으로
+    //  종결. 아래 resolveTeeByGrid/applyRoster가 스테일 순번을 되살리거나 상태를 흔들지 못하게 여기서 끊는다.
+    return { ...decide(article, v, member), rawVerdict: v };
   }
   applyBoardParts(v, member);             // ★표 헤더로 이 회원 부(部) 재검증(다른 부 표면 무관 처리)
   resolveTeeByGrid(v, member);            // 순번→티오프(구조·beyond-cut 스페어 등)

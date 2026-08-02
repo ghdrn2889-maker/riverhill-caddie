@@ -195,6 +195,9 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
       changes.push({ field: 'position', from: cur.myPosition, to: mp, reversal: false, msg: `순번 ${cur.myPosition}→${mp}번` });
     next.myPosition = mp;
   }
+  // ★_absent = 최신 신뢰 판독에서 이 회원이 명단에 없음(오독 의심 포함). 스테일 순번(cur)을 0으로 비워
+  //  아래 팀수·커트라인 재분류가 '옛 순번으로 근무 되살리기'를 못 하게 한다. (서동환 순번7 오알림 재발 방지)
+  if (verdict._absent) next.myPosition = 0;
 
   // ── 티오프: 새 확정 / 변경(번복) 감지 ──
   //  ★내 부 티오프 창 밖은 무효(남의 시간/취소·오독 방지). 창은 opts로 주입(3부 기본 16~24).
