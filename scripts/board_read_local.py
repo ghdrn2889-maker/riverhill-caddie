@@ -78,21 +78,27 @@ def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
 
 # ── 픽셀분석: 각 순번 셀 배경색으로 근무/스페어/근무배정 판정(결정론적) ──
 def classify_bg(im, x0f, x1f, row_top_f, row_bot_f):
+    # 반환 (배경색분류, 텍스트유무). 텍스트유무 = 어두운 픽셀 비율(빈 슬롯의 가짜 이름 제거용).
     W, H = im.size
     box = im.crop((int(x0f * W), int(row_top_f * H), int(x1f * W), int(row_bot_f * H)))
     px = list(box.getdata())
-    # 글자(어두운 픽셀) 제외한 배경 픽셀만
+    if not px:
+        return ("unknown", False)
+    dark = sum(1 for (r, g, b) in px if (r + g + b) / 3 < 110)
+    has_text = (dark / len(px)) > 0.02
     bg = [(r, g, b) for (r, g, b) in px if (r + g + b) / 3 > 140]
     if not bg:
-        return "unknown"
+        return ("unknown", has_text)
     ar = sum(p[0] for p in bg) / len(bg); ag = sum(p[1] for p in bg) / len(bg); ab = sum(p[2] for p in bg) / len(bg)
     if ag > ar + 12 and ag > ab + 12:
-        return "green"                       # 초록 = 54 근무배정
-    if ar > 235 and ag > 235 and ab > 235:
-        return "white"                       # 흰색 = 근무
-    if 175 < ar < 225 and abs(ar - ag) < 15 and abs(ar - ab) < 15:
-        return "gray"                        # 회색 = 스페어
-    return "white" if (ar + ag + ab) / 3 > 228 else "gray"
+        cls = "green"                        # 초록 = 54 근무배정
+    elif ar > 235 and ag > 235 and ab > 235:
+        cls = "white"                        # 흰색 = 근무
+    elif 175 < ar < 225 and abs(ar - ag) < 15 and abs(ar - ab) < 15:
+        cls = "gray"                         # 회색 = 스페어
+    else:
+        cls = "white" if (ar + ag + ab) / 3 > 228 else "gray"
+    return (cls, has_text)
 
 
 # 세로 스트립에서 '초록칸'(인턴 티오프) 연속 밴드 수를 센다. 순번 있는 보라칸(팀)은 제외(초록만).
@@ -147,27 +153,8 @@ def main():
     for (a, b, y0, y1) in quads:
         for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
             merged[n] = nm
-    N = max(merged) if merged else 0
-    roster, assign = [], {}
-    for n in range(1, N + 1):
-        raw = merged.get(n, "")
-        m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
-        if m:
-            assign[n] = m.group(1).replace(" ", "")
-            raw = raw[:m.start()].strip()
-        roster.append(raw)
-
-    # 2) 근무/스페어 픽셀분석 → status + 커트라인(마지막 근무 순번)
+    # 2) 픽셀분석: 각 순번 셀 배경색(근무/스페어) + 텍스트 유무
     bg = read_status(im, rows=20)
-    status, cut = {}, 0
-    for n in range(1, 41):
-        nm = merged.get(n, "")
-        c = bg.get(n, "unknown")
-        st = "spare" if c == "gray" else ("work" if c in ("white", "green") else "unknown")
-        if nm:
-            status[n] = st
-            if st == "work":
-                cut = max(cut, n)
 
     # 3) 티오프표 — OUT열([순번][시간])과 IN열([시간][순번])을 '따로' 크롭해 좌우 혼동 제거. 각 열=순번↔시각.
     def read_tee_col(x0f, x1f, course, reads_t=2):
@@ -189,6 +176,35 @@ def main():
         tees.append({"n": n, "time": tmap[n][0], "course": tmap[n][1]})
     # 인턴(초록/노란 티오프칸, 순번 없음) = 그리드 OUT/IN열에서 색칸 픽셀 카운트(연속 색밴드 = 1개).
     interns = count_color_cells(im, 0.66, 0.78) + count_color_cells(im, 0.90, 1.0)
+
+    # 4) 커트라인·명단·근무 확정
+    #  · 커트 = 티오프표 최대순번(가장 신뢰: 근무팀만 티오프가 있음). 없으면 회색경계 폴백.
+    grid_max = max((t["n"] for t in tees), default=0)
+    #  · 실제 명단 끝 = '텍스트가 있는' 마지막 순번(빈 슬롯 31~40의 가짜 이름 배제).
+    real_max = 0
+    for n in range(1, 41):
+        _, has_text = bg.get(n, ("unknown", False))
+        if has_text and merged.get(n):
+            real_max = n
+    if not real_max:
+        real_max = max(merged) if merged else 0
+    cut = grid_max
+    if not cut:                                    # 폴백: 회색 아닌(근무) 마지막 순번
+        for n in range(1, real_max + 1):
+            c, ht = bg.get(n, ("unknown", False))
+            if ht and c in ("white", "green"):
+                cut = max(cut, n)
+    roster, assign, status = [], {}, {}
+    for n in range(1, real_max + 1):
+        c, has_text = bg.get(n, ("unknown", False))
+        raw = merged.get(n, "") if has_text else ""    # 빈 슬롯 가짜 이름 제거
+        m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
+        if m:
+            assign[n] = m.group(1).replace(" ", "")
+            raw = raw[:m.start()].strip()
+        roster.append(raw)
+        if raw:
+            status[n] = "work" if (cut and n <= cut) else ("work" if c in ("white", "green") else "spare")
 
     print(json.dumps({"roster": roster, "assign": assign, "status": status, "cutPos": cut,
         "teeGrid": tees, "internCount": interns, "source": "local:%s" % MODEL}, ensure_ascii=False))
