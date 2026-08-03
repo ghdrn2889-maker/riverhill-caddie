@@ -371,22 +371,52 @@ def legacy_read(im, reads, name_prompt):
             "teeGrid": tees, "internCount": interns}
 
 
-def single_crop_read(im, part, reads, name_prompt, known_set):
+def region_text_density(im, x0f, x1f, y0f, y1f):
+    # 영역의 '어두운 글자 픽셀' 비율 — 빈 칸/빈 열 판별(결정적). 이름 칸이 비면 0에 가깝다.
+    W, H = im.size
+    box = im.crop((int(x0f * W), int(y0f * H), int(x1f * W), int(y1f * H)))
+    px = list(box.getdata())
+    if not px:
+        return 0.0
+    dark = sum(1 for (r, g, b) in px if (r + g + b) / 3 < 110)
+    return dark / len(px)
+
+
+def _snap_known(nm, known_set):
+    # 명단 최근접 스냅 — 같은 길이 1글자차 후보가 '유일'하면 교정(장미화→장미희). 괄호 태그 보존.
+    if not known_set:
+        return nm
+    b = _base_name(nm)
+    if len(b) < 2 or b in known_set:
+        return nm
+    cands = [k for k in known_set if len(k) == len(b) and sum(1 for i in range(len(b)) if b[i] != k[i]) == 1]
+    if len(cands) == 1:
+        tag = re.search(r"(\([^)]*\))\s*$", str(nm))
+        return cands[0] + (tag.group(1) if tag else "")
+    return nm
+
+
+def single_crop_read(im, part, reads, name_prompt, known_set, cut_override=0):
     # ★단일 부(部) 크롭 전용 — 위치탐색 없이 고정 기하로 바로 판독(변동 크롭 업로드·부별 잘라읽기).
     #  깨끗한 단일부 이미지: 좌측=명단(순번 이름 | 순번 이름 2단), 우측=티오프표(OUT|시간|IN).
-    #  ★단일부는 크롭당 ~40s로 매우 빠르므로 '완전성 우선' — 좌열·우열을 '따로' 단일 열로 읽어 빠진 행 방지.
-    #   (상/하로만 자르면 2단이 한 크롭에 섞여 VLM이 행을 흘린다 — 이하늘 pos6 누락 등. 열 분리가 정답.)
+    #  ★완전성·정확성 우선(단일부는 빠름): ①좌/우열 분리(2단 섞임 행누락 방지) ②세로 3분할(밀집 하단 포착)
+    #   ③빈 열(이름칸 글자밀도 낮음)은 통째 스킵(환각 차단) ④명단 최근접 스냅(1글자 오독 교정).
     NAME_COLS = [(0.0, 0.33), (0.31, 0.63)]        # 좌열(순번 이름) · 우열(순번 이름)
     TEE_X = (0.56, 1.0)
+    Y_BANDS = [(0.0, 0.40), (0.35, 0.72), (0.68, 1.0)]
     merged = {}
     for (cx0, cx1) in NAME_COLS:
-        for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:  # 각 열을 상/하로 해상도↑
-            # ★min_votes=2 — 빈 열·환각(헤더 '이름', 1회성 오검출)은 다수결에서 탈락, 실이름만 채택.
+        # ★빈 열 가드 — 이 열의 '이름 칸'(우측 55%) 글자밀도가 낮으면 빈 열 → 읽지 않는다(1부 24~46 빈칸 환각 차단).
+        name_sub = (cx0 + 0.45 * (cx1 - cx0), cx1)
+        dens = region_text_density(im, name_sub[0], name_sub[1], 0.07, 0.98)
+        if dens < 0.006:
+            continue
+        for (y0, y1) in Y_BANDS:                    # 세로 3분할 — 밀집 열(2부 25행) 하단까지 포착
             for n, nm in read_names(im, cx0, cx1, reads, name_prompt, y0, y1, min_votes=2).items():
                 if n not in merged and nm:
                     merged[n] = nm
     tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=4)   # part 시간대 필터로 옆부 오염 방지
-    cut = max((t["n"] for t in tees), default=0)
+    cut = cut_override or max((t["n"] for t in tees), default=0)     # 요약숫자(있으면) 우선 = 신뢰도↑
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, TEE_X[0], TEE_X[1])
     roster, assign, status = [], {}, {}
@@ -396,6 +426,7 @@ def single_crop_read(im, part, reads, name_prompt, known_set):
         if m:
             assign[n] = m.group(1).replace(" ", "")
             raw = raw[:m.start()].strip()
+        raw = _snap_known(raw, known_set) if raw else raw          # 명단 최근접 스냅
         roster.append(raw)
         if raw:
             status[n] = "work" if (cut and n <= cut) else "spare"
@@ -444,7 +475,7 @@ def main():
     # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──
     if cfg.get("single"):
         npart = int(want) if want.isdigit() else 0
-        out = single_crop_read(im, npart, reads, name_prompt, known_set)
+        out = single_crop_read(im, npart, reads, name_prompt, known_set, cut_override=int(cfg.get("cut", 0) or 0))
         out.update({"part": want, "_layout": "single", "_ms": int((_time.time() - t0) * 1000),
                     "source": "local:%s" % MODEL})
         print(json.dumps(out, ensure_ascii=False))
