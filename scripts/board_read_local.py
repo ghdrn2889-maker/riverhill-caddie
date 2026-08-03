@@ -55,17 +55,17 @@ def ask(img, prompt, key):
     return []
 
 
-def crop_up(im, x0f, x1f, scale=4):
+def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=5):
     from PIL import Image
     W, H = im.size
-    c = im.crop((int(x0f * W), 0, int(x1f * W), H))
+    c = im.crop((int(x0f * W), int(y0f * H), int(x1f * W), int(y1f * H)))
     return c.resize((c.width * scale, c.height * scale), Image.LANCZOS)
 
 
-def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT):
+def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
     tally = {}
     for _ in range(reads):
-        for row in ask(crop_up(im, x0f, x1f), prompt, "rows"):
+        for row in ask(crop_up(im, x0f, x1f, y0f, y1f), prompt, "rows"):
             try:
                 n = int(row["n"]); nm = str(row.get("name", "")).strip()
             except Exception:
@@ -136,10 +136,16 @@ def main():
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
-    # 1) 명단(타일 표결)
+    # 1) 명단 — 좌/우 열을 다시 상/하로 쪼갠 '4분할'(각 줄 해상도↑ → 흐린 셀 오독 최소화). 순번(인쇄숫자)로 병합.
     merged = {}
-    for (a, b) in [(0.0, 0.38), (0.32, 0.72)]:
-        for n, nm in read_names(im, a, b, reads, name_prompt).items():
+    quads = [
+        (0.0, 0.38, 0.0, 0.56),    # 좌열 상(순번 1~10, 헤더 포함)
+        (0.0, 0.38, 0.48, 1.0),    # 좌열 하(11~20)
+        (0.32, 0.72, 0.0, 0.56),   # 우열 상(21~30)
+        (0.32, 0.72, 0.48, 1.0),   # 우열 하(31~40)
+    ]
+    for (a, b, y0, y1) in quads:
+        for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
             merged[n] = nm
     N = max(merged) if merged else 0
     roster, assign = [], {}
