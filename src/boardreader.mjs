@@ -79,20 +79,26 @@ async function readPartsOnce(img, sorted, cuts) {
   return parts;
 }
 
-// 판독 불량 판정 — 경계 흔들림으로 (1)근무자 누락(명단 < 커트) 또는 (2)부 머리 중복(경계 붕괴)일 때.
-//  ★불변식: 명단은 커트(근무선)까지 순번을 모두 담아야 한다 → 명단 길이 < 커트면 근무자 일부를 못 읽음(치명).
+// 명단 심각부족 판정 floor — 인턴(노란칸=순번 없는 팀)이 있으면 정규명단 < 커트가 정상이라 여유(−4·60%)를 둔다.
+//  경계로 순번열이 통째 누락된 '심각' 부족(예: 커트16에 명단9)만 잡고, 인턴발 1~3 부족은 통과.
+const _rosterFloor = (cut) => Math.max(cut - 4, Math.ceil(cut * 0.6));
+
+// 판독 불량 판정 — 경계 흔들림으로 (1)부 머리 이름 중복(경계 붕괴) 또는 (2)명단 심각부족(순번열 누락)일 때.
 function boardReadFault(parts, cuts) {
   const keys = Object.keys(parts);
-  for (const p of keys) {
-    const cut = Number(cuts[p]) || Number(parts[p].cut) || 0;
-    const rl = (parts[p].roster || []).filter(Boolean).length;
-    if (cut > 0 && rl < cut) return `${p}부 명단 부족(${rl} < 커트 ${cut}) — 근무자 누락`;
-  }
+  // (1) 경계 붕괴의 가장 확실한 신호: 서로 다른 부의 '머리 이름'이 겹침(두 크롭이 같은 열을 읽음).
   for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
     const a = (parts[keys[i]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
     const b = (parts[keys[j]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
     const common = a.filter((x) => b.includes(x));
     if (common.length >= 2) return `${keys[i]}·${keys[j]}부 머리 중복(${common.join(',')}) — 경계 붕괴`;
+  }
+  // (2) 순번열 통째 누락 = 명단이 커트 대비 '심각' 부족(인턴 여유 넘어). 1~3 부족(인턴)은 정상 통과.
+  for (const p of keys) {
+    const cut = Number(cuts[p]) || Number(parts[p].cut) || 0;
+    const rl = (parts[p].roster || []).filter(Boolean).length;
+    const floor = _rosterFloor(cut);
+    if (cut > 0 && rl < floor) return `${p}부 명단 심각부족(${rl} < ${floor}, 커트 ${cut}) — 순번열 누락`;
   }
   return '';
 }
@@ -230,11 +236,11 @@ export async function readBoardClaudeVerdict(article, member) {
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
   const pd = board.parts[part];
   if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) return null;
-  // ★안전 게이트: 이 부 명단이 커트(근무선)를 못 덮으면(근무자 누락) 회원 발송에 쓰지 않는다 → null로 폴백.
-  //  경계 흔들림 잔여가 회원에게 잘못된 '근무 없음' 알림을 내는 것을 원천 차단.
+  // ★안전 게이트: 이 부 명단이 커트를 '심각' 미달(순번열 누락)이면 회원 발송에 쓰지 않는다 → null로 폴백.
+  //  경계 흔들림 잔여가 회원에게 잘못된 '근무 없음' 알림을 내는 것을 차단. (인턴발 1~3 부족은 정상 허용.)
   const cut = Number(pd.cut) || 0;
   const rl = pd.roster.filter(Boolean).length;
-  if (cut > 0 && rl < cut) { console.warn(`[claude] ${part}부 명단 부족(${rl}<${cut}) — 발송용 판독 보류(폴백)`); return null; }
+  if (cut > 0 && rl < _rosterFloor(cut)) { console.warn(`[claude] ${part}부 명단 심각부족(${rl}<${_rosterFloor(cut)}, 커트 ${cut}) — 발송용 판독 보류(폴백)`); return null; }
   return verdictFromPart(article, member, pd, Object.keys(board.parts));
 }
 
