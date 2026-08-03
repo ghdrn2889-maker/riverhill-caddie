@@ -351,14 +351,17 @@ def legacy_read(im, reads, name_prompt):
 def single_crop_read(im, part, reads, name_prompt, known_set):
     # ★단일 부(部) 크롭 전용 — 위치탐색 없이 고정 기하로 바로 판독(변동 크롭 업로드·부별 잘라읽기).
     #  깨끗한 단일부 이미지: 좌측=명단(순번 이름 | 순번 이름 2단), 우측=티오프표(OUT|시간|IN).
-    #  ★단일부는 크롭당 ~25s로 매우 빠르므로 '완전성 우선' — 무조건 다회 판독(빠진 행 방지). 게이트 미사용.
-    NAME_X = (0.0, 0.62); TEE_X = (0.56, 1.0)
+    #  ★단일부는 크롭당 ~40s로 매우 빠르므로 '완전성 우선' — 좌열·우열을 '따로' 단일 열로 읽어 빠진 행 방지.
+    #   (상/하로만 자르면 2단이 한 크롭에 섞여 VLM이 행을 흘린다 — 이하늘 pos6 누락 등. 열 분리가 정답.)
+    NAME_COLS = [(0.0, 0.33), (0.31, 0.63)]        # 좌열(순번 이름) · 우열(순번 이름)
+    TEE_X = (0.56, 1.0)
     merged = {}
-    for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:
-        for n, nm in read_names(im, NAME_X[0], NAME_X[1], reads, name_prompt, y0, y1).items():
-            if n not in merged and nm:
-                merged[n] = nm
-    tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=3)   # part 시간대 필터로 옆부 오염 방지
+    for (cx0, cx1) in NAME_COLS:
+        for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:  # 각 열을 상/하로 해상도↑
+            for n, nm in read_names(im, cx0, cx1, reads, name_prompt, y0, y1).items():
+                if n not in merged and nm:
+                    merged[n] = nm
+    tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=4)   # part 시간대 필터로 옆부 오염 방지
     cut = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, TEE_X[0], TEE_X[1])
