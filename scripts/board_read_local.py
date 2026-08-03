@@ -55,11 +55,15 @@ def ask(img, prompt, key):
     return []
 
 
-def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=5):
+def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=5, max_side=3600):
     from PIL import Image
     W, H = im.size
     c = im.crop((int(x0f * W), int(y0f * H), int(x1f * W), int(y1f * H)))
-    return c.resize((c.width * scale, c.height * scale), Image.LANCZOS)
+    w, h = c.width * scale, c.height * scale
+    m = max(w, h)
+    if m > max_side:                       # 큰 원본 배치표에서 업스케일이 거대해져 VLM이 느려지는 것 방지(캡)
+        f = max_side / m; w = int(w * f); h = int(h * f)
+    return c.resize((max(1, w), max(1, h)), Image.LANCZOS)
 
 
 def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
