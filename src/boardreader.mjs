@@ -65,9 +65,9 @@ async function readPartsOnce(img, sorted, cuts) {
       const x1 = next ? next.x0 : b.x1;
       const margin = next ? 0.0 : 0.05;
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
-      // ★y1=0.68 — 명단 세로 전체 포착. 기본 0.60은 첫 열이 21행 이상(2부 25·1부 21)일 때 하단을 잘라
-      //  뒤 순번을 통째로 놓치고(최수원·이은지) 둘째 열이 그 자리로 밀려 오정렬됐다. 공지영역(≈0.70~)은 아직 제외.
-      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.68 }, scale: 6 }, 30000);
+      // ★y1=0.73 — 명단 세로 전체 포착. 2부 첫 열은 25행이라 0.68로도 하단 2행(정용호·우경조)을 놓쳤다.
+      //  0.73으로 25행까지 담고, 공지/흡연실당번(순번 없음)은 PART_PROMPT가 무시(무해).
+      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;

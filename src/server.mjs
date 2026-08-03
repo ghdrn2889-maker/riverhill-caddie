@@ -1043,7 +1043,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       } else if (full.images && full.images.length) {
         console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 크레딧 절약(배치표당 Gemini ~5회 유지): ${full.subject}`);
       }
-      if (opts.previewMode) await sendDailyPreview(boardISO, full);
+      if (opts.previewMode) await sendDailyPreview(boardISO, full, opts);
       return primaryRet;
     }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
@@ -1116,7 +1116,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 
   // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
-  if (opts.previewMode) { try { await sendDailyPreview(boardISO, full); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
+  if (opts.previewMode) { try { await sendDailyPreview(boardISO, full, opts); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }
@@ -1421,8 +1421,9 @@ function isPreviewSent(dayISO) {
   return Array.isArray(store[dayISO]) && store[dayISO].length > 0;
 }
 // 본배치표 최초 판독 시 호출 — 판독된 전 회원에게 통합 예고 1건씩(이미 받은 회원·날짜는 건너뜀).
-async function sendDailyPreview(dayISO, full) {
+async function sendDailyPreview(dayISO, full, opts = {}) {
   if (!dayISO) return;
+  if (opts.noPush) { console.log('·  [noPush] 통합 예고 발송 억제(관리자 재판독)'); return; }
   const store = loadJSON('preview-sent.json', {});
   const today = todayISOKST();
   for (const d of Object.keys(store)) if (d < today) delete store[d];   // 지난 날짜 정리
