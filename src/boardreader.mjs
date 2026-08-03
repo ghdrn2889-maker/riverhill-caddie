@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -97,17 +97,20 @@ async function readPartsOnce(img, sorted, cuts) {
       // ★y1=0.73 — 명단 세로 전체 포착(공지영역 위까지). crop_only가 실제 사용 경계(x0/x1/y1)를 함께 반환.
       const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
+      // ★열 경계 — part 판독의 rosterCols가 있으면 쓰고, 없으면(들쭉날쭉) 전용 호출로 확실히 잡는다.
+      let rcols = (r && Array.isArray(r.rosterCols) && r.rosterCols.length) ? r.rosterCols : null;
+      if (!rcols) { try { rcols = await getRosterColumns(cropPath); } catch { /* noop */ } }
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;
       const cut = Number(cuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰), 없으면 per-part cut
       // ★열분할: 판독한 열 경계로 각 열을 단일 크롭 재판독 → 더 완전하면 채택(2부 다열 하단 누락·밀림 해결).
       let roster = r.roster;
       const cx0 = Number(meta?.x0), cx1 = Number(meta?.x1), cy1 = Number(meta?.y1) || 0.73;
-      if (Array.isArray(r.rosterCols) && r.rosterCols.length && Number.isFinite(cx0) && Number.isFinite(cx1) && cx1 > cx0) {
-        const colRoster = await readColumnsAssemble(img, r.rosterCols, cx0, cx1, cy1, b.part);
+      if (rcols && rcols.length && Number.isFinite(cx0) && Number.isFinite(cx1) && cx1 > cx0) {
+        const colRoster = await readColumnsAssemble(img, rcols, cx0, cx1, cy1, b.part);
         const base = r.roster.filter(Boolean).length;
         if (colRoster && colRoster.length >= base && colRoster.length <= 60) {
-          console.log(`[boardreader] 부${b.part} 열분할 채택: ${colRoster.length}명(${r.rosterCols.length}열, 단일 대비 +${colRoster.length - base})`);
+          console.log(`[boardreader] 부${b.part} 열분할 채택: ${colRoster.length}명(${rcols.length}열, 단일 대비 +${colRoster.length - base})`);
           roster = colRoster;
         }
       }

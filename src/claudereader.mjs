@@ -126,6 +126,33 @@ const COLUMN_PROMPT = (
   + 'Skip a row only if it has no name. Ignore any text without a printed 순번 (notices, legends). '
   + 'Output ONLY strict JSON: {"roster":[{"pos":1,"name":"차은경(54)"},...]}'
 );
+// 부 크롭에서 '명단 열 x-경계'만 잡는 전용 호출(part 판독이 rosterCols를 들쭉날쭉 빠뜨려 별도로 확실히).
+//  반환: [{x0,x1}] 크롭 fraction, 티오프표 제외. 실패/캡초과면 null.
+const COLBOUNDS_PROMPT = (
+  'Read the given local image with the Read tool. It is ONE 부 section of a Korean golf caddie board (배치표): '
+  + 'on the LEFT there are one or more vertical [순번 이름] roster columns placed side by side; on the RIGHT is a tee-time table. '
+  + 'For EACH roster column (the left group only, NOT the tee table on the right), give its horizontal span {x0,x1} '
+  + 'as fractions (0 = left edge, 1 = right edge OF THIS IMAGE), left to right. Each span must cover BOTH the 순번 number and the name. '
+  + 'Output ONLY strict JSON: {"cols":[{"x0":0.02,"x1":0.20},{"x0":0.24,"x1":0.42}]}'
+);
+export async function getRosterColumns(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 열경계 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${COLBOUNDS_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 열경계 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const cols = (Array.isArray(j.cols) ? j.cols : [])
+      .map((c) => ({ x0: Number(c.x0), x1: Number(c.x1) }))
+      .filter((c) => c.x1 > c.x0 && c.x0 >= 0 && c.x1 <= 1);
+    return cols.length ? cols : null;
+  } catch { return null; }
+}
+
 export async function readColumnRoster(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 열 판독 스킵'); return null; }
