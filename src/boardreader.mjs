@@ -54,27 +54,11 @@ function snapRoster(roster) {
   });
 }
 
-// ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. ──
-//  반환 { boundaries, parts: { '1': {roster,tee,cut}, ... }, _claudeCalls }
-export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies(), summaryCuts = {} } = {}) {
-  const img = await ensureLocal(imageOrUrl);
-  if (!img) return null;
-  const startBudget = claudeBudgetLeft();
-  const bounds = await getPartBoundaries(img);
-  if (!bounds || !bounds.length) return null;
-  const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
-  // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
-  //  요약은 큰 인쇄 숫자라 안정적. 합본에만 있어(변동 크롭엔 없음) 없으면 per-part cut로 폴백. 합본당 +1 호출.
-  let cuts = { ...summaryCuts };
-  if (!Object.keys(cuts).length && sorted.length >= 2) {   // 여러 부 = 합본 → 요약 존재 기대
-    try {
-      const sumPath = path.join(TMP, `sum_${Date.now()}.png`);
-      await runPy({ image: img, crop_only: sumPath, slice: { x0: 0.55, x1: 0.90, y1: 0.06, lmargin: 0 }, scale: 6 }, 30000);
-      const sc = await readSummaryCounts(sumPath);
-      try { fs.unlinkSync(sumPath); } catch { /* noop */ }
-      if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
-    } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
-  }
+// 셀 → 태그 뗀 기본 이름(공백 제거). 오염(부 머리 중복) 판정용.
+const _baseName = (cell) => String(cell || '').replace(/\s*\([^)]*\).*/, '').replace(/\s/g, '').trim();
+
+// 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
+async function readPartsOnce(img, sorted, cuts) {
   const parts = {};
   for (let i = 0; i < sorted.length; i++) {
     const b = sorted[i];
@@ -83,7 +67,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       const next = sorted[i + 1];
       const x1 = next ? next.x0 : b.x1;
       const margin = next ? 0.0 : 0.05;
-      const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}.png`);
+      const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
       await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
@@ -92,7 +76,62 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       parts[String(b.part)] = { roster: snapRoster(r.roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }
-  return { boundaries: bounds, parts, _claudeCalls: startBudget - claudeBudgetLeft() };
+  return parts;
+}
+
+// 판독 불량 판정 — 경계 흔들림으로 (1)근무자 누락(명단 < 커트) 또는 (2)부 머리 중복(경계 붕괴)일 때.
+//  ★불변식: 명단은 커트(근무선)까지 순번을 모두 담아야 한다 → 명단 길이 < 커트면 근무자 일부를 못 읽음(치명).
+function boardReadFault(parts, cuts) {
+  const keys = Object.keys(parts);
+  for (const p of keys) {
+    const cut = Number(cuts[p]) || Number(parts[p].cut) || 0;
+    const rl = (parts[p].roster || []).filter(Boolean).length;
+    if (cut > 0 && rl < cut) return `${p}부 명단 부족(${rl} < 커트 ${cut}) — 근무자 누락`;
+  }
+  for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
+    const a = (parts[keys[i]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
+    const b = (parts[keys[j]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
+    const common = a.filter((x) => b.includes(x));
+    if (common.length >= 2) return `${keys[i]}·${keys[j]}부 머리 중복(${common.join(',')}) — 경계 붕괴`;
+  }
+  return '';
+}
+
+// ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. 경계 흔들림 대비 검증+재시도(최대 3회). ──
+//  반환 { boundaries, parts: { '1': {roster,tee,cut}, ... }, _claudeCalls }
+export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies(), summaryCuts = {}, maxTries = 3 } = {}) {
+  const img = await ensureLocal(imageOrUrl);
+  if (!img) return null;
+  const startBudget = claudeBudgetLeft();
+  let cuts = { ...summaryCuts };
+  let best = null, bestBounds = null, bestScore = -1, lastFault = '';
+  for (let attempt = 0; attempt < maxTries; attempt++) {
+    if (claudeBudgetLeft() <= 0) break;
+    const bounds = await getPartBoundaries(img);
+    if (!bounds || !bounds.length) continue;
+    const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
+    // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
+    //  요약은 큰 인쇄 숫자라 안정적. 합본에만 있음. 첫 시도에서 1회만 판독해 재사용.
+    if (!Object.keys(cuts).length && sorted.length >= 2) {
+      try {
+        const sumPath = path.join(TMP, `sum_${Date.now()}.png`);
+        await runPy({ image: img, crop_only: sumPath, slice: { x0: 0.55, x1: 0.90, y1: 0.06, lmargin: 0 }, scale: 6 }, 30000);
+        const sc = await readSummaryCounts(sumPath);
+        try { fs.unlinkSync(sumPath); } catch { /* noop */ }
+        if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
+      } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
+    }
+    const parts = await readPartsOnce(img, sorted, cuts);
+    const fault = boardReadFault(parts, cuts);
+    if (!fault) { best = parts; bestBounds = bounds; lastFault = ''; break; }   // 깨끗 → 채택
+    lastFault = fault;
+    const score = Object.values(parts).reduce((s, p) => s + (p.roster || []).filter(Boolean).length, 0);
+    if (score > bestScore) { best = parts; bestBounds = bounds; bestScore = score; }   // 불량이어도 가장 완전한 판독 보관
+    console.warn(`[boardreader] 시도 ${attempt + 1}/${maxTries} 불량(${fault}) → 경계 재추정 재시도`);
+  }
+  if (!best) return null;
+  if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
+  return { boundaries: bestBounds, parts: best, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -191,6 +230,11 @@ export async function readBoardClaudeVerdict(article, member) {
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
   const pd = board.parts[part];
   if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) return null;
+  // ★안전 게이트: 이 부 명단이 커트(근무선)를 못 덮으면(근무자 누락) 회원 발송에 쓰지 않는다 → null로 폴백.
+  //  경계 흔들림 잔여가 회원에게 잘못된 '근무 없음' 알림을 내는 것을 원천 차단.
+  const cut = Number(pd.cut) || 0;
+  const rl = pd.roster.filter(Boolean).length;
+  if (cut > 0 && rl < cut) { console.warn(`[claude] ${part}부 명단 부족(${rl}<${cut}) — 발송용 판독 보류(폴백)`); return null; }
   return verdictFromPart(article, member, pd, Object.keys(board.parts));
 }
 
