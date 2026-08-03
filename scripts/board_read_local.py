@@ -139,9 +139,21 @@ def read_status(im, header_f=0.052, rows=20):
 #  배치표 레이아웃은 날마다 다르다(단일 부 / 1·2·3부 통합 10칼럼 등). 좌표를 VLM에 물으면 못 짚는다.
 #  대신 '내가' 세로 스트립으로 크롭해 각 조각의 티오프 '시각'을 읽는다 — 시간대가 부를 확정한다:
 #   1부=아침(6~9시), 2부=낮(11~14시), 3부=오후(16~19시). 각 부 티오프표의 x중심을 얻는다.
+def crop_fast(im, x0f, x1f, scale=2, max_side=1300):
+    # 저해상 크롭 — 위치탐색(티오프 시각만)용. 빠르게 여러 스트립을 훑는다.
+    from PIL import Image
+    W, H = im.size
+    c = im.crop((int(x0f * W), 0, int(x1f * W), H))
+    w, h = c.width * scale, c.height * scale
+    m = max(w, h)
+    if m > max_side:
+        f = max_side / m; w = int(w * f); h = int(h * f)
+    return c.resize((max(1, w), max(1, h)), Image.LANCZOS)
+
+
 def _strip_hours(im, x0, x1):
     hrs = []
-    for row in ask(crop_up(im, x0, x1, 0.0, 1.0), TEE_PROMPT, "rows"):
+    for row in ask(crop_fast(im, x0, x1), TEE_PROMPT, "rows"):
         t = str(row.get("time", "")).strip()
         if re.match(r"^\d{1,2}:\d{2}$", t):
             hrs.append(int(t.split(":")[0]))
@@ -149,8 +161,8 @@ def _strip_hours(im, x0, x1):
 
 
 def find_part_tees(im):
-    # 반환 {part(int): (tee_x0, tee_x1)}. 스트립 스캔 → 시간대 tight한 것만 부로 채택.
-    W = 0.13; STEP = 0.065
+    # 반환 {part(int): (tee_x0, tee_x1)}. 저해상 스트립 스캔 → 시간대 tight한 것만 부로 채택.
+    W = 0.16; STEP = 0.11                 # 스트립 수 최소화(속도) — ~9개
     strips = []
     x = 0.0
     while x < 1.0 - 1e-6:
@@ -158,10 +170,10 @@ def find_part_tees(im):
         hrs = _strip_hours(im, x, x1)
         strips.append((x, x1, hrs))
         x += STEP
-    # 각 부에 속하는 스트립 중심 모으기(시간대 범위≤6, 개수 4~40 = 진짜 티오프표; 조편성 노이즈 n=90+ 배제)
+    # 각 부에 속하는 스트립 중심 모으기(시간대 범위≤6, 개수 3~40 = 진짜 티오프표; 조편성 노이즈 n=90+ 배제)
     buckets = {1: [], 2: [], 3: []}
     for (a, b, hrs) in strips:
-        if not (4 <= len(hrs) <= 40):
+        if not (3 <= len(hrs) <= 40):
             continue
         hs = sorted(hrs)
         if hs[-1] - hs[0] > 6:            # 여러 부 섞이거나 조편성 잡음 → 스킵
@@ -189,11 +201,10 @@ def read_one_part(im, part, parts, reads, name_prompt):
         r_x0 = max(0.0, r_x1 - 0.20)
     if r_x1 - r_x0 > 0.34:                                    # 너무 넓으면(단일 부 등) 그대로 두되 좌우 2단으로 읽음
         pass
-    # 명단 — 상/하로 쪼개 해상도↑ + 좌우 2단(순번 이름 | 순번 이름) 각각. 순번(인쇄숫자)로 병합.
-    mid = (r_x0 + r_x1) / 2.0
+    # 명단 — 명단 구간 전체(순번 이름 | 순번 이름 2단)를 상/하로만 쪼개 해상도↑. 순번(인쇄숫자)로 병합
+    #  (좌우 2단은 한 크롭에 담아 read_names가 순번으로 알아서 합침 → 호출 수 절반).
     merged = {}
-    for (a, b, y0, y1) in [(r_x0, mid + 0.01, 0.0, 0.56), (r_x0, mid + 0.01, 0.48, 1.0),
-                           (mid - 0.01, r_x1, 0.0, 0.56), (mid - 0.01, r_x1, 0.48, 1.0)]:
+    for (a, b, y0, y1) in [(r_x0, r_x1, 0.0, 0.56), (r_x0, r_x1, 0.48, 1.0)]:
         for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
             if n not in merged:
                 merged[n] = nm
