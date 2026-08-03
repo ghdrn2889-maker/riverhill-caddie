@@ -31,17 +31,28 @@ def load_image(src):
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
+import time as _time
+
+
 def ask(img, prompt, key):
     buf = io.BytesIO(); img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     body = json.dumps({"model": MODEL, "prompt": prompt, "images": [b64], "stream": False,
         "format": "json", "options": {"temperature": 0, "num_ctx": 8192}}).encode()
-    req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
-    r = json.loads(urllib.request.urlopen(req, timeout=120).read())
-    try:
-        return json.loads(r["response"]).get(key, [])
-    except Exception:
-        return []
+    # ollama 재로드/일시 과부하로 500이 날 수 있음 → 최대 3회 재시도(모델 웜업 대기).
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
+            r = json.loads(urllib.request.urlopen(req, timeout=180).read())
+            try:
+                return json.loads(r["response"]).get(key, [])
+            except Exception:
+                return []
+        except urllib.error.HTTPError as e:
+            if e.code >= 500 and attempt < 2:
+                _time.sleep(3 * (attempt + 1)); continue
+            raise
+    return []
 
 
 def crop_up(im, x0f, x1f, scale=4):
