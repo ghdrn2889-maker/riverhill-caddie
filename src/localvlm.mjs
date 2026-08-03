@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './store.mjs';
-import { confirmedCaddies, correctAndLearn } from './roster.mjs';
+import { confirmedCaddies, correctAndLearn, snapStrong } from './roster.mjs';
 import { activeMembers } from './users.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -35,12 +35,14 @@ function knownNames() {
 }
 
 // 확정사전 1글자 보정(폐쇄어휘 프롬프트의 2차 안전망). 괄호 표기는 표시이름·점유자 각각 보정.
+//  1차: correctAndLearn(hamming1) → 2차: snapStrong(강확정 편집거리≤2). 성신영→정진영 같은 2글자 오독 교정.
+const snap1 = (x) => snapStrong(correctAndLearn([x])[0] || x);
 function snapCell(cell) {
   const s = String(cell || '').trim();
   if (!s) return '';
   const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
-  if (m) return `${correctAndLearn([m[1].trim()])[0]}(${correctAndLearn([m[2].trim()])[0]})`;
-  return correctAndLearn([s])[0] || s;
+  if (m) return `${snap1(m[1].trim())}(${snap1(m[2].trim())})`;
+  return snap1(s) || s;
 }
 
 // article → 로컬 타일링 판독 결과 또는 null. (순번 index+1, 괄호 점유자 원문 유지)

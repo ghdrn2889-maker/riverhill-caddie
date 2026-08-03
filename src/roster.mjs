@@ -65,6 +65,38 @@ export function confirmedCaddies() {
   return confirmedFrom(load());
 }
 
+// 편집거리(같은 길이 치환수 근사) — 길이 다르면 큰 값.
+function editDist(a, b) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > 1) return 9;
+  // Levenshtein(작은 문자열이라 단순 DP)
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  }
+  return dp[m][n];
+}
+
+// ★강확정(자주 등장, 기본 n≥20) 이름 목록 — 2글자 오독까지 교정할 때의 '안전한' 후보군.
+export function strongCaddies(minN = 20) {
+  const db = load();
+  return Object.keys(db).filter((k) => k.length >= 3 && (db[k]?.n || 0) >= minN);
+}
+
+// 폐쇄어휘 2차 교정: 확정 명단에 없는 이름을, '강확정' 후보 중 편집거리≤2로 '유일'하게 가까운 것에 스냅.
+//  성신영→정진영(2글자차, n=128)처럼 hamming1이 못 잡는 오독을 교정. 유일하지 않으면 그대로(안전).
+export function snapStrong(name) {
+  const s = String(name || '').trim();
+  if (s.length < 3) return s;
+  const conf = confirmedFrom(load());
+  if (conf.includes(s)) return s;                       // 이미 확정 → 손대지 않음
+  const strong = strongCaddies();
+  const near = strong.filter((c) => editDist(s, c) <= 2);
+  return near.length === 1 ? near[0] : s;               // 유일 후보만 교정
+}
+
 // 순번 위치배열(빈칸 '' 유지) 보정 + 학습. 보정된 배열 반환.
 export function correctAndLearn(names) {
   const db = load();
