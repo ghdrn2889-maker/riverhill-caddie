@@ -59,7 +59,7 @@ def ask(img, prompt, key):
     return []
 
 
-def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=2400):
+def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=1700):
     from PIL import Image
     W, H = im.size
     c = im.crop((int(x0f * W), int(y0f * H), int(x1f * W), int(y1f * H)))
