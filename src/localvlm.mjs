@@ -56,6 +56,16 @@ export async function readBoardLocal(article, { reads = 3 } = {}) {
   let roster = Array.isArray(out?.roster) ? out.roster.map((s) => String(s || '').trim()) : [];
   if (!roster.length) return null;
   roster = roster.map(snapCell);   // 확정사전 보정
+  // ★타당성 게이트 — 고정 타일 기하는 '단일 부(部) 2단' 배치표 전용이다. 다부(1·2·3부 통합)·다열(10칼럼)
+  //  배치표는 한 부 범위를 넘겨 명단/티오프/컷이 비정상적으로 커진다(실측: 08-04 → 명단50·티70·컷70).
+  //  이런 판독은 '내 레이아웃 아님'으로 보고 버린다(null) → judge가 Gemini 폴백. 쓰레기 데이터가 정본을 덮는 사고 차단.
+  const MAX_SLOTS = 40;                                  // 한 부 순번은 현실적으로 40 이하(3부 ~30±).
+  const teeN = Array.isArray(out.teeGrid) ? out.teeGrid.length : 0;
+  const cutN = Number(out.cutPos) || 0;
+  if (roster.length > MAX_SLOTS || teeN > MAX_SLOTS || cutN > MAX_SLOTS) {
+    console.warn(`[localvlm] 타당성 실패(명단 ${roster.length}·티 ${teeN}·컷 ${cutN} > ${MAX_SLOTS}) — 다부/다열 레이아웃 의심 → 폴백`);
+    return null;
+  }
   return {
     part3Roster: roster,
     assign: out.assign || {},
