@@ -61,13 +61,14 @@ const _looksName = (nm) => /^[가-힣]{2,4}$/.test(String(nm || '').replace(/\([
 //  rosterCols(크롭 fraction) → 원본 fraction 역매핑 → 각 열 단일 크롭 판독 → 열 순서로 이어붙여 위치정렬.
 async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
   const cw = cropX1 - cropX0;
-  // ★여유: 왼쪽 −0.008(순번·첫글자 안 잘리게), 오른쪽 +0.02(경계 과소추정으로 이름 끝글자 잘림 방지 — 송승은→송승).
-  //  다음 열까지 간격이 커서 오른쪽 여유가 옆 열 이름을 물지 않음(물어도 이름검사가 거름).
+  // ★Claude의 열 x경계(특히 오른쪽 x1)가 과소추정돼 3글자 이름 끝글자가 잘린다(송승은→송승).
+  //  좌표를 곧이곧대로 믿지 말고 '최소 폭 보장'(순번+3글자 이름 ≈ 0.075)으로 넓힌다.
   const cols = rosterCols
-    .map((rc) => ({ x0: Math.max(0, cropX0 + rc.x0 * cw - 0.008), x1: Math.min(1, cropX0 + rc.x1 * cw + 0.02) }))
+    .map((rc) => ({ x0: Math.max(0, cropX0 + rc.x0 * cw - 0.008), x1: cropX0 + rc.x1 * cw }))
     .filter((c) => c.x1 > c.x0)
     .sort((a, b) => a.x0 - b.x0);
-  // 오른쪽 여유가 '다음 열'을 침범하면 그 열 첫 이름을 중복 판독한다 → 다음 열 시작 직전까지로 제한(마지막 열은 여유 유지).
+  for (const c of cols) c.x1 = Math.min(1, Math.max(c.x1 + 0.02, c.x0 + 0.075));   // 최소 폭 + 오른쪽 여유
+  // 넓힌 오른쪽이 '다음 열'을 물면 그 열 첫 이름을 중복 판독 → 다음 열 시작 직전까지로 제한(마지막 열은 여유 유지).
   for (let i = 0; i < cols.length - 1; i++) cols[i].x1 = Math.min(cols[i].x1, cols[i + 1].x0 - 0.003);
   const names = [];
   for (let k = 0; k < cols.length; k++) {
