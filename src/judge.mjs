@@ -6,6 +6,7 @@ import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePar
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 import { loadJSON } from './store.mjs';
+import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
 
 // ★관리자가 '진짜 동명이인'으로 등록한 이름들(data/homonyms.json = ["이지은", ...]).
 //  배치표에 같은 이름이 여러 순번에 뜨는 건 대개 '재인쇄'(같은 사람)라 기본은 접는다.
@@ -1101,15 +1102,24 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     || /[가-힣]{2,4}\s*님\s*(?:\([^)]*\)\s*)?까지\s*(?:근무|일)/.test(subj)  // "○○님(□□)까지 근무"
   );
   // ★배치표(이미지)는 여러 번 읽어 '표결'(신뢰도↑·정직한 불확실). 텍스트/카톡/일반 글은 1회(기본 모델).
-  let verdict = isBoard
-    ? await readBoardConsensus(article, member)
-    : await callGeminiJSON(buildPrompt(article, member), img, null);
+  //  ★로컬 VLM 스위치(data/use-local-vlm) — 배치표 판독을 홈 GPU(qwen2.5vl)로. 비용0. 실패하면 Gemini 폴백.
+  //   롤백: rm data/use-local-vlm (즉시). 로컬 verdict는 _local=true → 아래 Gemini 명단 재판독 블록을 건너뛴다.
+  let verdict;
+  if (isBoard && useLocalVLM()) {
+    verdict = await readBoardLocalVerdict(article, member);
+    if (!verdict) { console.log('[localvlm] 판독 실패 → Gemini 폴백'); verdict = await readBoardConsensus(article, member); }
+    else console.log(`[localvlm] 로컬 판독 채택(${verdict._source}, ${Math.round((verdict._ms || 0) / 1000)}s, 명단 ${verdict.part3Roster.length})`);
+  } else {
+    verdict = isBoard
+      ? await readBoardConsensus(article, member)
+      : await callGeminiJSON(buildPrompt(article, member), img, null);
+  }
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
   if (!verdict?._resolved) resolveTeeByGrid(verdict, member);
   // ★순번별 '이름' 명단 — 통합 판독이 자주 놓쳐서(타임아웃·부분) 전용 판독으로 다시 뽑아 위치정렬로 저장.
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
-  if (isBoard && verdict) {
+  if (isBoard && verdict && !verdict._local) {   // ★로컬 VLM 판독은 이미 명단·인턴을 채웠으므로 Gemini 재판독 스킵(비용0·회귀0)
     try {
       // ★몰림 방지: 명단 판독과 조 배치표 판독을 '동시(Promise.all)'로 쏘던 것을 '순차'로 —
       //  무거운 board 판독이 겹쳐 429/타임아웃으로 명단이 빈값(0명) 오던 문제 완화.
