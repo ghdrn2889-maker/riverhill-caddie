@@ -38,7 +38,7 @@ def ask(img, prompt, key):
     buf = io.BytesIO(); img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     body = json.dumps({"model": MODEL, "prompt": prompt, "images": [b64], "stream": False,
-        "format": "json", "options": {"temperature": 0, "num_ctx": 8192}}).encode()
+        "format": "json", "keep_alive": "10m", "options": {"temperature": 0, "num_ctx": 8192}}).encode()
     # ollama 재로드/일시 과부하로 500이 날 수 있음 → 최대 3회 재시도(모델 웜업 대기).
     for attempt in range(3):
         try:

@@ -15,7 +15,7 @@ import { activeMembers } from './users.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
 const SCRIPT = path.join(HERE, '..', 'scripts', 'board_read_local.py');
-const VLM_TIMEOUT_MS = Number(process.env.VLM_TIMEOUT_MS || 180000);
+const VLM_TIMEOUT_MS = Number(process.env.VLM_TIMEOUT_MS || 300000);
 
 // ★즉시 토글(재시작 불필요) — data/use-local-vlm 파일 있으면 배치표 판독을 로컬 VLM으로. 롤백=rm 파일.
 //  (env LOCAL_VLM=1 도 허용.) 판독 시점마다 확인하므로 touch/rm 즉시 반영.
