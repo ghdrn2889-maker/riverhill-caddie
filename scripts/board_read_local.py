@@ -84,6 +84,24 @@ def classify_bg(im, x0f, x1f, row_top_f, row_bot_f):
     return "white" if (ar + ag + ab) / 3 > 228 else "gray"
 
 
+# 세로 스트립에서 '초록칸'(인턴 티오프) 연속 밴드 수를 센다. 순번 있는 보라칸(팀)은 제외(초록만).
+def count_color_cells(im, x0f, x1f, bands=90):
+    W, H = im.size
+    x0, x1 = int(x0f * W), int(x1f * W)
+    prev_green = False; count = 0
+    for k in range(bands):
+        y0 = int(k / bands * H); y1 = int((k + 1) / bands * H)
+        box = im.crop((x0, y0, x1, y1)); px = list(box.getdata())
+        if not px:
+            prev_green = False; continue
+        ar = sum(p[0] for p in px) / len(px); ag = sum(p[1] for p in px) / len(px); ab = sum(p[2] for p in px) / len(px)
+        is_green = ag > ar + 15 and ag > ab + 15 and ag > 150
+        if is_green and not prev_green:
+            count += 1
+        prev_green = is_green
+    return count
+
+
 def read_status(im, header_f=0.052, rows=20):
     # 좌열(순번1-20) x≈[0.02,0.34], 우열(21-40) x≈[0.34,0.68]. 헤더 아래를 20행으로 등분.
     rh = (1.0 - header_f) / rows
@@ -146,8 +164,8 @@ def main():
     tmap.update(read_tee_col(0.78, 1.0, "IN"))       # 시간 + IN 숫자
     for n in sorted(tmap):
         tees.append({"n": n, "time": tmap[n][0], "course": tmap[n][1]})
-    # 인턴(초록/노란 티오프칸, 순번 없음) = 그리드 OUT열에서 초록 셀 수 픽셀 카운트
-    interns = 0
+    # 인턴(초록/노란 티오프칸, 순번 없음) = 그리드 OUT/IN열에서 색칸 픽셀 카운트(연속 색밴드 = 1개).
+    interns = count_color_cells(im, 0.66, 0.78) + count_color_cells(im, 0.90, 1.0)
 
     print(json.dumps({"roster": roster, "assign": assign, "status": status, "cutPos": cut,
         "teeGrid": tees, "internCount": interns, "source": "local:%s" % MODEL}, ensure_ascii=False))
