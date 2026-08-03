@@ -62,11 +62,14 @@ def read_tee_block(im, x0f, x1f, part, reads_t=3):
 
 
 def load_image(src):
+    import os
     from PIL import Image
     if src.startswith("data:"):
         raw = base64.b64decode(src.split(",", 1)[1])
     elif re.match(r"^https?:", src):
         raw = urllib.request.urlopen(src, timeout=20).read()
+    elif os.path.exists(src):                       # 로컬 파일 경로(부별 크롭 테스트 등)
+        return Image.open(src).convert("RGB")
     else:
         raw = base64.b64decode(src)
     return Image.open(io.BytesIO(raw)).convert("RGB")
@@ -345,6 +348,34 @@ def legacy_read(im, reads, name_prompt):
             "teeGrid": tees, "internCount": interns}
 
 
+def single_crop_read(im, part, reads, name_prompt, known_set):
+    # ★단일 부(部) 크롭 전용 — 위치탐색 없이 고정 기하로 바로 판독(변동 크롭 업로드·부별 잘라읽기).
+    #  깨끗한 단일부 이미지: 좌측=명단(순번 이름 | 순번 이름 2단), 우측=티오프표(OUT|시간|IN).
+    NAME_X = (0.0, 0.62); TEE_X = (0.58, 1.0)
+    merged = {}
+    for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:
+        res, _done = read_names_gated(im, NAME_X[0], NAME_X[1], name_prompt, known_set, y0, y1, max_reads=reads)
+        for n, nm in res.items():
+            if n not in merged:
+                merged[n] = nm
+    tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=2)   # part 시간대 필터로 옆부 오염 방지
+    cut = max((t["n"] for t in tees), default=0)
+    real_max = max(merged) if merged else 0
+    interns = count_color_cells(im, TEE_X[0], TEE_X[1])
+    roster, assign, status = [], {}, {}
+    for n in range(1, real_max + 1):
+        raw = merged.get(n, "")
+        m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
+        if m:
+            assign[n] = m.group(1).replace(" ", "")
+            raw = raw[:m.start()].strip()
+        roster.append(raw)
+        if raw:
+            status[n] = "work" if (cut and n <= cut) else "spare"
+    return {"roster": roster, "assign": assign, "status": status, "cutPos": cut,
+            "teeGrid": tees, "internCount": interns}
+
+
 def _emit(obj):
     # 스트리밍 출력 — 한 줄(NDJSON) 즉시 flush. 호출부(Node)가 부 단위로 바로 처리·저장·발송할 수 있게.
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
@@ -363,6 +394,15 @@ def main():
     name_prompt = NAME_PROMPT
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
+
+    # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──
+    if cfg.get("single"):
+        npart = int(want) if want.isdigit() else 0
+        out = single_crop_read(im, npart, reads, name_prompt, known_set)
+        out.update({"part": want, "_layout": "single", "_ms": int((_time.time() - t0) * 1000),
+                    "source": "local:%s" % MODEL})
+        print(json.dumps(out, ensure_ascii=False))
+        return
 
     parts = find_part_tees(im)                     # ★위치탐색 1회 — 이 결과를 모든 부 판독이 공유.
     layout = "multi:%s" % ",".join(str(p) for p in sorted(parts)) if parts else "none"
