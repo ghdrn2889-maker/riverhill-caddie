@@ -59,7 +59,7 @@ def ask(img, prompt, key):
     return []
 
 
-def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=2400):
+def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=1800):
     from PIL import Image
     W, H = im.size
     c = im.crop((int(x0f * W), int(y0f * H), int(x1f * W), int(y1f * H)))
@@ -143,7 +143,7 @@ def read_status(im, header_f=0.052, rows=20):
 #  배치표 레이아웃은 날마다 다르다(단일 부 / 1·2·3부 통합 10칼럼 등). 좌표를 VLM에 물으면 못 짚는다.
 #  대신 '내가' 세로 스트립으로 크롭해 각 조각의 티오프 '시각'을 읽는다 — 시간대가 부를 확정한다:
 #   1부=아침(6~9시), 2부=낮(11~14시), 3부=오후(16~19시). 각 부 티오프표의 x중심을 얻는다.
-def crop_fast(im, x0f, x1f, scale=2, max_side=1300):
+def crop_fast(im, x0f, x1f, scale=2, max_side=1000):
     # 저해상 크롭 — 위치탐색(티오프 시각만)용. 빠르게 여러 스트립을 훑는다.
     from PIL import Image
     W, H = im.size
@@ -166,7 +166,7 @@ def _strip_hours(im, x0, x1):
 
 def find_part_tees(im):
     # 반환 {part(int): (tee_x0, tee_x1)}. 저해상 스트립 스캔 → 시간대 tight한 것만 부로 채택.
-    W = 0.16; STEP = 0.11                 # 스트립 수 최소화(속도) — ~9개
+    W = 0.20; STEP = 0.16                 # 스트립 수 최소화(속도) — ~6개
     strips = []
     x = 0.0
     while x < 1.0 - 1e-6:
@@ -226,8 +226,8 @@ def read_one_part(im, part, parts, reads, name_prompt):
         return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
     tw = tee_x1 - tee_x0
     tmap = {}
-    tmap.update(read_tee_col(tee_x0, tee_x0 + tw * 0.62, "OUT"))
-    tmap.update(read_tee_col(tee_x0 + tw * 0.38, tee_x1, "IN"))
+    tmap.update(read_tee_col(tee_x0, tee_x0 + tw * 0.62, "OUT", reads_t=1))
+    tmap.update(read_tee_col(tee_x0 + tw * 0.38, tee_x1, "IN", reads_t=1))
     # ★부(部) 시간대 밖 시각은 옆 부 열이 새어든 오염 → 제거(1부 아침·2부 낮·3부 오후).
     lo, hi = {1: (5, 11), 2: (10, 16), 3: (14, 21)}.get(part, (0, 24))
     tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]}
