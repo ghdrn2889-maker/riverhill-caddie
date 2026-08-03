@@ -10,7 +10,7 @@ import { loadJSON, saveJSON } from './store.mjs';
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS || 240000);
-const DAILY_CAP = Number(process.env.CLAUDE_DAILY_CAP || 12);   // 하루 최대 호출(부별 1회×배치표 몇 건)
+const DAILY_CAP = Number(process.env.CLAUDE_DAILY_CAP || 40);   // 하루 최대 호출(합본 4 + 변동들). 폭주 방지 상한.
 const CAP_FILE = 'claude-calls.json';
 
 // ── 하루 하드캡 ─────────────────────────────────────────────
@@ -85,6 +85,37 @@ export async function getPartBoundaries(imagePath) {
       .map((p) => ({ part: Number(String(p.part).replace(/\D/g, '')), x0: Number(p.x0), x1: Number(p.x1) }))
       .filter((p) => p.part >= 1 && p.part <= 3 && p.x1 > p.x0 && p.x0 >= 0 && p.x1 <= 1);
     return parts.length ? parts : null;
+  } catch { return null; }
+}
+
+// 부별 크롭(단일부) → 명단 + 티오프 + 커트를 '한 번에'. 슬라이스당 Claude 1회.
+//  실증(8/4): 3부 명단 29 정확 + 티오프 16팀(IN 포함) + 커트16. VLM이 약했던 티오프까지 정확.
+const PART_PROMPT = (
+  'Read the given local image with the Read tool. It is ONE 부(section) of a Korean golf caddie board (배치표). '
+  + 'LEFT: [순번 이름] roster column(s) — list ALL caddies strictly in 순번 order, preserving parenthetical tags exactly '
+  + 'like (54)/(1,3)/(조출)/(찾근); skip truly empty rows. '
+  + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
+  + 'cut = the highest team number in the tee table (커트라인). '
+  + 'Output ONLY strict JSON, no prose: {"roster":["name",...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
+);
+
+export async function readPartWithClaude(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 캡(${DAILY_CAP}) 도달 — 부 판독 스킵`); return null; }
+  let out;
+  try { out = await runClaude(`${PART_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 부 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const roster = Array.isArray(j.roster) ? j.roster.map((s) => String(s || '').trim()) : [];
+    const tee = (Array.isArray(j.tee) ? j.tee : [])
+      .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
+      .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
+    const cut = Number(j.cut) || tee.reduce((mx, t) => Math.max(mx, t.pos), 0);
+    return roster.length ? { roster, tee, cut } : null;
   } catch { return null; }
 }
 

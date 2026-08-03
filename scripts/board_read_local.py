@@ -509,6 +509,21 @@ def main():
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
+    # ── crop_only: 경계로 잘라 업스케일 크롭만 저장(VLM 판독 안 함) — Claude가 그 크롭을 읽는다. 빠름. ──
+    if cfg.get("crop_only"):
+        from PIL import Image as _PIL
+        sl = cfg.get("slice") or {}
+        W, H = im.size
+        x0 = max(0.0, float(sl.get("x0", 0.0)) - 0.005)
+        x1 = min(1.0, float(sl.get("x1", 1.0)) + 0.05)
+        y1 = float(sl.get("y1", 0.60))
+        c = im.crop((int(x0 * W), 0, int(x1 * W), int(y1 * H)))
+        cw, ch = c.size
+        scale = int(cfg.get("scale", 6))
+        c.resize((cw * scale, ch * scale), _PIL.LANCZOS).save(str(cfg["crop_only"]))
+        print(json.dumps({"crop_path": str(cfg["crop_only"]), "_ms": int((_time.time() - t0) * 1000)}))
+        return
+
     # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──
     #  slice={x0,x1}가 오면(오케스트레이터가 Claude 경계로 합본을 부별 분할) 그 x구간만 먼저 잘라 단일부처럼 읽는다.
     if cfg.get("single"):
