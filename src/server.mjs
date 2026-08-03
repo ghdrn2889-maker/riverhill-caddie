@@ -1017,15 +1017,12 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
   //   + 텍스트-only(이미지 없이 글로 온 변동). 3부 판독의 boardTables 재사용 → "그 부 표가 있나" 판단은 추가 비용 0.
   try {
-    // ★크레딧 절감(최대 레버) — 1·2부는 아직 섀도(대시보드·알림에서 숨김, MINOR_PART_PUSH로 게이트).
-    //  꺼져 있으면 결과를 '버릴 뿐'인 1·2부 판독 2회 + 교차확인(board당 비싼 Gemini ~10회)을 아예 생략한다.
-    //  → board당 Gemini 호출 ~15회 → ~5회. Phase 2에서 MINOR_PART_PUSH=1 켜면 자동 재개(3부 경로는 무관).
+    // ★크레딧 절감 — 1·2부 회원 알림·대시보드·상태(processForMemberPart)는 MINOR_PART_PUSH로 게이트(기본 off).
+    //  단, 모니터 '판독/검수'가 읽는 board-parts-store(setBoardPart)는 이 게이트와 '무관하게' 항상 갱신한다 —
+    //  2부 배치표가 바뀌면 판독도 최신을 보여야 하므로(안 그러면 옛 2부에 영구 고정). 회원 상태·푸시만 아래
+    //  `if (!minorPartOn) continue` 로 분리해 건너뛴다(유령 2부 오알림·회원 영향 0). 꺼짐 비용 = 2부 표가 뜬
+    //  board당 judge 1회(모니터 저장소만). Phase 2에서 =1 켜면 회원 알림·대시보드까지 재개(3부 경로는 무관).
     const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
-    if (!minorPartOn) {
-      if (full.images && full.images.length) console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 섀도 판독·교차확인 생략(크레딧 절약): ${full.subject}`);
-      if (opts.previewMode) await sendDailyPreview(boardISO, full);   // 1·2부 꺼져도 3부 기준 예고는 발송
-      return primaryRet;
-    }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
     const isFullBoard = /전체|전부/.test(full.subject || '');
     const txt = `${full.subject || ''} ${full.text || ''}`;
@@ -1035,7 +1032,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     // ★이름 중복 교차확인(두 탕) — board당 1회. 각 부 근무자 집합(순번≤팀수)을 교차해 '이름→뛰는 부' authoritative 맵.
     //  2부 근무자는 조배치표 근무표시가 빈칸이라 이 교차확인이 두 탕/부소속의 가장 확실한 신호. 전체·다부 배치표에서만(비용).
     let crossPart = null;
-    if (isBoardImg && (isFullBoard || boardTables.length >= 2)) {
+    if (minorPartOn && isBoardImg && (isFullBoard || boardTables.length >= 2)) {  // 교차확인은 회원 근무배정 게이트용 → 꺼짐이면 불필요(크레딧 절약)
       try {
         crossPart = await crossPartWorkMap(full);
         if (crossPart?.twoRounds?.length) console.log(`🔁 두 탕 감지(교차확인): ${crossPart.twoRounds.map((nm) => `${nm}(${crossPart.byName[nm].duty})`).join(', ')}`);
@@ -1077,6 +1074,9 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           });
         } catch (e) { console.error('[board-parts 저장 오류]', e.message); }
       }
+      // ★MINOR_PART_PUSH 꺼짐: 위 setBoardPart(모니터 판독 저장소)까지만 하고, 회원 상태·저널·알림·대시보드는
+      //  일절 건드리지 않는다(유령 2부 오알림·회원 데이터 오염 0). Phase 2에서 켜면 아래 회원 처리까지 재개.
+      if (!minorPartOn) continue;
       // ★member 1도 다른 회원과 '동일하게' 그 부 명단 기반으로 재해석 — 전체 배치표의 3부 섹션 본인을
       //  1·2부로 오검출하는 것을 차단(그 부 명단에 없으면 순번 없음 = 무관). (opts.boardISO=이번 배치표 날짜)
       const m1outP = interpretForMember(full, outP.rawVerdict, mp, loadToday(1, p));
