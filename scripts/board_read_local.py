@@ -125,6 +125,44 @@ def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
     return {n: max(d.items(), key=lambda x: x[1])[0] for n, d in tally.items()}
 
 
+def _base_name(nm):
+    return re.sub(r"\([^)]*\)", "", str(nm or "")).strip()
+
+
+def read_names_gated(im, x0f, x1f, prompt, known_set, y0f=0.0, y1f=1.0, max_reads=3):
+    # ★확신게이트: 크롭을 1회 읽고, '불확실'할 때만 추가 판독(최대 max_reads). 정확도 유지·호출 감축.
+    #  불확실 = 표결이 갈리는 칸이 있거나(len>1), 명단대조 집합이 있는데 그 안에 없는 이름이 있음(오독 의심).
+    crop = crop_up(im, x0f, x1f, y0f, y1f)
+    tally = {}
+
+    def one():
+        for row in ask(crop, prompt, "rows"):
+            try:
+                n = int(row["n"]); nm = str(row.get("name", "")).strip()
+            except Exception:
+                continue
+            if nm:
+                tally.setdefault(n, {})
+                tally[n][nm] = tally[n].get(nm, 0) + 1
+
+    def uncertain():
+        for n, d in tally.items():
+            if len(d) > 1:
+                return True                       # 표결 불일치 → 더 읽어 확정
+            if known_set:
+                nm = max(d.items(), key=lambda x: x[1])[0]
+                b = _base_name(nm)
+                if len(b) >= 2 and b not in known_set:
+                    return True                   # 명단에 없는 이름 → 오독 의심 → 재확인
+        return False
+
+    one()
+    done = 1
+    while done < max_reads and uncertain():
+        one(); done += 1
+    return {n: max(d.items(), key=lambda x: x[1])[0] for n, d in tally.items()}, done
+
+
 # ── 픽셀분석: 각 순번 셀 배경색으로 근무/스페어/근무배정 판정(결정론적) ──
 def classify_bg(im, x0f, x1f, row_top_f, row_bot_f):
     # 반환 (배경색분류, 텍스트유무). 텍스트유무 = 어두운 픽셀 비율(빈 슬롯의 가짜 이름 제거용).
@@ -234,7 +272,7 @@ def find_part_tees(im):
     return parts
 
 
-def read_one_part(im, part, parts, reads, name_prompt):
+def read_one_part(im, part, parts, reads, name_prompt, known_set=None):
     # part의 명단(순번↔이름) + 티오프(순번↔시각) + 커트 판독. '이전 부 티오프'와 '이 부 티오프' 사이가 명단.
     centers = {p: (a + b) / 2.0 for p, (a, b) in parts.items()}
     tee_x0, tee_x1 = parts[part]
@@ -246,15 +284,16 @@ def read_one_part(im, part, parts, reads, name_prompt):
         r_x0 = max(0.0, r_x1 - 0.20)
     if r_x1 - r_x0 > 0.34:                                    # 너무 넓으면(단일 부 등) 그대로 두되 좌우 2단으로 읽음
         pass
-    # 명단 — 명단 구간 전체(순번 이름 | 순번 이름 2단)를 상/하로만 쪼개 해상도↑. 순번(인쇄숫자)로 병합
-    #  (좌우 2단은 한 크롭에 담아 read_names가 순번으로 알아서 합침 → 호출 수 절반).
+    # 명단 — 명단 구간 전체(순번 이름 | 순번 이름 2단)를 상/하로만 쪼개 해상도↑. 순번(인쇄숫자)로 병합.
+    #  ★확신게이트: 각 반쪽을 1회 읽고 불확실(명단에 없거나 표 갈림)할 때만 추가 판독 → 깨끗하면 호출↓, 애매하면 재확인.
     merged = {}
     for (a, b, y0, y1) in [(r_x0, r_x1, 0.0, 0.56), (r_x0, r_x1, 0.48, 1.0)]:
-        for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
+        res, _done = read_names_gated(im, a, b, name_prompt, known_set, y0, y1, max_reads=reads)
+        for n, nm in res.items():
             if n not in merged:
                 merged[n] = nm
     # 티오프 — 이 부 티오프표 전체를 행단위로 읽어 OUT·IN 팀 모두·정렬 보존(빈칸에도 안 어긋남).
-    tees = read_tee_block(im, tee_x0, tee_x1, part, reads_t=3)
+    tees = read_tee_block(im, tee_x0, tee_x1, part, reads_t=2)
     cut = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, tee_x0, tee_x1)
@@ -306,32 +345,67 @@ def legacy_read(im, reads, name_prompt):
             "teeGrid": tees, "internCount": interns}
 
 
+def _emit(obj):
+    # 스트리밍 출력 — 한 줄(NDJSON) 즉시 flush. 호출부(Node)가 부 단위로 바로 처리·저장·발송할 수 있게.
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
 def main():
     cfg = json.loads(sys.stdin.read() or "{}")
     reads = int(cfg.get("reads", 3))
     want = str(cfg.get("part", "3")).replace("부", "").strip() or "3"
     known = [str(x).strip() for x in (cfg.get("known") or []) if str(x).strip()]
+    known_set = set(_base_name(x) for x in known if len(_base_name(x)) >= 2)
     im = load_image(cfg["image"])
+    t0 = _time.time()
 
     name_prompt = NAME_PROMPT
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
-    parts = find_part_tees(im)
+    parts = find_part_tees(im)                     # ★위치탐색 1회 — 이 결과를 모든 부 판독이 공유.
+    layout = "multi:%s" % ",".join(str(p) for p in sorted(parts)) if parts else "none"
+
+    # ── want=="all": 이미지에 있는 '모든 부'를 부별로 판독하고 각 부를 즉시 내보낸다(스트리밍). ──
+    if want == "all":
+        present = sorted(parts)
+        if not present:                            # 부 못 찾음 → 단일부 폴백 1건
+            out = legacy_read(im, reads, name_prompt)
+            out.update({"part": "?", "_layout": "legacy", "_ms": int((_time.time() - t0) * 1000),
+                        "source": "local:%s" % MODEL})
+            _emit({"_stream": "part", **out})
+            _emit({"_done": True, "_layout": "legacy", "parts_read": ["?"],
+                   "_ms": int((_time.time() - t0) * 1000), "source": "local:%s" % MODEL})
+            return
+        done_parts = []
+        for p in present:                          # 아침/낮/오후 순으로 1→2→3
+            try:
+                out = read_one_part(im, p, parts, reads, name_prompt, known_set)
+            except Exception as e:                 # 한 부 실패는 그 부만 격리(나머지 부는 계속)
+                out = {"roster": [], "assign": {}, "status": {}, "cutPos": 0, "teeGrid": [],
+                       "internCount": 0, "_error": str(e)[:120]}
+            out.update({"part": str(p), "_layout": layout, "_ms": int((_time.time() - t0) * 1000),
+                        "source": "local:%s" % MODEL})
+            _emit({"_stream": "part", **out})      # ★그 부 즉시 내보냄
+            done_parts.append(str(p))
+        _emit({"_done": True, "_layout": layout, "parts_read": done_parts,
+               "_ms": int((_time.time() - t0) * 1000), "source": "local:%s" % MODEL})
+        return
+
+    # ── 단일 부 요청(변동 업데이트: 보통 한 부만 잘려 올라옴) — 그 부만 판독(하위호환: 단일 JSON). ──
     npart = int(want) if want.isdigit() else 3
     if npart in parts:
-        # 요청 부를 정확히 위치시켜 판독(다부/단일 레이아웃 모두). 다른 부도 필요하면 all_parts로.
-        out = read_one_part(im, npart, parts, reads, name_prompt)
-        out["_layout"] = "multi:%s" % ",".join(str(p) for p in sorted(parts))
+        out = read_one_part(im, npart, parts, reads, name_prompt, known_set)
+        out["_layout"] = layout
     elif len(parts) <= 1:
-        # 부 티오프를 못(하나만) 찾음 → 단일 부 고정기하 폴백.
         out = legacy_read(im, reads, name_prompt)
         out["_layout"] = "legacy"
     else:
-        # 여러 부는 찾았는데 요청 부는 없음 → 그 부는 이 배치표에 없음(빈 결과).
         out = {"roster": [], "assign": {}, "status": {}, "cutPos": 0, "teeGrid": [], "internCount": 0}
         out["_layout"] = "multi-no-part:%s" % ",".join(str(p) for p in sorted(parts))
     out["part"] = want
+    out["_ms"] = int((_time.time() - t0) * 1000)
     out["source"] = "local:%s" % MODEL
     print(json.dumps(out, ensure_ascii=False))
 
