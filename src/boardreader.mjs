@@ -70,6 +70,7 @@ async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
   for (const c of cols) c.x1 = Math.min(1, Math.max(c.x1 + 0.02, c.x0 + 0.075));   // 최소 폭 + 오른쪽 여유
   // 넓힌 오른쪽이 '다음 열'을 물면 그 열 첫 이름을 중복 판독 → 다음 열 시작 직전까지로 제한(마지막 열은 여유 유지).
   for (let i = 0; i < cols.length - 1; i++) cols[i].x1 = Math.min(cols[i].x1, cols[i + 1].x0 - 0.003);
+  console.log(`[boardreader] 부${part} 열크롭(crop ${cropX0.toFixed(3)}~${cropX1.toFixed(3)}): ${cols.map((c) => `${c.x0.toFixed(3)}~${c.x1.toFixed(3)}`).join(' | ')}`);
   const names = [];
   for (let k = 0; k < cols.length; k++) {
     const c = cols[k];
