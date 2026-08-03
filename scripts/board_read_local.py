@@ -351,14 +351,14 @@ def legacy_read(im, reads, name_prompt):
 def single_crop_read(im, part, reads, name_prompt, known_set):
     # ★단일 부(部) 크롭 전용 — 위치탐색 없이 고정 기하로 바로 판독(변동 크롭 업로드·부별 잘라읽기).
     #  깨끗한 단일부 이미지: 좌측=명단(순번 이름 | 순번 이름 2단), 우측=티오프표(OUT|시간|IN).
-    NAME_X = (0.0, 0.62); TEE_X = (0.58, 1.0)
+    #  ★단일부는 크롭당 ~25s로 매우 빠르므로 '완전성 우선' — 무조건 다회 판독(빠진 행 방지). 게이트 미사용.
+    NAME_X = (0.0, 0.62); TEE_X = (0.56, 1.0)
     merged = {}
     for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:
-        res, _done = read_names_gated(im, NAME_X[0], NAME_X[1], name_prompt, known_set, y0, y1, max_reads=reads)
-        for n, nm in res.items():
-            if n not in merged:
+        for n, nm in read_names(im, NAME_X[0], NAME_X[1], reads, name_prompt, y0, y1).items():
+            if n not in merged and nm:
                 merged[n] = nm
-    tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=2)   # part 시간대 필터로 옆부 오염 방지
+    tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=3)   # part 시간대 필터로 옆부 오염 방지
     cut = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, TEE_X[0], TEE_X[1])
