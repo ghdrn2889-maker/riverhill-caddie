@@ -1017,12 +1017,16 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
   //   + 텍스트-only(이미지 없이 글로 온 변동). 3부 판독의 boardTables 재사용 → "그 부 표가 있나" 판단은 추가 비용 0.
   try {
-    // ★크레딧 절감 — 1·2부 회원 알림·대시보드·상태(processForMemberPart)는 MINOR_PART_PUSH로 게이트(기본 off).
-    //  단, 모니터 '판독/검수'가 읽는 board-parts-store(setBoardPart)는 이 게이트와 '무관하게' 항상 갱신한다 —
-    //  2부 배치표가 바뀌면 판독도 최신을 보여야 하므로(안 그러면 옛 2부에 영구 고정). 회원 상태·푸시만 아래
-    //  `if (!minorPartOn) continue` 로 분리해 건너뛴다(유령 2부 오알림·회원 영향 0). 꺼짐 비용 = 2부 표가 뜬
-    //  board당 judge 1회(모니터 저장소만). Phase 2에서 =1 켜면 회원 알림·대시보드까지 재개(3부 경로는 무관).
+    // ★크레딧 절감(최대 레버) — MINOR_PART_PUSH 꺼지면 1·2부 판독을 '통째로' 생략(judge·명단·교차확인·setBoardPart 전부).
+    //  1·2부 board 1건 = readBoardConsensus+명단+인턴 = Gemini 여러 회. 부가 2개면 배치표당 호출이 ~5→~10으로 배증한다.
+    //  → 2026-08-03 크레딧 급소진 대응으로 '모니터 2부 판독 갱신'(직전 시도)을 되돌림: 돈>2부 판독 최신화.
+    //   모니터 1·2부는 마지막 성공 판독본에 머무름(허용). Phase 2에서 =1 켜면 회원 알림+모니터 갱신 함께 재개.
     const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
+    if (!minorPartOn) {
+      if (full.images && full.images.length) console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 크레딧 절약(배치표당 Gemini ~5회 유지): ${full.subject}`);
+      if (opts.previewMode) await sendDailyPreview(boardISO, full);
+      return primaryRet;
+    }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
     const isFullBoard = /전체|전부/.test(full.subject || '');
     const txt = `${full.subject || ''} ${full.text || ''}`;
