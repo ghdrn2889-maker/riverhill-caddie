@@ -396,16 +396,33 @@ def _snap_known(nm, known_set):
     return nm
 
 
+def _band_text_extent(im, x0f, x1f, y0f=0.0, y1f=1.0, bands=64, thr=0.012):
+    # 열의 '글자 있는' 세로 범위(첫~마지막 텍스트 밴드 중심). 행 그리드 보정용.
+    W, H = im.size
+    x0, x1 = int(x0f * W), int(x1f * W)
+    ys = []
+    for k in range(bands):
+        a = y0f + (y1f - y0f) * k / bands; b = y0f + (y1f - y0f) * (k + 1) / bands
+        box = im.crop((x0, int(a * H), x1, int(b * H))); px = list(box.getdata())
+        if not px:
+            continue
+        dark = sum(1 for (r, g, bl) in px if (r + g + bl) / 3 < 110) / len(px)
+        if dark >= thr:
+            ys.append((a + b) / 2)
+    return (min(ys), max(ys)) if ys else None
+
+
 def single_crop_read(im, part, reads, name_prompt, known_set, cut_override=0):
     # ★단일 부(部) 크롭 전용 — 위치탐색 없이 고정 기하로 바로 판독(변동 크롭 업로드·부별 잘라읽기).
     #  깨끗한 단일부 이미지: 좌측=명단(순번 이름 | 순번 이름 2단), 우측=티오프표(OUT|시간|IN).
-    #  ★완전성·정확성 우선(단일부는 빠름): ①좌/우열 분리(2단 섞임 행누락 방지) ②세로 3분할(밀집 하단 포착)
-    #   ③빈 열(이름칸 글자밀도 낮음)은 통째 스킵(환각 차단) ④명단 최근접 스냅(1글자 오독 교정).
+    #  ★완전성·정확성 우선(단일부는 빠름): ①좌/우열 분리 ②세로 3분할 ③빈 열 스킵 ④명단 최근접 스냅
+    #   ⑤행-단위 빈칸 후행절단(부분만 찬 열의 빈 하단 환각 제거) ⑥한 부 내 이름 중복 제거.
     NAME_COLS = [(0.0, 0.33), (0.31, 0.63)]        # 좌열(순번 이름) · 우열(순번 이름)
     TEE_X = (0.56, 1.0)
     Y_BANDS = [(0.0, 0.40), (0.35, 0.72), (0.68, 1.0)]
     merged = {}
-    for (cx0, cx1) in NAME_COLS:
+    col_of = {}                                    # 순번 → 어느 열(0=좌,1=우)에서 읽혔나
+    for ci, (cx0, cx1) in enumerate(NAME_COLS):
         # ★빈 열 가드 — 이 열의 '이름 칸'(우측 55%) 글자밀도가 낮으면 빈 열 → 읽지 않는다(1부 24~46 빈칸 환각 차단).
         name_sub = (cx0 + 0.45 * (cx1 - cx0), cx1)
         dens = region_text_density(im, name_sub[0], name_sub[1], 0.07, 0.98)
@@ -414,7 +431,27 @@ def single_crop_read(im, part, reads, name_prompt, known_set, cut_override=0):
         for (y0, y1) in Y_BANDS:                    # 세로 3분할 — 밀집 열(2부 25행) 하단까지 포착
             for n, nm in read_names(im, cx0, cx1, reads, name_prompt, y0, y1, min_votes=2).items():
                 if n not in merged and nm:
-                    merged[n] = nm
+                    merged[n] = nm; col_of[n] = ci
+    # ── ⑤ 행-단위 빈칸 후행절단 — '부분만 찬 열'(예: 3부 우열 21~29, 30~40 빈칸)의 환각 꼬리 제거. ──
+    right = sorted([n for n in merged if col_of.get(n) == 1])
+    left = sorted([n for n in merged if col_of.get(n) == 0])
+    if right and left:
+        R = min(right) - 1                          # 열당 물리 행 수(우열 시작=R+1)
+        ext = _band_text_extent(im, NAME_COLS[0][0] + 0.45 * (NAME_COLS[0][1] - NAME_COLS[0][0]), NAME_COLS[0][1])
+        if R >= 1 and ext:
+            y_top, y_bot = ext
+            rh = (y_bot - y_top) / max(1, R - 1)    # 좌열 첫~끝 텍스트가 R행에 걸침
+            nsub = (NAME_COLS[1][0] + 0.45 * (NAME_COLS[1][1] - NAME_COLS[1][0]), NAME_COLS[1][1])
+            for p in reversed(right):               # 높은 순번부터: 빈 셀이면 절단, 실이 나오면 멈춤
+                row = p - (R + 1)                   # 우열 내 0-기준 행
+                if row < 0:
+                    continue
+                cy = y_top + row * rh
+                d = region_text_density(im, nsub[0], nsub[1], max(0.0, cy - rh * 0.4), min(1.0, cy + rh * 0.4))
+                if d < 0.008:                       # 셀에 글자 없음 = 환각 → 제거
+                    merged.pop(p, None); col_of.pop(p, None)
+                else:
+                    break
     tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=4)   # part 시간대 필터로 옆부 오염 방지
     cut = cut_override or max((t["n"] for t in tees), default=0)     # 요약숫자(있으면) 우선 = 신뢰도↑
     real_max = max(merged) if merged else 0
