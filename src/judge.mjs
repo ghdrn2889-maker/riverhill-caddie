@@ -226,15 +226,16 @@ function resolveCutoff(verdict, article, today = null) {
   const pc = parseCutoffText(article);
   if (pc) {
     verdict.cutoffAnnounced = true;
-    verdict.cutoffName = pc.holder;                                 // 실제 그 자리 주인(괄호 점유자)으로 표기
-    if (roster.length) {
-      const cpos = rosterPosOf(roster, pc.holder);                  // 괄호 점유자 자리 = 진짜 컷
-      if (cpos > 0) verdict.cutoffPosition = cpos;
-      else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
-    } else if (pc.pos != null) verdict.cutoffPosition = pc.pos;
+    // 위치: 명단에서 홀더(괄호 점유자) 자리 → 없으면 이미지가 준 기존 위치 유지 → 그것도 없으면 텍스트 'N번'.
+    //  (raw 홀더로 조회 — 점유자가 명단에 두 번(자기 자리+빌린 자리) 나오는 이름은 스냅하면 자기 홈 자리로 오조회됨.)
+    const cpos = roster.length ? rosterPosOf(roster, pc.holder) : 0; // 괄호 점유자 자리 = 진짜 컷
+    if (cpos > 0) verdict.cutoffPosition = cpos;
+    else if (pc.pos != null && !(Number(verdict.cutoffPosition) > 0)) verdict.cutoffPosition = pc.pos;
+    // ★이름: 공지 텍스트 오탈자를 확정 사전으로 보정(예: "김도우"→유일 1글자차 확정명 "김동우"). 위치는 위에서 이미 확정.
+    verdict.cutoffName = snapName(pc.holder);
   } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
     const holder = normRosterName(verdict.cutoffName).name;         // "연승준(서동환)" → 서동환
-    verdict.cutoffName = holder;
+    verdict.cutoffName = snapName(holder);                          // 오탈자 보정
     if (roster.length && !(Number(verdict.cutoffPosition) > 0)) {
       const cpos = rosterPosOf(roster, holder);
       if (cpos > 0) verdict.cutoffPosition = cpos;
