@@ -403,17 +403,17 @@ def single_crop_read(im, part, reads, name_prompt, known_set):
             "teeGrid": tees, "internCount": interns}
 
 
-SUMMARY_PROMPT = ("이 이미지는 골프 배치표 상단의 요약이다. '1부 N  2부 M  3부 K  총 T팀' 형식으로 각 부의 팀 수가 적혀 있다. "
-    "보이는 부와 그 팀 수를 그대로 읽어라(추측 금지). "
+SUMMARY_PROMPT = ("이 이미지에는 '1부 N   2부 M   3부 K   총 T팀' 처럼 부별 팀 수가 큰 글씨로 적혀 있다. "
+    "'N부'는 부 번호, 그 옆 숫자가 그 부의 팀 수다. '총'/'팀'/'조'/'명'은 무시. 보이는 그대로 읽어라(추측 금지). "
     'JSON만: {"parts":[{"part":부번호, "teams":팀수}]}')
 
 
 def read_summary_counts(im, reads=3):
-    # ★배치표 우상단 요약에서 부별 '팀 수'(=커트)를 확정 — 티오프 행을 세는 것보다 신뢰도 높음(하단 누락 무관).
-    #  전체 합본 배치표에만 있음(부별 크롭엔 없을 수 있음). 상단 가로 밴드를 표결로 읽는다.
+    # ★배치표 상단 요약에서 부별 '팀 수'(=커트)를 확정 — 티오프 행을 세는 것보다 신뢰도 높음(하단 누락 무관).
+    #  전체 합본 배치표에만 있음(부별 크롭엔 없을 수 있음). '1부 21 2부 4 3부 16'만 좁게·고해상도로.
     tally = {}
     for _ in range(reads):
-        for row in ask(crop_up(im, 0.45, 1.0, 0.0, 0.06, scale=4, max_side=1600), SUMMARY_PROMPT, "parts"):
+        for row in ask(crop_up(im, 0.55, 0.90, 0.0, 0.05, scale=6, max_side=2000), SUMMARY_PROMPT, "parts"):
             p = _to_pos(row.get("part")); t = _to_pos(row.get("teams"))
             if p in (1, 2, 3) and t and t <= 40:
                 tally.setdefault(p, {}); tally[p][t] = tally[p].get(t, 0) + 1
