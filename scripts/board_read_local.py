@@ -514,7 +514,9 @@ def main():
         from PIL import Image as _PIL
         sl = cfg.get("slice") or {}
         W, H = im.size
-        x0 = max(0.0, float(sl.get("x0", 0.0)) - 0.005)
+        # ★왼쪽 여유 넉넉히(-0.025) — Claude 경계 x0가 실행마다 흔들려도 이름 첫 글자를 안 자르게.
+        #  부 왼쪽은 '이전 부 티오프표'라 좀 물려도 이름 오염 없음(숫자·시간뿐). 첫 부는 0에서 시작.
+        x0 = max(0.0, float(sl.get("x0", 0.0)) - float(sl.get("lmargin", 0.025)))
         # ★x1은 호출부가 준 값을 '그대로'(가운데 부는 다음 부 경계=번짐 방지). margin은 마지막 부에서만 준다.
         x1 = min(1.0, float(sl.get("x1", 1.0)) + float(sl.get("margin", 0.0)))
         y1 = float(sl.get("y1", 0.60))
