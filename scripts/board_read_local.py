@@ -414,7 +414,9 @@ def read_summary_counts(im, reads=3):
     tally = {}
     for _ in range(reads):
         for row in ask(crop_up(im, 0.55, 0.90, 0.0, 0.05, scale=6, max_side=2000), SUMMARY_PROMPT, "parts"):
-            p = _to_pos(row.get("part")); t = _to_pos(row.get("teams"))
+            pm = re.search(r"\d+", str(row.get("part", "")))   # "1부" → 1
+            p = int(pm.group()) if pm else None
+            t = _to_pos(str(row.get("teams", "")).replace("팀", "").strip())
             if p in (1, 2, 3) and t and t <= 40:
                 tally.setdefault(p, {}); tally[p][t] = tally[p].get(t, 0) + 1
     return {p: max(d.items(), key=lambda x: x[1])[0] for p, d in tally.items()}
