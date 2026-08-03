@@ -93,12 +93,14 @@ export async function getPartBoundaries(imagePath) {
 const PART_PROMPT = (
   'Read the given local image with the Read tool. It is ONE 부(section) of a Korean golf caddie board (배치표). '
   + 'LEFT: one or MORE [순번 이름] roster columns side by side (e.g. 순번 1-25 in the first column, then 26-50 continuing in the next column to its right). '
-  + 'Read the columns left-to-right, and WITHIN each column top-to-bottom, following the printed 순번 numbers. '
-  + 'List ALL caddies strictly in 순번 order, preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근); skip truly empty rows. '
+  + 'Read the columns left-to-right, and WITHIN each column top-to-bottom. For EVERY row, read BOTH the printed 순번 number and the name together as a pair. '
+  + '★Read every numbered row all the way to the BOTTOM of each column — do NOT stop early; the last 1-2 rows of a column are easy to miss. '
+  + 'Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Skip a row only if it has no name. '
   + 'IGNORE any text that is NOT a numbered 순번 row — e.g. notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'cut = the highest team number in the tee table (커트라인). '
-  + 'Output ONLY strict JSON, no prose: {"roster":["name",...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
+  + 'Output ONLY strict JSON, no prose. Each roster entry MUST include its printed 순번 as "pos": '
+  + '{"roster":[{"pos":1,"name":"차은경(54)"},{"pos":2,"name":"..."},...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
 );
 
 export async function readPartWithClaude(imagePath) {
@@ -112,12 +114,23 @@ export async function readPartWithClaude(imagePath) {
   if (!m) return null;
   try {
     const j = JSON.parse(m[0]);
-    const roster = Array.isArray(j.roster) ? j.roster.map((s) => String(s || '').trim()) : [];
+    // ★순번(pos) 기반 위치정렬 — 중간 행을 놓쳐도 뒤 순번이 당겨지지 않게(index=pos-1, 빈 자리는 '').
+    //  하위호환: 옛 형식(문자열 배열)이면 배열 순서를 그대로 순번으로 본다.
+    const raw = Array.isArray(j.roster) ? j.roster : [];
+    let roster = [];
+    if (raw.length && typeof raw[0] === 'object') {
+      let maxPos = 0;
+      for (const r of raw) { const p = Number(r?.pos) || 0; if (p > maxPos) maxPos = p; }
+      roster = new Array(maxPos).fill('');
+      for (const r of raw) { const p = Number(r?.pos) || 0; const nm = String(r?.name || '').trim(); if (p >= 1 && nm) roster[p - 1] = nm; }
+    } else {
+      roster = raw.map((s) => String(s || '').trim());
+    }
     const tee = (Array.isArray(j.tee) ? j.tee : [])
       .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
       .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
     const cut = Number(j.cut) || tee.reduce((mx, t) => Math.max(mx, t.pos), 0);
-    return roster.length ? { roster, tee, cut } : null;
+    return roster.filter(Boolean).length ? { roster, tee, cut } : null;
   } catch { return null; }
 }
 
