@@ -61,11 +61,17 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   const startBudget = claudeBudgetLeft();
   const bounds = await getPartBoundaries(img);
   if (!bounds || !bounds.length) return null;
+  const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
   const parts = {};
-  for (const b of bounds) {
+  for (let i = 0; i < sorted.length; i++) {
+    const b = sorted[i];
     try {
+      // ★가운데 부는 '다음 부 경계'까지만(번짐 방지). 마지막 부만 우측 여유(margin)로 티오프 안 잘리게.
+      const next = sorted[i + 1];
+      const x1 = next ? next.x0 : b.x1;
+      const margin = next ? 0.0 : 0.05;
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}.png`);
-      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1: b.x1 }, scale: 6 }, 30000);
+      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;

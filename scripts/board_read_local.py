@@ -515,7 +515,8 @@ def main():
         sl = cfg.get("slice") or {}
         W, H = im.size
         x0 = max(0.0, float(sl.get("x0", 0.0)) - 0.005)
-        x1 = min(1.0, float(sl.get("x1", 1.0)) + 0.05)
+        # ★x1은 호출부가 준 값을 '그대로'(가운데 부는 다음 부 경계=번짐 방지). margin은 마지막 부에서만 준다.
+        x1 = min(1.0, float(sl.get("x1", 1.0)) + float(sl.get("margin", 0.0)))
         y1 = float(sl.get("y1", 0.60))
         c = im.crop((int(x0 * W), 0, int(x1 * W), int(y1 * H)))
         cw, ch = c.size
