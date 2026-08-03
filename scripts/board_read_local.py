@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-# 로컬 VLM 배치표 판독(타일링) — 홈서버 GPU ollama(qwen2.5vl). ★API 비용 0.
-#  배치표는 세로로 긴 2단(순번1~20 | 21~40) 리스트라 통이미지론 아래가 뭉개진다(truncate).
-#  → 폭을 좌/우 열로 크롭 + 4배 업스케일 + 타일당 표결 → 순번(인쇄된 숫자) 기준 병합.
-#  실측(2026-08-03, 26955): 통이미지 50% → 타일링 30/30 이름·괄호점유자 정확(≈100%).
-#  입력: stdin JSON {"image": "<url|dataURI|base64>", "reads": 2}
-#  출력: stdout JSON {"roster": ["이름(점유자)", ...순번순서], "assign": {순번: "54"}, "source": "..."}
+# 로컬 VLM 배치표 판독(타일링+픽셀분석) — 홈서버 GPU ollama(qwen2.5vl). ★API 비용 0.
+#  배치표 = 세로로 긴 2단 명단(순번1~20 | 21~40) + 우측 티오프표(OUT|시간|IN). 폭이 좁아 통이미지는 truncate.
+#  전략:
+#   1) 명단: 좌/우 열 크롭 + 4배 업스케일 + 타일당 N회 표결 → 인쇄된 순번으로 병합.  (VLM)
+#   2) 근무/스페어(커트라인): 각 순번 셀 배경색 픽셀분석(흰=근무, 회색=스페어, 초록=근무배정). (결정론적, 공짜)
+#   3) 티오프표: 우측 그리드 크롭 → 순번↔시각·OUT/IN. (VLM)
+#  입력(stdin JSON): {"image":"<url|dataURI|base64>", "reads":3}
+#  출력(stdout JSON): {roster[], assign{}, status{순번:work|spare}, cutPos, teeGrid[{n,time,course}], interns[], source}
 import sys, io, json, base64, urllib.request, re
 
 OLLAMA = "http://localhost:11434/api/generate"
 MODEL = "qwen2.5vl:7b"
-PROMPT = ("이 이미지는 골프 배치표의 한 열이다. 각 줄은 [순번숫자][이름] 형식이다. "
+NAME_PROMPT = ("이 이미지는 골프 배치표의 한 열이다. 각 줄은 [순번숫자][이름] 형식이다. "
     "★이름에 괄호가 붙어 있으면 반드시 '이름(점유자)' 원문 그대로 포함하라(예: 신지현(오동현)). 괄호를 빠뜨리지 마라. "
     "이름 옆 (54) 같은 근무배정 숫자는 그대로 둬라. 빈 이름줄은 건너뛴다. 글자를 추측 말고 보이는 대로. "
     'JSON만: {"rows":[{"n":순번, "name":"이름"}]}')
+TEE_PROMPT = ("이 이미지는 골프 티오프표다. 각 행은 [OUT칸][시간][IN칸]. OUT/IN칸엔 팀 순번 숫자가 있거나 비어있다. "
+    "순번 숫자가 있는 칸만 뽑아라. 노란색 칸(숫자 없이 색만)은 intern=true. 시간은 HH:MM. "
+    'JSON만: {"tees":[{"n":순번, "time":"HH:MM", "course":"OUT"|"IN", "intern":false}]}')
 
 
 def load_image(src):
@@ -26,15 +31,15 @@ def load_image(src):
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
-def ask(img):
+def ask(img, prompt, key):
     buf = io.BytesIO(); img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
-    body = json.dumps({"model": MODEL, "prompt": PROMPT, "images": [b64], "stream": False,
+    body = json.dumps({"model": MODEL, "prompt": prompt, "images": [b64], "stream": False,
         "format": "json", "options": {"temperature": 0, "num_ctx": 8192}}).encode()
     req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
     r = json.loads(urllib.request.urlopen(req, timeout=120).read())
     try:
-        return json.loads(r["response"]).get("rows", [])
+        return json.loads(r["response"]).get(key, [])
     except Exception:
         return []
 
@@ -46,10 +51,10 @@ def crop_up(im, x0f, x1f, scale=4):
     return c.resize((c.width * scale, c.height * scale), Image.LANCZOS)
 
 
-def ask_vote(im, x0f, x1f, reads):
+def read_names(im, x0f, x1f, reads):
     tally = {}
     for _ in range(reads):
-        for row in ask(crop_up(im, x0f, x1f)):
+        for row in ask(crop_up(im, x0f, x1f), NAME_PROMPT, "rows"):
             try:
                 n = int(row["n"]); nm = str(row.get("name", "")).strip()
             except Exception:
@@ -60,28 +65,85 @@ def ask_vote(im, x0f, x1f, reads):
     return {n: max(d.items(), key=lambda x: x[1])[0] for n, d in tally.items()}
 
 
+# ── 픽셀분석: 각 순번 셀 배경색으로 근무/스페어/근무배정 판정(결정론적) ──
+def classify_bg(im, x0f, x1f, row_top_f, row_bot_f):
+    W, H = im.size
+    box = im.crop((int(x0f * W), int(row_top_f * H), int(x1f * W), int(row_bot_f * H)))
+    px = list(box.getdata())
+    # 글자(어두운 픽셀) 제외한 배경 픽셀만
+    bg = [(r, g, b) for (r, g, b) in px if (r + g + b) / 3 > 140]
+    if not bg:
+        return "unknown"
+    ar = sum(p[0] for p in bg) / len(bg); ag = sum(p[1] for p in bg) / len(bg); ab = sum(p[2] for p in bg) / len(bg)
+    if ag > ar + 12 and ag > ab + 12:
+        return "green"                       # 초록 = 54 근무배정
+    if ar > 235 and ag > 235 and ab > 235:
+        return "white"                       # 흰색 = 근무
+    if 175 < ar < 225 and abs(ar - ag) < 15 and abs(ar - ab) < 15:
+        return "gray"                        # 회색 = 스페어
+    return "white" if (ar + ag + ab) / 3 > 228 else "gray"
+
+
+def read_status(im, header_f=0.052, rows=20):
+    # 좌열(순번1-20) x≈[0.02,0.34], 우열(21-40) x≈[0.34,0.68]. 헤더 아래를 20행으로 등분.
+    rh = (1.0 - header_f) / rows
+    status = {}
+    for k in range(rows):
+        top = header_f + k * rh; bot = header_f + (k + 1) * rh
+        pad = rh * 0.18
+        status[k + 1] = classify_bg(im, 0.03, 0.33, top + pad, bot - pad)        # 좌 → 순번 k+1
+        status[k + 21] = classify_bg(im, 0.35, 0.66, top + pad, bot - pad)       # 우 → 순번 k+21
+    return status
+
+
 def main():
     cfg = json.loads(sys.stdin.read() or "{}")
-    reads = int(cfg.get("reads", 2))
+    reads = int(cfg.get("reads", 3))
     im = load_image(cfg["image"])
-    # 폭 비율 크롭(2단 배치표): 좌열 0~38%, 우열 32~72%. 해상도 무관 일반화.
+
+    # 1) 명단(타일 표결)
     merged = {}
     for (a, b) in [(0.0, 0.38), (0.32, 0.72)]:
-        for n, nm in ask_vote(im, a, b, reads).items():
+        for n, nm in read_names(im, a, b, reads).items():
             merged[n] = nm
-    if not merged:
-        print(json.dumps({"roster": [], "source": "local:%s" % MODEL})); return
-    N = max(merged)
+    N = max(merged) if merged else 0
     roster, assign = [], {}
     for n in range(1, N + 1):
         raw = merged.get(n, "")
-        # 근무배정 숫자태그 (54)/(1,3) 분리 — 이름엔 한글 점유자 괄호만 남긴다.
         m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
         if m:
             assign[n] = m.group(1).replace(" ", "")
             raw = raw[:m.start()].strip()
         roster.append(raw)
-    print(json.dumps({"roster": roster, "assign": assign, "source": "local:%s" % MODEL}, ensure_ascii=False))
+
+    # 2) 근무/스페어 픽셀분석 → status + 커트라인(마지막 근무 순번)
+    bg = read_status(im, rows=20)
+    status, cut = {}, 0
+    for n in range(1, 41):
+        nm = merged.get(n, "")
+        c = bg.get(n, "unknown")
+        st = "spare" if c == "gray" else ("work" if c in ("white", "green") else "unknown")
+        if nm:
+            status[n] = st
+            if st == "work":
+                cut = max(cut, n)
+
+    # 3) 티오프표(그리드 크롭 VLM)
+    tees = []
+    interns = 0
+    try:
+        for t in ask(crop_up(im, 0.66, 1.0), TEE_PROMPT, "tees"):
+            if t.get("intern"):
+                interns += 1; continue
+            try:
+                tees.append({"n": int(t["n"]), "time": str(t.get("time", "")), "course": str(t.get("course", "")).upper()})
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    print(json.dumps({"roster": roster, "assign": assign, "status": status, "cutPos": cut,
+        "teeGrid": tees, "internCount": interns, "source": "local:%s" % MODEL}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
