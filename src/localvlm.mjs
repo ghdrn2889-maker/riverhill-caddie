@@ -42,13 +42,13 @@ function snapCell(cell) {
 }
 
 // article → 로컬 타일링 판독 결과 또는 null. (순번 index+1, 괄호 점유자 원문 유지)
-export async function readBoardLocal(article, { reads = 3 } = {}) {
+export async function readBoardLocal(article, { reads = 3, part = '3' } = {}) {
   const img = article?.images?.[0] || article?.image || '';
   if (!img) return null;
   const t0 = Date.now();
   let out;
   try {
-    out = await runPy({ image: img, reads, known: knownNames() });
+    out = await runPy({ image: img, reads, known: knownNames(), part: String(part).replace(/\D/g, '') || '3' });
   } catch (e) {
     console.error('[localvlm] 오류:', e.message);
     return null;
@@ -84,7 +84,7 @@ export async function readBoardLocal(article, { reads = 3 } = {}) {
 const occHolder = (cell) => { const m = String(cell || '').match(/\(([^)]+)\)/); return (m ? m[1] : String(cell || '')).replace(/\s/g, ''); };
 
 export async function readBoardLocalVerdict(article, member) {
-  const b = await readBoardLocal(article, { reads: 3 });
+  const b = await readBoardLocal(article, { reads: 3, part: member?.part || '3' });
   if (!b || !Array.isArray(b.part3Roster) || !b.part3Roster.length) return null;
   const roster = b.part3Roster.slice();
   const cutPos = Number(b.cutPos) || 0;

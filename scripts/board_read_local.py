@@ -228,7 +228,10 @@ def read_one_part(im, part, parts, reads, name_prompt):
     tmap = {}
     tmap.update(read_tee_col(tee_x0, tee_x0 + tw * 0.62, "OUT"))
     tmap.update(read_tee_col(tee_x0 + tw * 0.38, tee_x1, "IN"))
-    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]} for n in sorted(tmap)]
+    # ★부(部) 시간대 밖 시각은 옆 부 열이 새어든 오염 → 제거(1부 아침·2부 낮·3부 오후).
+    lo, hi = {1: (5, 11), 2: (10, 16), 3: (14, 21)}.get(part, (0, 24))
+    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]}
+            for n in sorted(tmap) if lo <= int(tmap[n][0].split(":")[0]) < hi]
     cut = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, tee_x0, tee_x1)
