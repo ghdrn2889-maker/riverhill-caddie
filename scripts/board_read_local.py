@@ -38,9 +38,9 @@ def ask(img, prompt, key):
     buf = io.BytesIO(); img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     body = json.dumps({"model": MODEL, "prompt": prompt, "images": [b64], "stream": False,
-        "format": "json", "keep_alive": "10m", "options": {"temperature": 0, "num_ctx": 8192}}).encode()
-    # ollama 재로드/일시 과부하로 500이 날 수 있음 → 최대 3회 재시도(모델 웜업 대기).
-    for attempt in range(3):
+        "format": "json", "keep_alive": "10m", "options": {"temperature": 0, "num_ctx": 4096}}).encode()
+    # ollama 재로드/메모리압박(15GB 모델/16GB)으로 500이 날 수 있음 → 재시도. 끝내 실패해도 []로 계속(전체 판독은 살림).
+    for attempt in range(5):
         try:
             req = urllib.request.Request(OLLAMA, body, {"Content-Type": "application/json"})
             r = json.loads(urllib.request.urlopen(req, timeout=180).read())
@@ -49,9 +49,13 @@ def ask(img, prompt, key):
             except Exception:
                 return []
         except urllib.error.HTTPError as e:
-            if e.code >= 500 and attempt < 2:
+            if e.code >= 500 and attempt < 4:
                 _time.sleep(3 * (attempt + 1)); continue
-            raise
+            return []          # 5회 실패 → 이 호출만 포기(raise 안 함, 나머지 판독 계속)
+        except Exception:
+            if attempt < 4:
+                _time.sleep(2 * (attempt + 1)); continue
+            return []
     return []
 
 
