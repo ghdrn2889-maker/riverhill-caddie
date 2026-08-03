@@ -135,32 +135,69 @@ def read_status(im, header_f=0.052, rows=20):
     return status
 
 
-def main():
-    cfg = json.loads(sys.stdin.read() or "{}")
-    reads = int(cfg.get("reads", 3))
-    known = [str(x).strip() for x in (cfg.get("known") or []) if str(x).strip()]
-    im = load_image(cfg["image"])
+# ── 티오프 시각으로 각 부(部) 위치 찾기 ───────────────────────────────────
+#  배치표 레이아웃은 날마다 다르다(단일 부 / 1·2·3부 통합 10칼럼 등). 좌표를 VLM에 물으면 못 짚는다.
+#  대신 '내가' 세로 스트립으로 크롭해 각 조각의 티오프 '시각'을 읽는다 — 시간대가 부를 확정한다:
+#   1부=아침(6~9시), 2부=낮(11~14시), 3부=오후(16~19시). 각 부 티오프표의 x중심을 얻는다.
+def _strip_hours(im, x0, x1):
+    hrs = []
+    for row in ask(crop_up(im, x0, x1, 0.0, 1.0), TEE_PROMPT, "rows"):
+        t = str(row.get("time", "")).strip()
+        if re.match(r"^\d{1,2}:\d{2}$", t):
+            hrs.append(int(t.split(":")[0]))
+    return hrs
 
-    # 폐쇄어휘: 알려진 캐디 명단을 프롬프트에 주입 → 오독을 '존재하는 이름'으로 억제(김수영 같은 유령 방지).
-    name_prompt = NAME_PROMPT
-    if known:
-        name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
-    # 1) 명단 — 좌열은 상/하로 쪼개 각 줄 해상도↑(흐린 셀 오독 최소화), 우열은 통짜(빈 슬롯 자연 스킵·할루시네이션 방지).
-    #    순번(인쇄숫자)로 병합. ※한 열이 통째로 빈칸이면 모델이 이름을 지어내므로, 빈칸 많은 쪽은 쪼개지 않는다.
+def find_part_tees(im):
+    # 반환 {part(int): (tee_x0, tee_x1)}. 스트립 스캔 → 시간대 tight한 것만 부로 채택.
+    W = 0.13; STEP = 0.065
+    strips = []
+    x = 0.0
+    while x < 1.0 - 1e-6:
+        x1 = min(1.0, x + W)
+        hrs = _strip_hours(im, x, x1)
+        strips.append((x, x1, hrs))
+        x += STEP
+    # 각 부에 속하는 스트립 중심 모으기(시간대 범위≤6, 개수 4~40 = 진짜 티오프표; 조편성 노이즈 n=90+ 배제)
+    buckets = {1: [], 2: [], 3: []}
+    for (a, b, hrs) in strips:
+        if not (4 <= len(hrs) <= 40):
+            continue
+        hs = sorted(hrs)
+        if hs[-1] - hs[0] > 6:            # 여러 부 섞이거나 조편성 잡음 → 스킵
+            continue
+        med = hs[len(hs) // 2]
+        part = 1 if med < 10 else 2 if med < 15 else 3
+        buckets[part].append((a + b) / 2.0)
+    parts = {}
+    for p, cs in buckets.items():
+        if cs:
+            c = sum(cs) / len(cs)          # 부 티오프표 중심
+            parts[p] = (max(0.0, c - 0.05), min(1.0, c + 0.09))   # OUT|N부|IN 대략 폭
+    return parts
+
+
+def read_one_part(im, part, parts, reads, name_prompt):
+    # part의 명단(순번↔이름) + 티오프(순번↔시각) + 커트 판독. '이전 부 티오프'와 '이 부 티오프' 사이가 명단.
+    centers = {p: (a + b) / 2.0 for p, (a, b) in parts.items()}
+    tee_x0, tee_x1 = parts[part]
+    tee_c = centers[part]
+    prev_c = max([c for p, c in centers.items() if c < tee_c], default=None)
+    r_x1 = tee_x0 - 0.005
+    r_x0 = (prev_c + 0.05) if prev_c is not None else 0.0     # 이전 부 티오프 오른쪽 ~ 이 부 티오프 왼쪽 = 명단
+    if r_x1 - r_x0 < 0.12:                                    # 너무 좁으면 최소 폭 확보
+        r_x0 = max(0.0, r_x1 - 0.20)
+    if r_x1 - r_x0 > 0.34:                                    # 너무 넓으면(단일 부 등) 그대로 두되 좌우 2단으로 읽음
+        pass
+    # 명단 — 상/하로 쪼개 해상도↑ + 좌우 2단(순번 이름 | 순번 이름) 각각. 순번(인쇄숫자)로 병합.
+    mid = (r_x0 + r_x1) / 2.0
     merged = {}
-    quads = [
-        (0.0, 0.38, 0.0, 0.56),    # 좌열 상(순번 1~10, 헤더 포함)
-        (0.0, 0.38, 0.48, 1.0),    # 좌열 하(11~20)
-        (0.32, 0.72, 0.0, 1.0),    # 우열 통짜(21~40, 빈칸은 스킵)
-    ]
-    for (a, b, y0, y1) in quads:
+    for (a, b, y0, y1) in [(r_x0, mid + 0.01, 0.0, 0.56), (r_x0, mid + 0.01, 0.48, 1.0),
+                           (mid - 0.01, r_x1, 0.0, 0.56), (mid - 0.01, r_x1, 0.48, 1.0)]:
         for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
-            merged[n] = nm
-    # 2) 픽셀분석: 각 순번 셀 배경색(근무/스페어) + 텍스트 유무
-    bg = read_status(im, rows=20)
-
-    # 3) 티오프표 — OUT열([순번][시간])과 IN열([시간][순번])을 '따로' 크롭해 좌우 혼동 제거. 각 열=순번↔시각.
+            if n not in merged:
+                merged[n] = nm
+    # 티오프 — 이 부 티오프표 구간에서 순번↔시각(OUT/IN 두 열 표결)
     def read_tee_col(x0f, x1f, course, reads_t=2):
         tally = {}
         for _ in range(reads_t):
@@ -172,21 +209,56 @@ def main():
                 if re.match(r"^\d{1,2}:\d{2}$", tm):
                     tally.setdefault(n, {}); tally[n][tm] = tally[n].get(tm, 0) + 1
         return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
-    tees = []
+    tw = tee_x1 - tee_x0
     tmap = {}
-    tmap.update(read_tee_col(0.66, 0.885, "OUT"))    # OUT 숫자 + 시간
-    tmap.update(read_tee_col(0.78, 1.0, "IN"))       # 시간 + IN 숫자
-    for n in sorted(tmap):
-        tees.append({"n": n, "time": tmap[n][0], "course": tmap[n][1]})
-    # 인턴(초록/노란 티오프칸, 순번 없음) = 그리드 OUT/IN열에서 색칸 픽셀 카운트(연속 색밴드 = 1개).
-    interns = count_color_cells(im, 0.66, 0.78) + count_color_cells(im, 0.90, 1.0)
+    tmap.update(read_tee_col(tee_x0, tee_x0 + tw * 0.62, "OUT"))
+    tmap.update(read_tee_col(tee_x0 + tw * 0.38, tee_x1, "IN"))
+    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]} for n in sorted(tmap)]
+    cut = max((t["n"] for t in tees), default=0)
+    real_max = max(merged) if merged else 0
+    interns = count_color_cells(im, tee_x0, tee_x1)
+    roster, assign, status = [], {}, {}
+    for n in range(1, real_max + 1):
+        raw = merged.get(n, "")
+        m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
+        if m:
+            assign[n] = m.group(1).replace(" ", "")
+            raw = raw[:m.start()].strip()
+        roster.append(raw)
+        if raw:
+            status[n] = "work" if (cut and n <= cut) else "spare"
+    return {"roster": roster, "assign": assign, "status": status, "cutPos": cut,
+            "teeGrid": tees, "internCount": interns}
 
-    # 4) 커트라인·명단·근무 확정
-    #  · 커트 = 티오프표 최대순번(가장 신뢰: 근무팀만 티오프가 있음). 없으면 회색경계 폴백.
+
+def legacy_read(im, reads, name_prompt):
+    # 폴백 — 단일 부(2단) 배치표 전용 고정 기하(부 티오프를 못 찾았을 때).
+    merged = {}
+    for (a, b, y0, y1) in [(0.0, 0.38, 0.0, 0.56), (0.0, 0.38, 0.48, 1.0), (0.32, 0.72, 0.0, 1.0)]:
+        for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
+            merged[n] = nm
+    bg = read_status(im, rows=20)
+
+    def read_tee_col(x0f, x1f, course, reads_t=2):
+        tally = {}
+        for _ in range(reads_t):
+            for row in ask(crop_up(im, x0f, x1f), TEE_PROMPT, "rows"):
+                try:
+                    n = int(row["n"]); tm = str(row.get("time", "")).strip()
+                except Exception:
+                    continue
+                if re.match(r"^\d{1,2}:\d{2}$", tm):
+                    tally.setdefault(n, {}); tally[n][tm] = tally[n].get(tm, 0) + 1
+        return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
+    tmap = {}
+    tmap.update(read_tee_col(0.66, 0.885, "OUT"))
+    tmap.update(read_tee_col(0.78, 1.0, "IN"))
+    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]} for n in sorted(tmap)]
+    interns = count_color_cells(im, 0.66, 0.78) + count_color_cells(im, 0.90, 1.0)
     grid_max = max((t["n"] for t in tees), default=0)
-    real_max = max(merged) if merged else 0        # 우열 통짜라 빈 슬롯 할루시네이션 없음 → VLM 명단 끝 신뢰
+    real_max = max(merged) if merged else 0
     cut = grid_max
-    if not cut:                                    # 폴백: 회색 아닌(근무) 마지막 순번
+    if not cut:
         for n in range(1, real_max + 1):
             c, ht = bg.get(n, ("unknown", False))
             if ht and c in ("white", "green"):
@@ -194,7 +266,7 @@ def main():
     roster, assign, status = [], {}, {}
     for n in range(1, real_max + 1):
         c, has_text = bg.get(n, ("unknown", False))
-        raw = merged.get(n, "")                        # real_max 이내는 VLM 이름 신뢰(개별 텍스트게이트로 실명 지우지 않음)
+        raw = merged.get(n, "")
         m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
         if m:
             assign[n] = m.group(1).replace(" ", "")
@@ -202,9 +274,38 @@ def main():
         roster.append(raw)
         if raw:
             status[n] = "work" if (cut and n <= cut) else ("work" if c in ("white", "green") else "spare")
+    return {"roster": roster, "assign": assign, "status": status, "cutPos": cut,
+            "teeGrid": tees, "internCount": interns}
 
-    print(json.dumps({"roster": roster, "assign": assign, "status": status, "cutPos": cut,
-        "teeGrid": tees, "internCount": interns, "source": "local:%s" % MODEL}, ensure_ascii=False))
+
+def main():
+    cfg = json.loads(sys.stdin.read() or "{}")
+    reads = int(cfg.get("reads", 3))
+    want = str(cfg.get("part", "3")).replace("부", "").strip() or "3"
+    known = [str(x).strip() for x in (cfg.get("known") or []) if str(x).strip()]
+    im = load_image(cfg["image"])
+
+    name_prompt = NAME_PROMPT
+    if known:
+        name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
+
+    parts = find_part_tees(im)
+    npart = int(want) if want.isdigit() else 3
+    if npart in parts:
+        # 요청 부를 정확히 위치시켜 판독(다부/단일 레이아웃 모두). 다른 부도 필요하면 all_parts로.
+        out = read_one_part(im, npart, parts, reads, name_prompt)
+        out["_layout"] = "multi:%s" % ",".join(str(p) for p in sorted(parts))
+    elif len(parts) <= 1:
+        # 부 티오프를 못(하나만) 찾음 → 단일 부 고정기하 폴백.
+        out = legacy_read(im, reads, name_prompt)
+        out["_layout"] = "legacy"
+    else:
+        # 여러 부는 찾았는데 요청 부는 없음 → 그 부는 이 배치표에 없음(빈 결과).
+        out = {"roster": [], "assign": {}, "status": {}, "cutPos": 0, "teeGrid": [], "internCount": 0}
+        out["_layout"] = "multi-no-part:%s" % ",".join(str(p) for p in sorted(parts))
+    out["part"] = want
+    out["source"] = "local:%s" % MODEL
+    print(json.dumps(out, ensure_ascii=False))
 
 
 if __name__ == "__main__":
