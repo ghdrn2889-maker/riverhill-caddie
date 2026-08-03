@@ -54,9 +54,6 @@ function snapRoster(roster) {
   });
 }
 
-// 셀 → 태그 뗀 기본 이름(공백 제거). 오염(부 머리 중복) 판정용.
-const _baseName = (cell) => String(cell || '').replace(/\s*\([^)]*\).*/, '').replace(/\s/g, '').trim();
-
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
 async function readPartsOnce(img, sorted, cuts) {
   const parts = {};
@@ -83,17 +80,11 @@ async function readPartsOnce(img, sorted, cuts) {
 //  경계로 순번열이 통째 누락된 '심각' 부족(예: 커트16에 명단9)만 잡고, 인턴발 1~3 부족은 통과.
 const _rosterFloor = (cut) => Math.max(cut - 4, Math.ceil(cut * 0.6));
 
-// 판독 불량 판정 — 경계 흔들림으로 (1)부 머리 이름 중복(경계 붕괴) 또는 (2)명단 심각부족(순번열 누락)일 때.
+// 판독 불량 판정 — 경계 흔들림으로 순번열이 통째 누락돼 '명단 심각부족'일 때.
+//  ★부 머리 중복은 불량 신호가 아니다: (54)·(1,3) 교차근무 캐디는 1부·3부 명단 머리에 '정상적으로' 함께 뜬다.
+//   그래서 '명단 < 커트'(근무자 누락)라는 건전한 불변식만 본다. 붕괴로 한 부가 반쪽만 읽히면 그 부가 커트 미달로 걸린다.
 function boardReadFault(parts, cuts) {
   const keys = Object.keys(parts);
-  // (1) 경계 붕괴의 가장 확실한 신호: 서로 다른 부의 '머리 이름'이 겹침(두 크롭이 같은 열을 읽음).
-  for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) {
-    const a = (parts[keys[i]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
-    const b = (parts[keys[j]].roster || []).slice(0, 4).map(_baseName).filter(Boolean);
-    const common = a.filter((x) => b.includes(x));
-    if (common.length >= 2) return `${keys[i]}·${keys[j]}부 머리 중복(${common.join(',')}) — 경계 붕괴`;
-  }
-  // (2) 순번열 통째 누락 = 명단이 커트 대비 '심각' 부족(인턴 여유 넘어). 1~3 부족(인턴)은 정상 통과.
   for (const p of keys) {
     const cut = Number(cuts[p]) || Number(parts[p].cut) || 0;
     const rl = (parts[p].roster || []).filter(Boolean).length;
