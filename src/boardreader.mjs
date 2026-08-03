@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -63,6 +63,18 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   const bounds = await getPartBoundaries(img);
   if (!bounds || !bounds.length) return null;
   const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
+  // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
+  //  요약은 큰 인쇄 숫자라 안정적. 합본에만 있어(변동 크롭엔 없음) 없으면 per-part cut로 폴백. 합본당 +1 호출.
+  let cuts = { ...summaryCuts };
+  if (!Object.keys(cuts).length && sorted.length >= 2) {   // 여러 부 = 합본 → 요약 존재 기대
+    try {
+      const sumPath = path.join(TMP, `sum_${Date.now()}.png`);
+      await runPy({ image: img, crop_only: sumPath, slice: { x0: 0.55, x1: 0.90, y1: 0.06, lmargin: 0 }, scale: 6 }, 30000);
+      const sc = await readSummaryCounts(sumPath);
+      try { fs.unlinkSync(sumPath); } catch { /* noop */ }
+      if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
+    } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
+  }
   const parts = {};
   for (let i = 0; i < sorted.length; i++) {
     const b = sorted[i];
@@ -76,7 +88,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;
-      const cut = Number(summaryCuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰)
+      const cut = Number(cuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰), 없으면 per-part cut
       parts[String(b.part)] = { roster: snapRoster(r.roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }

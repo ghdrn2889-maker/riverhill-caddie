@@ -119,6 +119,32 @@ export async function readPartWithClaude(imagePath) {
   } catch { return null; }
 }
 
+// 상단 요약 스트립("1부 21  2부 4  3부 16  총 41팀") → 부별 팀수(=커트). ★큰 인쇄 숫자라 안정적.
+//  부별 티오프 행을 세는 것(±2 흔들림)보다 훨씬 신뢰. 합본당 1회. 부별 크롭엔 없어 null(그땐 per-part cut 사용).
+const SUMMARY_PROMPT = (
+  'Read the given local image with the Read tool. It is the top summary strip of a Korean golf caddie board (배치표) '
+  + 'showing per-부 team counts, e.g. "1부 21  2부 4  3부 16  총 41팀". '
+  + 'Output ONLY strict JSON mapping each 부 number to its team count: {"counts":{"1":21,"2":4,"3":16}}'
+);
+
+export async function readSummaryCounts(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 요약 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${SUMMARY_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 요약 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const src = j.counts || j;
+    const cuts = {};
+    for (const k of ['1', '2', '3']) { const n = Number(src[k]); if (n > 0 && n <= 40) cuts[k] = n; }
+    return Object.keys(cuts).length ? cuts : null;
+  } catch { return null; }
+}
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
