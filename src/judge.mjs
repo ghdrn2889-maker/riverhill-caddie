@@ -242,6 +242,52 @@ function resolveCutoff(verdict, article, today = null) {
   }
 }
 
+// ── 텍스트 당추·커트라인 글을 Gemini 없이 코드로만 판독 → 최소 verdict(신호 없으면 null) ──
+//  배치표는 '이미지'라 로컬 VLM으로 갈아탔지만, 당일추가·커트("27팀 ○○님까지 근무") 같은 '텍스트' 글은
+//  비전 모델이 아니라 정규식으로 읽는 게 맞다. 여기서 잡으면 Gemini 호출 0(크레딧 소진 무관) + 13명 스팸 제거.
+//  ★오탐 방지 3중 가드: (1)다른 부만 명시되고 내 부 언급 없으면 포기, (2)커트 홀더가 내 부 명단에 있거나
+//   (3)팀수(N팀)가 명시됐을 때만 relevant. 그 외(잡담·사진·모호)는 null → 기존 Gemini/‘직접 확인’ 폴백에 위임.
+function codeReadTextVerdict(article, member, today = null) {
+  const blob = `${article?.subject || ''}\n${article?.text || article?.contentText || article?.content || ''}`;
+  const p = String(member?.part || '3').replace(/\D/g, '') || '3';
+  // 다른 부만 언급되고 내 부 언급이 없으면 → 남의 부 소식 → 코드판독 포기(안전).
+  if (new RegExp('[1-9]\\s*부').test(blob) && !new RegExp(`${p}\\s*부`).test(blob)) return null;
+  const pc = parseCutoffText(article);
+  let team = extractTeamCount(blob, member)
+    || extractBareTeamCount(article?.subject, article?.text || article?.contentText || article?.content, member);
+  // "N팀 …님까지 근무" — 부 표기 없이 팀수+커트가 같이 오는 당추 관례(예: "27팀 김기선(김도우)님까지").
+  if (!team && pc) {
+    const mt = blob.match(/(\d{1,2})\s*팀[^0-9]{0,14}까지/) || blob.match(/(\d{1,2})\s*팀/);
+    if (mt) { const n = Number(mt[1]); if (n >= 1 && n <= 40) team = n; }
+  }
+  const roster = Array.isArray(today?.roster3) ? today.roster3 : [];
+  const holderPos = pc && roster.length ? rosterPosOf(roster, pc.holder) : 0;
+  if (!team && !(holderPos > 0)) return null;                 // 부 신호 불충분 → 위임
+  const dm = String(article?.subject || '').match(/(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*[월화수목금토일]요일)?/);
+  const cutPos = pc && pc.pos != null ? pc.pos : (holderPos > 0 ? holderPos : (team || null));
+  const myPos = Number(today?.myPosition) || 0;
+  // ★본인 상태를 순번 vs 커트/팀수로 코드가 확정 — 명단이 없어도(텍스트 소식) decide가 남은인원을 계산하도록 씨앗을 심는다.
+  //  순번0(미배정·병가 등)은 이 글로 단정하지 않고 unknown(피드만) — 당추는 '근무선 이동'이라 부재자를 근무로 되살리지 않음.
+  const myStatus = myPos > 0 ? (cutPos && myPos <= cutPos ? 'assigned' : 'spare') : 'unknown';
+  return {
+    relevant: true,
+    part: p,
+    category: '변동',
+    cutoffAnnounced: !!pc,
+    cutoffName: pc ? pc.holder : '',
+    cutoffPosition: cutPos,
+    teamCount: team || null,
+    dateLabel: dm ? dm[0].trim() : '',
+    myStatus,
+    myCellColor: 'unknown',
+    teeTime: null, course: '',
+    myPosition: myPos || null,
+    confidence: 0.85,
+    _codeText: true,
+    _source: 'code:text',
+  };
+}
+
 // 날짜 라벨 같은 날 비교('7월 29일'·'2026년 7월 29일' 모두 '7-29'). 둘 다 있어야 True(불확실하면 보수적으로 False).
 function sameDayLabel(a, b) {
   const key = (s) => { const m = String(s || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/); return m ? `${Number(m[1])}-${Number(m[2])}` : ''; };
@@ -1109,10 +1155,13 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     verdict = await readBoardLocalVerdict(article, member);
     if (!verdict) { console.log('[localvlm] 판독 실패 → Gemini 폴백'); verdict = await readBoardConsensus(article, member); }
     else console.log(`[localvlm] 로컬 판독 채택(${verdict._source}, ${Math.round((verdict._ms || 0) / 1000)}s, 명단 ${verdict.part3Roster.length})`);
+  } else if (isBoard) {
+    verdict = await readBoardConsensus(article, member);
   } else {
-    verdict = isBoard
-      ? await readBoardConsensus(article, member)
-      : await callGeminiJSON(buildPrompt(article, member), img, null);
+    // ★텍스트 당추·커트라인 글: 코드 정규식으로 먼저 판독(Gemini 0·크레딧 무관·스팸 제거). 신호 없으면 Gemini.
+    verdict = codeReadTextVerdict(article, member, today);
+    if (verdict) console.log(`[codetext] 코드 판독 채택(cut=${verdict.cutoffName || '-'}, team=${verdict.teamCount || '-'})`);
+    else verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
   }
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
@@ -1381,5 +1430,12 @@ export function interpretForMember(article, shared, member, today = null) {
   const th = (String(v.teeTime || '').match(/(\d{1,2}):/) || [])[1];
   if (th != null && outOfWindow(Number(th), member)) { v.teeTime = ''; v.course = ''; }
   applyRoster(v, today, article, member);
+  // ★텍스트 당추·커트라인(명단 없음): 이 회원 순번 vs 커트/팀수로 스페어 대기 상태를 코드가 부여 →
+  //  decide()가 남은 인원(mp−cut)을 계산해 '근무 예정/스페어 N번'을 만든다. 명단(배치표) 경로엔 영향 없음.
+  if (v.myStatus === 'unknown' && (v.cutoffAnnounced || Number(v.teamCount) > 0)
+      && Number(v.myPosition) > 0 && (!Array.isArray(v.part3Roster) || !v.part3Roster.length)) {
+    const cp = Number(v.cutoffPosition) || Number(v.teamCount) || 0;
+    v.myStatus = cp && Number(v.myPosition) <= cp ? 'assigned' : 'spare';
+  }
   return { ...decide(article, v, member), rawVerdict: v };
 }
