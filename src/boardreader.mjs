@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -54,6 +54,35 @@ function snapRoster(roster) {
   });
 }
 
+// 이름처럼 보이는가(2~4 한글, 괄호태그 허용) — 열분할에서 티오프 열 오검출을 거른다.
+const _looksName = (nm) => /^[가-힣]{2,4}$/.test(String(nm || '').replace(/\([^)]*\).*/, '').replace(/\s/g, ''));
+
+// ★열분할 판독 — 밀집 다열 명단은 열별로 따로 크롭해 '단일열'로 읽어야 하단·정렬이 정확(2부 50명).
+//  rosterCols(크롭 fraction) → 원본 fraction 역매핑 → 각 열 단일 크롭 판독 → 열 순서로 이어붙여 위치정렬.
+async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
+  const cw = cropX1 - cropX0;
+  const cols = rosterCols
+    .map((rc) => ({ x0: Math.max(0, cropX0 + rc.x0 * cw - 0.006), x1: Math.min(1, cropX0 + rc.x1 * cw + 0.006) }))
+    .filter((c) => c.x1 > c.x0)
+    .sort((a, b) => a.x0 - b.x0);
+  const names = [];
+  for (let k = 0; k < cols.length; k++) {
+    const c = cols[k];
+    const colPath = path.join(TMP, `col_${part}_${Date.now()}_${k}.png`);
+    let rows = null;
+    try {
+      await runPy({ image: img, crop_only: colPath, slice: { x0: c.x0, x1: c.x1, y1, lmargin: 0, margin: 0 }, scale: 6 }, 30000);
+      rows = await readColumnRoster(colPath);
+      try { fs.unlinkSync(colPath); } catch { /* noop */ }
+    } catch (e) { console.error(`[boardreader] 부${part} 열${k} 오류:`, e.message); }
+    if (!rows || !rows.length) continue;
+    const valid = rows.filter((r) => _looksName(r.name));
+    if (valid.length < 2) continue;   // 명단 열 아님(티오프 등) → 스킵
+    for (const r of valid) names.push(r.name);   // 열 안은 위→아래 읽은 순서 그대로 누적
+  }
+  return names.length ? names : null;
+}
+
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
 async function readPartsOnce(img, sorted, cuts) {
   const parts = {};
@@ -65,14 +94,24 @@ async function readPartsOnce(img, sorted, cuts) {
       const x1 = next ? next.x0 : b.x1;
       const margin = next ? 0.0 : 0.05;
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
-      // ★y1=0.73 — 명단 세로 전체 포착. 2부 첫 열은 25행이라 0.68로도 하단 2행(정용호·우경조)을 놓쳤다.
-      //  0.73으로 25행까지 담고, 공지/흡연실당번(순번 없음)은 PART_PROMPT가 무시(무해).
-      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
+      // ★y1=0.73 — 명단 세로 전체 포착(공지영역 위까지). crop_only가 실제 사용 경계(x0/x1/y1)를 함께 반환.
+      const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;
       const cut = Number(cuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰), 없으면 per-part cut
-      parts[String(b.part)] = { roster: snapRoster(r.roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
+      // ★열분할: 판독한 열 경계로 각 열을 단일 크롭 재판독 → 더 완전하면 채택(2부 다열 하단 누락·밀림 해결).
+      let roster = r.roster;
+      const cx0 = Number(meta?.x0), cx1 = Number(meta?.x1), cy1 = Number(meta?.y1) || 0.73;
+      if (Array.isArray(r.rosterCols) && r.rosterCols.length && Number.isFinite(cx0) && Number.isFinite(cx1) && cx1 > cx0) {
+        const colRoster = await readColumnsAssemble(img, r.rosterCols, cx0, cx1, cy1, b.part);
+        const base = r.roster.filter(Boolean).length;
+        if (colRoster && colRoster.length >= base && colRoster.length <= 60) {
+          console.log(`[boardreader] 부${b.part} 열분할 채택: ${colRoster.length}명(${r.rosterCols.length}열, 단일 대비 +${colRoster.length - base})`);
+          roster = colRoster;
+        }
+      }
+      parts[String(b.part)] = { roster: snapRoster(roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }
   return parts;

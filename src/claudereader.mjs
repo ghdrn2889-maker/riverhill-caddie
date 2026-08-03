@@ -100,9 +100,50 @@ const PART_PROMPT = (
   + 'IGNORE any text that is NOT a numbered 순번 row — notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'cut = the highest team number in the tee table (커트라인). '
-  + 'Output ONLY strict JSON, no prose. Put EACH roster column as its own array inside "rosterColumns" (left-to-right), each entry with its printed 순번: '
-  + '{"rosterColumns":[[{"pos":1,"name":"차은경(54)"},...],[{"pos":26,"name":"송승은(찾근)"},...]],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
+  + 'ALSO give "rosterCols": for EACH vertical roster column, its horizontal span as {x0,x1} fractions (0=left edge, 1=right edge OF THIS IMAGE), left-to-right, EXCLUDING the tee table. Each span should cover the 순번 number AND the name of that column. '
+  + 'Output ONLY strict JSON, no prose. "roster" is a best-effort flat list in 순번 order (fallback): '
+  + '{"rosterCols":[{"x0":0.02,"x1":0.20},{"x0":0.24,"x1":0.42}],"roster":[{"pos":1,"name":"차은경(54)"},...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
 );
+
+// 평평한 명단(문자열 또는 {pos,name} 배열) → 순번 위치정렬 배열(index=pos-1, 빈 자리 ''). pos 없으면 순서대로.
+function rosterFromFlat(raw) {
+  const arr = Array.isArray(raw) ? raw : [];
+  let items;
+  if (arr.length && typeof arr[0] === 'object') items = arr.map((r, i) => ({ pos: Number(r?.pos) || (i + 1), name: String(r?.name || '').trim() }));
+  else items = arr.map((s, i) => ({ pos: i + 1, name: String(s || '').trim() }));
+  const maxPos = items.reduce((mx, r) => Math.max(mx, r.pos || 0), 0);
+  const out = new Array(maxPos).fill('');
+  for (const r of items) if (r.pos >= 1 && r.name) out[r.pos - 1] = r.name;
+  return out;
+}
+
+// 단일 열(순번 이름 한 줄) 크롭 판독 — 열 하나만 있으면 Claude가 맨 아래까지 100% 읽는다(1부 21/21 검증).
+//  반환: [{pos, name}] (인쇄 순번). 실패/캡초과면 null.
+const COLUMN_PROMPT = (
+  'Read the given local image with the Read tool. It is a SINGLE vertical [순번 이름] roster column from a Korean golf caddie board (배치표). '
+  + 'List EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
+  + 'For each row give the printed 순번 as "pos" and the name, preserving tags exactly like (54)/(1,3)/(조출)/(찾근). '
+  + 'Skip a row only if it has no name. Ignore any text without a printed 순번 (notices, legends). '
+  + 'Output ONLY strict JSON: {"roster":[{"pos":1,"name":"차은경(54)"},...]}'
+);
+export async function readColumnRoster(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 열 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${COLUMN_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 열 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const raw = Array.isArray(j.roster) ? j.roster : [];
+    const items = raw
+      .map((r) => (typeof r === 'object' ? { pos: Number(r?.pos) || 0, name: String(r?.name || '').trim() } : { pos: 0, name: String(r || '').trim() }))
+      .filter((r) => r.name);
+    return items.length ? items : null;
+  } catch { return null; }
+}
 
 export async function readPartWithClaude(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
@@ -115,38 +156,15 @@ export async function readPartWithClaude(imagePath) {
   if (!m) return null;
   try {
     const j = JSON.parse(m[0]);
-    // ★순번(pos) 기반 위치정렬 — 중간 행을 놓쳐도 뒤 순번이 당겨지지 않게(index=pos-1, 빈 자리는 '').
-    //  ★다열: rosterColumns(열별 배열)을 열 순서대로 이어붙이되, 열마다 순번(pos)이 있으면 그 자리로,
-    //   pos가 없으면 '이전 열 끝+누적 순서'로 배치 → 한 열이 짧게 읽혀도 다음 열이 당겨지지 않는다.
-    //  하위호환: rosterColumns 없으면 roster(단일배열, {pos,name} 또는 문자열) 처리.
-    const cols = Array.isArray(j.rosterColumns) ? j.rosterColumns : null;
-    let items = [];   // {pos, name} 누적(pos는 인쇄 순번 우선, 없으면 순차 채움)
-    if (cols) {
-      let running = 0;
-      for (const col of cols) {
-        if (!Array.isArray(col)) continue;
-        for (const r of col) {
-          const nm = String((r && r.name != null) ? r.name : r || '').trim();
-          if (!nm) { running++; continue; }
-          const p = Number(r && r.pos) || 0;
-          const pos = p >= 1 ? p : running + 1;
-          items.push({ pos, name: nm });
-          running = pos;
-        }
-      }
-    } else {
-      const raw = Array.isArray(j.roster) ? j.roster : [];
-      if (raw.length && typeof raw[0] === 'object') items = raw.map((r) => ({ pos: Number(r?.pos) || 0, name: String(r?.name || '').trim() }));
-      else items = raw.map((s, i) => ({ pos: i + 1, name: String(s || '').trim() }));
-    }
-    const maxPos = items.reduce((mx, r) => Math.max(mx, Number(r.pos) || 0), 0);
-    const roster = new Array(maxPos).fill('');
-    for (const r of items) { const p = Number(r.pos) || 0; if (p >= 1 && r.name) roster[p - 1] = r.name; }
+    const roster = rosterFromFlat(j.roster);   // 폴백용 rough 명단(위치정렬)
+    const rosterCols = (Array.isArray(j.rosterCols) ? j.rosterCols : [])
+      .map((c) => ({ x0: Number(c.x0), x1: Number(c.x1) }))
+      .filter((c) => c.x1 > c.x0 && c.x0 >= 0 && c.x1 <= 1);
     const tee = (Array.isArray(j.tee) ? j.tee : [])
       .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
       .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
     const cut = Number(j.cut) || tee.reduce((mx, t) => Math.max(mx, t.pos), 0);
-    return roster.filter(Boolean).length ? { roster, tee, cut } : null;
+    return (roster.filter(Boolean).length || tee.length) ? { roster, tee, cut, rosterCols } : null;
   } catch { return null; }
 }
 

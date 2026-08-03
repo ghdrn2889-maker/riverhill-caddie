@@ -524,7 +524,8 @@ def main():
         cw, ch = c.size
         scale = int(cfg.get("scale", 6))
         c.resize((cw * scale, ch * scale), _PIL.LANCZOS).save(str(cfg["crop_only"]))
-        print(json.dumps({"crop_path": str(cfg["crop_only"]), "_ms": int((_time.time() - t0) * 1000)}))
+        # ★실제 사용한 크롭 경계(fraction)를 함께 반환 — 호출부가 이 크롭 안 좌표(열 x-range)를 원본 fraction으로 역매핑.
+        print(json.dumps({"crop_path": str(cfg["crop_only"]), "x0": x0, "x1": x1, "y1": y1, "_ms": int((_time.time() - t0) * 1000)}))
         return
 
     # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──
