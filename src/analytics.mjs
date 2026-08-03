@@ -195,11 +195,41 @@ function partsToDuty(set) {
 //   없으면 스냅샷 폴백. today.json에 없는 것(crewDuty 근무표시맵·teamCount 헤더)만 스냅샷 유지.
 //  ※member-specific(myPosition/status/teeTime)은 절대 안 씀 — board-level만 취함.
 export function effectivePart3Verdict(lb) {
+  const t1 = loadUserJSON(1, 'today.json', null);
+  const digits = (s) => Number(String(s || '').replace(/\D/g, '')) || 0;
+  const lbId = digits(lb && lb.id);
+  const t1Id = digits(t1 && t1.articleId);
+  // ★★근본 수정(재발 차단) — today.json(대시보드가 읽는 소스)이 lastboard보다 '새 배치표'(글번호↑)로
+  //  넘어갔으면, 대시보드는 이미 그 새 배치표를 반영 중이다. 얼어붙은 lastboard(+지난 배치표의 관리자교정)를
+  //  버리고 board를 today.json으로 통째로 재구성 → 판독/검수가 대시보드와 '구조적으로' 절대 못 어긋난다.
+  //  (lastboard의 isAuthoritativeBoard/_adminCorrected freeze가 정상 새 배치표를 거부해 얼어도, 판독은
+  //   대시보드 소스를 그대로 따라간다. roster3=매 본배치표 전체명단, teeGrid·cutLine=당추 반영 최신.)
+  if (t1 && t1Id && t1Id > lbId) {
+    const nv = {
+      part3Roster: Array.isArray(t1.roster3) ? t1.roster3.slice() : [],
+      teeGrid: Array.isArray(t1.teeGrid) ? t1.teeGrid.slice() : [],
+      internTees: Array.isArray(t1.internTees) ? t1.internTees.slice() : [],
+      internCount: Number(t1.internCount) || 0,
+      cutoffName: t1.cutoffName || '',
+      cutoffPosition: Number(t1.cutoffPosition) || null,
+      cutLine: Number(t1.cutLine) || 0,
+      teamCount: Number(t1.teamCount) || 0,
+      dateLabel: t1.date || (lb && lb.dateLabel) || '',
+      rosterReliable: (Array.isArray(t1.roster3) ? t1.roster3.length : 0) >= 9,
+      crewDuty: (lb && lb.rawVerdict && lb.rawVerdict.crewDuty) || {},
+      _effArticleId: String(t1.articleId || ''),
+      _fromToday: true,
+    };
+    nv._t1Sig = `today:${t1.articleId}|${t1.updatedAt || 0}|${(t1.roster3 || []).length}|${t1.cutLine || 0}|`
+      + `${(t1.teeGrid || []).map((g) => `${g.pos}:${g.time}`).join(',')}`;
+    return nv;
+  }
+  // ── 같은 배치표(또는 today.json이 더 옛것): lastboard가 정본 — 기존 병합 로직 유지. ──
   const v = (lb && lb.rawVerdict) ? { ...lb.rawVerdict } : {};
   // ★관리자 교정 배치표(_adminCorrected)는 그 자체가 정본 — today.json 오버레이로 절대 덮지 않는다.
   //  (검수에서 서동명→서동환 교정한 이름을, 자동 판독이 담긴 today.json이 다시 서동명으로 되돌리던 사고 방지.)
+  //  ※단 위 today-branch가 '더 새 배치표'면 이미 그쪽으로 빠져나감 — 지난 배치표 교정에 영구히 갇히지 않음.
   if (v._adminCorrected) { v._t1Sig = `corrected:${v._adminCorrected.at || ''}`; return v; }
-  const t1 = loadUserJSON(1, 'today.json', null);
   if (!t1) { v._t1Sig = ''; return v; }
   // ★날짜 안전장치: today.json이 '다음 날'로 넘어갔으면(월-일 다름) 오늘 배치표에 안 얹는다.
   const dayNums = (s) => (String(s || '').match(/\d+/g) || []).slice(0, 2).join('-');
@@ -292,9 +322,9 @@ export async function computeBoardParts() {
     if (!availableParts.length) { _boardPartsCache = { key, data: null }; return null; }
     const art = article;
     const data = {
-      at: lb.at || null, articleId: id, subject: art.subject || '', writer: art.writer || '',
+      at: lb.at || null, articleId: v3._effArticleId || id, subject: art.subject || '', writer: art.writer || '',
       writeDate: art.writeDate || null, dateLabel: v3.dateLabel || lb.dateLabel || '',
-      image: (Array.isArray(art.images) && art.images[0]) || '', url: art.url || '',
+      image: lb.latestImage || (Array.isArray(art.images) && art.images[0]) || '', url: art.url || '',
       model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
       comments: (Array.isArray(art.comments) ? art.comments : []).map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
       // ★신선도 서명 — buildLatestBoard와 동일 포맷(boardSyncSig) → 프런트 재요청 게이트가 정확히 맞물림.

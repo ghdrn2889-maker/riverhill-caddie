@@ -361,7 +361,7 @@ app.get('/api/board-review', gate, (req, res) => {
     // ★원본 이미지: 구조 데이터(정본)와 별개로 '최신 3부 이미지'(당추 반영 변동본)를 우선 표시.
     const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
     res.json({ ok: true, part, board: {
-      articleId: lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
+      articleId: v._effArticleId || lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
       image: lb.latestImage || baseImg, imageId: lb.latestImageId || lb.id, imageAt: lb.latestImageAt || lb.at,
       url: (lb.article && lb.article.url) || '',
       // ★신선도 서명 — 얼어붙은 at 대신 today.json(_t1Sig) 기준 → 당추·커트로 대시보드가 바뀌면 검수도 재렌더.
