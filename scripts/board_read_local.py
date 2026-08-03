@@ -62,10 +62,10 @@ def crop_up(im, x0f, x1f, scale=4):
     return c.resize((c.width * scale, c.height * scale), Image.LANCZOS)
 
 
-def read_names(im, x0f, x1f, reads):
+def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT):
     tally = {}
     for _ in range(reads):
-        for row in ask(crop_up(im, x0f, x1f), NAME_PROMPT, "rows"):
+        for row in ask(crop_up(im, x0f, x1f), prompt, "rows"):
             try:
                 n = int(row["n"]); nm = str(row.get("name", "")).strip()
             except Exception:
@@ -128,12 +128,18 @@ def read_status(im, header_f=0.052, rows=20):
 def main():
     cfg = json.loads(sys.stdin.read() or "{}")
     reads = int(cfg.get("reads", 3))
+    known = [str(x).strip() for x in (cfg.get("known") or []) if str(x).strip()]
     im = load_image(cfg["image"])
+
+    # 폐쇄어휘: 알려진 캐디 명단을 프롬프트에 주입 → 오독을 '존재하는 이름'으로 억제(김수영 같은 유령 방지).
+    name_prompt = NAME_PROMPT
+    if known:
+        name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
     # 1) 명단(타일 표결)
     merged = {}
     for (a, b) in [(0.0, 0.38), (0.32, 0.72)]:
-        for n, nm in read_names(im, a, b, reads).items():
+        for n, nm in read_names(im, a, b, reads, name_prompt).items():
             merged[n] = nm
     N = max(merged) if merged else 0
     roster, assign = [], {}

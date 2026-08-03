@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_DIR } from './store.mjs';
+import { confirmedCaddies, correctAndLearn } from './roster.mjs';
+import { activeMembers } from './users.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -22,24 +24,45 @@ export function useLocalVLM() {
   try { return fs.existsSync(path.join(DATA_DIR, 'use-local-vlm')); } catch { return false; }
 }
 
-// article → 로컬 타일링 판독 결과 또는 null.
-//  반환: { part3Roster[], assign{순번:배정}, _source, _ms }  (순번 index+1, 괄호 점유자 원문 유지)
-export async function readBoardLocal(article, { reads = 2 } = {}) {
+// 로컬 판독에 넘길 '알려진 캐디 이름' 후보군(확정사전 + 활성회원) — 폐쇄어휘로 오독 억제.
+function knownNames() {
+  const set = new Set();
+  try { for (const n of confirmedCaddies()) { const s = String(n || '').trim(); if (s.length >= 2) set.add(s); } } catch { /* noop */ }
+  try { for (const m of activeMembers()) { const s = String(m.board_name || '').trim(); if (s.length >= 2) set.add(s); } } catch { /* noop */ }
+  return [...set];
+}
+
+// 확정사전 1글자 보정(폐쇄어휘 프롬프트의 2차 안전망). 괄호 표기는 표시이름·점유자 각각 보정.
+function snapCell(cell) {
+  const s = String(cell || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
+  if (m) return `${correctAndLearn([m[1].trim()])[0]}(${correctAndLearn([m[2].trim()])[0]})`;
+  return correctAndLearn([s])[0] || s;
+}
+
+// article → 로컬 타일링 판독 결과 또는 null. (순번 index+1, 괄호 점유자 원문 유지)
+export async function readBoardLocal(article, { reads = 3 } = {}) {
   const img = article?.images?.[0] || article?.image || '';
   if (!img) return null;
   const t0 = Date.now();
   let out;
   try {
-    out = await runPy({ image: img, reads });
+    out = await runPy({ image: img, reads, known: knownNames() });
   } catch (e) {
     console.error('[localvlm] 오류:', e.message);
     return null;
   }
-  const roster = Array.isArray(out?.roster) ? out.roster.map((s) => String(s || '').trim()) : [];
+  let roster = Array.isArray(out?.roster) ? out.roster.map((s) => String(s || '').trim()) : [];
   if (!roster.length) return null;
+  roster = roster.map(snapCell);   // 확정사전 보정
   return {
     part3Roster: roster,
     assign: out.assign || {},
+    status: out.status || {},
+    cutPos: Number(out.cutPos) || 0,
+    teeGrid: Array.isArray(out.teeGrid) ? out.teeGrid : [],
+    internCount: Number(out.internCount) || 0,
     _source: out.source || 'local:qwen2.5vl',
     _ms: Date.now() - t0,
   };

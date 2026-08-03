@@ -60,6 +60,11 @@ export function isKnownCaddie(name) {
   return conf.includes(snapWith(s, conf));
 }
 
+// 확정 캐디 명단(전역) — 로컬 VLM '폐쇄어휘' 판독에 후보군으로 주입(오독→존재하는 이름으로).
+export function confirmedCaddies() {
+  return confirmedFrom(load());
+}
+
 // 순번 위치배열(빈칸 '' 유지) 보정 + 학습. 보정된 배열 반환.
 export function correctAndLearn(names) {
   const db = load();
