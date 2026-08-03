@@ -92,15 +92,16 @@ export async function getPartBoundaries(imagePath) {
 //  실증(8/4): 3부 명단 29 정확 + 티오프 16팀(IN 포함) + 커트16. VLM이 약했던 티오프까지 정확.
 const PART_PROMPT = (
   'Read the given local image with the Read tool. It is ONE 부(section) of a Korean golf caddie board (배치표). '
-  + 'LEFT: one or MORE [순번 이름] roster columns side by side (e.g. 순번 1-25 in the first column, then 26-50 continuing in the next column to its right). '
-  + 'Read the columns left-to-right, and WITHIN each column top-to-bottom. For EVERY row, read BOTH the printed 순번 number and the name together as a pair. '
-  + '★Read every numbered row all the way to the BOTTOM of each column — do NOT stop early; the last 1-2 rows of a column are easy to miss. '
-  + 'Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Skip a row only if it has no name. '
-  + 'IGNORE any text that is NOT a numbered 순번 row — e.g. notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
+  + 'LEFT: the roster has one or MORE separate vertical [순번 이름] columns placed side by side '
+  + '(e.g. the first column holds 순번 1-25, then a SECOND column to its right continues 26-50). '
+  + '★Treat each vertical column as its OWN independent list. Read column by column, left to right. '
+  + 'Within EACH column, read every row from the very top to the very BOTTOM — the last 1-2 rows of a column are easy to miss, do NOT stop early. '
+  + 'For every row read BOTH the printed 순번 number and the name as a pair. Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Skip a row only if it has no name. '
+  + 'IGNORE any text that is NOT a numbered 순번 row — notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'cut = the highest team number in the tee table (커트라인). '
-  + 'Output ONLY strict JSON, no prose. Each roster entry MUST include its printed 순번 as "pos": '
-  + '{"roster":[{"pos":1,"name":"차은경(54)"},{"pos":2,"name":"..."},...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
+  + 'Output ONLY strict JSON, no prose. Put EACH roster column as its own array inside "rosterColumns" (left-to-right), each entry with its printed 순번: '
+  + '{"rosterColumns":[[{"pos":1,"name":"차은경(54)"},...],[{"pos":26,"name":"송승은(찾근)"},...]],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
 );
 
 export async function readPartWithClaude(imagePath) {
@@ -115,17 +116,32 @@ export async function readPartWithClaude(imagePath) {
   try {
     const j = JSON.parse(m[0]);
     // ★순번(pos) 기반 위치정렬 — 중간 행을 놓쳐도 뒤 순번이 당겨지지 않게(index=pos-1, 빈 자리는 '').
-    //  하위호환: 옛 형식(문자열 배열)이면 배열 순서를 그대로 순번으로 본다.
-    const raw = Array.isArray(j.roster) ? j.roster : [];
-    let roster = [];
-    if (raw.length && typeof raw[0] === 'object') {
-      let maxPos = 0;
-      for (const r of raw) { const p = Number(r?.pos) || 0; if (p > maxPos) maxPos = p; }
-      roster = new Array(maxPos).fill('');
-      for (const r of raw) { const p = Number(r?.pos) || 0; const nm = String(r?.name || '').trim(); if (p >= 1 && nm) roster[p - 1] = nm; }
+    //  ★다열: rosterColumns(열별 배열)을 열 순서대로 이어붙이되, 열마다 순번(pos)이 있으면 그 자리로,
+    //   pos가 없으면 '이전 열 끝+누적 순서'로 배치 → 한 열이 짧게 읽혀도 다음 열이 당겨지지 않는다.
+    //  하위호환: rosterColumns 없으면 roster(단일배열, {pos,name} 또는 문자열) 처리.
+    const cols = Array.isArray(j.rosterColumns) ? j.rosterColumns : null;
+    let items = [];   // {pos, name} 누적(pos는 인쇄 순번 우선, 없으면 순차 채움)
+    if (cols) {
+      let running = 0;
+      for (const col of cols) {
+        if (!Array.isArray(col)) continue;
+        for (const r of col) {
+          const nm = String((r && r.name != null) ? r.name : r || '').trim();
+          if (!nm) { running++; continue; }
+          const p = Number(r && r.pos) || 0;
+          const pos = p >= 1 ? p : running + 1;
+          items.push({ pos, name: nm });
+          running = pos;
+        }
+      }
     } else {
-      roster = raw.map((s) => String(s || '').trim());
+      const raw = Array.isArray(j.roster) ? j.roster : [];
+      if (raw.length && typeof raw[0] === 'object') items = raw.map((r) => ({ pos: Number(r?.pos) || 0, name: String(r?.name || '').trim() }));
+      else items = raw.map((s, i) => ({ pos: i + 1, name: String(s || '').trim() }));
     }
+    const maxPos = items.reduce((mx, r) => Math.max(mx, Number(r.pos) || 0), 0);
+    const roster = new Array(maxPos).fill('');
+    for (const r of items) { const p = Number(r.pos) || 0; if (p >= 1 && r.name) roster[p - 1] = r.name; }
     const tee = (Array.isArray(j.tee) ? j.tee : [])
       .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
       .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
