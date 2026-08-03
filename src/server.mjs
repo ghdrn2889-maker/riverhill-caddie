@@ -25,6 +25,7 @@ import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken,
 import { isKnownCaddie } from './roster.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
+import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -1023,7 +1024,21 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     //   모니터 1·2부는 마지막 성공 판독본에 머무름(허용). Phase 2에서 =1 켜면 회원 알림+모니터 갱신 함께 재개.
     const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
     if (!minorPartOn) {
-      if (full.images && full.images.length) console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 크레딧 절약(배치표당 Gemini ~5회 유지): ${full.subject}`);
+      // ★Claude 판독 ON이면: 1·2부 발송은 여전히 잠그되(회원 처리 X), 이미 읽은 whole-board 캐시에서
+      //  1·2부를 뽑아 '모니터에만' 반영(setBoardPart). 추가 Claude 호출 0(캐시 히트). 유령 2부 오알림 위험 없음(발송 없음).
+      if (useClaudeReader() && full.images && full.images.length) {
+        try {
+          const mparts = await claudeMonitorParts(full, ['1', '2']);
+          if (mparts) {
+            const meta = { at: Date.now(), dateLabel: out.rawVerdict?.dateLabel || '', subject: full.subject || '',
+              image: (full.images && full.images[0]) || '', url: full.url || '' };
+            for (const p of ['1', '2']) if (mparts[p]) setBoardPart(full.id, meta, full, p, mparts[p]);
+            console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
+          }
+        } catch (e) { console.error('[모니터 1·2부 반영 오류]', e.message); }
+      } else if (full.images && full.images.length) {
+        console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 크레딧 절약(배치표당 Gemini ~5회 유지): ${full.subject}`);
+      }
       if (opts.previewMode) await sendDailyPreview(boardISO, full);
       return primaryRet;
     }

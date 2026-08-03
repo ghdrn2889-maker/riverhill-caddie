@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, confirmedCaddies } from './roster.mjs';
+import { DATA_DIR } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -80,6 +81,128 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }
   return { boundaries: bounds, parts, _claudeCalls: startBudget - claudeBudgetLeft() };
+}
+
+// ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
+//  (env CLAUDE_READER=1 도 허용.) 판독 시점마다 확인 → touch/rm 즉시 반영. 실패·캡초과면 judge가 로컬/Gemini 폴백.
+export function useClaudeReader() {
+  if (['1', 'true', 'yes'].includes(String(process.env.CLAUDE_READER || '').toLowerCase())) return true;
+  try { return fs.existsSync(path.join(DATA_DIR, 'use-claude-reader')); } catch { return false; }
+}
+
+// ── 배치표 셀 파서 — "차은경(54)"·"신지현(1,3)"·"정진영(조하빈)"(순번교환)·"우겸조(찾근)" 해석. ──
+//  name=실제 그 자리 사람(교환이면 점유자), holder=공백제거 키, duty=근무태그('54'/'1,3'/'찾근'), cross=부중복.
+//  (judge.mjs normRosterName과 동일 규칙 — import 순환 피하려 여기 축약 복제.)
+function parseCell(cell) {
+  const s = String(cell || '').trim();
+  const m = s.match(/^(.*?)\s*\(([^)]*)\)\s*(.*)$/);
+  if (!m) return { name: s, holder: s.replace(/\s/g, ''), duty: '', cross: false };
+  const base = m[1].trim(), inner = m[2].trim().replace(/\s/g, ''), tail = m[3].trim();
+  const isNum = /^[\d,.]+$/.test(inner);
+  if (tail && /[가-힣]/.test(tail)) return { name: tail, holder: tail.replace(/\s/g, ''), duty: isNum ? inner : '', cross: isNum };
+  if (isNum) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: true };
+  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: false };
+  return { name: inner || base, holder: (inner || base).replace(/\s/g, ''), duty: '', cross: false };
+}
+
+// 부별 Claude 판독({roster,tee,cut}) → judge()가 쓰는 verdict 형식. localvlm.readBoardLocalVerdict와 동일 계약 +
+//  괄호 태그에서 crewDuty·guaranteedWork(54/찾근)·crossPartNames를 파생(3부 54·1,3 근무판정 게이트 근거).
+function verdictFromPart(article, member, pd, allParts) {
+  const roster = Array.isArray(pd?.roster) ? pd.roster.slice() : [];
+  if (!roster.length) return null;
+  const part = String(member?.part || '3').replace(/\D/g, '') || '3';
+  const teeGrid = (pd.tee || [])
+    .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: String(t.course || '').toUpperCase() }))
+    .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
+  const gridMax = teeGrid.reduce((mx, t) => Math.max(mx, t.pos), 0);
+  const cutPos = Number(pd.cut) || 0;
+  const cut = cutPos || gridMax || 0;
+  const dm = String(article?.subject || '').match(/(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*[월화수목금토일]요일)?/);
+  const nk = String(member?.name || '').replace(/\s/g, '');
+  const crewDuty = {}; const guaranteed = []; const cross = [];
+  let myPos = 0;
+  roster.forEach((cell, i) => {
+    const c = parseCell(cell);
+    if (c.holder && c.duty && !crewDuty[c.holder]) crewDuty[c.holder] = c.duty;
+    if (c.duty && /(?:^|,)(?:54|찾근)/.test(c.duty)) guaranteed.push(c.name);
+    if (c.cross && c.name) cross.push(c.name);
+    if (nk && c.holder === nk && myPos === 0) myPos = i + 1;
+  });
+  const myStatus = myPos > 0 ? (cut && myPos <= cut ? 'assigned' : 'spare') : 'off';
+  const tee = myPos > 0 ? teeGrid.find((t) => t.pos === myPos) : null;
+  return {
+    part, category: '배치표', relevant: true, rosterReliable: true,
+    part3Roster: roster,
+    teeGrid,
+    teamCount: cut || null,
+    cutoffPosition: cutPos || null,
+    cutoffName: cutPos ? parseCell(roster[cutPos - 1] || '').name : '',
+    cutoffAnnounced: !!cutPos,
+    internCount: 0, internTees: [],
+    dateLabel: dm ? dm[0].trim() : '',
+    boardTables: (allParts || []).map((p) => ({ part: Number(p), color: '' })),
+    crewDuty,
+    guaranteedWork: [...new Set(guaranteed)],
+    crossPartNames: [...new Set(cross)],
+    assignMap: {},
+    myPosition: myPos,
+    myStatus,
+    teeTime: tee ? tee.time : '',
+    course: tee ? tee.course : '',
+    confidence: 0.92,
+    _claude: true, _source: 'claude:crop',
+  };
+}
+
+// ── 이미지별 캐시 — 합본을 부마다(1·2·3) 다시 읽지 않게(Claude 4회를 12회로 늘리지 않음). ──
+//  한 배치표(=한 이미지)당 whole-board 판독을 '한 번'만. notifyForArticle 안 여러 judge()가 이 결과를 공유.
+//  Promise를 저장 → 동시 진입도 한 번의 판독으로 합쳐짐. 오류면 삭제(재시도 가능). 최근 4장만 보관.
+const _boardCache = new Map();
+function readBoardByClaudeCached(img, opts = {}) {
+  if (!img) return Promise.resolve(null);
+  if (_boardCache.has(img)) return _boardCache.get(img);
+  const pr = readBoardByClaude(img, opts).catch((e) => { _boardCache.delete(img); throw e; });
+  _boardCache.set(img, pr);
+  if (_boardCache.size > 4) { const k = _boardCache.keys().next().value; _boardCache.delete(k); }
+  return pr;
+}
+
+// judge() 진입점 — article(회원 기준) → 그 회원 부(部) verdict. 합본은 캐시로 1회 판독 후 해당 부만 변환.
+//  해당 부가 판독에 없으면(예: 다른 부만 잘라 올린 변동) null → judge가 로컬/Gemini 폴백.
+export async function readBoardClaudeVerdict(article, member) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img) return null;
+  let board;
+  try { board = await readBoardByClaudeCached(img); }
+  catch (e) { console.error('[claude] board 판독 오류:', e.message); return null; }
+  if (!board || !board.parts) return null;
+  const part = String(member?.part || '3').replace(/\D/g, '') || '3';
+  const pd = board.parts[part];
+  if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) return null;
+  return verdictFromPart(article, member, pd, Object.keys(board.parts));
+}
+
+// 모니터(board-parts-store) 채움용 — 이미 캐시된 whole-board 판독에서 지정 부들을 뽑아 setBoardPart payload로.
+//  ★추가 Claude 호출 0(캐시 히트만). 캐시에 없으면 null(판독 안 켜졌거나 아직 안 읽음).
+export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img || !_boardCache.has(img)) return null;
+  let board;
+  try { board = await _boardCache.get(img); } catch { return null; }
+  if (!board || !board.parts) return null;
+  const out = {};
+  for (const p of wantParts) {
+    const pd = board.parts[String(p)];
+    if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue;
+    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts));
+    out[String(p)] = {
+      roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teamCount: Number(v.teamCount) || 0,
+      internTees: v.internTees, internCount: v.internCount,
+      cutoffPosition: v.cutoffPosition, cutoffName: v.cutoffName,
+      crewDuty: v.crewDuty, rosterReliable: true, uncertain: '',
+    };
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 // ── 단일부(변동 크롭): 경계 없이 그 이미지를 바로 부 판독. ──
