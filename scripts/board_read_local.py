@@ -54,10 +54,13 @@ def read_tee_block(im, x0f, x1f, part, reads_t=3):
                     tally.setdefault(pos, {})
                     k = (tm, course)
                     tally[pos][k] = tally[pos].get(k, 0) + 1
+    # ★1회성 환각(있지도 않은 19:15 등)은 버리고, 2표 이상 득표한 팀만 채택(reads_t>=3일 때).
+    min_v = 2 if reads_t >= 3 else 1
     tees = []
     for pos, d in tally.items():
-        (tm, course), _ = max(d.items(), key=lambda x: x[1])
-        tees.append({"n": pos, "time": tm, "course": course})
+        (tm, course), v = max(d.items(), key=lambda x: x[1])
+        if v >= min_v:
+            tees.append({"n": pos, "time": tm, "course": course})
     return sorted(tees, key=lambda x: x["n"])
 
 
@@ -114,7 +117,21 @@ def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=2400):
     return c.resize((max(1, w), max(1, h)), Image.LANCZOS)
 
 
-def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
+_HEADER_WORDS = {"이름", "순번", "성명", "번호", "구분", "비고", "카트", "근무"}
+
+
+def _valid_name(nm):
+    # 헤더/환각 배제: 표 머리글("이름" 등) 제거 + 괄호 앞 본체가 2~4 한글이어야 이름으로 인정.
+    s = str(nm or "").strip()
+    if not s or s in _HEADER_WORDS:
+        return False
+    base = re.sub(r"\([^)]*\)", "", s).strip()
+    if base in _HEADER_WORDS:
+        return False
+    return bool(re.match(r"^[가-힣]{2,4}$", base))
+
+
+def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0, min_votes=1):
     tally = {}
     for _ in range(reads):
         for row in ask(crop_up(im, x0f, x1f, y0f, y1f), prompt, "rows"):
@@ -122,10 +139,16 @@ def read_names(im, x0f, x1f, reads, prompt=NAME_PROMPT, y0f=0.0, y1f=1.0):
                 n = int(row["n"]); nm = str(row.get("name", "")).strip()
             except Exception:
                 continue
-            if nm:
+            if nm and _valid_name(nm):
                 tally.setdefault(n, {})
                 tally[n][nm] = tally[n].get(nm, 0) + 1
-    return {n: max(d.items(), key=lambda x: x[1])[0] for n, d in tally.items()}
+    # ★다수결 필터 — 최다 득표 이름이 min_votes 이상일 때만 채택(환각은 대개 1회성 → 배제).
+    out = {}
+    for n, d in tally.items():
+        nm, v = max(d.items(), key=lambda x: x[1])
+        if v >= min_votes:
+            out[n] = nm
+    return out
 
 
 def _base_name(nm):
@@ -358,7 +381,8 @@ def single_crop_read(im, part, reads, name_prompt, known_set):
     merged = {}
     for (cx0, cx1) in NAME_COLS:
         for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:  # 각 열을 상/하로 해상도↑
-            for n, nm in read_names(im, cx0, cx1, reads, name_prompt, y0, y1).items():
+            # ★min_votes=2 — 빈 열·환각(헤더 '이름', 1회성 오검출)은 다수결에서 탈락, 실이름만 채택.
+            for n, nm in read_names(im, cx0, cx1, reads, name_prompt, y0, y1, min_votes=2).items():
                 if n not in merged and nm:
                     merged[n] = nm
     tees = read_tee_block(im, TEE_X[0], TEE_X[1], part, reads_t=4)   # part 시간대 필터로 옆부 오염 방지
@@ -377,6 +401,23 @@ def single_crop_read(im, part, reads, name_prompt, known_set):
             status[n] = "work" if (cut and n <= cut) else "spare"
     return {"roster": roster, "assign": assign, "status": status, "cutPos": cut,
             "teeGrid": tees, "internCount": interns}
+
+
+SUMMARY_PROMPT = ("이 이미지는 골프 배치표 상단의 요약이다. '1부 N  2부 M  3부 K  총 T팀' 형식으로 각 부의 팀 수가 적혀 있다. "
+    "보이는 부와 그 팀 수를 그대로 읽어라(추측 금지). "
+    'JSON만: {"parts":[{"part":부번호, "teams":팀수}]}')
+
+
+def read_summary_counts(im, reads=3):
+    # ★배치표 우상단 요약에서 부별 '팀 수'(=커트)를 확정 — 티오프 행을 세는 것보다 신뢰도 높음(하단 누락 무관).
+    #  전체 합본 배치표에만 있음(부별 크롭엔 없을 수 있음). 상단 가로 밴드를 표결로 읽는다.
+    tally = {}
+    for _ in range(reads):
+        for row in ask(crop_up(im, 0.45, 1.0, 0.0, 0.06, scale=4, max_side=1600), SUMMARY_PROMPT, "parts"):
+            p = _to_pos(row.get("part")); t = _to_pos(row.get("teams"))
+            if p in (1, 2, 3) and t and t <= 40:
+                tally.setdefault(p, {}); tally[p][t] = tally[p].get(t, 0) + 1
+    return {p: max(d.items(), key=lambda x: x[1])[0] for p, d in tally.items()}
 
 
 def _emit(obj):
