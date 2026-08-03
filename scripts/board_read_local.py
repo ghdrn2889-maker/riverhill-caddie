@@ -15,9 +15,9 @@ NAME_PROMPT = ("이 이미지는 골프 배치표의 한 열이다. 각 줄은 [
     "★이름에 괄호가 붙어 있으면 반드시 '이름(점유자)' 원문 그대로 포함하라(예: 신지현(오동현)). 괄호를 빠뜨리지 마라. "
     "이름 옆 (54) 같은 근무배정 숫자는 그대로 둬라. 빈 이름줄은 건너뛴다. 글자를 추측 말고 보이는 대로. "
     'JSON만: {"rows":[{"n":순번, "name":"이름"}]}')
-TEE_PROMPT = ("이 이미지는 골프 티오프표다. 각 행은 [OUT칸][시간][IN칸]. OUT/IN칸엔 팀 순번 숫자가 있거나 비어있다. "
-    "순번 숫자가 있는 칸만 뽑아라. 노란색 칸(숫자 없이 색만)은 intern=true. 시간은 HH:MM. "
-    'JSON만: {"tees":[{"n":순번, "time":"HH:MM", "course":"OUT"|"IN", "intern":false}]}')
+TEE_PROMPT = ("이 이미지는 골프 티오프표의 한 쪽 열이다. 각 행은 [팀순번 숫자]와 [시간 HH:MM]이 짝지어 있다. "
+    "순번 숫자가 있는 행만 뽑아라(빈칸·색만 있는 칸 제외). 시간은 HH:MM. "
+    'JSON만: {"rows":[{"n":팀순번, "time":"HH:MM"}]}')
 
 
 def load_image(src):
@@ -128,19 +128,26 @@ def main():
             if st == "work":
                 cut = max(cut, n)
 
-    # 3) 티오프표(그리드 크롭 VLM)
+    # 3) 티오프표 — OUT열([순번][시간])과 IN열([시간][순번])을 '따로' 크롭해 좌우 혼동 제거. 각 열=순번↔시각.
+    def read_tee_col(x0f, x1f, course, reads_t=2):
+        tally = {}
+        for _ in range(reads_t):
+            for row in ask(crop_up(im, x0f, x1f), TEE_PROMPT, "rows"):
+                try:
+                    n = int(row["n"]); tm = str(row.get("time", "")).strip()
+                except Exception:
+                    continue
+                if re.match(r"^\d{1,2}:\d{2}$", tm):
+                    tally.setdefault(n, {}); tally[n][tm] = tally[n].get(tm, 0) + 1
+        return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
     tees = []
+    tmap = {}
+    tmap.update(read_tee_col(0.66, 0.885, "OUT"))    # OUT 숫자 + 시간
+    tmap.update(read_tee_col(0.78, 1.0, "IN"))       # 시간 + IN 숫자
+    for n in sorted(tmap):
+        tees.append({"n": n, "time": tmap[n][0], "course": tmap[n][1]})
+    # 인턴(초록/노란 티오프칸, 순번 없음) = 그리드 OUT열에서 초록 셀 수 픽셀 카운트
     interns = 0
-    try:
-        for t in ask(crop_up(im, 0.66, 1.0), TEE_PROMPT, "tees"):
-            if t.get("intern"):
-                interns += 1; continue
-            try:
-                tees.append({"n": int(t["n"]), "time": str(t.get("time", "")), "course": str(t.get("course", "")).upper()})
-            except Exception:
-                pass
-    except Exception:
-        pass
 
     print(json.dumps({"roster": roster, "assign": assign, "status": status, "cutPos": cut,
         "teeGrid": tees, "internCount": interns, "source": "local:%s" % MODEL}, ensure_ascii=False))
