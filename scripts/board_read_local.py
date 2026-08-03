@@ -125,9 +125,9 @@ def read_status(im, header_f=0.052, rows=20):
     status = {}
     for k in range(rows):
         top = header_f + k * rh; bot = header_f + (k + 1) * rh
-        pad = rh * 0.18
-        status[k + 1] = classify_bg(im, 0.03, 0.33, top + pad, bot - pad)        # 좌 → 순번 k+1
-        status[k + 21] = classify_bg(im, 0.35, 0.66, top + pad, bot - pad)       # 우 → 순번 k+21
+        pad = rh * 0.04                                                          # 거의 전체 행(텍스트 놓침 방지)
+        status[k + 1] = classify_bg(im, 0.02, 0.34, top + pad, bot - pad)        # 좌 → 순번 k+1
+        status[k + 21] = classify_bg(im, 0.34, 0.67, top + pad, bot - pad)       # 우 → 순번 k+21
     return status
 
 
@@ -197,7 +197,7 @@ def main():
     roster, assign, status = [], {}, {}
     for n in range(1, real_max + 1):
         c, has_text = bg.get(n, ("unknown", False))
-        raw = merged.get(n, "") if has_text else ""    # 빈 슬롯 가짜 이름 제거
+        raw = merged.get(n, "")                        # real_max 이내는 VLM 이름 신뢰(개별 텍스트게이트로 실명 지우지 않음)
         m = re.search(r"\(([\d,\s]+)\)\s*$", raw)
         if m:
             assign[n] = m.group(1).replace(" ", "")
