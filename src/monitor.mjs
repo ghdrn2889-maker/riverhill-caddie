@@ -418,6 +418,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
       cutoffPosition: cutLine || null, cutoffName: pd.cutoffName || '', rosterReliable: true,
       dateLabel: pd.dateLabel || bp.dateLabel || '', internTees: iTees, internCount: iTees.length };
     const rosterNk = new Set(roster.map(nkey).filter(Boolean));
+    const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
     const dk = dayKey(vpart.dateLabel);
     let updated = 0, notified = 0;
     for (const m of activeMembers()) {
@@ -439,7 +440,13 @@ app.post('/api/board-correct', gate, async (req, res) => {
         next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
         if (!inWork) { next.teeTime = ''; next.course = ''; }
       }
-      next._adminLock = { dk, articleId: String(bp.articleId), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now(), part };
+      // ★'실제 바뀐 회원만' 잠근다 — 전 회원 잠금은 이후 같은 배치표 변동(당추 등)까지 얼려버림(이수련 동결 사고).
+      //  판정: 이 교정으로 내 status/티오프/순번이 달라졌거나, 내 순번 칸이 직접 교정된(cellDiff) 경우만.
+      delete next._adminLock;
+      const _chg = today.status !== next.status || String(today.teeTime || '') !== String(next.teeTime || '') || Number(today.myPosition || 0) !== pos;
+      if (_chg || diffPositions.has(pos)) {
+        next._adminLock = { dk, articleId: String(bp.articleId), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now(), part };
+      }
       next.updatedAt = Date.now();
       const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
       const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
@@ -491,6 +498,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
     try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
   }
   const rosterNk = new Set(roster.map(nkey).filter(Boolean));
+  const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
   const dk = dayKey(v.dateLabel || lb.dateLabel || '');
   let updated = 0, notified = 0;
   for (const m of activeMembers()) {
@@ -512,7 +520,13 @@ app.post('/api/board-correct', gate, async (req, res) => {
       next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
       if (!inWork) { next.teeTime = ''; next.course = ''; }
     }
-    next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() };
+    // ★'실제 바뀐 회원만' 잠근다 — 전 회원 잠금은 이후 같은 배치표 변동(당추 등)까지 얼려버림(이수련 동결 사고).
+    //  판정: 이 교정으로 내 status/티오프/순번이 달라졌거나, 내 순번 칸이 직접 교정된(cellDiff) 경우만.
+    delete next._adminLock;
+    const _chg = today.status !== next.status || String(today.teeTime || '') !== String(next.teeTime || '') || Number(today.myPosition || 0) !== pos;
+    if (_chg || diffPositions.has(pos)) {
+      next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() };
+    }
     next.updatedAt = Date.now();
     const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
     const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
