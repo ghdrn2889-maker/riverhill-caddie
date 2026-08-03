@@ -65,7 +65,9 @@ async function readPartsOnce(img, sorted, cuts) {
       const x1 = next ? next.x0 : b.x1;
       const margin = next ? 0.0 : 0.05;
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
-      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin }, scale: 6 }, 30000);
+      // ★y1=0.68 — 명단 세로 전체 포착. 기본 0.60은 첫 열이 21행 이상(2부 25·1부 21)일 때 하단을 잘라
+      //  뒤 순번을 통째로 놓치고(최수원·이은지) 둘째 열이 그 자리로 밀려 오정렬됐다. 공지영역(≈0.70~)은 아직 제외.
+      await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.68 }, scale: 6 }, 30000);
       const r = await readPartWithClaude(cropPath);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       if (!r) continue;

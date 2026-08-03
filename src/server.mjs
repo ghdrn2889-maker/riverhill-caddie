@@ -323,9 +323,13 @@ app.post('/api/simulate', async (req, res) => {
   if (!req.user && process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
     return res.status(401).json({ error: '인증 실패(로그인 또는 토큰 필요)' });
   }
+  // ★nopush=1 : 상태·상황판·검수·저널은 모두 갱신하되 회원 기기 발송만 억제(관리자 재판독/대시보드 새로고침).
+  //  minor=1 : 이 재판독 동안에만 1·2부 회원 처리도 수행(today1/2 갱신) — MINOR_PART_PUSH env와 무관하게 강제.
+  const noPush = ['1', 'true', 'yes'].includes(String(req.query.nopush || req.body?.nopush || '').toLowerCase());
+  const minorOverride = ['1', 'true', 'yes'].includes(String(req.query.minor || req.body?.minor || '').toLowerCase());
   try {
     const full = await fetchArticle(id);
-    const out = await notifyForArticle(full, { hits: [], priority: 'high' }, { force: true });
+    const out = await notifyForArticle(full, { hits: [], priority: 'high' }, { force: true, noPush, minorOverride });
     res.json({ ok: true, writer: full.writer, menuId: full.menuId, menuName: full.menuName, ...out });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1022,7 +1026,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     //  1·2부 board 1건 = readBoardConsensus+명단+인턴 = Gemini 여러 회. 부가 2개면 배치표당 호출이 ~5→~10으로 배증한다.
     //  → 2026-08-03 크레딧 급소진 대응으로 '모니터 2부 판독 갱신'(직전 시도)을 되돌림: 돈>2부 판독 최신화.
     //   모니터 1·2부는 마지막 성공 판독본에 머무름(허용). Phase 2에서 =1 켜면 회원 알림+모니터 갱신 함께 재개.
-    const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
+    const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
     if (!minorPartOn) {
       // ★Claude 판독 ON이면: 1·2부 발송은 여전히 잠그되(회원 처리 X), 이미 읽은 whole-board 캐시에서
       //  1·2부를 뽑아 '모니터에만' 반영(setBoardPart). 추가 Claude 호출 0(캐시 히트). 유령 2부 오알림 위험 없음(발송 없음).
@@ -1341,6 +1345,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
     if (userId === 1) console.log(`·  (예고대기·회원${userId}) ${title} — 통합 예고로 발송`);
     return { pushed: false, previewHeld: true, ...ret };
   }
+  // ★noPush(관리자 재판독/드라이런) — 상태·저널·상황판·검수는 모두 갱신하되 회원 기기 발송만 억제.
+  if (opts.noPush) { console.log(`·  [noPush·회원${userId}] 발송 억제(상태만 갱신): ${title}`); return { pushed: false, suppressed: true, ...ret }; }
   await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true, ...ret };
@@ -1617,6 +1623,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   }
   // ★본배치표 최초(previewMode): 개별 부 알림 억제 → 통합 예고로 대체(두 탕도 한 건).
   if (opts.previewMode) { if (userId === 1) console.log(`·  (예고대기·회원${userId}·${label}) ${title} — 통합 예고로 발송`); return { pushed: false, previewHeld: true }; }
+  if (opts.noPush) { console.log(`·  [noPush·회원${userId}·${label}] 발송 억제(상태만 갱신)`); return { pushed: false, suppressed: true }; }
   await broadcast({ title, body, url: full.url, level: push }, userId);
   console.log(`🔔 [회원${userId}·${label}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   return { pushed: true };

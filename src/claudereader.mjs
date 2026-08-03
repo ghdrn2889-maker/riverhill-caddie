@@ -92,8 +92,10 @@ export async function getPartBoundaries(imagePath) {
 //  실증(8/4): 3부 명단 29 정확 + 티오프 16팀(IN 포함) + 커트16. VLM이 약했던 티오프까지 정확.
 const PART_PROMPT = (
   'Read the given local image with the Read tool. It is ONE 부(section) of a Korean golf caddie board (배치표). '
-  + 'LEFT: [순번 이름] roster column(s) — list ALL caddies strictly in 순번 order, preserving parenthetical tags exactly '
-  + 'like (54)/(1,3)/(조출)/(찾근); skip truly empty rows. '
+  + 'LEFT: one or MORE [순번 이름] roster columns side by side (e.g. 순번 1-25 in the first column, then 26-50 continuing in the next column to its right). '
+  + 'Read the columns left-to-right, and WITHIN each column top-to-bottom, following the printed 순번 numbers. '
+  + 'List ALL caddies strictly in 순번 order, preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근); skip truly empty rows. '
+  + 'IGNORE any text that is NOT a numbered 순번 row — e.g. notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'cut = the highest team number in the tee table (커트라인). '
   + 'Output ONLY strict JSON, no prose: {"roster":["name",...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
