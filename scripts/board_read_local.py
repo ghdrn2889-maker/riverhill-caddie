@@ -142,13 +142,13 @@ def main():
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
-    # 1) 명단 — 좌/우 열을 다시 상/하로 쪼갠 '4분할'(각 줄 해상도↑ → 흐린 셀 오독 최소화). 순번(인쇄숫자)로 병합.
+    # 1) 명단 — 좌열은 상/하로 쪼개 각 줄 해상도↑(흐린 셀 오독 최소화), 우열은 통짜(빈 슬롯 자연 스킵·할루시네이션 방지).
+    #    순번(인쇄숫자)로 병합. ※한 열이 통째로 빈칸이면 모델이 이름을 지어내므로, 빈칸 많은 쪽은 쪼개지 않는다.
     merged = {}
     quads = [
         (0.0, 0.38, 0.0, 0.56),    # 좌열 상(순번 1~10, 헤더 포함)
         (0.0, 0.38, 0.48, 1.0),    # 좌열 하(11~20)
-        (0.32, 0.72, 0.0, 0.56),   # 우열 상(21~30)
-        (0.32, 0.72, 0.48, 1.0),   # 우열 하(31~40)
+        (0.32, 0.72, 0.0, 1.0),    # 우열 통짜(21~40, 빈칸은 스킵)
     ]
     for (a, b, y0, y1) in quads:
         for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
@@ -180,14 +180,7 @@ def main():
     # 4) 커트라인·명단·근무 확정
     #  · 커트 = 티오프표 최대순번(가장 신뢰: 근무팀만 티오프가 있음). 없으면 회색경계 폴백.
     grid_max = max((t["n"] for t in tees), default=0)
-    #  · 실제 명단 끝 = '텍스트가 있는' 마지막 순번(빈 슬롯 31~40의 가짜 이름 배제).
-    real_max = 0
-    for n in range(1, 41):
-        _, has_text = bg.get(n, ("unknown", False))
-        if has_text and merged.get(n):
-            real_max = n
-    if not real_max:
-        real_max = max(merged) if merged else 0
+    real_max = max(merged) if merged else 0        # 우열 통짜라 빈 슬롯 할루시네이션 없음 → VLM 명단 끝 신뢰
     cut = grid_max
     if not cut:                                    # 폴백: 회색 아닌(근무) 마지막 순번
         for n in range(1, real_max + 1):
