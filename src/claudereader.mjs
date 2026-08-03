@@ -60,6 +60,34 @@ export async function readCropWithClaude(imagePath) {
   } catch { return null; }
 }
 
+// 합본 배치표 → 부별 x경계(0~1). Claude가 레이아웃을 이해해 대략 경계를 준다(슬라이서). 아침 합본당 1회.
+//  실증(8/4): Claude 1부0~0.24·2부0.24~0.44·3부0.44~0.63 ≈ 실제. 슬라이서는 대략이면 충분(단일부 판독이 흡수).
+const BOUNDS_PROMPT = (
+  'Read the given local image with the Read tool. It is a Korean golf caddie board (배치표) with sections laid out '
+  + 'LEFT to RIGHT: 1부 (roster + morning tee table), 2부 (roster + midday tee table), 3부 (roster + afternoon tee table), '
+  + 'then 조편성표 (crew grid on the far right). For EACH 부 that is present, estimate the horizontal span of its '
+  + '[roster + its tee table] as fractions of total width (left=0.0, right=1.0). Output ONLY JSON: '
+  + '{"parts":[{"part":1,"x0":0.0,"x1":0.24},...]}'
+);
+
+export async function getPartBoundaries(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 경계 추정 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${BOUNDS_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 경계 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const parts = (Array.isArray(j.parts) ? j.parts : [])
+      .map((p) => ({ part: Number(String(p.part).replace(/\D/g, '')), x0: Number(p.x0), x1: Number(p.x1) }))
+      .filter((p) => p.part >= 1 && p.part <= 3 && p.x1 > p.x0 && p.x0 >= 0 && p.x1 <= 1);
+    return parts.length ? parts : null;
+  } catch { return null; }
+}
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.

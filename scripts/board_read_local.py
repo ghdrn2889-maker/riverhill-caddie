@@ -510,11 +510,27 @@ def main():
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
     # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──
+    #  slice={x0,x1}가 오면(오케스트레이터가 Claude 경계로 합본을 부별 분할) 그 x구간만 먼저 잘라 단일부처럼 읽는다.
     if cfg.get("single"):
         npart = int(want) if want.isdigit() else 0
+        sl = cfg.get("slice")
+        crop_path = ""
+        if sl and (sl.get("x1", 0) > sl.get("x0", 0)):
+            W, H = im.size
+            x0 = max(0.0, float(sl["x0"]) - 0.005)
+            x1 = min(1.0, float(sl["x1"]) + 0.05)      # 우측 여유 — 티오프표가 경계 밖으로 살짝 나가도 포함
+            y1 = float(sl.get("y1", 0.60))             # 공지영역 제외(명단·티오프 구간만)
+            im = im.crop((int(x0 * W), 0, int(x1 * W), int(y1 * H)))
+        # ★교차검증용 업스케일 크롭 저장 — Claude가 '같은 크롭'을 보게(작은 크롭은 업스케일이 결정적).
+        if cfg.get("save_crop"):
+            from PIL import Image as _PIL
+            cw, ch = im.size
+            big = im.resize((cw * 6, ch * 6), _PIL.LANCZOS)
+            crop_path = str(cfg.get("save_crop"))
+            big.save(crop_path)
         out = single_crop_read(im, npart, reads, name_prompt, known_set, cut_override=int(cfg.get("cut", 0) or 0))
-        out.update({"part": want, "_layout": "single", "_ms": int((_time.time() - t0) * 1000),
-                    "source": "local:%s" % MODEL})
+        out.update({"part": want, "_layout": "slice" if sl else "single", "_ms": int((_time.time() - t0) * 1000),
+                    "source": "local:%s" % MODEL, "_crop_path": crop_path})
         print(json.dumps(out, ensure_ascii=False))
         return
 
