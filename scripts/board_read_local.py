@@ -18,6 +18,47 @@ NAME_PROMPT = ("이 이미지는 골프 배치표의 한 열이다. 각 줄은 [
 TEE_PROMPT = ("이 이미지는 골프 티오프표의 한 쪽 열이다. 각 행은 [팀순번 숫자]와 [시간 HH:MM]이 짝지어 있다. "
     "순번 숫자가 있는 행만 뽑아라(빈칸·색만 있는 칸 제외). 시간은 HH:MM. "
     'JSON만: {"rows":[{"n":팀순번, "time":"HH:MM"}]}')
+# ★티오프표 전체를 '행 단위'로 읽는다 — [OUT팀번호][시간][IN팀번호]. OUT/IN을 따로 크롭하면 빈칸에서 행이
+#  어긋나(팀↔시각 오매칭·IN열 통째 누락) → 한 크롭에서 행마다 좌/우 팀번호를 함께 읽어 정렬을 보존한다.
+TEE_ROW_PROMPT = ("이 이미지는 골프 티오프표다. 세로로 여러 행이 있고, 각 행은 왼쪽부터 [OUT팀번호][시간 HH:MM][IN팀번호] 구조다. "
+    "가운데가 시간(HH:MM)이다. 왼쪽 칸 숫자=그 팀이 OUT코스, 오른쪽 칸 숫자=그 팀이 IN코스로 출발. "
+    "칸이 비어 있으면 그 값은 null(추측 금지). 각 행마다 시간과, 있으면 왼쪽·오른쪽 팀번호를 보이는 그대로. 빈 행(시간 없음)은 건너뛴다. "
+    'JSON만: {"rows":[{"out":OUT팀번호_또는_null, "time":"HH:MM", "in":IN팀번호_또는_null}]}')
+
+
+def _to_pos(val):
+    try:
+        n = int(str(val).strip())
+        return n if n > 0 else None
+    except Exception:
+        return None
+
+
+def read_tee_block(im, x0f, x1f, part, reads_t=3):
+    # 티오프표(OUT|시간|IN) 전체를 한 크롭·행단위로 읽어 순번↔시각을 정렬 보존해 뽑는다(OUT·IN 모두).
+    #  상/하 2분할로 밀도 truncation 방지. 순번(인쇄숫자)로 표결 병합. 부 시간대 밖 시각은 옆 부 오염 → 제거.
+    lo, hi = {1: (5, 11), 2: (10, 16), 3: (14, 21)}.get(part, (0, 24))
+    tally = {}  # pos -> {(time,course): votes}
+    for (y0, y1) in [(0.0, 0.56), (0.48, 1.0)]:
+        for _ in range(reads_t):
+            for row in ask(crop_up(im, x0f, x1f, y0, y1), TEE_ROW_PROMPT, "rows"):
+                tm = str(row.get("time", "")).strip()
+                if not re.match(r"^\d{1,2}:\d{2}$", tm):
+                    continue
+                if not (lo <= int(tm.split(":")[0]) < hi):     # 옆 부 시각 오염 제거
+                    continue
+                for key, course in (("out", "OUT"), ("in", "IN")):
+                    pos = _to_pos(row.get(key))
+                    if pos is None:
+                        continue
+                    tally.setdefault(pos, {})
+                    k = (tm, course)
+                    tally[pos][k] = tally[pos].get(k, 0) + 1
+    tees = []
+    for pos, d in tally.items():
+        (tm, course), _ = max(d.items(), key=lambda x: x[1])
+        tees.append({"n": pos, "time": tm, "course": course})
+    return sorted(tees, key=lambda x: x["n"])
 
 
 def load_image(src):
@@ -212,26 +253,8 @@ def read_one_part(im, part, parts, reads, name_prompt):
         for n, nm in read_names(im, a, b, reads, name_prompt, y0, y1).items():
             if n not in merged:
                 merged[n] = nm
-    # 티오프 — 이 부 티오프표 구간에서 순번↔시각(OUT/IN 두 열 표결)
-    def read_tee_col(x0f, x1f, course, reads_t=2):
-        tally = {}
-        for _ in range(reads_t):
-            for row in ask(crop_up(im, x0f, x1f), TEE_PROMPT, "rows"):
-                try:
-                    n = int(row["n"]); tm = str(row.get("time", "")).strip()
-                except Exception:
-                    continue
-                if re.match(r"^\d{1,2}:\d{2}$", tm):
-                    tally.setdefault(n, {}); tally[n][tm] = tally[n].get(tm, 0) + 1
-        return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
-    tw = tee_x1 - tee_x0
-    tmap = {}
-    tmap.update(read_tee_col(tee_x0, tee_x0 + tw * 0.62, "OUT"))
-    tmap.update(read_tee_col(tee_x0 + tw * 0.38, tee_x1, "IN"))
-    # ★부(部) 시간대 밖 시각은 옆 부 열이 새어든 오염 → 제거(1부 아침·2부 낮·3부 오후).
-    lo, hi = {1: (5, 11), 2: (10, 16), 3: (14, 21)}.get(part, (0, 24))
-    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]}
-            for n in sorted(tmap) if lo <= int(tmap[n][0].split(":")[0]) < hi]
+    # 티오프 — 이 부 티오프표 전체를 행단위로 읽어 OUT·IN 팀 모두·정렬 보존(빈칸에도 안 어긋남).
+    tees = read_tee_block(im, tee_x0, tee_x1, part, reads_t=3)
     cut = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
     interns = count_color_cells(im, tee_x0, tee_x1)
@@ -257,21 +280,8 @@ def legacy_read(im, reads, name_prompt):
             merged[n] = nm
     bg = read_status(im, rows=20)
 
-    def read_tee_col(x0f, x1f, course, reads_t=2):
-        tally = {}
-        for _ in range(reads_t):
-            for row in ask(crop_up(im, x0f, x1f), TEE_PROMPT, "rows"):
-                try:
-                    n = int(row["n"]); tm = str(row.get("time", "")).strip()
-                except Exception:
-                    continue
-                if re.match(r"^\d{1,2}:\d{2}$", tm):
-                    tally.setdefault(n, {}); tally[n][tm] = tally[n].get(tm, 0) + 1
-        return {n: (max(d.items(), key=lambda x: x[1])[0], course) for n, d in tally.items()}
-    tmap = {}
-    tmap.update(read_tee_col(0.66, 0.885, "OUT"))
-    tmap.update(read_tee_col(0.78, 1.0, "IN"))
-    tees = [{"n": n, "time": tmap[n][0], "course": tmap[n][1]} for n in sorted(tmap)]
+    # 티오프표(우측 OUT|시간|IN) 전체를 행단위로 읽어 정렬 보존(part=0 → 시간대 필터 없음, 단일부).
+    tees = read_tee_block(im, 0.66, 1.0, 0, reads_t=3)
     interns = count_color_cells(im, 0.66, 0.78) + count_color_cells(im, 0.90, 1.0)
     grid_max = max((t["n"] for t in tees), default=0)
     real_max = max(merged) if merged else 0
