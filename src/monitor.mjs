@@ -546,14 +546,16 @@ app.post('/api/board-correct', gate, async (req, res) => {
 });
 
 // ── 공지(팩스 출력지) 작성·발송 — 회원 앱이 열릴 때 출력 연출로 표시. ──
-//  audience: 'admin'(테스트=관리자만) | 'all'(전체). 미지정이면 안전하게 관리자만.
+//  audience: 'admin'(테스트=관리자만) | 'all'(전체) | 'users'(지정 회원). 미지정이면 안전하게 관리자만.
 app.post('/api/notice', gate, (req, res) => {
   try {
-    const { title, body, audience, admin } = req.body || {};
+    const { title, body, audience, admin, userIds, tags, noticeDate } = req.body || {};
     if (!String(title || '').trim() || !String(body || '').trim()) return res.status(400).json({ ok: false, error: '제목·내용을 모두 입력해주세요.' });
-    const n = addNotice({ title, body, admin: admin || '김홍구', audience });
-    console.log(`[notice] 공지 발송 — "${n.title}" (대상 ${n.audience === 'all' ? '전체' : '관리자만'})`);
-    res.json({ ok: true, notice: n, audience: n.audience });
+    if (audience === 'users' && !(Array.isArray(userIds) && userIds.length)) return res.status(400).json({ ok: false, error: '받는 회원을 한 명 이상 선택해주세요.' });
+    const n = addNotice({ title, body, admin: admin || '관리자 김홍구', audience, userIds, tags, noticeDate });
+    const audKo = n.audience === 'all' ? '전체' : (n.audience === 'users' ? `지정 ${n.userIds.length}명` : '관리자만');
+    console.log(`[notice] 공지 발송 — "${n.title}" (대상 ${audKo})`);
+    res.json({ ok: true, notice: n, audience: n.audience, count: n.userIds.length });
   } catch (e) { console.error('notice 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 app.get('/api/notice/list', gate, (req, res) => {

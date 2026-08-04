@@ -2659,9 +2659,12 @@ function playFax(n) {
   const nm = (meState && meState.profile && meState.profile.boardName) || '회원';
   $('fxTo').textContent = nm + ' 님';
   $('fxAdmin').textContent = n.admin || '관리자';
-  $('fxDate').textContent = fmtNoticeDate(n.createdAt);
+  $('fxDate').textContent = n.noticeDate || fmtNoticeDate(n.createdAt);   // 관리자가 지정한 날짜 우선
   $('fxTitle').textContent = n.title || '';
   $('fxBody').textContent = n.body || '';
+  // 출력지 태그(회람·긴급·확인요망) — 관리자 선택 반영. 구버전(배열 없음)은 기본값.
+  const tags = Array.isArray(n.tags) ? n.tags : ['회람', '확인요망'];
+  document.querySelectorAll('#fxTags span').forEach((s) => s.classList.toggle('on', tags.includes(s.getAttribute('data-tag'))));
   $('fxDisp').textContent = nm + '님께 새 팩스가 도착했어요';
   faxReset();
   $('faxOv').hidden = false;
@@ -2674,6 +2677,7 @@ function faxReset() {
   m.classList.remove('printing');
   btn.disabled = false; btn.classList.remove('pressed'); btn.classList.add('await');
   $('fxReady').textContent = '수신';
+  const ov = $('faxOv'); ov.style.overflow = ''; ov.scrollTop = 0;   // 스크롤 위치·오버플로 초기화(긴 본문 대비)
 }
 // 용지가 슬롯에서 아래로 밀려나옴(display 명시 — #faxOv .feed 기본 none이라 ''로는 안 보임)
 function faxPrintOut(feedEl, dur) {
@@ -2707,6 +2711,7 @@ async function faxPrint() {
 }
 async function faxConfirm() {
   const ok = $('fxOk'); if (ok.disabled) return; ok.disabled = true; ok.classList.remove('pulse');
+  $('faxOv').style.overflow = 'hidden';             // 배출 애니메이션이 스크롤 영역을 늘리지 않게 잠금
   faxEjectFeed($('fxFeed'));                        // 뜯겨 배출
   if (_faxId) { try { postJSON('/api/notice/seen', { id: _faxId }); } catch { /* 무해 */ } }
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

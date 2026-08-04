@@ -1096,7 +1096,7 @@
     @media (prefers-reduced-motion:reduce) { #obOv .feed, #obOv .welcome { transition-duration:.01s; } #obOv .printer.run, #obOv .ob-taphint, #obOv .printer.await::after { animation:none; } }
 
     /* ── 관리자 공지(팩스 출력지) 연출 — 출력기(팩스) + 디자인C 표지 ── */
-    #faxOv.scov { padding:0; background:#fbfbf9; overflow:hidden; }
+    #faxOv.scov { padding:0; background:#fbfbf9; overflow-y:auto; -webkit-overflow-scrolling:touch; }
     #faxOv.scov:not([hidden]) { display:block; }
     #faxOv .fx-stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:12vh 16px 44px; }
     #faxOv .fx-col { width:400px; max-width:94vw; }
@@ -1718,10 +1718,10 @@
               <div class="fx-c"><small>DATE</small><div class="fx-v" id="fxDate">2026-08-05</div></div>
               <div class="fx-c"><small>PAGES</small><div class="fx-v">1 / 1</div></div>
             </div>
-            <div class="fx-tags">
-              <span class="on"><i class="box"></i>회람</span>
-              <span><i class="box"></i>긴급</span>
-              <span class="on"><i class="box"></i>확인요망</span>
+            <div class="fx-tags" id="fxTags">
+              <span data-tag="회람"><i class="box"></i>회람</span>
+              <span data-tag="긴급"><i class="box"></i>긴급</span>
+              <span data-tag="확인요망"><i class="box"></i>확인요망</span>
             </div>
             <div class="fx-title" id="fxTitle"></div>
             <div class="fx-body" id="fxBody"></div>
