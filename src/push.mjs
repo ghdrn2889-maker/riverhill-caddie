@@ -65,6 +65,32 @@ export function inQuietHours(h = new Date().getHours()) {
   return QUIET_START <= QUIET_END ? (h >= QUIET_START && h < QUIET_END) : (h >= QUIET_START || h < QUIET_END);
 }
 
+// ── 조용시간 정정 대기열 ── 밤(22~QUIET_END시)에 발생한 회원 정정 알림은 '드롭'하지 않고 여기 쌓았다가
+//  아침(QUIET_END시)에 flushDeferred()로 한꺼번에 보낸다. 회원별·제목별 최신 1건만 유지(새벽 스팸 방지).
+//  키=`uid|title` → 같은 종류(티오프변경 등) 정정이 밤새 여러 번이면 마지막 상태만 아침에 전달.
+const DEFERRED_FILE = () => path.join(DATA_DIR, 'deferred-push.json');
+function loadDeferred() { try { return JSON.parse(fs.readFileSync(DEFERRED_FILE(), 'utf8')); } catch { return {}; } }
+function saveDeferred(m) { try { fs.writeFileSync(DEFERRED_FILE(), JSON.stringify(m)); } catch { /* noop */ } }
+function enqueueDeferred(userId, { title, body, url, level }) {
+  const m = loadDeferred();
+  m[`${userId}|${title}`] = { userId: Number(userId), title, body, url, level: level || 'normal', at: Date.now() };
+  saveDeferred(m);
+}
+// 아침 flush — 대기열을 비우며 각 항목을 조용시간 예외로 즉시 발송. (같은 상태 재발 방지: 업스트림 pushlog가 이미 dedup)
+export async function flushDeferred() {
+  const m = loadDeferred();
+  const items = Object.values(m);
+  if (!items.length) return { sent: 0 };
+  saveDeferred({});   // 먼저 비워 재진입·중복 방지
+  let sent = 0;
+  for (const it of items) {
+    try { await broadcast({ title: it.title, body: it.body, url: it.url, level: it.level, bypassQuiet: true }, it.userId); sent++; }
+    catch (e) { console.error('정정 대기열 발송 오류:', e.message); }
+  }
+  console.log(`🌅 아침 정정 대기열 발송: ${sent}건`);
+  return { sent };
+}
+
 // 발송한 알림을 한 줄씩 로그로 남긴다(운영 모니터의 '최근 발송 알림' 피드용). append-only.
 function logSentPush(userId, { title, body, level }, sent, devices) {
   appendJSONL('sent-push.jsonl', {
@@ -86,7 +112,8 @@ export async function broadcast({ title, body, url, level, bypassQuiet }, userId
     return;
   }
   if (!bypassQuiet && inQuietHours()) {
-    console.log(`🔕 조용시간(${QUIET_START}~${QUIET_END}시) — 발송 보류: [회원${userId}] ${title}`);
+    enqueueDeferred(userId, { title, body, url, level });
+    console.log(`🔕 조용시간(${QUIET_START}~${QUIET_END}시) — 아침 발송 대기열 적재: [회원${userId}] ${title}`);
     return;
   }
   const subs = getSubscriptions(userId);

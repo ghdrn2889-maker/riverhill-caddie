@@ -169,6 +169,25 @@ export function teeForPos(board, pos) {
   return t ? { tee: t.tee || '', course: t.course || '' } : { tee: '', course: '' };
 }
 
+// ── 칠판(단일 진실원)을 판독 verdict에 덧씌운다 ── 검수·대시보드·알림이 같은 칠판을 보게 하는 공용 오버레이.
+//  컷(cut)과 팀별 티오프(teeGrid)를 칠판 기준으로 반영. 관리자 정본(_adminCorrected)은 건드리지 않는다.
+//  회원 개인 교정은 호출측이 이 다음에 다시 얹어 최종 권위를 갖는다. iso=날짜(YYYY-MM-DD).
+export function overlayDayboardOnVerdict(v, iso) {
+  if (!v || v._adminCorrected || !iso) return v;
+  try {
+    const db = loadDayboard(iso);
+    if (!db || !Array.isArray(db.log) || !db.log.length) return v;
+    const board = db.board || {};
+    if (Number(board.cut) > 0) { v.cutoffPosition = board.cut; v.cutLine = board.cut; }
+    const byPos = new Map((v.teeGrid || []).map((g) => [Number(g.pos), { pos: Number(g.pos), time: String(g.time || ''), course: g.course || '' }]));
+    for (const t of teamsArray(board)) {
+      if (t.tee && /^\d{1,2}:\d{2}$/.test(t.tee)) byPos.set(t.pos, { pos: t.pos, time: t.tee, course: t.course || '' });
+    }
+    v.teeGrid = [...byPos.values()].sort((a, b) => a.pos - b.pos);
+  } catch { /* noop */ }
+  return v;
+}
+
 // ── 검증 규칙(사용자 규칙 = 낡음 탐지기) ──
 //  1) 한 티오프 시각 = 최대 2명(OUT 1·IN 1). 3명↑ 또는 같은 코스 2명 → 그리드 낡음.
 //  2) 컷 이내인데 티오프 없음 → 미확정.

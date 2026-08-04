@@ -5,7 +5,7 @@ loadEnv();
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
-import { initPush, addSubscription, broadcast } from './push.mjs';
+import { initPush, addSubscription, broadcast, flushDeferred } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
@@ -28,7 +28,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
-import { ingestVerdict as dayboardIngest, summarize as dayboardSummary } from './dayboard.mjs';
+import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -1091,14 +1091,24 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   // ★근본 수정(재발 방지) — '배치표 이미지인데 티오프표를 못 읽은' 판독 실패를 크롤러에 신호로 돌려준다.
   //  crawler가 이 신호를 보면 seen 을 찍지 않고 다음 폴링에 재시도한다(실패=종결이던 구조 폐기).
   //  성공하면 서명이 바뀌어 정상 알림, 재시도 중 check 는 dedup(unknown|)으로 한 번만 나가 스팸 없음.
+  //  ★_boardReadFailed(재시도 신호)는 '원판독' 기준으로 아래 칠판 오버레이보다 먼저 확정 — 칠판이 옛 티오프를
+  //   덧씌워 실패를 가려 재시도를 막지 않도록(재시도 정직성 유지).
   const _boardReadFailed = _isBoardImg
     && !(out.rawVerdict?.rosterReliable === true && Array.isArray(out.rawVerdict?.teeGrid) && out.rawVerdict.teeGrid.length > 0);
+
+  // ── 칠판(단일 진실원) 스위치 ── 회원 처리 '전에' 이 판독을 칠판에 먼저 기록(ingest)하고, 그 칠판(누적된
+  //  텍스트·구두 컷/티오프 변동 포함)을 out.rawVerdict에 덧씌운다. 그러면 대시보드·알림이 검수와 '같은 칠판'에서
+  //  파생돼 100% 동행한다. 단일 이미지 날은 칠판 teeGrid == 이미지 teeGrid 라 무변화(회귀 0).
+  const dbISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || new Date().toISOString().slice(0, 10);
+  try { dayboardIngest(dbISO, full, out.rawVerdict || {}); } catch (e) { console.error('[칠판 피드]', e.message); }
+  try { if (out.rawVerdict && !out.rawVerdict._adminCorrected) overlayDayboardOnVerdict(out.rawVerdict, dbISO); }
+  catch (e) { console.error('[칠판 오버레이]', e.message); }
 
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
   if (primaryRet && typeof primaryRet === 'object') primaryRet.boardReadFailed = _boardReadFailed;
 
-  // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict를 코드로 재해석.
+  // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict(칠판 오버레이된)를 코드로 재해석.
   for (const m of activeMembers()) {
     if (m.id === 1) continue;
     try {
@@ -1108,13 +1118,6 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
   rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
-
-  // ── 칠판(dayboard) 섀도우 피드 — 이 판독을 시각순 이벤트로 칠판에 기록(3부 경로 불변, 파일에만 씀) ──
-  //  검증 전까지 출력엔 안 씀. 모니터에서 현 출력과 대조해 칠판이 맞다고 확인되면 화면들을 칠판으로 스위치.
-  try {
-    const dbISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || new Date().toISOString().slice(0, 10);
-    dayboardIngest(dbISO, full, out.rawVerdict || {});
-  } catch (e) { console.error('[칠판 섀도우]', e.message); }
 
   // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
@@ -1902,6 +1905,25 @@ async function checkTimelineReminders() {
 }
 setInterval(checkTimelineReminders, 60 * 1000); // 1분마다 체크
 console.log(`⏰ 출근 타임라인 리마인더: 출발 ${LEAVE_REMIND_BEFORE}분전·출발정각·도착·티오프 ${TEE_REMIND_BEFORE}분전 (1분 체크)`);
+
+// ── 아침 정정 대기열 flush ── 밤(조용시간) 동안 쌓인 회원 정정 알림을 아침 시각(기본 8시)에 한꺼번에 발송.
+//  칠판(단일 진실원) 변동·야간 판독 교정이 새벽에 회원을 깨우지 않고 humane한 시각에 도착하게 한다.
+const MORNING_FLUSH_HOUR = Number(process.env.MORNING_FLUSH_HOUR ?? 8);
+let _lastFlushDay = '';
+async function checkMorningFlush() {
+  try {
+    const nowKST = new Date(Date.now() + 9 * 3600 * 1000);   // 서버 TZ 무관 KST
+    const h = nowKST.getUTCHours();
+    const day = nowKST.toISOString().slice(0, 10);
+    if (h >= MORNING_FLUSH_HOUR && _lastFlushDay !== day) {
+      _lastFlushDay = day;
+      const r = await flushDeferred();
+      if (r && r.sent) console.log(`🌅 아침 ${MORNING_FLUSH_HOUR}시 정정 대기열 flush — ${r.sent}건 발송`);
+    }
+  } catch (e) { console.error('아침 flush 오류:', e.message); }
+}
+setInterval(checkMorningFlush, 5 * 60 * 1000); // 5분마다 체크(정확 시각 근처에 1회 발송)
+console.log(`🌅 아침 정정 대기열: 매일 ${MORNING_FLUSH_HOUR}시 발송 예약`);
 
 startCrawler({
   onMatch: async (article, result) => {
