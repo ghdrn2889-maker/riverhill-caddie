@@ -1133,6 +1133,34 @@ async function notifyForArticle(full, result = {}, opts = {}) {
               image: (full.images && full.images[0]) || '', url: full.url || '' };
             for (const p of ['1', '2']) if (mparts[p]) setBoardPart(full.id, meta, full, p, mparts[p]);
             console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
+            // ★조출(1부) 회원 대시보드 복구 — MINOR_PART_PUSH 꺼져도 '조출'처럼 배치표에 명시 태그된 고신뢰
+            //  1부 배정은 회원 today1에 반영(대시보드·일지). 이미 읽은 1부 캐시만 사용(추가 판독·Gemini 0),
+            //  발송은 안 함(noPush). 유령 위험 큰 2부는 계속 잠금. 조출은 명시 태그라 오검출 위험 없음.
+            try {
+              const p1 = mparts['1'];
+              const bare = (c) => String(c || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '');
+              if (p1 && Array.isArray(p1.roster) && p1.roster.length) {
+                const win = partWindow('1');
+                const p1v = {
+                  part: '1', category: '배치표', relevant: true, rosterReliable: true,
+                  part3Roster: p1.roster.slice(), teeGrid: Array.isArray(p1.teeGrid) ? p1.teeGrid.slice() : [],
+                  teamCount: Number(p1.teamCount) || 0, cutoffPosition: Number(p1.cutoffPosition) || null,
+                  cutoffName: p1.cutoffName || '', internTees: p1.internTees || [], internCount: p1.internCount || 0,
+                  crewDuty: p1.crewDuty || out.rawVerdict?.crewDuty || {}, dateLabel: out.rawVerdict?.dateLabel || '',
+                };
+                for (const m of activeMembers()) {
+                  const key = bare(m.board_name);
+                  const isChulgn = p1.roster.some((c) => /\(조출\)/.test(String(c)) && bare(c) === key);
+                  if (!isChulgn) continue;   // 이 배치표에서 '조출'로 명시된 회원만(고신뢰)
+                  try {
+                    const memberP = { name: m.board_name, part: '1', commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+                    const moutP = interpretForMember(full, p1v, memberP, loadToday(m.id, '1'));
+                    await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty: p1v.crewDuty, noPush: true });
+                    console.log(`·  [조출·회원${m.id}] ${m.board_name} 1부 조출 대시보드 반영(발송X)`);
+                  } catch (e) { console.error(`[조출 회원${m.id} 처리 오류]`, e.message); }
+                }
+              }
+            } catch (e) { console.error('[조출 반영 오류]', e.message); }
           }
         } catch (e) { console.error('[모니터 1·2부 반영 오류]', e.message); }
       } else if (full.images && full.images.length) {
