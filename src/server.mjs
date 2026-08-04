@@ -985,7 +985,15 @@ function rememberBoard(full, out) {
   if (prev && isAuthoritativeBoard(prev.rawVerdict) && !isAuthoritativeBoard(v)) {
     const pd = String(prev.dateLabel || '').trim(), nd = String(v.dateLabel || '').trim();
     const newDay = pd && nd && pd !== nd;
-    if (!newDay) {
+    // ★검수가 '본배치표에서 얼고 이후 변동엔 안 움직이던' 문제 해소 —
+    //  비정본이어도 '쪼그라들지 않고(명단·티오프 기존 이상) 날짜를 잃지 않는' 완전한 변동/당추 판독은
+    //  검수를 갱신한다(대시보드·알림과 동행). 약한 부분 재크롭(줄어들거나 날짜 소실)만 정본 보호로 막는다.
+    const prevRoster = (prev.rawVerdict?.part3Roster || []).filter(Boolean).length;
+    const newRoster = (v.part3Roster || []).filter(Boolean).length;
+    const prevGrid = (prev.rawVerdict?.teeGrid || []).length;
+    const newGrid = (v.teeGrid || []).length;
+    const weak = newRoster < prevRoster || newGrid < prevGrid || !nd;   // 줄어듦 또는 날짜 소실 = 약한 판독
+    if (!newDay && weak) {
       // ★구조(순번·커트)는 정본 유지하되 '원본 배치표'로 띄울 최신 3부 이미지는 갱신 —
       //  당추가 그려진 변동본 이미지가 옛 기본 이미지에 가려지지 않게(검수·판독의 원본 이미지 신선도).
       if (newImg && String(prev.latestImageId || prev.id) !== String(full.id)) {
