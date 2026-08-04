@@ -1158,6 +1158,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
                   try {
                     const memberP = { name: m.board_name, part: '1', commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
                     const moutP = interpretForMember(full, p1v, memberP, loadToday(m.id, '1'));
+                    if (moutP.rawVerdict) { moutP.rawVerdict.assign = 'chulgn'; moutP.rawVerdict.myAssign = 'chulgn'; }  // 조출 배지 근거
                     await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty: p1v.crewDuty, noPush: true });
                     console.log(`·  [조출·회원${m.id}] ${m.board_name} 1부 조출 대시보드 반영(발송X)`);
                   } catch (e) { console.error(`[조출 회원${m.id} 처리 오류]`, e.message); }
