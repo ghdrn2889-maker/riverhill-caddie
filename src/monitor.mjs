@@ -359,11 +359,12 @@ app.get('/api/board-review', gate, (req, res) => {
     }
     const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
     flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
-    // ★원본 이미지: 구조 데이터(정본)와 별개로 '최신 3부 이미지'(당추 반영 변동본)를 우선 표시.
+    // ★원본 이미지: '전체 배치표'(article 본문) 우선. latestImage는 3부만 잘린 당추 변동 크롭이라
+    //  관리자가 "옛날/이상한 사진"으로 인지 → 전체판을 원본으로 주고, 변동 크롭은 variantImage로 별도 제공.
     const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
     res.json({ ok: true, part, board: {
       articleId: v._effArticleId || lb.id, dateLabel: v.dateLabel || lb.dateLabel || '', subject: (lb.article && lb.article.subject) || '',
-      image: lb.latestImage || baseImg, imageId: lb.latestImageId || lb.id, imageAt: lb.latestImageAt || lb.at,
+      image: baseImg || lb.latestImage, variantImage: lb.latestImage || '', imageId: lb.id, imageAt: lb.at,
       url: (lb.article && lb.article.url) || '',
       // ★신선도 서명 — 얼어붙은 at 대신 today.json(_t1Sig) 기준 → 당추·커트로 대시보드가 바뀌면 검수도 재렌더.
       syncSig: `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`,

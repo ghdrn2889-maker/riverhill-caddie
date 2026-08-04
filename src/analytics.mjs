@@ -301,10 +301,12 @@ export async function computeBoardParts() {
   if (_boardPartsCache.key === key) return _boardPartsCache.data;   // 같은 배치표+같은 판독시각이면 캐시
   try {
     const article = lb.article;
-    const teams = await analyzePartTeams(article);                 // 상단 헤더 "N부 M" 팀수
+    // ★Gemini 헤더 판독 제거 — 크레딧 고갈(429)로 판독검증 탭 전체가 죽던 원인.
+    //  팀수는 이미 저장돼 있다: 3부=대시보드 v3(teamCount/cutLine), 1·2부=board-parts-store(pd.teamCount, 아래 324행).
+    const teams = {};
     const partsSrc = {};
     for (const p of ['1', '2', '3']) {
-      let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
+      let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || Number(v3.cutLine) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
       let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, cutLine = 0, swaps = [], reliable = false, uncertain = '';
       if (p === '3') {                                             // 3부는 대시보드와 같은 최신본(v3) 재사용(추가 판독 없음)
         roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : await analyzeRoster(article, '3');
@@ -344,7 +346,10 @@ export async function computeBoardParts() {
     const data = {
       at: lb.at || null, articleId: v3._effArticleId || id, subject: art.subject || '', writer: art.writer || '',
       writeDate: art.writeDate || null, dateLabel: v3.dateLabel || lb.dateLabel || '',
-      image: lb.latestImage || (Array.isArray(art.images) && art.images[0]) || '', url: art.url || '',
+      // ★원본은 '전체 배치표'(article 본문 이미지)를 우선 — latestImage는 3부만 잘린 당추 변동본(크롭)이라
+      //  관리자가 "옛날/이상한 사진"으로 인지. 전체판을 주고, 변동 크롭은 latestImage로 별도 제공.
+      image: (Array.isArray(art.images) && art.images[0]) || lb.latestImage || '',
+      variantImage: lb.latestImage || '', url: art.url || '',
       model: process.env.GEMINI_BOARD_MODEL || process.env.GEMINI_MODEL || 'gemini-flash-latest',
       comments: (Array.isArray(art.comments) ? art.comments : []).map((c) => String(c.content || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 6),
       // ★신선도 서명 — buildLatestBoard와 동일 포맷(boardSyncSig) → 프런트 재요청 게이트가 정확히 맞물림.
