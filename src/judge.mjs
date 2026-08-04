@@ -1238,7 +1238,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   if (!verdict?._resolved) resolveTeeByGrid(verdict, member);
   // ★순번별 '이름' 명단 — 통합 판독이 자주 놓쳐서(타임아웃·부분) 전용 판독으로 다시 뽑아 위치정렬로 저장.
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
-  if (isBoard && verdict && !verdict._local && !verdict._claude) {   // ★로컬 VLM·Claude 판독은 이미 명단·인턴을 채웠으므로 Gemini 재판독 스킵(비용0·회귀0)
+  if (isBoard && verdict && !verdict._local && !verdict._claude && useGeminiFallback()) {   // ★로컬 VLM·Claude 판독은 이미 명단·인턴을 채웠으므로 Gemini 재판독 스킵(비용0·회귀0). ★Gemini 폴백 OFF(크레딧 고갈)면 죽은 Gemini로 낙하하지 않고 마지막 정상 명단 보존(today 프레임보호).
     try {
       // ★몰림 방지: 명단 판독과 조 배치표 판독을 '동시(Promise.all)'로 쏘던 것을 '순차'로 —
       //  무거운 board 판독이 겹쳐 429/타임아웃으로 명단이 빈값(0명) 오던 문제 완화.
@@ -1337,7 +1337,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  요청 댓글만 있고 아직 '반영' 마커가 없으면 대기(적용 안 함) → 관리자가 공식 반영한 것만 회원에게 반영.
   //  스왑 해석은 모델(parseDaebaByModel)이 지저분한 실제 형식·오타·부-라우팅까지 처리 → 코드가 결정적으로 적용(멱등).
   //  · 배치표 글: 갓 하베스트한 '깨끗한 원본 명단'(rosterReliable)에 적용. · 당일변동 글: 저장된 today.roster3에 적용.
-  if (verdict && hasReflectionMarker(article.comments)) {
+  if (verdict && hasReflectionMarker(article.comments) && useGeminiFallback()) {   // ★대바 스왑 해석은 아직 Gemini(parseDaebaByModel) — 크레딧 고갈로 OFF. Claude 파서로 이관 예정(감독관 구조).
     const fresh = !!verdict.rosterReliable && Array.isArray(verdict.part3Roster) && verdict.part3Roster.length;
     const base = fresh ? verdict.part3Roster
       : (Array.isArray(today?.roster3) && today.roster3.length ? today.roster3 : []);
