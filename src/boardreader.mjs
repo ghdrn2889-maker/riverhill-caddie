@@ -47,8 +47,23 @@ async function ensureLocal(imageOrUrl) {
 //  ★체인: snapName(같은길이 1글자, 유일)로 먼저, 이어 snapStrong(편집거리≤2, 유일)로. 둘 다 '유일 최근접'만
 //   교정(서동한처럼 서동환·서동명 사이 애매하면 그대로 둠) → 정본명 정확 반영 + 비슷한 이름 섣부른 치환 방지.
 const snapOfficial = (x) => snapStrong(snapName(String(x || '').trim()));
+const _bareNameOf = (cell) => {
+  const s = String(cell || '').trim();
+  const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
+  return (m ? m[1] : s).trim();
+};
 function snapRoster(roster) {
-  const snap1 = (x) => snapOfficial(x);
+  // ★중복 생성 방지 — 이미 명단에 '정본명 그대로' 있는 이름으로는 스냅하지 않는다.
+  //  (예: 남재권이 정본 누락이라 편집거리2로 '최재영'에 스냅되려 하지만, 최재영이 이미 다른 순번에 있으면
+  //   그건 오독교정이 아니라 서로 다른 사람을 한 명으로 뭉개는 오스냅 → 원문 유지.) 실제 캐디 누락에 견고.
+  const CONF = new Set(confirmedCaddies());
+  const present = new Set();
+  for (const cell of (roster || [])) { const nm = _bareNameOf(cell); if (nm && CONF.has(nm)) present.add(nm); }
+  const snap1 = (x) => {
+    const y = snapOfficial(x);
+    if (y !== x && present.has(y) && !CONF.has(String(x).trim())) return String(x).trim();  // 이미 있는 정본명으로 스냅 = 중복 → 원문 유지
+    return y;
+  };
   return (roster || []).map((cell) => {
     const s = String(cell || '').trim();
     const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
