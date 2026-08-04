@@ -137,10 +137,38 @@ export function seedCaddies(names) {
   return Object.keys(db).length;
 }
 
-// 현재 사전 규모(전체·확정) — 디버그/브리핑용.
+// ★정본 명단 시드 — 관리자가 직접 타이핑한 확정 명단(오독 0)을 사전에 '강확정' 수준으로 심는다.
+//  n을 STRONG_SEED(≥강확정 20)로 올려 snapWith(1글자)뿐 아니라 snapStrong(편집거리≤2)도 이 이름들을 후보로 쓰게 한다.
+//  official 플래그 + 전화번호 보관(동명이인 구분·명부 대조 근거). 멱등(부팅마다 안전 재적용).
+const STRONG_SEED = 30;
+export function seedOfficial(entries) {
+  const db = load();
+  const phones = loadJSON('roster-phones.json', {});   // ★서버 전용(gitignore) {이름:번호} — 없으면 {}. 깃엔 이름만.
+  let cnt = 0;
+  for (const raw of entries || []) {
+    const name = String(raw?.name || raw || '').trim();
+    if (!name) continue;
+    const phone = String(raw?.phone || phones[name] || '').replace(/\D/g, '');
+    const e = db[name] || (db[name] = { n: 0, duties: {} });
+    e.n = Math.max(e.n || 0, STRONG_SEED);   // 강확정 이상 → 스냅 후보 확정
+    if (phone) e.phone = phone;
+    e.official = true;                        // 정본(폐쇄어휘) 표식
+    cnt++;
+  }
+  save(db);
+  return cnt;
+}
+
+// 정본 명단(관리자 확정) 이름 목록 — 폐쇄어휘 판독·명부 대조용.
+export function officialCaddies() {
+  const db = load();
+  return Object.keys(db).filter((k) => db[k]?.official);
+}
+
+// 현재 사전 규모(전체·확정·정본) — 디버그/브리핑용.
 export function caddieStats() {
   const db = load();
-  return { total: Object.keys(db).length, confirmed: confirmedFrom(db).length };
+  return { total: Object.keys(db).length, confirmed: confirmedFrom(db).length, official: officialCaddies().length };
 }
 
 // ── 조 배치표 중복 수확 방지 ──────────────────────────────

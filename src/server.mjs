@@ -22,7 +22,8 @@ import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
-import { isKnownCaddie } from './roster.mjs';
+import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
+import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
@@ -31,6 +32,8 @@ import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
 const freshFeed = (arr) => (arr || []).filter((x) => (Date.now() - (x.detectedAt || 0)) < FEED_KEEP_MS);
 
+seedOfficial(OFFICIAL_ROSTER);   // ★정본 캐디 명단(관리자 확정) → 이름 사전에 강확정 시드(멱등). 판독 스냅 기준.
+try { const cs = caddieStats(); console.log(`[roster] 정본 시드 완료 — 정본 ${cs.official}명 / 사전 총 ${cs.total}명(확정 ${cs.confirmed})`); } catch { /* noop */ }
 seedPrimaryUser();               // 1번 회원(김홍구) 보장 — 회원제 도입 전 '나'를 그대로 이관
 migratePrimaryToUserStore();     // 전역 데이터(today/worklog/cart/journal/photos) → data/users/1/ (crawler 시작 전)
 initPush();                      // VAPID + subscriptions.json → SQLite 이관
