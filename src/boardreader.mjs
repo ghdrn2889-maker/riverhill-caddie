@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, claudeBudgetLeft } from './claudereader.mjs';
-import { snapStrong, confirmedCaddies } from './roster.mjs';
+import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -43,9 +43,12 @@ async function ensureLocal(imageOrUrl) {
   return null;
 }
 
-// 판독 명단에 명단 최근접 스냅 적용(장미화→장미희 등 1글자 오독 교정). 괄호 점유자도 각각.
+// 판독 명단에 명단 최근접 스냅 적용(박시숙→박시윤·성신영→정진영 등 오독 교정). 괄호 점유자도 각각.
+//  ★체인: snapName(같은길이 1글자, 유일)로 먼저, 이어 snapStrong(편집거리≤2, 유일)로. 둘 다 '유일 최근접'만
+//   교정(서동한처럼 서동환·서동명 사이 애매하면 그대로 둠) → 정본명 정확 반영 + 비슷한 이름 섣부른 치환 방지.
+const snapOfficial = (x) => snapStrong(snapName(String(x || '').trim()));
 function snapRoster(roster) {
-  const snap1 = (x) => snapStrong(String(x || '').trim());
+  const snap1 = (x) => snapOfficial(x);
   return (roster || []).map((cell) => {
     const s = String(cell || '').trim();
     const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
@@ -189,7 +192,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       const ol = await readOffList(offPath);
       try { fs.unlinkSync(offPath); } catch { /* noop */ }
       if (Array.isArray(ol)) {
-        offList = ol.map((o) => ({ name: snapStrong(o.name) || o.name, reason: o.reason }));
+        offList = ol.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
         console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
       }
     } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
