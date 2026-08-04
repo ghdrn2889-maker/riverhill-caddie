@@ -225,15 +225,30 @@ function parseCutoffText(article) {
 // "스페어N번 ○○(님)" 스페어 앵커 — 그 사람이 스페어 N번 = 순번(그 사람)−N 까지 근무 확정.
 //  ★사람을 콕 집는 최우선 커트 근거(='까지 근무'와 동급). 변동 크롭이라 티오프표(gridMax)가 덜 읽혀도 이 앵커가 확정선을 바로잡음.
 //   예: "24팀 … 스페어1번 장성원님" + 장성원=순번25 → 커트 24(김동우까지 근무). 괄호 점유자 우선(자리 주인).
-const SPARE_RE = /스페어\s*(\d{1,2})\s*번\s*([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님?/;
-function parseSpareAnchor(article) {
+//  ★두 형식 모두 지원: (A) "스페어1번 장성원님" (스페어→번호→이름), (B) "도대영님 스페어 1번" (이름→스페어→번호, 카톡 관례).
+//   형식 A는 뒤 단어를 이름으로 오검("스페어1번 입니다")할 수 있어, 모든 후보를 모아 '명단에 실재하는' 것만 채택한다.
+const SPARE_RE_A = /스페어\s*(\d{1,2})\s*번\s*([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님?/g;      // (A)
+const SPARE_RE_B = /([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님?\s*스페어\s*(\d{1,2})\s*번/g;        // (B)
+function parseSpareAnchors(article) {
   const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
-  const m = t.match(SPARE_RE);
-  if (!m) return null;
   const clean = (x) => String(x || '').replace(/님$/, '').trim();
-  const spareNum = Number(m[1]);
-  if (!(spareNum >= 1 && spareNum <= 40)) return null;
-  return { spareNum, display: clean(m[2]), holder: clean(m[3] || m[2]) };
+  const out = [];
+  let m;
+  SPARE_RE_B.lastIndex = 0;  // (B) 이름→스페어 를 먼저(더 구체적)
+  while ((m = SPARE_RE_B.exec(t))) { const sn = Number(m[3]); if (sn >= 1 && sn <= 40) out.push({ spareNum: sn, display: clean(m[1]), holder: clean(m[2] || m[1]) }); }
+  SPARE_RE_A.lastIndex = 0;
+  while ((m = SPARE_RE_A.exec(t))) { const sn = Number(m[1]); if (sn >= 1 && sn <= 40) out.push({ spareNum: sn, display: clean(m[2]), holder: clean(m[3] || m[2]) }); }
+  return out;
+}
+// 후보들 중 '명단에 실재하는 홀더'로 컷이 유효 범위인 첫 앵커를 채택 → {cut, holder, spareNum, display} 또는 null.
+function spareAnchorCut(article, roster) {
+  if (!Array.isArray(roster) || !roster.length) return null;
+  for (const sa of parseSpareAnchors(article)) {
+    const sp = rosterPosOf(roster, sa.holder);
+    const c = sp - sa.spareNum;
+    if (sp > 0 && c >= 1 && c <= roster.length) return { cut: c, holder: sa.holder, spareNum: sa.spareNum, display: sa.display };
+  }
+  return null;
 }
 
 // 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
@@ -264,23 +279,17 @@ function resolveCutoff(verdict, article, today = null) {
   // ── 스페어 앵커 최우선 오버라이드: "스페어N번 ○○" → 커트 = ○○ 순번 − N. ──
   //  변동 크롭의 티오프표가 덜 읽혀 gridMax가 낮게 나와도(예: 컷20) 사람을 콕 집은 이 앵커로 확정선을 바로잡는다.
   //  오탐 방지: (1)이름이 3부 정본 명단(roster3)에 실재 (2)커트가 [1, 명단길이] 범위. 둘 다 아니면 무시(기존 유지).
-  const sa = parseSpareAnchor(article);
+  const canon = (Array.isArray(today?.roster3) && today.roster3.length) ? today.roster3 : roster;  // 정본 전체명단 우선
+  const sa = spareAnchorCut(article, canon) || spareAnchorCut(article, roster);
   if (sa) {
-    const canon = (Array.isArray(today?.roster3) && today.roster3.length) ? today.roster3 : roster;  // 정본 전체명단 우선
-    let spos = canon.length ? rosterPosOf(canon, sa.holder) : 0;
-    if (!(spos > 0) && roster.length) spos = rosterPosOf(roster, sa.holder);
-    const scut = spos - sa.spareNum;
-    const rlen = canon.length || roster.length;
-    if (spos > 0 && scut >= 1 && (!rlen || scut <= rlen)) {
-      verdict.cutoffAnnounced = true;
-      verdict.cutoffPosition = scut;
-      // ★teamCount(=확정선)도 앵커값으로 못박는다 — 변동크롭의 낮은 teamCount/gridMax가 cutLine·근무판정을
-      //  되돌리지 못하게(today.mjs teamCount 블록이 이 값을 최우선으로 써 cutLine·근무/스페어를 재계산).
-      verdict.teamCount = scut;
-      const cutName = canon[scut - 1] || roster[scut - 1] || '';
-      if (cutName) verdict.cutoffName = snapName(normRosterName(cutName).name);
-      verdict._cutSource = `스페어앵커(${sa.display} 스페어${sa.spareNum}번→컷${scut})`;
-    }
+    verdict.cutoffAnnounced = true;
+    verdict.cutoffPosition = sa.cut;
+    // ★teamCount(=확정선)도 앵커값으로 못박는다 — 변동크롭의 낮은 teamCount/gridMax가 cutLine·근무판정을
+    //  되돌리지 못하게(today.mjs teamCount 블록이 이 값을 최우선으로 써 cutLine·근무/스페어를 재계산).
+    verdict.teamCount = sa.cut;
+    const cutName = canon[sa.cut - 1] || roster[sa.cut - 1] || '';
+    if (cutName) verdict.cutoffName = snapName(normRosterName(cutName).name);
+    verdict._cutSource = `스페어앵커(${sa.display} 스페어${sa.spareNum}번→컷${sa.cut})`;
   }
 }
 
@@ -304,9 +313,13 @@ function codeReadTextVerdict(article, member, today = null) {
   }
   const roster = Array.isArray(today?.roster3) ? today.roster3 : [];
   const holderPos = pc && roster.length ? rosterPosOf(roster, pc.holder) : 0;
-  if (!team && !(holderPos > 0)) return null;                 // 부 신호 불충분 → 위임
+  // ★스페어 앵커("도대영님 스페어 1번"·"스페어1번 장성원") → 컷 = 그 사람 순번 − N. 카톡 실시간 컷이동의 핵심 신호.
+  const sa = spareAnchorCut(article, roster);
+  const saCut = sa ? sa.cut : 0;
+  const saName = sa ? normRosterName(roster[sa.cut - 1] || '').name : '';
+  if (!team && !(holderPos > 0) && !saCut) return null;       // 부 신호 불충분 → 위임
   const dm = String(article?.subject || '').match(/(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*[월화수목금토일]요일)?/);
-  const cutPos = pc && pc.pos != null ? pc.pos : (holderPos > 0 ? holderPos : (team || null));
+  const cutPos = pc && pc.pos != null ? pc.pos : (holderPos > 0 ? holderPos : (saCut || team || null));
   const myPos = Number(today?.myPosition) || 0;
   // ★본인 상태를 순번 vs 커트/팀수로 코드가 확정 — 명단이 없어도(텍스트 소식) decide가 남은인원을 계산하도록 씨앗을 심는다.
   //  순번0(미배정·병가 등)은 이 글로 단정하지 않고 unknown(피드만) — 당추는 '근무선 이동'이라 부재자를 근무로 되살리지 않음.
@@ -315,10 +328,10 @@ function codeReadTextVerdict(article, member, today = null) {
     relevant: true,
     part: p,
     category: '변동',
-    cutoffAnnounced: !!pc,
-    cutoffName: pc ? pc.holder : '',
+    cutoffAnnounced: !!pc || !!saCut,
+    cutoffName: pc ? pc.holder : saName,
     cutoffPosition: cutPos,
-    teamCount: team || null,
+    teamCount: (saCut || team) || null,
     dateLabel: dm ? dm[0].trim() : '',
     myStatus,
     myCellColor: 'unknown',
