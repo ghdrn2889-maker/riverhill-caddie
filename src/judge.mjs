@@ -214,12 +214,31 @@ export function applySwapAssignments(roster, ops) {
 // "○○님까지 근무" 커트라인 텍스트 파싱 — 괄호 점유자 우선("송민지님(박준서)까지" → 실제 컷 사람=박준서).
 //  사용자 원칙: 괄호 안 이름이 그 자리의 실제 주인. display(표기 이름)와 holder(위치 기준 사람)를 분리.
 //  괄호는 "이름(점유자)님까지"·"이름님(점유자)까지" 두 위치 다 허용 → holder(점유자) 우선.
-const CUTOFF_RE = /(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|콜|배정|출근)/;
+// ★님 선택적('님?') — "심영운까지 근무"처럼 님 없이 오는 카톡 관례도 잡는다. 필러어(여기/저기…)는 아래서 제외.
+const CUTOFF_RE = /(?:(\d{1,3})\s*번\s*)?([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님?\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?까지\s*[^가-힣]*(?:근무|일\s*됩|일됩|나가|나감|나갑|콜|배정|출근)/;
+const CUT_FILLER = /^(여기|저기|거기|이거|그거|저거|어디|지금|오늘|내일|현재|이번|다음|우리|끝)$/;   // '님' 완화로 생길 오검 제외
+const stripNim = (s) => String(s || '').replace(/님$/, '').trim();   // '님?' 완화로 이름에 님이 붙어 잡힐 때(≤3자+님) 제거 → 명단 대조 정확
 function parseCutoffText(article) {
   const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
   const m = t.match(CUTOFF_RE);
   if (!m) return null;
-  return { display: m[2], holder: m[4] || m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
+  const display = stripNim(m[2]);
+  if (CUT_FILLER.test(display) && !m[1]) return null;   // "여기까지 근무" 등 필러(단, 'N번' 붙으면 유효)
+  return { display, holder: stripNim(m[4] || m[3] || m[2]), pos: m[1] ? Number(m[1]) : null };
+}
+
+// ★이름 없이 숫자만으로 오는 커트 — "28번까지 근무", "25팀까지", "현재 25팀 근무" 등. (사장님 지적: 텍스트 숫자 커트 감지)
+//  · "N번까지 …근무동사" → 순번(pos) 커트   · "N팀 …까지" 또는 "현재 N팀 근무/진행" → 팀수(=커트)
+const NUMPOS_CUT_RE = /(\d{1,3})\s*번\s*(?:[^가-힣0-9]{0,4}\s*)?까지\s*[^가-힣]{0,4}(?:근무|일\s*됩|일됩|나가|나감|나갑|콜|배정|출근)/;
+const NUMTEAM_CUT_RE = /(\d{1,2})\s*팀\s*(?:[^가-힣0-9]{0,6}\s*)?까지/;
+const NUMTEAM_CUR_RE = /(?:현재|지금)\s*(\d{1,2})\s*팀(?:\s*(?:까지)?\s*(?:근무|진행|일\s*됩|나감|콜))?/;
+function parseNumericCut(text) {
+  const t = String(text || '');
+  let m = t.match(NUMPOS_CUT_RE);
+  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 40) return { pos: n }; }
+  m = t.match(NUMTEAM_CUT_RE) || t.match(NUMTEAM_CUR_RE);
+  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 40) return { team: n }; }
+  return null;
 }
 
 // "스페어N번 ○○(님)" 스페어 앵커 — 그 사람이 스페어 N번 = 순번(그 사람)−N 까지 근무 확정.
@@ -311,15 +330,19 @@ function codeReadTextVerdict(article, member, today = null) {
     const mt = blob.match(/(\d{1,2})\s*팀[^0-9]{0,14}까지/) || blob.match(/(\d{1,2})\s*팀/);
     if (mt) { const n = Number(mt[1]); if (n >= 1 && n <= 40) team = n; }
   }
+  // ★이름 없는 숫자 커트("28번까지 근무"·"25팀까지") — 이름 커트가 없어도 감지(사장님 지적).
+  const numCut = parseNumericCut(blob);
+  if (!team && numCut && numCut.team) team = numCut.team;
   const roster = Array.isArray(today?.roster3) ? today.roster3 : [];
   const holderPos = pc && roster.length ? rosterPosOf(roster, pc.holder) : 0;
   // ★스페어 앵커("도대영님 스페어 1번"·"스페어1번 장성원") → 컷 = 그 사람 순번 − N. 카톡 실시간 컷이동의 핵심 신호.
   const sa = spareAnchorCut(article, roster);
   const saCut = sa ? sa.cut : 0;
   const saName = sa ? normRosterName(roster[sa.cut - 1] || '').name : '';
-  if (!team && !(holderPos > 0) && !saCut) return null;       // 부 신호 불충분 → 위임
+  if (!team && !(holderPos > 0) && !saCut && !numCut) return null;       // 부 신호 불충분 → 위임
   const dm = String(article?.subject || '').match(/(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일(?:\s*[월화수목금토일]요일)?/);
-  const cutPos = pc && pc.pos != null ? pc.pos : (holderPos > 0 ? holderPos : (saCut || team || null));
+  // 커트 위치: 이름커트 > 이름홀더순번 > 숫자순번커트(N번) > 스페어앵커 > 팀수
+  const cutPos = (pc && pc.pos != null) ? pc.pos : (holderPos > 0 ? holderPos : ((numCut && numCut.pos) || saCut || team || null));
   const myPos = Number(today?.myPosition) || 0;
   // ★본인 상태를 순번 vs 커트/팀수로 코드가 확정 — 명단이 없어도(텍스트 소식) decide가 남은인원을 계산하도록 씨앗을 심는다.
   //  순번0(미배정·병가 등)은 이 글로 단정하지 않고 unknown(피드만) — 당추는 '근무선 이동'이라 부재자를 근무로 되살리지 않음.
@@ -328,8 +351,9 @@ function codeReadTextVerdict(article, member, today = null) {
     relevant: true,
     part: p,
     category: '변동',
-    cutoffAnnounced: !!pc || !!saCut,
-    cutoffName: pc ? pc.holder : saName,
+    cutoffAnnounced: !!pc || !!saCut || !!(numCut && (numCut.pos || numCut.team)),
+    // 이름커트 > 스페어앵커 > 숫자순번커트(명단에서 그 순번 이름)
+    cutoffName: pc ? pc.holder : (saName || ((numCut && numCut.pos && roster.length) ? normRosterName(roster[cutPos - 1] || '').name : '')),
     cutoffPosition: cutPos,
     teamCount: (saCut || team) || null,
     dateLabel: dm ? dm[0].trim() : '',
