@@ -131,7 +131,7 @@ app.get('/api/user-dash', gate, (req, res) => {
         if (baseISO && ppISO && ppISO !== baseISO) continue;     // 베이스(3부)와 다른 날짜 제외
         rounds.push({
           part: pp, work: isW, teeTime: tp.teeTime || '', course: tp.course || '',
-          myPos: Number(tp.myPosition) || 0,
+          myPos: Number(tp.myPosition) || 0, assign: tp.assign || '',
           commute: (isW && tp.teeTime) ? commuteInfo(tp.teeTime, commuteMin) : null,
         });
       }
@@ -139,17 +139,27 @@ app.get('/api/user-dash', gate, (req, res) => {
       const workParts = workRounds.map((r) => r.part);
       const combo = workParts.length >= 2;         // 하루 두 부 이상 근무 = 통합 카드
       const comboLabel = workParts.join('·') + '부';   // 예: 1·3부
+      // ★조출 단독(1부 근무 + 3부 스페어/휴무): 근무 부가 1개뿐이라 combo가 아니어도 히어로는 그 근무여야 한다.
+      //  앱 pickFocus와 동일 — base(3부) status가 근무가 아니면 실제 근무 라운드가 스페어/휴무를 이긴다.
+      //  (이게 없으면 조출이 3부 base=spare로 폴백해 모니터만 '스페어'로 새던 버그.)
+      const soloWork = (!combo && !isWork && workRounds.length === 1) ? workRounds[0] : null;
+      const soloChul = soloWork && soloWork.part === '1' && soloWork.assign === 'chulgn';
       let kind, badge, heroTitle;
       if (combo) { kind = 'work'; badge = { t: comboLabel, c: 'work' }; heroTitle = `${dayW} ${comboLabel} 근무`; }
       else if (status === 'your_turn') { kind = 'work'; badge = { t: '출근 차례', c: 'work' }; heroTitle = '지금 출근 차례'; }
       else if (isWork) { kind = 'work'; badge = { t: '근무', c: 'work' }; heroTitle = teeTime ? `${dayW} 근무 확정` : `${dayW} 근무 예정`; }
+      else if (soloWork) { kind = 'work'; badge = { t: soloChul ? '조출' : `${soloWork.part}부`, c: 'work' }; heroTitle = `${dayW} ${soloChul ? '조출' : `${soloWork.part}부`} 근무${soloWork.teeTime ? ' 확정' : ' 예정'}`; }
       else if (offRemoved) { kind = 'removed'; badge = { t: '순번 제외', c: 'removed' }; heroTitle = '근무 없음 (순번 제외)'; }
       else if (offSick) { kind = 'off'; badge = { t: '병가', c: 'sick' }; heroTitle = `${dayW} 병가`; }
       else if (offVac) { kind = 'off'; badge = { t: '휴가', c: 'vac' }; heroTitle = `${dayW} 휴가`; }
       else if (isOff) { kind = 'off'; badge = { t: '휴무', c: 'off' }; heroTitle = `${dayW} 휴무`; }
       else if (isSpare) { kind = 'spare'; badge = { t: '스페어', c: 'spare' }; heroTitle = `${dayW} 스페어${myPos ? ` · ${myPos}번` : ''}`; }
       else { kind = 'unknown'; badge = { t: '미상', c: 'unk' }; heroTitle = '상태 미상'; }
-      const commute = (!combo && isWork && teeTime) ? commuteInfo(teeTime, commuteMin) : null;
+      // 히어로가 조출 등 단독 근무면 티오프·코스·순번·통근도 그 근무 기준으로 표시(3부 base의 빈 값 대신).
+      const heroTee = soloWork ? soloWork.teeTime : teeTime;
+      const heroCourse = soloWork ? soloWork.course : (st.course || '');
+      const heroPos = soloWork ? soloWork.myPos : myPos;
+      const commute = soloWork ? soloWork.commute : ((!combo && isWork && teeTime) ? commuteInfo(teeTime, commuteMin) : null);
       const subCount = (getSubscriptions(m.id) || []).length;
       let stale = false;
       try { const iso = worklog.labelToISO(st.date); if (iso && iso < todayISO) stale = true; } catch { /* 무해 */ }
@@ -161,13 +171,13 @@ app.get('/api/user-dash', gate, (req, res) => {
       else if (!pk || dk === 'unknown') match = { s: 'na', t: '대조 보류' };
       else match = (dk !== pk) ? { s: 'bad', t: '불일치' } : { s: 'ok', t: '일치' };
       users.push({
-        id: m.id, name: bname || `#${m.id}`, part: combo ? comboLabel : (st.part || `${m.part || 3}부`),
+        id: m.id, name: bname || `#${m.id}`, part: combo ? comboLabel : (soloWork ? `${soloChul ? '1부(조출)' : `${soloWork.part}부`}` : (st.part || `${m.part || 3}부`)),
         combo, comboRounds: combo ? workRounds : null,
         status, kind, badge, heroTitle,
         date: st.date || '', dayW, stale, empty: !st.date && !st.status,
-        myPos, cut, ahead, teamCount: Number(st.teamCount) || 0,
+        myPos: heroPos, cut, ahead, teamCount: Number(st.teamCount) || 0,
         locked: (st._adminLock && dayKey(st.date) === dayKey(st._adminLock.dk)) ? Object.keys(st._adminLock.fields || {}).filter((k) => st._adminLock.fields[k]) : [],
-        teeTime, course: st.course || '', commute, commuteMin,
+        teeTime: heroTee, course: heroCourse, commute, commuteMin,
         rosterFound: !!rosterPos, updatedAt: st.updatedAt || 0, subCount,
         lastPush: lp ? { at: lp.at, title: lp.title || '', body: lp.body || '', level: lp.level || lp.push || '', sent: lp.sent ?? null, devices: lp.devices ?? null } : null,
         match,
