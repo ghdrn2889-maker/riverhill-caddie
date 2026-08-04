@@ -269,6 +269,9 @@ function resolveCutoff(verdict, article, today = null) {
     if (spos > 0 && scut >= 1 && (!rlen || scut <= rlen)) {
       verdict.cutoffAnnounced = true;
       verdict.cutoffPosition = scut;
+      // ★teamCount(=확정선)도 앵커값으로 못박는다 — 변동크롭의 낮은 teamCount/gridMax가 cutLine·근무판정을
+      //  되돌리지 못하게(today.mjs teamCount 블록이 이 값을 최우선으로 써 cutLine·근무/스페어를 재계산).
+      verdict.teamCount = scut;
       const cutName = canon[scut - 1] || roster[scut - 1] || '';
       if (cutName) verdict.cutoffName = snapName(normRosterName(cutName).name);
       verdict._cutSource = `스페어앵커(${sa.display} 스페어${sa.spareNum}번→컷${scut})`;
