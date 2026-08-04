@@ -27,7 +27,7 @@ try { initPush(); pushReady = true; }
 catch (e) { console.warn('⚠️ 푸시 초기화 실패 — 승인 알림 비활성:', e.message); }
 
 const app = express();
-app.use(express.json());   // 승인 POST 바디 파싱
+app.use(express.json({ limit: '12mb' }));   // 승인 POST 바디 파싱 + 배치표 이미지 업로드(base64)
 
 // 토큰 게이트 — 설정돼 있으면 ?k= / x-monitor-token 헤더 / Bearer 중 하나로 통과.
 function gate(req, res, next) {
@@ -562,6 +562,26 @@ app.post('/api/notice', gate, (req, res) => {
 app.get('/api/notice/list', gate, (req, res) => {
   try { res.json({ ok: true, notices: listNotices().slice(-20).reverse() }); }
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ★배치표 이미지 업로드 → 앱의 /api/ingest-image 로 서버-서버 포워딩(홀리스틱 판독·자동반영).
+//  카톡 배치표(사진)는 알림 브리지가 자동 못 잡으므로, 관리자가 여기 올리면 시스템이 판독해 반영한다.
+app.post('/api/upload-board', gate, async (req, res) => {
+  try {
+    const image = req.body?.image;
+    if (!image || typeof image !== 'string') return res.status(400).json({ ok: false, error: '이미지 파일이 필요합니다.' });
+    const token = process.env.INGEST_TOKEN || '';
+    const appUrl = process.env.APP_INTERNAL_URL || 'http://localhost:3000';
+    const source = req.body?.source || '카톡업로드';
+    const comments = Array.isArray(req.body?.comments) ? req.body.comments.filter(Boolean).slice(0, 8) : [];
+    const nopush = req.body?.nopush ? '1' : '';
+    const r = await fetch(`${appUrl}/api/ingest-image${nopush ? '?nopush=1' : ''}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token },
+      body: JSON.stringify({ image, source, comments, subject: '[관리자업로드] 배치표 이미지' }),
+    });
+    const j = await r.json().catch(() => ({ ok: false, error: `앱 응답 파싱 실패(HTTP ${r.status})` }));
+    res.status(r.ok ? 200 : r.status).json(j);
+  } catch (e) { console.error('upload-board 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));

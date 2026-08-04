@@ -471,6 +471,17 @@
   <div class="tab-page" id="page-review">
     <div class="sectlab">배치표 검수 · 판독 교정</div>
     <div class="panel full">
+      <h2>카톡 배치표 이미지 올리기 — 시스템이 판독해 반영</h2>
+      <p class="desc">카톡으로 온 배치표(당추·티오프 변동) 사진은 알림으로 자동 감지가 안 됩니다. 여기 올리면 <b>서버가 판독해 전 회원에게 반영</b>합니다. (조하빈 등 승격자 티오프처럼 이미지에만 있는 값 채우기)</p>
+      <div class="ub-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="file" id="ubFile" accept="image/*" style="font:inherit;font-size:12.5px;">
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--tx2);"><input type="checkbox" id="ubNoPush"> 발송 없이 상태만(테스트)</label>
+        <button class="btn" id="ubSend" disabled>판독 · 반영</button>
+        <span id="ubStat" style="font-size:12px;color:var(--tx3);"></span>
+      </div>
+      <img id="ubPrev" style="display:none;max-height:220px;margin-top:10px;border:1px solid var(--bord);border-radius:8px;">
+    </div>
+    <div class="panel full">
       <h2>시스템 판독 배치표 — 원본과 대조해 틀린 칸만 수정</h2>
       <p class="desc">판독 결과를 순번표로 재구성했습니다. 오른쪽(또는 아래) 원본 이미지와 대조해 <b>이름·티오프가 틀린 칸만</b> 고치고, <b>확정선</b>(여기까지 근무)을 맞춘 뒤 저장하세요. 저장하면 <b>전 회원 대시보드가 이 배치표 기준으로 다시 계산</b>됩니다. (교정은 이 배치표에만 적용 · 새 배치표가 오면 자동 교체)</p>
       <div id="boardReview"><div class="muted">불러오는 중…</div></div>
@@ -1143,6 +1154,29 @@
 
   // 검수 폼을 관리자가 건드리면 dirty 표시 — 자동 폴링이 입력 중인 교정을 덮어쓰지 않게(#boardReview는 재렌더돼도 컨테이너는 유지되므로 위임 1회 등록).
   (function(){ var rv=$('boardReview'); if(rv){ rv.addEventListener('input', function(){ brDirty=true; }); rv.addEventListener('change', function(){ brDirty=true; }); } })();
+
+  // ── 배치표 이미지 업로드 → 판독·반영 ──
+  (function(){
+    var fi=$('ubFile'), btn=$('ubSend'), stat=$('ubStat'), prev=$('ubPrev'); if(!fi||!btn) return;
+    var dataUrl='';
+    fi.addEventListener('change', function(){
+      var f=fi.files&&fi.files[0]; dataUrl=''; btn.disabled=true; prev.style.display='none'; stat.textContent='';
+      if(!f) return;
+      var rd=new FileReader();
+      rd.onload=function(){ dataUrl=String(rd.result||''); prev.src=dataUrl; prev.style.display='block'; btn.disabled=false; stat.textContent=f.name+' ('+Math.round(f.size/1024)+'KB)'; };
+      rd.readAsDataURL(f);
+    });
+    btn.addEventListener('click', async function(){
+      if(!dataUrl){ return; }
+      btn.disabled=true; var np=$('ubNoPush').checked; stat.textContent='판독 중… (수십 초 걸릴 수 있어요)';
+      try{
+        var r=await fetch(apiUrl('/api/upload-board'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ image:dataUrl, nopush:np }) });
+        var j=await r.json();
+        if(j&&j.ok){ stat.textContent='반영됨: '+(j.body||('컷 '+(j.cutLine||'?')))+(np?' · (발송 안 함)':''); brDirty=false; loadBoardReview(true); }
+        else { stat.textContent='실패: '+((j&&j.error)||('HTTP '+r.status)); btn.disabled=false; }
+      }catch(e){ stat.textContent='오류: '+e.message; btn.disabled=false; }
+    });
+  })();
 
   tick(); loop();
   loadMembers(); memberLoop();
