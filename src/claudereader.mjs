@@ -24,6 +24,44 @@ function bumpCalls() {
 }
 export function claudeBudgetLeft() { return Math.max(0, DAILY_CAP - callsToday()); }
 
+// ── 홀리스틱 판독(감독관) — 한 부(部)의 명단·티오프·컷을 '한 번의 호출로 함께' 판독 ─────────────
+//  기존 크롭-파이프라인은 명단(순번+이름)과 티오프 그리드를 '따로' 읽어 짝이 어긋나던(순번↔시각) 게 최대 오류원.
+//  여기선 순번↔이름↔티오프를 한 이미지에서 통째로 대응시켜 어긋남을 원천 차단. 호출도 부당 1회.
+const HOLISTIC_P3_PROMPT = (
+  'Read the local image with the Read tool. It is the 3부(Part 3) section of a Korean golf caddie assignment board (배치표).\n'
+  + 'LAYOUT:\n'
+  + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(찾근).\n'
+  + '- Right: a tee-time grid with three columns [OUT | time | IN]. Each row shows a tee time (e.g. 16:32). The OUT cell and/or the IN cell of a row may contain a 순번 number. That number identifies which caddie (by their 순번) tees off at that time on that course. A blank/yellow cell means no one on that course/row.\n'
+  + 'TASK: Match 순번 -> name (from roster) and 순번 -> tee time+course (from the grid).\n'
+  + 'Output STRICT JSON ONLY, no prose:\n'
+  + '{"teamCount": <integer after "3부" in the header if visible, else null>,\n'
+  + ' "roster": [{"pos":1,"name":"차은경(54)","spare":false}, ... EVERY numbered roster row in order ...],\n'
+  + ' "tees": [{"pos":1,"time":"16:32","course":"OUT"}, ... ONE entry for EACH OUT/IN cell that contains a 순번 ...]}'
+);
+
+// 로컬 이미지(전체판 또는 3부 크롭) → { teamCount, roster:[{pos,name,spare}], tees:[{pos,time,course}] } 또는 null.
+export async function readPart3Holistic(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 홀리스틱 스킵`); return null; }
+  let out;
+  try { out = await runClaude(`${HOLISTIC_P3_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 홀리스틱 호출 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const roster = Array.isArray(j.roster) ? j.roster
+      .map((r) => ({ pos: Number(r.pos) || 0, name: String(r.name || '').trim(), spare: !!r.spare }))
+      .filter((r) => r.pos > 0 && r.name) : [];
+    const tees = Array.isArray(j.tees) ? j.tees
+      .map((t) => ({ pos: Number(t.pos) || 0, time: (String(t.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
+      .filter((t) => t.pos > 0 && t.time) : [];
+    if (!roster.length) return null;
+    return { teamCount: Number(j.teamCount) || null, roster, tees };
+  } catch { return null; }
+}
+
 // 부별 판독 프롬프트 — 순번 순서 명단 JSON만. 괄호 태그(54·1,3·조출·찾근) 원문 보존.
 const READ_PROMPT = (
   'Read the given local image with the Read tool. It is one section of a Korean golf caddie assignment board (배치표). '
