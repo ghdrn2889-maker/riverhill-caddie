@@ -340,6 +340,41 @@ app.post('/api/simulate', async (req, res) => {
   }
 });
 
+// ★카톡/업로드 배치표 '이미지' 인그레스 — 네이버 폴링 밖(카톡 이미지 등)에서 온 배치표를 서버가 직접 판독·반영.
+//  근본 공백 해소: 카톡 인그레스가 텍스트만 받아 이미지 배치표(조하빈 티오프 등)를 못 읽던 문제.
+//  자동적용+사후검수: 기존 오케스트레이터(notifyForArticle) 재사용 → 프레임보호·검수·푸시·저널 전부 그대로.
+//  인증: 로그인(관리자) 또는 INGEST_TOKEN. body: { image: dataURL|base64, source?, comments?[], subject?, nopush? }
+app.post('/api/ingest-image', async (req, res) => {
+  const token = req.get('x-token') || req.query.token || req.body?.token;
+  if (!req.user && process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
+    return res.status(401).json({ error: '인증 실패(로그인 또는 토큰 필요)' });
+  }
+  try {
+    const raw = String(req.body?.image || '');
+    const dm = raw.match(/^data:(image\/\w+);base64,([\s\S]+)$/);
+    const b64 = dm ? dm[2] : (/^[A-Za-z0-9+/=\s]+$/.test(raw) && raw.length > 100 ? raw.replace(/\s/g, '') : '');
+    if (!b64) return res.status(400).json({ error: 'image(dataURL 또는 base64) 필요' });
+    const ext = (dm ? dm[1].split('/')[1] : 'png') || 'png';
+    const ts = Date.now();
+    const dir = path.join(DATA_DIR, 'ingest-images');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `img_${ts}.${ext}`);
+    fs.writeFileSync(file, Buffer.from(b64, 'base64'));
+    const noPush = ['1', 'true', 'yes'].includes(String(req.query.nopush || req.body?.nopush || '').toLowerCase());
+    const source = req.body?.source || '카톡';
+    const comments = Array.isArray(req.body?.comments)
+      ? req.body.comments.map((c) => ({ content: String(c || ''), nick: String(source), date: ts })).filter((c) => c.content) : [];
+    const full = {
+      id: `img-${ts}`, subject: req.body?.subject || `[${source}] 배치표 이미지`,
+      text: String(req.body?.text || ''), writer: String(req.body?.sender || source),
+      menuId: '2', menuName: '배치 시간표', images: [file], writeDate: ts, url: '/', comments,
+    };
+    console.log(`🖼 [ingest-image] 수신 ${path.basename(file)} (${Math.round(b64.length * 0.75 / 1024)}KB) noPush=${noPush}`);
+    const out = await notifyForArticle(full, { relevant: true, priority: 'high' }, { force: true, noPush });
+    res.json({ ok: true, id: full.id, file: path.basename(file), noPush, pushed: !!out.pushed, body: out.body, teamCount: out.teamCount, cutLine: out.cutLine });
+  } catch (e) { console.error('[ingest-image]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // 새 두뇌(judge) 검증용: 글을 통합 판단기로만 돌려 결과 확인 (푸시 안 함, 라이브 흐름 무관).
 app.post('/api/judge', async (req, res) => {
   const id = req.body?.id || req.query.id;
