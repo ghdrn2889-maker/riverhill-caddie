@@ -57,12 +57,14 @@ export function addSubscription(sub, userId = 1) {
 
 function removeSubscription(endpoint) { run('DELETE FROM push_subscriptions WHERE endpoint = ?', endpoint); }
 
-// ── 조용 시간대(취침) ── 기본 22시~07시엔 어떤 알림도 보내지 않는다.
+// ── 조용 시간대(취침) ── 기본 22시~08시엔 회원 알림을 즉시 보내지 않고 대기열에 쌓아 아침에 보낸다.
 //  예외(bypassQuiet:true): 당일 조출(1부) 출발·티오프 같은 '근무에 늦으면 안 되는' 알림만 통과.
-const QUIET_START = Number(process.env.QUIET_START_HOUR ?? 22); // 22시부터
-const QUIET_END = Number(process.env.QUIET_END_HOUR ?? 7);      // 07시까지 무음
+//  ★env는 함수 안에서 지연 읽기 — 모듈 import가 loadEnv()보다 먼저 평가돼 .env 값이 무시되던 문제 방지.
+const quietStart = () => Number(process.env.QUIET_START_HOUR ?? 22); // 22시부터
+const quietEnd = () => Number(process.env.QUIET_END_HOUR ?? 8);      // 08시까지 무음(아침 flush 시각과 정렬)
 export function inQuietHours(h = new Date().getHours()) {
-  return QUIET_START <= QUIET_END ? (h >= QUIET_START && h < QUIET_END) : (h >= QUIET_START || h < QUIET_END);
+  const s = quietStart(), e = quietEnd();
+  return s <= e ? (h >= s && h < e) : (h >= s || h < e);
 }
 
 // ── 조용시간 정정 대기열 ── 밤(22~QUIET_END시)에 발생한 회원 정정 알림은 '드롭'하지 않고 여기 쌓았다가
@@ -113,7 +115,7 @@ export async function broadcast({ title, body, url, level, bypassQuiet }, userId
   }
   if (!bypassQuiet && inQuietHours()) {
     enqueueDeferred(userId, { title, body, url, level });
-    console.log(`🔕 조용시간(${QUIET_START}~${QUIET_END}시) — 아침 발송 대기열 적재: [회원${userId}] ${title}`);
+    console.log(`🔕 조용시간(${quietStart()}~${quietEnd()}시) — 아침 발송 대기열 적재: [회원${userId}] ${title}`);
     return;
   }
   const subs = getSubscriptions(userId);
