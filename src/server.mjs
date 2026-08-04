@@ -1039,7 +1039,7 @@ function backfillFromLastBoard(userId, member) {
     const mout = interpretForMember(lb.article, lb.rawVerdict, member, loadToday(userId));
     const v = mout.rawVerdict;
     if (!mout.relevant || !v) return false;
-    const merged = applyVerdict(loadToday(userId), v, lb.article);
+    const merged = applyVerdict(loadToday(userId), v, lb.article, { name: member.name, part: member.part || '3' });
     saveToday(merged.next, userId);
     console.log(`↩️  회원 ${userId}(${member.name}) 가입 소급: 최신 배치표 #${lb.id} 반영`);
     return true;
@@ -1267,7 +1267,7 @@ async function processForMember(userId, member, out, full, opts = {}) {
   let change = { reversal: false, material: false, message: '' };
   let merged = null;
   if (out.relevant && v) {
-    merged = applyVerdict(today, v, full);
+    merged = applyVerdict(today, v, full, { name: member.name, part: member.part || '3' });
     // ★불안정 판독(_uncertain)은 상황판 baseline을 갱신하지 않는다 — 흔들리는 순번/상태가
     //  다음 안정 판독과 비교돼 '유령 변경(순번 15→29 등)'을 만드는 것을 원천 차단. (읽기 기록·진단 로그는 아래에서 별도.)
     if (!v._uncertain) saveToday(merged.next, userId);
@@ -1626,7 +1626,7 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   const hasNow = Number(v.myPosition) > 0;
   if (!hadState && !hasNow) return { pushed: false };
 
-  const merged = applyVerdict(cur, v, full, { teeMin: win.min, teeMax: win.max });
+  const merged = applyVerdict(cur, v, full, { teeMin: win.min, teeMax: win.max, name: member.name, part });
   // ★1부 배정유형(조출/1,3/54/1부전용) 저장 → 대시보드 배지. 값 없으면 이전 값 보존(명단 미판독 글 대비).
   if (part === '1' && v.myAssign) merged.next.assign = v.myAssign;
   else if (part === '1' && cur && cur.assign && !merged.next.assign) merged.next.assign = cur.assign;

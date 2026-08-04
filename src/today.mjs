@@ -162,6 +162,10 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   else if (!cur.date && d) cur = { ...cur, date: d };
 
   const next = { ...cur, timeline: [...(cur.timeline || [])] };
+  // ★회원 이름/부는 opts로 주입(다중회원). blank() 기본값(MY_NAME=1번회원)이 남의 today.json에
+  //  새어나가 모든 회원 이름이 '김홍구'로 찍히던 레거시 1인용 잔재를 차단.
+  if (opts.name) next.name = opts.name;
+  if (opts.part) next.part = /부$/.test(String(opts.part)) ? String(opts.part) : `${opts.part}부`;
   const changes = [];
   // ★순번 제외(off:removed) — 이전엔 배치표에 있었는데 최신 신뢰 판독에서 사라짐(사유 미상).
   //  이 경우 아래 팀수·커트라인 재분류(스페어 승강)를 건너뛰어 'off' 결론을 지킨다.

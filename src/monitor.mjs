@@ -451,7 +451,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
       let next;
       try {
         const mout = interpretForMember(article, JSON.parse(JSON.stringify(vpart)), member, today);
-        next = applyVerdict(today, mout.rawVerdict, article, { teeMin: win.min, teeMax: win.max }).next;
+        next = applyVerdict(today, mout.rawVerdict, article, { teeMin: win.min, teeMax: win.max, name: m.board_name, part }).next;
       } catch (e) { console.error(`${part}부교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
       const isOff = next.status === 'off';
       const pos = Number(next.myPosition) || 0;
@@ -531,7 +531,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
     let next;
     try {
       const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, today);
-      next = applyVerdict(today, mout.rawVerdict, lb.article).next;
+      next = applyVerdict(today, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
     } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
     const isOff = next.status === 'off'; // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정
     const pos = Number(next.myPosition) || 0;
