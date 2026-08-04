@@ -214,7 +214,42 @@ function freshestPart3Ref() {
   return best || loadUserJSON(1, 'today.json', null);
 }
 
+// ★네 화면 통합 — 회원 개인 today.json의 티오프(수동/관리자 교정 포함)를 공유 그리드에 덮어씌운다.
+//  검수·판독검증이 대시보드·알림과 절대 못 어긋나게: 같은 회원은 어디서나 같은 티오프·근무여부.
+//  (회원 아닌 순번은 그리드 유지 — 그건 배치표 이미지로만 갱신.)
+function overlayMemberTees(v) {
+  if (!v) return v;
+  try {
+    const grid = Array.isArray(v.teeGrid) ? v.teeGrid.slice() : [];
+    const byPos = new Map(grid.map((g) => [Number(g.pos), { pos: Number(g.pos), time: String(g.time || ''), course: g.course || '' }]));
+    const dir = path.join(DATA_DIR, 'users');
+    for (const d of fs.readdirSync(dir)) {
+      if (!/^\d+$/.test(d)) continue;
+      const j = loadUserJSON(Number(d), 'today.json', null);
+      if (!j || (j.part && String(j.part) !== '3')) continue;
+      const pos = Number(j.myPosition) || 0;
+      const tee = String(j.teeTime || '');
+      if (pos >= 1 && /^\d{1,2}:\d{2}$/.test(tee)) {
+        byPos.set(pos, { pos, time: tee, course: /IN/i.test(String(j.course)) ? 'IN' : 'OUT' });
+      }
+    }
+    v.teeGrid = [...byPos.values()].sort((a, b) => a.pos - b.pos);
+  } catch { /* noop */ }
+  return v;
+}
+
 export function effectivePart3Verdict(lb) {
+  const v = _effPart3VerdictRaw(lb);
+  if (v) {
+    const before = (v.teeGrid || []).map((g) => `${g.pos}:${g.time}`).join(',');
+    overlayMemberTees(v);
+    const after = (v.teeGrid || []).map((g) => `${g.pos}:${g.time}${g.course}`).join(',');
+    if (before !== after) v._t1Sig = `${v._t1Sig || ''}|mo:${after}`;   // 회원 오버레이 반영 → 캐시 정확 무효화
+  }
+  return v;
+}
+
+function _effPart3VerdictRaw(lb) {
   const t1 = freshestPart3Ref();
   const digits = (s) => Number(String(s || '').replace(/\D/g, '')) || 0;
   const lbId = digits(lb && lb.id);
