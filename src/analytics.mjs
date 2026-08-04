@@ -194,8 +194,28 @@ function partsToDuty(set) {
 //  해법: 변동에 민감한 board-level 필드(순번명단·티오프표·확정선·커트·인턴)는 today.json 우선,
 //   없으면 스냅샷 폴백. today.json에 없는 것(crewDuty 근무표시맵·teamCount 헤더)만 스냅샷 유지.
 //  ※member-specific(myPosition/status/teeTime)은 절대 안 씀 — board-level만 취함.
+// ★검수/판독 기준 today.json — 1번 회원(김홍구)이 병가·휴무면 컷이동이 그의 상태에 안 실려 검수가 얼어붙는다.
+//  → 3부 '근무/스페어'(off 아님) 회원 중 가장 최근 갱신된 today.json을 기준으로 삼아 실시간 컷을 항상 따라간다.
+//  (명단·구조는 아래 로직이 lastboard/교정을 우선하므로, 여기선 '가장 신선한 시간민감 상태'만 고른다.)
+function freshestPart3Ref() {
+  let best = null, bestT = -1;
+  try {
+    const base = path.join(DATA_DIR, 'users');
+    for (const id of fs.readdirSync(base)) {
+      let j;
+      try { j = JSON.parse(fs.readFileSync(path.join(base, id, 'today.json'), 'utf8')); } catch { continue; }
+      if (!j || !(j.part && String(j.part).includes('3'))) continue;
+      if (j.status === 'off' || j.status === 'unknown') continue;          // off(병가·휴무)는 컷이동 미반영 → 기준 제외
+      if (!(Array.isArray(j.roster3) && j.roster3.length) && !(Number(j.cutLine) > 0)) continue;
+      const ts = Number(j.updatedAt) || 0;
+      if (ts > bestT) { bestT = ts; best = j; }
+    }
+  } catch { /* noop */ }
+  return best || loadUserJSON(1, 'today.json', null);
+}
+
 export function effectivePart3Verdict(lb) {
-  const t1 = loadUserJSON(1, 'today.json', null);
+  const t1 = freshestPart3Ref();
   const digits = (s) => Number(String(s || '').replace(/\D/g, '')) || 0;
   const lbId = digits(lb && lb.id);
   const t1Id = digits(t1 && t1.articleId);
