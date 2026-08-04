@@ -1067,6 +1067,24 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   opts = { ...opts, previewMode, boardISO };
   if (previewMode) console.log(`📢 본배치표 최초(${boardISO}) — 개별 알림 억제 · 통합 예고 발송 예정: ${full.subject}`);
 
+  // ★관리자 교정 소급(회원까지) — 이 배치표가 검수에서 교정된 정본(_adminCorrected·같은 글)이면,
+  //  회원 처리 '전에' 교정 명단·근태·티오프를 out.rawVerdict에 얹는다. (기존엔 교정이 lastboard=검수만
+  //  지키고 회원은 매번 새 판독(같은 오독)으로 처리돼, 검수에서 고친 걸 회원 알림이 무시하던 문제.)
+  try {
+    const _lbCorr = loadJSON('lastboard.json', null);
+    const _cv = _lbCorr && _lbCorr.rawVerdict;
+    if (_cv && _cv._adminCorrected && String(_lbCorr.id) === String(full.id) && out.rawVerdict) {
+      const pd = String(_cv.dateLabel || '').trim(), nd = String(out.rawVerdict.dateLabel || '').trim();
+      if (!(pd && nd && pd !== nd)) {   // 같은 날만
+        if (Array.isArray(_cv.part3Roster) && _cv.part3Roster.length) out.rawVerdict.part3Roster = _cv.part3Roster.slice();
+        if (_cv.crewDuty) out.rawVerdict.crewDuty = { ..._cv.crewDuty };
+        if (Array.isArray(_cv.teeGrid) && _cv.teeGrid.length) out.rawVerdict.teeGrid = _cv.teeGrid.slice();
+        out.rawVerdict._adminCorrected = _cv._adminCorrected;
+        console.log(`·  [교정소급] #${full.id} 검수 교정 명단/티오프를 회원 처리에 적용(검수·대시보드·알림 일치)`);
+      }
+    }
+  } catch (e) { console.error('[교정소급 오류]', e.message); }
+
   // ★근본 수정(재발 방지) — '배치표 이미지인데 티오프표를 못 읽은' 판독 실패를 크롤러에 신호로 돌려준다.
   //  crawler가 이 신호를 보면 seen 을 찍지 않고 다음 폴링에 재시도한다(실패=종결이던 구조 폐기).
   //  성공하면 서명이 바뀌어 정상 알림, 재시도 중 check 는 dedup(unknown|)으로 한 번만 나가 스팸 없음.
