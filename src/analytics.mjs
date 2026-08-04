@@ -226,7 +226,9 @@ function overlayMemberTees(v) {
     for (const d of fs.readdirSync(dir)) {
       if (!/^\d+$/.test(d)) continue;
       const j = loadUserJSON(Number(d), 'today.json', null);
-      if (!j || (j.part && String(j.part) !== '3')) continue;
+      if (!j) continue;
+      const pn = String(j.part || '3').replace(/[^0-9]/g, '') || '3';   // '3부'/'3' 모두 허용
+      if (pn !== '3') continue;
       const pos = Number(j.myPosition) || 0;
       const tee = String(j.teeTime || '');
       if (pos >= 1 && /^\d{1,2}:\d{2}$/.test(tee)) {
