@@ -346,7 +346,7 @@ export async function computeBoardParts() {
       let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || Number(v3.cutLine) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
       let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, cutLine = 0, swaps = [], reliable = false, uncertain = '';
       if (p === '3') {                                             // 3부는 대시보드와 같은 최신본(v3) 재사용(추가 판독 없음)
-        roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : await analyzeRoster(article, '3');
+        roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : [];   // ★죽은 Gemini(analyzeRoster) 폴백 제거 — part3Roster는 today.json에서 항상 채워짐
         teeGrid = Array.isArray(v3.teeGrid) ? v3.teeGrid : [];
         internCount = Number(v3.internCount) || 0; internTees = Array.isArray(v3.internTees) ? v3.internTees : [];
         cutoffName = v3.cutoffName || ''; cutoffPosition = Number(v3.cutoffPosition) || null;

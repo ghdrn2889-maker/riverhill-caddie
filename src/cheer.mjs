@@ -199,7 +199,11 @@ function seasonOk(line, season) {
   return !re || !re.test(line);
 }
 
+// ★Gemini 응원문구 생성 게이트 — 기본 OFF(GEMINI_CHEER=1일 때만). 크레딧 고갈 시 429 스팸·앱 지연 방지.
+//  꺼지면 빈 풀 반환 → getCheer가 사람이 써둔 안전망 문구로 대체(따뜻함 유지, 비용 0).
+const useGeminiCheer = () => ['1', 'true', 'yes'].includes(String(process.env.GEMINI_CHEER || '').toLowerCase());
 async function generatePool(facts, season, n = 6) {
+  if (!useGeminiCheer()) return [];
   const model = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest';
   const out = await callGeminiJSON(buildPrompt(facts, n), null, model, { temperature: 1.0, topP: 0.95 });
   const lines = Array.isArray(out?.lines) ? out.lines : [];
