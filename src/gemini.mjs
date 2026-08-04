@@ -72,9 +72,14 @@ async function fetchImageBase64(url) {
 
 // 프롬프트(+선택 이미지) → Gemini 호출 → JSON 파싱 (2회 재시도). 실패 시 null.
 // imageUrl 이 없으면 텍스트-only 로 호출한다(제목/본문만 있는 글도 판단 가능).
+// ★전역 킬스위치 — Gemini 비활성(기본)이면 어떤 경로도 실제 호출을 안 한다. 크레딧 고갈 상태에서
+//  잔재 호출들이 429/타임아웃으로 시간을 잡아먹거나 그 기능을 멈추게 하던 문제 원천 차단.
+//  되살리려면(크레딧 충전 후) .env 에 GEMINI_ENABLED=1. 그때까진 모든 callGeminiJSON 이 즉시 null.
+export const geminiEnabled = () => ['1', 'true', 'yes'].includes(String(process.env.GEMINI_ENABLED || '').toLowerCase());
+
 export async function callGeminiJSON(promptText, imageUrl = null, modelOverride = null, opts = {}) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  if (!key || !geminiEnabled()) return null;   // 키 없음 또는 전역 비활성 → 호출 안 함(429·멈춤 방지)
 
   const model = modelOverride || process.env.GEMINI_MODEL || 'gemini-flash-latest';
 

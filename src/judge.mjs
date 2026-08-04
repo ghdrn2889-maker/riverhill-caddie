@@ -983,11 +983,16 @@ function rosterHitsOf(roster, name) {
   const out = [];
   if (!Array.isArray(roster) || !name) return out;
   const key = String(name).replace(/\s/g, '');
+  // 괄호 안이 '사람 이름'이면 순번교환 점유자(정진영(조하빈)=조하빈), '근무태그/숫자'(조출·찾근·54·1,3·2,3·휴무 등)면
+  //  base가 그 사람(서동환(조출)=서동환). 근무태그를 점유자로 오인해 조출/두탕 캐디가 매칭 안 되던 버그 수정.
+  const DUTY_RE = /^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리|대리|주임|마샬|54h?|[\d,.]+)$/;
   for (let i = 0; i < roster.length; i++) {
     const cell = String(roster[i] || '').replace(/\s/g, '');
     if (!cell) continue;
     const m = cell.match(/\(([^)]+)\)/);
-    const occupant = (m ? m[1] : cell.replace(/\(.*$/, '')).trim();
+    const inner = m ? m[1].trim() : '';
+    const base = cell.replace(/\(.*$/, '').trim();
+    const occupant = (inner && !DUTY_RE.test(inner)) ? inner : base;   // 태그면 base, 이름이면 점유자
     if (occupant === key || cell === key) out.push(i + 1);
   }
   return out;
