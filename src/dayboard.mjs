@@ -82,18 +82,21 @@ function applyEvent(board, e) {
   const p = e.payload || {};
   switch (e.kind) {
     case 'board_full': {
-      const teams = {};
+      // ★비파괴 병합(안 쪼그라듦) — 각 순번을 upsert. 이번 판독이 준 값은 덮고, 안 준 자리는 기존 유지.
+      //  약한 부분 판독이 정본 칠판을 지우지 못하게(칠판이 절대 쪼그라들지 않게). 날짜별 파일이라 날 넘김 오염 없음.
       for (const t of (Array.isArray(p.teams) ? p.teams : [])) {
         const pos = Number(t.pos); if (!(pos > 0)) continue;
-        teams[pos] = {
-          pos, name: norm(t.name),
-          tee: normTime(t.tee || t.time), course: normCourse(t.course),
-          spare: !!t.spare,
+        const cur = b.teams[pos] || { pos };
+        b.teams[pos] = {
+          pos,
+          name: norm(t.name) || cur.name || '',
+          tee: normTime(t.tee || t.time) || cur.tee || '',
+          course: normCourse(t.course) || cur.course || '',
+          spare: t.spare != null ? !!t.spare : !!cur.spare,
         };
       }
-      b.teams = teams;
       if (Number(p.cut) > 0) b.cut = Number(p.cut);
-      else { let mx = 0; for (const k of Object.keys(teams)) if (!teams[k].spare && Number(k) > mx) mx = Number(k); b.cut = mx; }
+      else if (!(b.cut > 0)) { let mx = 0; for (const k of Object.keys(b.teams)) if (!b.teams[k].spare && Number(k) > mx) mx = Number(k); b.cut = mx; }
       break;
     }
     case 'cut': {
@@ -210,6 +213,21 @@ export function summarize(date) {
 // ── 어댑터: 기존 판독 결과(rawVerdict)+글을 칠판 이벤트로 번역(섀도우 피드) ──
 //  이미지 배치표 → board_full(로스터+티오프+컷 전체) / 텍스트 컷 → cut / 텍스트 티오프 → tee.
 //  기존 시스템이 이미 계산한 필드를 재사용 — 재파싱 최소화, 3부 경로 불변.
+// 구두(텍스트) 티오프 공지 파서 — "장성원 18:45 out" / "조하빈 18:45 인" / "박준서 18:38 in코스" 등.
+//  엄격 패턴(한글이름+시각+코스어)만 잡아 오검출 최소화. 이름·시각·코스를 tee 이벤트 페이로드로.
+const TEE_ANNOUNCE_RE = /([가-힣]{2,4})\s*(?:님)?\s*(\d{1,2}\s*[:：]\s*\d{2})\s*(?:분\s*)?(out|in|아웃|인|아웃코스|인코스|out코스|in코스)/gi;
+export function parseTeeAnnouncements(text) {
+  const out = [];
+  const s = String(text || '');
+  let m;
+  TEE_ANNOUNCE_RE.lastIndex = 0;
+  while ((m = TEE_ANNOUNCE_RE.exec(s))) {
+    const name = norm(m[1]); const tee = normTime(m[2]); const course = normCourse(m[3]);
+    if (name && tee) out.push({ name, tee, course });
+  }
+  return out;
+}
+
 export function eventsFromVerdict(article, rv = {}) {
   const events = [];
   const at = Number(article.writeDate || article.at) || 0;
@@ -231,6 +249,13 @@ export function eventsFromVerdict(article, rv = {}) {
   } else if (cut > 0) {
     events.push({ id: `${id}:cut:${cut}`, at, source: 'text', kind: 'cut', payload: { cut }, note: norm(rv.cutoffName) });
   }
+  // ★텍스트 티오프 공지 — 이미지 없이 말로 온 "장성원 18:45 out" 등을 칠판 tee 이벤트로(이름 매칭).
+  //  글 본문 + 댓글 전부 훑는다. board_full/cut 와 함께 시각순으로 쌓임.
+  const blob = [article.subject, article.text, ...((article.comments || []).map((c) => (c && c.content) || ''))].join('\n');
+  const anns = parseTeeAnnouncements(blob);
+  anns.forEach((a, i) => {
+    events.push({ id: `${id}:tee:${a.name}:${a.tee}`, at: at + i + 1, source: 'text', kind: 'tee', payload: { name: a.name, tee: a.tee, course: a.course } });
+  });
   return events;
 }
 

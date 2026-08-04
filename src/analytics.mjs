@@ -7,6 +7,8 @@ import { DATA_DIR, appendJSONL, loadJSON, loadUserJSON } from './store.mjs';
 import { all, get, run } from './db.mjs';
 import { analyzeRoster, analyzeInterns, analyzePartTeams } from './gemini.mjs';
 import { getBoardPart, loadBoardPartsStore } from './boardparts.mjs';
+import { loadDayboard, teamsArray as dayboardTeams } from './dayboard.mjs';
+import { labelToISO } from './worklog.mjs';
 
 // ── 기록(본 앱에서 호출) ────────────────────────────────
 const VISIT_THROTTLE_MS = 10 * 60 * 1000; // 같은 회원 10분 내 재방문은 1건으로
@@ -240,13 +242,38 @@ function overlayMemberTees(v) {
   return v;
 }
 
+// ★칠판(dayboard) 오버레이 — 검수·판독이 '시각순 단일 진실원'을 최종 권위로 삼는다.
+//  칠판은 이미지 배치표든 텍스트 업데이트(컷 "28번까지"·변동)든 시각순으로 반영하므로,
+//  '본배치표에서 얼고 이후 변동엔 안 움직이던' 검수를 대시보드·알림과 동행시킨다.
+//  precedence: 칠판이 board(컷·티오프)를 깔고 → 그 위에 회원/관리자 today 교정이 최종(overlayMemberTees).
+//  관리자 교정 정본(_adminCorrected)은 칠판이 건드리지 않는다.
+function overlayDayboard(v) {
+  if (!v || v._adminCorrected) return v;
+  try {
+    const iso = labelToISO(v.dateLabel || '');
+    if (!iso) return v;
+    const db = loadDayboard(iso);
+    if (!db || !Array.isArray(db.log) || !db.log.length) return v;
+    const board = db.board || {};
+    if (Number(board.cut) > 0) { v.cutoffPosition = board.cut; v.cutLine = board.cut; }
+    const byPos = new Map((v.teeGrid || []).map((g) => [Number(g.pos), { pos: Number(g.pos), time: String(g.time || ''), course: g.course || '' }]));
+    for (const t of dayboardTeams(board)) {
+      if (t.tee && /^\d{1,2}:\d{2}$/.test(t.tee)) byPos.set(t.pos, { pos: t.pos, time: t.tee, course: t.course || '' });
+    }
+    v.teeGrid = [...byPos.values()].sort((a, b) => a.pos - b.pos);
+    v._t1Sig = `${v._t1Sig || ''}|db:${iso}:${board.cut || 0}:${db.updatedAt || 0}`;   // 칠판 변경 시 캐시 무효화
+  } catch { /* noop */ }
+  return v;
+}
+
 export function effectivePart3Verdict(lb) {
   const v = _effPart3VerdictRaw(lb);
   if (v) {
     const before = (v.teeGrid || []).map((g) => `${g.pos}:${g.time}`).join(',');
-    overlayMemberTees(v);
+    overlayDayboard(v);    // 칠판(단일 진실원) — 텍스트 컷/변동까지 반영해 검수·판독을 동행시킴
+    overlayMemberTees(v);  // 회원 개인 today(관리자 교정 포함)가 최종 권위
     const after = (v.teeGrid || []).map((g) => `${g.pos}:${g.time}${g.course}`).join(',');
-    if (before !== after) v._t1Sig = `${v._t1Sig || ''}|mo:${after}`;   // 회원 오버레이 반영 → 캐시 정확 무효화
+    if (before !== after) v._t1Sig = `${v._t1Sig || ''}|mo:${after}`;   // 오버레이 반영 → 캐시 정확 무효화
   }
   return v;
 }
