@@ -226,13 +226,14 @@ export async function readSummaryCounts(imagePath) {
 //   전용 1회 판독으로 근태를 잡아 crewDuty에 주입 → 기존 오프 게이트(judge fixMemberPosByRoster)가 발화한다.
 //  반환: [{name, reason}] reason∈{휴무,병가,휴가,연차,반차,월차,격리}. 근태 없음=[](빈 배열, 유효). 실패=null.
 const OFF_PROMPT = (
-  'Read the given local image with the Read tool. It is a full Korean golf caddie assignment board (배치표). '
-  + 'Somewhere on it — often a SEPARATE 근태/휴무 list or column, NOT inside the numbered 순번 tee rosters — there are caddies marked ABSENT for the day '
-  + 'with a reason such as 휴무, 병가, 휴가, 연차, 반차, 월차, or 격리. '
-  + 'List EVERY caddie marked with one of those absence reasons, paired with that exact reason word. '
-  + 'Do NOT include caddies who appear in a numbered 순번 roster / tee-time table (those are working, not absent). '
+  'This image is the 조편성표 (crew assignment grid) from the RIGHT side of a Korean golf caddie board (배치표). '
+  + 'Several vertical blocks (조) are placed side by side; each block has columns [이름 | 근무 | 카트]. '
+  + 'Read EVERY block, EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
+  + 'For each row whose 근무 cell is an ABSENCE status, output the 이름 and the status. '
+  + 'Distinguish the status by BOTH the text AND its cell COLOR: 휴무 = YELLOW cell, 휴가 = GREEN cell, 병가 = light BLUE cell; 격리/연차/반차/월차 as written. '
+  + 'IGNORE rows whose 근무 is a working tag (3부, 1,3, 54, 54h, 조출, 찾근, 선발, 당번, 배치, 정출, 마감, 대리, 주임, 마샬) or blank. '
   + 'If nobody is marked absent, return an empty list. '
-  + 'Output ONLY strict JSON: {"off":[{"name":"김홍구","reason":"병가"},{"name":"성지현","reason":"휴무"}]}'
+  + 'Output ONLY strict JSON: {"off":[{"name":"이수련","reason":"휴무"},{"name":"김홍구","reason":"병가"}]}'
 );
 
 const OFF_REASONS = ['병가', '휴가', '연차', '반차', '월차', '격리', '휴무'];   // 구체(병가/휴가류) 우선, 일반 휴무 최후

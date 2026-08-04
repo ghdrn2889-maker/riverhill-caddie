@@ -178,13 +178,14 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   if (!best) return null;
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
-  // ★근태(휴무/병가/휴가) 판독 — 부 크롭엔 없는 별도 근태 목록을 전체판 1회 판독으로 잡는다(합본당 +1 호출).
-  //  전체판을 3배 업스케일해 근태 칸까지 읽음. 명단 스냅으로 회원 이름과 정렬(1글자 오독 흡수). 실패면 [](오프 미검출).
+  // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표'의 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 1회 판독.
+  //  ★핵심: 전체판을 그냥 키우면 Claude Read가 긴 변을 다운샘플해 밀집 근무칸(노란 휴무)을 놓친다(2/10만 잡힘).
+  //   조편성표 영역만[x0.64~1.0] 크롭해 6배 → 근무칸까지 선명 → 실측 10/10 전원 검출. 명단 스냅으로 이름 정렬.
   let offList = [];
   if (claudeBudgetLeft() > 0) {
     try {
       const offPath = path.join(TMP, `off_${Date.now()}.png`);
-      await runPy({ image: img, crop_only: offPath, slice: { x0: 0, x1: 1, y1: 1 }, scale: 3 }, 45000);
+      await runPy({ image: img, crop_only: offPath, slice: { x0: 0.64, x1: 1.0, y1: 0.92, lmargin: 0 }, scale: 6 }, 45000);
       const ol = await readOffList(offPath);
       try { fs.unlinkSync(offPath); } catch { /* noop */ }
       if (Array.isArray(ol)) {
