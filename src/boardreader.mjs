@@ -134,7 +134,14 @@ async function readOffByColumns(img) {
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
 async function readPartsOnce(img, sorted, cuts) {
   const parts = {};
-  for (let i = 0; i < sorted.length; i++) {
+  // ★부3(현재 회원 전원의 부)를 '먼저' 판독 — 예산(캡)이 모자라도 우리 회원 부는 절대 굶지 않게.
+  //  경계(x1)는 여전히 x0정렬 이웃으로 계산하므로 크롭 정확도는 그대로. 순서만 3부 우선.
+  const order = sorted.map((_, i) => i).sort((a, b) => {
+    const ra = String(sorted[a].part) === '3' ? 0 : 1;
+    const rb = String(sorted[b].part) === '3' ? 0 : 1;
+    return ra - rb || a - b;
+  });
+  for (const i of order) {
     const b = sorted[i];
     try {
       // ★가운데 부는 '다음 부 경계'까지만(번짐 방지). 마지막 부만 우측 여유(margin)로 티오프 안 잘리게.
@@ -357,7 +364,11 @@ const _boardCache = new Map();
 function readBoardByClaudeCached(img, opts = {}) {
   if (!img) return Promise.resolve(null);
   if (_boardCache.has(img)) return _boardCache.get(img);
-  const pr = readBoardByClaude(img, opts).catch((e) => { _boardCache.delete(img); throw e; });
+  // ★null(판독 실패)은 캐시에 남기지 않는다 — 일시적 실패 1건이 재시작 전까지 이후 모든 판독을
+  //  같은 널로 오염시키던 버그(증상: "재시작해야 새 배치표가 잡힘"). 성공(board)만 캐시.
+  const pr = readBoardByClaude(img, opts)
+    .then((board) => { if (!board) _boardCache.delete(img); return board; })
+    .catch((e) => { _boardCache.delete(img); throw e; });
   _boardCache.set(img, pr);
   if (_boardCache.size > 4) { const k = _boardCache.keys().next().value; _boardCache.delete(k); }
   return pr;
