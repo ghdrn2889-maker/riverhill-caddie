@@ -7,8 +7,11 @@ import { loadJSON, saveJSON } from './store.mjs';
 const SEEN_FILE = 'seen.json';
 const MAX_SEEN = 800;
 
+const MAX_BOARD_RETRIES = Number(process.env.BOARD_READ_RETRIES ?? 6);
+
 export function startCrawler({ onMatch, onComment, onCafeError }) {
   const seen = new Set(loadJSON(SEEN_FILE, []));
+  const boardRetries = loadJSON('board-retries.json', {}); // {id: 재시도횟수} — 판독 실패한 배치표를 다음 폴링에 재시도
   const commentCounts = loadJSON('commentcounts.json', {}); // 글별 최근 댓글 수(댓글 변동 감지용)
   const CH = process.env.CHANGE_MENU_ID || '13';
   const SC = process.env.SCHEDULE_MENU_ID || '2';
@@ -67,7 +70,20 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
       if (result.relevant) {
         console.log(`🔔 [${result.priority}] ${a.subject}  (${result.hits.join(', ')})  — ${who}`);
         // ★처리(onMatch)가 성공해야 seen 기록. 실패·재시작 시 seen에 안 남아 다음 폴링에서 재시도된다.
-        try { await onMatch(a, result); markSeen(a.id); }
+        //  ★근본 수정: '배치표인데 티오프표를 못 읽은' 판독 실패(boardReadFailed)면 seen 을 찍지 않고 재시도한다.
+        //   (기존엔 판독 실패해도 onMatch가 throw만 안 하면 seen 확정 → 새 배치표가 영구 미반영되던 재발 버그.)
+        try {
+          const r = await onMatch(a, result);
+          if (r && r.boardReadFailed && (boardRetries[a.id] || 0) < MAX_BOARD_RETRIES) {
+            boardRetries[a.id] = (boardRetries[a.id] || 0) + 1;
+            saveJSON('board-retries.json', boardRetries);
+            console.warn(`⏳ 배치표 판독 실패 → seen 미기록, 다음 폴링 재시도 (${boardRetries[a.id]}/${MAX_BOARD_RETRIES}): ${a.subject}`);
+          } else {
+            if (boardRetries[a.id]) { delete boardRetries[a.id]; saveJSON('board-retries.json', boardRetries); }
+            if (r && r.boardReadFailed) console.warn(`⚠️ 배치표 판독 재시도 ${MAX_BOARD_RETRIES}회 소진 — seen 처리(수동 확인 필요): ${a.subject}`);
+            markSeen(a.id);
+          }
+        }
         catch (e) { console.error(`onMatch 오류(seen 미기록 → 다음 폴링 재시도): ${e.message}`); }
       } else {
         console.log(`·  (무관) ${a.subject}  — ${who}`);

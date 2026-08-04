@@ -1067,8 +1067,15 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   opts = { ...opts, previewMode, boardISO };
   if (previewMode) console.log(`📢 본배치표 최초(${boardISO}) — 개별 알림 억제 · 통합 예고 발송 예정: ${full.subject}`);
 
+  // ★근본 수정(재발 방지) — '배치표 이미지인데 티오프표를 못 읽은' 판독 실패를 크롤러에 신호로 돌려준다.
+  //  crawler가 이 신호를 보면 seen 을 찍지 않고 다음 폴링에 재시도한다(실패=종결이던 구조 폐기).
+  //  성공하면 서명이 바뀌어 정상 알림, 재시도 중 check 는 dedup(unknown|)으로 한 번만 나가 스팸 없음.
+  const _boardReadFailed = _isBoardImg
+    && !(out.rawVerdict?.rosterReliable === true && Array.isArray(out.rawVerdict?.teeGrid) && out.rawVerdict.teeGrid.length > 0);
+
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
+  if (primaryRet && typeof primaryRet === 'object') primaryRet.boardReadFailed = _boardReadFailed;
 
   // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict를 코드로 재해석.
   for (const m of activeMembers()) {
@@ -1852,7 +1859,7 @@ startCrawler({
       const full = await fetchArticle(article.id);
       full.writer = full.writer || article.writer || '';
       full.writeDate = full.writeDate || article.writeDate || '';
-      await notifyForArticle(full, result);
+      return await notifyForArticle(full, result);   // ★반환 → 크롤러가 boardReadFailed 보고 seen/재시도 판단
     } catch (e) {
       console.error('본문 분석 실패, 제목으로 알림:', e.message);
       saveRecent(article, result, null);
