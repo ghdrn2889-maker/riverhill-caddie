@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -144,6 +144,30 @@ async function readPartsOnce(img, sorted, cuts) {
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
       // ★y1=0.73 — 명단 세로 전체 포착(공지영역 위까지). crop_only가 실제 사용 경계(x0/x1/y1)를 함께 반환.
       const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
+      // ★3부 홀리스틱 우선(토글) — 명단·티오프를 이 크롭에서 '한 번에' 대응 판독(순번↔시각 어긋남 원천 차단).
+      //  부실(명단 심각부족)하면 아래 기존 분할 판독으로 폴백. 티오프 배열은 verdictFromPart이 그대로 소비.
+      if (b.part === '3' && useHolisticP3()) {
+        try {
+          const h = await readPart3Holistic(cropPath);
+          if (h && Array.isArray(h.roster) && h.roster.length) {
+            const maxPos = h.roster.reduce((mx, x) => Math.max(mx, x.pos), 0);
+            const names = new Array(maxPos).fill('');
+            h.roster.forEach((x) => { if (x.pos >= 1 && x.pos <= maxPos) names[x.pos - 1] = x.name; });
+            const filled = names.filter(Boolean).length;
+            const firstSpare = h.roster.filter((x) => x.spare).reduce((mn, x) => Math.min(mn, x.pos), Infinity);
+            const gridMax = (h.tees || []).reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
+            const cut = Number(cuts[b.part]) || (Number.isFinite(firstSpare) ? firstSpare - 1 : 0) || gridMax || 0;
+            // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
+            if (filled >= _rosterFloor(cut || filled)) {
+              try { fs.unlinkSync(cropPath); } catch { /* noop */ }
+              parts[String(b.part)] = { roster: snapRoster(names), tee: h.tees, cut, x0: b.x0, x1: b.x1 };
+              console.log(`[boardreader] 3부 홀리스틱 채택: 명단${filled}·티${(h.tees || []).length}·컷${cut}(스페어첫 ${Number.isFinite(firstSpare) ? firstSpare : '-'})`);
+              continue;
+            }
+            console.log(`[boardreader] 3부 홀리스틱 부실(명단${filled}<floor ${_rosterFloor(cut || filled)}) → 분할판독 폴백`);
+          }
+        } catch (e) { console.error('[boardreader] 3부 홀리스틱 오류 → 폴백:', e.message); }
+      }
       const r = await readPartWithClaude(cropPath);
       // ★열 경계 — part 판독의 rosterCols가 있으면 쓰고, 없으면(들쭉날쭉) 전용 호출로 확실히 잡는다.
       let rcols = (r && Array.isArray(r.rosterCols) && r.rosterCols.length) ? r.rosterCols : null;
@@ -248,6 +272,13 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
 export function useClaudeReader() {
   if (['1', 'true', 'yes'].includes(String(process.env.CLAUDE_READER || '').toLowerCase())) return true;
   try { return fs.existsSync(path.join(DATA_DIR, 'use-claude-reader')); } catch { return false; }
+}
+
+// ★홀리스틱 3부 판독 토글 — data/use-holistic-p3 있으면 3부는 '명단+티오프 1회 통합 판독'(어긋남 원천 차단).
+//  즉시 토글(재시작 불필요). 실패·부실하면 기존 크롭-분할 경로로 자동 폴백. 롤백=rm 파일.
+export function useHolisticP3() {
+  if (['1', 'true', 'yes'].includes(String(process.env.HOLISTIC_P3 || '').toLowerCase())) return true;
+  try { return fs.existsSync(path.join(DATA_DIR, 'use-holistic-p3')); } catch { return false; }
 }
 
 // ── 배치표 셀 파서 — "차은경(54)"·"신지현(1,3)"·"정진영(조하빈)"(순번교환)·"우겸조(찾근)" 해석. ──
