@@ -217,6 +217,20 @@ function parseCutoffText(article) {
   return { display: m[2], holder: m[4] || m[3] || m[2], pos: m[1] ? Number(m[1]) : null };
 }
 
+// "스페어N번 ○○(님)" 스페어 앵커 — 그 사람이 스페어 N번 = 순번(그 사람)−N 까지 근무 확정.
+//  ★사람을 콕 집는 최우선 커트 근거(='까지 근무'와 동급). 변동 크롭이라 티오프표(gridMax)가 덜 읽혀도 이 앵커가 확정선을 바로잡음.
+//   예: "24팀 … 스페어1번 장성원님" + 장성원=순번25 → 커트 24(김동우까지 근무). 괄호 점유자 우선(자리 주인).
+const SPARE_RE = /스페어\s*(\d{1,2})\s*번\s*([가-힣]{2,4})\s*(?:\(\s*([가-힣]{2,4})\s*\)\s*)?님?/;
+function parseSpareAnchor(article) {
+  const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
+  const m = t.match(SPARE_RE);
+  if (!m) return null;
+  const clean = (x) => String(x || '').replace(/님$/, '').trim();
+  const spareNum = Number(m[1]);
+  if (!(spareNum >= 1 && spareNum <= 40)) return null;
+  return { spareNum, display: clean(m[2]), holder: clean(m[3] || m[2]) };
+}
+
 // 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
 //  · 표기 이름은 그대로 두되(예: "송민지님까지" 문구), 위치는 실제 주인(박준서=18) 자리로.
 function resolveCutoff(verdict, article, today = null) {
@@ -240,6 +254,24 @@ function resolveCutoff(verdict, article, today = null) {
     if (roster.length && !(Number(verdict.cutoffPosition) > 0)) {
       const cpos = rosterPosOf(roster, holder);
       if (cpos > 0) verdict.cutoffPosition = cpos;
+    }
+  }
+  // ── 스페어 앵커 최우선 오버라이드: "스페어N번 ○○" → 커트 = ○○ 순번 − N. ──
+  //  변동 크롭의 티오프표가 덜 읽혀 gridMax가 낮게 나와도(예: 컷20) 사람을 콕 집은 이 앵커로 확정선을 바로잡는다.
+  //  오탐 방지: (1)이름이 3부 정본 명단(roster3)에 실재 (2)커트가 [1, 명단길이] 범위. 둘 다 아니면 무시(기존 유지).
+  const sa = parseSpareAnchor(article);
+  if (sa) {
+    const canon = (Array.isArray(today?.roster3) && today.roster3.length) ? today.roster3 : roster;  // 정본 전체명단 우선
+    let spos = canon.length ? rosterPosOf(canon, sa.holder) : 0;
+    if (!(spos > 0) && roster.length) spos = rosterPosOf(roster, sa.holder);
+    const scut = spos - sa.spareNum;
+    const rlen = canon.length || roster.length;
+    if (spos > 0 && scut >= 1 && (!rlen || scut <= rlen)) {
+      verdict.cutoffAnnounced = true;
+      verdict.cutoffPosition = scut;
+      const cutName = canon[scut - 1] || roster[scut - 1] || '';
+      if (cutName) verdict.cutoffName = snapName(normRosterName(cutName).name);
+      verdict._cutSource = `스페어앵커(${sa.display} 스페어${sa.spareNum}번→컷${scut})`;
     }
   }
 }
