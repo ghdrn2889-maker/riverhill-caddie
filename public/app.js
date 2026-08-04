@@ -2636,6 +2636,21 @@ function obPromptTap() {
 //  audience 'admin'(테스트=관리자만) / 'all'(전체). 확인하면 /api/notice/seen 기록 → 다시 안 뜸.
 //  오디오는 가입 연출과 동일 합성 재사용(obActx·obPrinterLoop·obEjectSound). 출력/배출은 전용(display 제어).
 let _noticeChecked = false, _faxId = null;
+// 로컬 열람 캐시 — 서버 seen 반영 전(콜드 재시작·앱 종료 레이스)에도 재출력 방지.
+function noticeSeenSet() {
+  try { const a = JSON.parse(localStorage.getItem('noticeSeen') || '[]'); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+// 표시 즉시 '본 것'으로 확정 — localStorage 즉시 + keepalive POST(앱을 바로 닫아도 서버 도달).
+function markNoticeSeen(id) {
+  if (!id) return;
+  try {
+    const a = noticeSeenSet();
+    if (!a.includes(id)) { a.push(id); while (a.length > 300) a.shift(); localStorage.setItem('noticeSeen', JSON.stringify(a)); }
+  } catch { /* 무해 */ }
+  try { fetch('/api/notice/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), keepalive: true }).catch(() => {}); }
+  catch { /* 무해 */ }
+}
 async function checkNotice() {
   if (_noticeChecked) return; _noticeChecked = true;
   try {
@@ -2647,7 +2662,7 @@ async function checkNotice() {
     if (!$('faxOv').hidden) return;
     const r = await (await fetch('/api/notice/pending')).json();
     const n = r && r.notice;
-    if (n && n.id) playFax(n);
+    if (n && n.id && !noticeSeenSet().includes(n.id)) playFax(n);   // 로컬 가드 — 서버 반영 전 재출력 차단
   } catch { /* 무해 */ }
 }
 function fmtNoticeDate(ts) {
@@ -2656,6 +2671,7 @@ function fmtNoticeDate(ts) {
 }
 function playFax(n) {
   _faxId = n.id;
+  markNoticeSeen(n.id);   // 표시 즉시 열람 확정 — 콜드 재시작/앱 종료에도 재출력 방지(핵심)
   const nm = (meState && meState.profile && meState.profile.boardName) || '회원';
   $('fxTo').textContent = nm + ' 님';
   $('fxAdmin').textContent = n.admin || '관리자';
@@ -2713,7 +2729,7 @@ async function faxConfirm() {
   const ok = $('fxOk'); if (ok.disabled) return; ok.disabled = true; ok.classList.remove('pulse');
   $('faxOv').style.overflow = 'hidden';             // 배출 애니메이션이 스크롤 영역을 늘리지 않게 잠금
   faxEjectFeed($('fxFeed'));                        // 뜯겨 배출
-  if (_faxId) { try { postJSON('/api/notice/seen', { id: _faxId }); } catch { /* 무해 */ } }
+  if (_faxId) markNoticeSeen(_faxId);   // 표시 때 이미 기록됨 — 확인 시 재확정(멱등)
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   await obSleep(reduce ? 150 : 760);
   const ov = $('faxOv'); ov.style.transition = 'opacity .5s ease'; ov.style.opacity = '0';
