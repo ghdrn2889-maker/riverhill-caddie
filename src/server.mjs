@@ -28,6 +28,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
+import { ingestVerdict as dayboardIngest, summarize as dayboardSummary } from './dayboard.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -1071,6 +1072,13 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
   rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
+
+  // ── 칠판(dayboard) 섀도우 피드 — 이 판독을 시각순 이벤트로 칠판에 기록(3부 경로 불변, 파일에만 씀) ──
+  //  검증 전까지 출력엔 안 씀. 모니터에서 현 출력과 대조해 칠판이 맞다고 확인되면 화면들을 칠판으로 스위치.
+  try {
+    const dbISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || new Date().toISOString().slice(0, 10);
+    dayboardIngest(dbISO, full, out.rawVerdict || {});
+  } catch (e) { console.error('[칠판 섀도우]', e.message); }
 
   // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
