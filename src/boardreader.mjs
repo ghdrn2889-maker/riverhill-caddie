@@ -146,7 +146,7 @@ async function readPartsOnce(img, sorted, cuts) {
       const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
       // ★3부 홀리스틱 우선(토글) — 명단·티오프를 이 크롭에서 '한 번에' 대응 판독(순번↔시각 어긋남 원천 차단).
       //  부실(명단 심각부족)하면 아래 기존 분할 판독으로 폴백. 티오프 배열은 verdictFromPart이 그대로 소비.
-      if (b.part === '3' && useHolisticP3()) {
+      if (String(b.part) === '3' && useHolisticP3()) {
         try {
           const h = await readPart3Holistic(cropPath);
           if (h && Array.isArray(h.roster) && h.roster.length) {
