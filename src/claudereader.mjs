@@ -259,6 +259,58 @@ export async function readOffList(imagePath) {
   } catch { return null; }
 }
 
+// ── 조편성표 '조 열분할' 판독 ──────────────────────────────
+//  통짜 크루 크롭은 다열이 빽빽해 이름을 '다른 유효 이름'으로 뭉갠다(박시윤→박신훈: 스냅으로도 못 잡음).
+//  조별로 따로 크롭해 단일열로 읽으면 해상도가 배로 올라 이름·근태가 안정(실측 8배에서 박시윤·서동명 또렷).
+const CREW_COLS_PROMPT = (
+  'Read the given local image with the Read tool. It is the 조편성표 (crew grid) of a Korean golf caddie board: '
+  + 'several vertical 조 blocks placed side by side, each block having columns [이름 | 근무 | 카트]. '
+  + 'For EACH 조 block, give its horizontal span {x0,x1} as fractions (0=left edge, 1=right edge OF THIS IMAGE), left to right. '
+  + 'Each span must cover the whole block (이름+근무+카트). Output ONLY strict JSON: {"cols":[{"x0":0.0,"x1":0.24},{"x0":0.25,"x1":0.49}]}'
+);
+export async function getCrewColumns(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 조열경계 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${CREW_COLS_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 조열경계 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/); if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const cols = (Array.isArray(j.cols) ? j.cols : [])
+      .map((c) => ({ x0: Number(c.x0), x1: Number(c.x1) }))
+      .filter((c) => c.x1 > c.x0 && c.x0 >= 0 && c.x1 <= 1);
+    return cols.length ? cols : null;
+  } catch { return null; }
+}
+
+// 단일 조 블록 [이름|근무|카트] 판독 → [{name,duty}]. 근무칸(색태그)에서 근태·근무유형을 함께 뽑는다.
+const CREW_COL_PROMPT = (
+  'Read the given local image with the Read tool. It is a SINGLE 조 block from a Korean golf caddie crew grid, columns [이름 | 근무 | 카트]. '
+  + 'Read EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
+  + 'For each row output the 이름 (name) and the 근무 cell value (a work/absence tag, or "" if blank). '
+  + 'Read the 근무 status using BOTH the text AND its cell color: 휴무 = YELLOW cell, 휴가 = GREEN cell, 병가 = light BLUE cell; '
+  + 'others (3부, 1,3, 54, 54h, 조출, 찾근, 선발, 당번, 배치, 정출, 마감, 격리, 연차, 반차, 월차) as written. '
+  + 'Skip rows that have no name. Output ONLY strict JSON: {"rows":[{"name":"정진영","duty":"3부"},{"name":"이수련","duty":"휴무"}]}'
+);
+export async function readCrewColumn(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 조 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${CREW_COL_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 조 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/); if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const rows = (Array.isArray(j.rows) ? j.rows : [])
+      .map((r) => ({ name: String(r?.name || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim(), duty: String(r?.duty || '').trim() }))
+      .filter((r) => /^[가-힣]{2,4}$/.test(r.name));
+    return rows;
+  } catch { return null; }
+}
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.

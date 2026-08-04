@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -90,6 +90,45 @@ async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
     for (const r of valid) names.push(r.name);   // 열 안은 위→아래 읽은 순서 그대로 누적
   }
   return names.length ? names : null;
+}
+
+// ★조편성표 열분할 근태 판독 — 조별로 단일 크롭해 이름·근태를 안정적으로(통짜 크롭의 이름 뭉갬 해결: 박시윤→박신훈 방지).
+//  흐름: 크루영역 크롭 → Claude가 조 x경계 검출 → 각 조 원본 fraction 역매핑(★좌측 여유로 첫 글자 잘림 방지) → 단일 조 판독.
+//  반환 [{name,reason}](스냅 전) 또는 null(조 경계 판독 실패 → 호출부가 통짜 폴백).
+const OFF_REASON_RE = /병가|휴가|연차|반차|월차|격리|휴무/;
+async function readOffByColumns(img) {
+  const crewPath = path.join(TMP, `crew_${Date.now()}.png`);
+  let meta;
+  try { meta = await runPy({ image: img, crop_only: crewPath, slice: { x0: 0.64, x1: 1.0, y1: 0.92, lmargin: 0 }, scale: 3 }, 45000); }
+  catch { return null; }
+  let cols = null;
+  try { cols = await getCrewColumns(crewPath); } catch { /* noop */ }
+  try { fs.unlinkSync(crewPath); } catch { /* noop */ }
+  const cx0 = Number(meta?.x0), cx1 = Number(meta?.x1), cy1 = Number(meta?.y1) || 0.92;
+  if (!cols || !cols.length || !Number.isFinite(cx0) || !(cx1 > cx0)) return null;   // 조 경계 실패 → 통짜 폴백
+  const cw = cx1 - cx0;
+  // 크루크롭 fraction → 원본 fraction. 조 경계는 다음 조 시작 직전까지로 클램프(중복 방지).
+  const cols2 = cols
+    .map((c) => ({ x0: cx0 + c.x0 * cw, x1: cx0 + c.x1 * cw }))
+    .filter((c) => c.x1 > c.x0).sort((a, b) => a.x0 - b.x0);
+  for (let i = 0; i < cols2.length - 1; i++) cols2[i].x1 = Math.min(cols2[i].x1, cols2[i + 1].x0 - 0.002);
+  console.log(`[boardreader] 조편성 열분할 ${cols2.length}조: ${cols2.map((c) => `${c.x0.toFixed(3)}~${c.x1.toFixed(3)}`).join(' | ')}`);
+  const out = [];
+  for (let k = 0; k < cols2.length; k++) {
+    const c = cols2[k];
+    const colPath = path.join(TMP, `crewcol_${Date.now()}_${k}.png`);
+    try {
+      // ★lmargin 0.01 — 조 왼쪽 이름 첫 글자 잘림 방지(jo4 실측: 천→변·전→변 좌측 잘림). 오른쪽은 카트열까지라 여유 충분.
+      await runPy({ image: img, crop_only: colPath, slice: { x0: c.x0, x1: c.x1, y1: cy1, lmargin: 0.01, margin: 0 }, scale: 8 }, 30000);
+      const rows = await readCrewColumn(colPath);
+      try { fs.unlinkSync(colPath); } catch { /* noop */ }
+      for (const r of (rows || [])) {
+        const m = OFF_REASON_RE.exec(String(r.duty || ''));
+        if (r.name && m) out.push({ name: r.name, reason: m[0] });
+      }
+    } catch (e) { console.error(`[boardreader] 조${k} 근태 오류:`, e.message); }
+  }
+  return out;
 }
 
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
@@ -181,18 +220,22 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   if (!best) return null;
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
-  // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표'의 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 1회 판독.
-  //  ★핵심: 전체판을 그냥 키우면 Claude Read가 긴 변을 다운샘플해 밀집 근무칸(노란 휴무)을 놓친다(2/10만 잡힘).
-  //   조편성표 영역만[x0.64~1.0] 크롭해 6배 → 근무칸까지 선명 → 실측 10/10 전원 검출. 명단 스냅으로 이름 정렬.
+  // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표' 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 판독.
+  //  ★조 열분할 우선: 통짜 크루 크롭은 다열이 빽빽해 이름을 다른 유효이름으로 뭉갠다(박시윤→박신훈, 스냅으로도 못 잡음).
+  //   조별 단일 크롭(8배)이면 이름·근태 안정(실측 박시윤·서동명 정확). 조 경계 실패 시 통짜 크루 크롭(6배)으로 폴백.
+  //   ★로컬 VLM은 이 판독에 못 씀(qwen2.5vl 실측 2명만 뱉음) → Claude로만.
   let offList = [];
   if (claudeBudgetLeft() > 0) {
     try {
-      const offPath = path.join(TMP, `off_${Date.now()}.png`);
-      await runPy({ image: img, crop_only: offPath, slice: { x0: 0.64, x1: 1.0, y1: 0.92, lmargin: 0 }, scale: 6 }, 45000);
-      const ol = await readOffList(offPath);
-      try { fs.unlinkSync(offPath); } catch { /* noop */ }
-      if (Array.isArray(ol)) {
-        offList = ol.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
+      let raw = await readOffByColumns(img);              // 조 열분할(이름 안정)
+      if (raw == null) {                                   // 조 경계 실패 → 통짜 크루 크롭 폴백
+        const offPath = path.join(TMP, `off_${Date.now()}.png`);
+        await runPy({ image: img, crop_only: offPath, slice: { x0: 0.64, x1: 1.0, y1: 0.92, lmargin: 0 }, scale: 6 }, 45000);
+        raw = await readOffList(offPath);
+        try { fs.unlinkSync(offPath); } catch { /* noop */ }
+      }
+      if (Array.isArray(raw)) {
+        offList = raw.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
         console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
       }
     } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
