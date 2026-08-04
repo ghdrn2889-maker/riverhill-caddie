@@ -716,9 +716,13 @@ export function decide(article, verdict, member = memberFromEnv()) {
     }
   } else if (status === 'off') {
     // ★순번 제외(removed)는 쉼·사유를 단정하지 않고 사실만(문제가 생긴 걸 수도 있음).
+    //  ★offType 존중: 병가·휴가는 그대로 문구에 — '휴무'로 뭉뚱그리지 않는다(사용자 지적).
+    const offKind = verdict.offType === 'sick' ? '병가' : verdict.offType === 'vacation' ? '휴가' : '휴무';
     body = verdict._offReason === 'removed'
       ? `${name}님, ${verdict.dateLabel || '오늘'} 최신 배치표에서 순번이 빠졌어요.`
-      : `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`;
+      : (offKind === '휴무'
+          ? `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`
+          : `${name}님, ${verdict.dateLabel || '오늘'} ${offKind}로 확인됐어요. 편히 쉬세요`);
   }
 
   if (verdict.note && String(verdict.note).trim()) body += `\n${String(verdict.note).trim()}`;
@@ -1336,6 +1340,28 @@ export async function judge(article, today = null, member = memberFromEnv()) {
         verdict.part3Roster = base.slice();   // 이미 반영된 저장 명단 그대로(재적용 금지)
         verdict._swapKey = swapKey;
       }
+    }
+  }
+  // ── ★프레임 보호(당추 약한 크롭): 정본보다 '짧게' 읽힌 3부 변동 크롭은 이미지 명단·티오프표가 시프트돼
+  //  (예: 정본29→크롭27, 곽호완 22→20) 전원 순번이 밀린다 → 절대순번·팀수 어긋남. 이땐 크롭 이미지 데이터를
+  //  버리고 정본(today.roster3/teeGrid) 프레임으로 교체하고, 팀수는 프레임 무관한 공지 텍스트("24팀")로 재산출.
+  //  이래야 순번·컷·티오프가 한 프레임에서 일관 — 컷은 아래 resolveCutoff의 앵커(스페어N번·○○까지)로 확정.
+  //  ★주회원(judge) verdict가 곧 shared → interpretForMember가 그대로 물려받아 전 회원이 같은 정본 프레임을 씀.
+  if (verdict && Array.isArray(today?.roster3) && today.roster3.length && String(member.part) === '3') {
+    const cropLen = Array.isArray(verdict.part3Roster) ? verdict.part3Roster.filter(Boolean).length : 0;
+    const auth = verdict.rosterReliable === true && !!String(verdict.dateLabel || '').trim()
+      && (Number(verdict.teamCount) > 0 || Number(verdict.cutoffPosition) > 0) && cropLen >= 9;
+    const nd = String(verdict.dateLabel || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    const cdd = String(today.date || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    const sameDay = !nd || !cdd || (nd[1] === cdd[1] && nd[2] === cdd[2]);   // 크롭은 날짜 없음 → 같은 날 취급
+    if (cropLen > 0 && cropLen < today.roster3.filter(Boolean).length && !auth && sameDay) {
+      verdict.part3Roster = today.roster3.slice();       // 정본 프레임(순번 일관)
+      verdict.teeGrid = Array.isArray(today.teeGrid) ? today.teeGrid.slice() : [];
+      const blob = `${article.subject || ''}\n${article.text || article.contentText || article.content || ''}`;
+      const tc = extractTeamCount(blob, member) || extractBareTeamCount(article.subject, article.text || article.contentText || article.content, member);
+      verdict.teamCount = tc || 0;                        // 크롭 저팀수 폐기 → 공지 텍스트 팀수(예:24)로, 없으면 앵커가 채움
+      verdict.rosterReliable = false;                    // 이 크롭은 정본 아님(프레임만 빌려씀)
+      verdict._frameFrozen = `약한크롭 ${cropLen}<정본 ${today.roster3.filter(Boolean).length} → 정본프레임+텍스트팀수${tc || '(앵커)'}`;
     }
   }
   // ★커트라인 위치를 (교환 후) 명단에서 괄호 점유자 기준으로 확정 → 본인 순번·근무/스페어 최종 재확정.

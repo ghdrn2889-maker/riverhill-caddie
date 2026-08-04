@@ -245,9 +245,23 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   if (gridMax > 0) next.cutLine = Math.max(gridMax, annCut);                     // 배치표 기준(이번 표)
   else if (annCut > 0) next.cutLine = Math.max(annCut, Number(cur.cutLine) || 0); // 텍스트 커트라인
 
+  // ── ★프레임 보호: 약한 변동 크롭이 정본(전체 배치표) 명단 프레임을 '더 짧게' 덮지 않게 ──
+  //  당추 변동은 부분 크롭이라 명단을 덜 읽어(예: 정본29→크롭27) 전원 순번이 밀린다(곽호완 22→20 등).
+  //  그러면 절대순번·팀수가 어긋난다. 컷은 프레임과 무관한 공지 앵커(스페어N번·N팀·○○까지)로 결정되므로
+  //  프레임(명단·티오프표)은 정본 판독만 갱신하고, 약한 짧은 크롭은 기존 프레임을 얼려 유지한다.
+  //  판정: lastboard '정본' 기준과 동일(rosterReliable+날짜+팀수/컷+최소순번). 새 날·기존없음은 정상 갱신.
+  const _newRoster = Array.isArray(verdict.part3Roster) ? verdict.part3Roster : [];
+  const _curRoster = Array.isArray(cur.roster3) ? cur.roster3 : [];
+  const _dayChanged = cur.date && verdict.dateLabel && dayKey(cur.date) !== dayKey(verdict.dateLabel);
+  const _authoritative = verdict.rosterReliable === true && !!String(verdict.dateLabel || '').trim()
+    && (Number(verdict.teamCount) > 0 || Number(verdict.cutoffPosition) > 0) && _newRoster.length >= 9;
+  //  ★차단 대상 = '더 짧게' 덮는 약한 크롭만(같은 길이=대바 교환 등은 통과, 회귀 최소화).
+  const _wouldShrink = _curRoster.length > 0 && !_authoritative && !_dayChanged && _newRoster.length > 0 && _newRoster.length < _curRoster.length;
+  if (_wouldShrink) console.log(`·  [프레임보호] 약한 변동(명단 ${_newRoster.length} < 정본 ${_curRoster.length})이 명단·티오프표 프레임을 덮지 않음 — 컷은 공지 앵커로 반영`);
+
   // ── 3부 명단(화이트리스트): 본배치표에서 통째로 읽혔을 때만 저장/갱신 ──
   //  (짧은 소식은 part3Roster=[] 이므로 기존 명단을 그대로 유지) — 이후 이름 기반 필터의 근거.
-  if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length) {
+  if (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length && !_wouldShrink) {
     next.roster3 = verdict.part3Roster.slice();   // ★위치정렬 보존(빈칸 유지) — 순번 = index+1
     next.crossPart3 = (verdict.crossPartNames || []).filter(Boolean);
     next.rosterAt = Date.now();
@@ -258,7 +272,8 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
 
   // ── 티오프표(순번→시각) 저장 — 스페어 대시보드에서 확정자 티오프를 이름 옆에 표기하기 위함 ──
   //  (배치표 판독일 때만 채워짐. 텍스트 소식은 teeGrid 없음 → 기존 유지)
-  if (Array.isArray(verdict.teeGrid) && verdict.teeGrid.length) {
+  //  ★프레임보호: 짧은 크롭의 티오프표(어긋난 프레임)가 정본 순번↔시각을 덮지 않게(_wouldShrink면 스킵).
+  if (Array.isArray(verdict.teeGrid) && verdict.teeGrid.length && !_wouldShrink) {
     next.teeGrid = verdict.teeGrid
       .filter((g) => Number(g?.pos) > 0 && /\d{1,2}:\d{2}/.test(String(g?.time || '')))
       .map((g) => ({ pos: Number(g.pos), time: String(g.time), course: g.course || '' }));

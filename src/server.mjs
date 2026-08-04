@@ -817,7 +817,8 @@ function deriveScheduleRole(ai) {
   if (/휴무|휴가|병가/.test(ds)) role = 'off';
   else if (/\b54\b|54/.test(ds)) role = 'work';
   else if (new RegExp(`${part}부`).test(ds) || /2\s*[,、]\s*3/.test(ds)) role = 'spare';
-  const message = role === 'off' ? `${name}님, ${d} 휴무입니다. 편히 쉬세요`
+  const offKind = /병가/.test(ds) ? '병가' : /휴가/.test(ds) ? '휴가' : '휴무';
+  const message = role === 'off' ? (offKind === '휴무' ? `${name}님, ${d} 휴무입니다. 편히 쉬세요` : `${name}님, ${d} ${offKind}로 확인됐어요. 편히 쉬세요`)
     : role === 'work' ? `${name}님, ${d} 근무입니다 (출근 확정)`
     : role === 'spare' ? `${name}님, ${d} ${part}부 스페어(대기)입니다.`
     : (ai.message || `${name}님, ${d} 배치표 확인하세요`);
