@@ -74,21 +74,20 @@ async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
   // 넓힌 오른쪽이 '다음 열'을 물면 그 열 첫 이름을 중복 판독 → 다음 열 시작 직전까지로 제한(마지막 열은 여유 유지).
   for (let i = 0; i < cols.length - 1; i++) cols[i].x1 = Math.min(cols[i].x1, cols[i + 1].x0 - 0.003);
   console.log(`[boardreader] 부${part} 열크롭(crop ${cropX0.toFixed(3)}~${cropX1.toFixed(3)}): ${cols.map((c) => `${c.x0.toFixed(3)}~${c.x1.toFixed(3)}`).join(' | ')}`);
-  const names = [];
-  for (let k = 0; k < cols.length; k++) {
-    const c = cols[k];
+  // ★열 병렬(Promise.all) — 열은 서로 독립이라 동시 판독으로 속도↑. Promise.all이 열 순서(정렬됨)를 보존해 위치정렬 유지.
+  //  (부 3개는 순차 유지 — 무거운 부 판독 동시 발사는 429/명단 빈값 위험. 열 단위는 가벼워 병렬 안전.)
+  const perCol = await Promise.all(cols.map(async (c, k) => {
     const colPath = path.join(TMP, `col_${part}_${Date.now()}_${k}.png`);
-    let rows = null;
     try {
       await runPy({ image: img, crop_only: colPath, slice: { x0: c.x0, x1: c.x1, y1, lmargin: 0, margin: 0 }, scale: 6 }, 30000);
-      rows = await readColumnRoster(colPath);
+      const rows = await readColumnRoster(colPath);
       try { fs.unlinkSync(colPath); } catch { /* noop */ }
-    } catch (e) { console.error(`[boardreader] 부${part} 열${k} 오류:`, e.message); }
-    if (!rows || !rows.length) continue;
-    const valid = rows.filter((r) => _looksName(r.name));
-    if (valid.length < 2) continue;   // 명단 열 아님(티오프 등) → 스킵
-    for (const r of valid) names.push(r.name);   // 열 안은 위→아래 읽은 순서 그대로 누적
-  }
+      if (!rows || !rows.length) return [];
+      const valid = rows.filter((r) => _looksName(r.name));
+      return valid.length >= 2 ? valid.map((r) => r.name) : [];   // 명단 열 아님(티오프 등)이면 빈 배열
+    } catch (e) { console.error(`[boardreader] 부${part} 열${k} 오류:`, e.message); return []; }
+  }));
+  const names = perCol.flat();   // 열 순서 유지(위→아래 누적 순서 그대로)
   return names.length ? names : null;
 }
 
@@ -113,10 +112,10 @@ async function readOffByColumns(img) {
     .filter((c) => c.x1 > c.x0).sort((a, b) => a.x0 - b.x0);
   for (let i = 0; i < cols2.length - 1; i++) cols2[i].x1 = Math.min(cols2[i].x1, cols2[i + 1].x0 - 0.002);
   console.log(`[boardreader] 조편성 열분할 ${cols2.length}조: ${cols2.map((c) => `${c.x0.toFixed(3)}~${c.x1.toFixed(3)}`).join(' | ')}`);
-  const out = [];
-  for (let k = 0; k < cols2.length; k++) {
-    const c = cols2[k];
+  // ★조 병렬(Promise.all) — 조는 서로 독립이라 동시 판독으로 속도 회복(조 열분할이 더한 지연 상쇄).
+  const perJo = await Promise.all(cols2.map(async (c, k) => {
     const colPath = path.join(TMP, `crewcol_${Date.now()}_${k}.png`);
+    const found = [];
     try {
       // ★lmargin 0.01 — 조 왼쪽 이름 첫 글자 잘림 방지(jo4 실측: 천→변·전→변 좌측 잘림). 오른쪽은 카트열까지라 여유 충분.
       await runPy({ image: img, crop_only: colPath, slice: { x0: c.x0, x1: c.x1, y1: cy1, lmargin: 0.01, margin: 0 }, scale: 8 }, 30000);
@@ -124,11 +123,12 @@ async function readOffByColumns(img) {
       try { fs.unlinkSync(colPath); } catch { /* noop */ }
       for (const r of (rows || [])) {
         const m = OFF_REASON_RE.exec(String(r.duty || ''));
-        if (r.name && m) out.push({ name: r.name, reason: m[0] });
+        if (r.name && m) found.push({ name: r.name, reason: m[0] });
       }
     } catch (e) { console.error(`[boardreader] 조${k} 근태 오류:`, e.message); }
-  }
-  return out;
+    return found;
+  }));
+  return perJo.flat();
 }
 
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
