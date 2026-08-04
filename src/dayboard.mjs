@@ -149,10 +149,15 @@ function resolvePos(board, sel) {
 }
 
 // ── board → 순번 1..N 배열(정렬) ──
+//  spare 는 저장값이 아니라 '컷에서 파생' — 컷이 이동하면 근무/스페어가 즉시 따라감(낡은 spare 방지).
 export function teamsArray(board) {
   const out = [];
   const max = Math.max(0, ...Object.keys(board.teams).map(Number));
-  for (let i = 1; i <= max; i++) out.push(board.teams[i] || { pos: i, name: '', tee: '', course: '', spare: false });
+  for (let i = 1; i <= max; i++) {
+    const t = board.teams[i] || { pos: i, name: '', tee: '', course: '' };
+    const spare = board.cut > 0 ? i > board.cut : !!t.spare;
+    out.push({ ...t, pos: i, spare });
+  }
   return out;
 }
 
