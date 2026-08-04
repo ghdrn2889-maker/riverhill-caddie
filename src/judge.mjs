@@ -9,6 +9,11 @@ import { loadJSON } from './store.mjs';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
 import { readBoardClaudeVerdict, useClaudeReader } from './boardreader.mjs';
 
+// ★Gemini 판독 폴백 스위치 — 기본 OFF(더 이상 사용 안 함). Claude(주)+로컬VLM만 사용.
+//  Claude가 특정 부를 못 읽어도(부분 크롭에 그 부 없음) Gemini로 넘겨 429·과금을 일으키지 않는다.
+//  되살리려면 서버 .env 에 GEMINI_FALLBACK=1.
+const useGeminiFallback = () => ['1', 'true', 'yes'].includes(String(process.env.GEMINI_FALLBACK || '').toLowerCase());
+
 // ★관리자가 '진짜 동명이인'으로 등록한 이름들(data/homonyms.json = ["이지은", ...]).
 //  배치표에 같은 이름이 여러 순번에 뜨는 건 대개 '재인쇄'(같은 사람)라 기본은 접는다.
 //  단 이 목록의 이름만은 실제로 딴 사람이 섞인 것이라, 명단만으론 어느 자리가 회원인지 확정 못 함 → 배정 보류.
@@ -1198,21 +1203,22 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     verdict = await readBoardClaudeVerdict(article, member);
     if (verdict) console.log(`[claude] 판독 채택(${member.part}부 명단 ${verdict.part3Roster.length}·컷 ${verdict.cutoffPosition || '-'}·티 ${verdict.teeGrid.length})`);
     else {
-      console.log('[claude] 판독 실패/해당부 없음 → 폴백');
+      // ★'해당부 없음'(부분 크롭에 이 부 미포함)은 실패가 아님 — 조용히 스킵/기존상태 유지. Gemini는 기본 미사용(GEMINI_FALLBACK=1일 때만).
+      console.log(`[claude] 이 부(${member.part}) 판독 없음 → ${useLocalVLM() ? '로컬VLM' : (useGeminiFallback() ? 'Gemini' : '스킵(기존 유지)')}`);
       if (useLocalVLM()) verdict = await readBoardLocalVerdict(article, member);
-      if (!verdict) verdict = await readBoardConsensus(article, member);
+      if (!verdict && useGeminiFallback()) verdict = await readBoardConsensus(article, member);
     }
   } else if (isBoard && useLocalVLM()) {
     verdict = await readBoardLocalVerdict(article, member);
-    if (!verdict) { console.log('[localvlm] 판독 실패 → Gemini 폴백'); verdict = await readBoardConsensus(article, member); }
+    if (!verdict) { if (useGeminiFallback()) { console.log('[localvlm] 판독 실패 → Gemini 폴백'); verdict = await readBoardConsensus(article, member); } }
     else console.log(`[localvlm] 로컬 판독 채택(${verdict._source}, ${Math.round((verdict._ms || 0) / 1000)}s, 명단 ${verdict.part3Roster.length})`);
   } else if (isBoard) {
-    verdict = await readBoardConsensus(article, member);
+    if (useGeminiFallback()) verdict = await readBoardConsensus(article, member);
   } else {
-    // ★텍스트 당추·커트라인 글: 코드 정규식으로 먼저 판독(Gemini 0·크레딧 무관·스팸 제거). 신호 없으면 Gemini.
+    // ★텍스트 당추·커트라인 글: 코드 정규식으로 먼저 판독(Gemini 0·크레딧 무관·스팸 제거). 신호 없으면 Gemini(기본 OFF).
     verdict = codeReadTextVerdict(article, member, today);
     if (verdict) console.log(`[codetext] 코드 판독 채택(cut=${verdict.cutoffName || '-'}, team=${verdict.teamCount || '-'})`);
-    else verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
+    else if (useGeminiFallback()) verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
   }
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
@@ -1355,13 +1361,31 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     const cdd = String(today.date || '').match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
     const sameDay = !nd || !cdd || (nd[1] === cdd[1] && nd[2] === cdd[2]);   // 크롭은 날짜 없음 → 같은 날 취급
     if (cropLen > 0 && cropLen < today.roster3.filter(Boolean).length && !auth && sameDay) {
+      // ★크롭 티오프표를 '정본 프레임'으로 재매핑 — 크롭↔정본 순번 오프셋을 공유 이름 위치차 최빈값으로 검출.
+      //  크롭이 상단 N명을 덜 읽어 전원 −N 시프트여도, 크롭이 읽은 '현재(당추) 티오프 시각'을 정본 순번에 정확히 얹는다.
+      const cropRoster = verdict.part3Roster;
+      const canonRoster = today.roster3;
+      const nrm = (s) => String(s || '').replace(/\s/g, '').replace(/\(.*$/, '');
+      const canonPos = {};
+      canonRoster.forEach((n, i) => { const k = nrm(n); if (k && !(k in canonPos)) canonPos[k] = i + 1; });
+      const diffs = {};
+      cropRoster.forEach((n, i) => { const k = nrm(n); if (k && (k in canonPos)) { const d = canonPos[k] - (i + 1); diffs[d] = (diffs[d] || 0) + 1; } });
+      let off = null, bestc = 0;
+      for (const d in diffs) if (diffs[d] > bestc) { bestc = diffs[d]; off = Number(d); }
+      const canonLen = canonRoster.length;
+      if (off != null && bestc >= 3 && Array.isArray(verdict.teeGrid) && verdict.teeGrid.length) {
+        verdict.teeGrid = verdict.teeGrid                // 크롭 pos + off = 정본 pos (현재 당추 티오프 보존)
+          .map((g) => ({ pos: Number(g.pos) + off, time: g.time, course: g.course || '' }))
+          .filter((g) => g.pos >= 1 && g.pos <= canonLen && /\d{1,2}:\d{2}/.test(String(g.time || '')));
+      } else {
+        verdict.teeGrid = Array.isArray(today.teeGrid) ? today.teeGrid.slice() : [];   // 오프셋 불명 → 정본(직전) 유지
+      }
       verdict.part3Roster = today.roster3.slice();       // 정본 프레임(순번 일관)
-      verdict.teeGrid = Array.isArray(today.teeGrid) ? today.teeGrid.slice() : [];
       const blob = `${article.subject || ''}\n${article.text || article.contentText || article.content || ''}`;
       const tc = extractTeamCount(blob, member) || extractBareTeamCount(article.subject, article.text || article.contentText || article.content, member);
       verdict.teamCount = tc || 0;                        // 크롭 저팀수 폐기 → 공지 텍스트 팀수(예:24)로, 없으면 앵커가 채움
       verdict.rosterReliable = false;                    // 이 크롭은 정본 아님(프레임만 빌려씀)
-      verdict._frameFrozen = `약한크롭 ${cropLen}<정본 ${today.roster3.filter(Boolean).length} → 정본프레임+텍스트팀수${tc || '(앵커)'}`;
+      verdict._frameFrozen = `약한크롭 ${cropLen}<정본 ${canonLen} → 정본프레임(off=${off ?? '-'},티${verdict.teeGrid.length},팀수${tc || '앵커'})`;
     }
   }
   // ★커트라인 위치를 (교환 후) 명단에서 괄호 점유자 기준으로 확정 → 본인 순번·근무/스페어 최종 재확정.
