@@ -468,9 +468,11 @@ app.get('/api/today', (req, res) => {
   //  2부 스페어)를 절대 붙이지 않는다. 붙이면 pickFocus가 비대표 라운드를 히어로로 올려 '휴무'가 '스페어'로 납치됨.
   const primaryOff = t.status === 'off';
   for (const pp of ['1', '2', '3']) {
-    if (pp !== '3' && !minorPartOn) continue;   // ★섀도 단계: 1·2부는 대시보드 라운드에서 제외(유령 카드 방지)
-    if (pp !== primaryPart && primaryOff) continue;   // ★휴무 = 휴무: 다른 부 유령 라운드 억제
     const tp = (pp === primaryPart) ? t : loadToday(uid, pp);
+    // ★섀도 단계: 1·2부는 대시보드 라운드에서 제외(유령 카드 방지) — 단, 1부 '조출'(배치표 명시 태그·고신뢰)은 예외.
+    const isChulgn = pp === '1' && tp && tp.assign === 'chulgn' && ['assigned', 'work', 'your_turn'].includes(tp.status);
+    if (pp !== '3' && !minorPartOn && !isChulgn) continue;
+    if (pp !== primaryPart && primaryOff && !isChulgn) continue;   // ★휴무 = 휴무: 다른 부 유령 라운드 억제(조출은 실제 근무라 예외)
     if (!tp) continue;
     const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);
     const isSpare = ['spare', 'waiting', 'near'].includes(tp.status);
@@ -478,7 +480,8 @@ app.get('/api/today', (req, res) => {
     if (!isWork && !(isSpare && hasPos)) continue;
     // ★비대표부(1·2부) 근무는 '티오프 확정'된 것만 대시보드에 띄운다. 티오프 미정 근무는 섀도 단계 판독
     //  오검출(예: 2부 명단 오독으로 생긴 '근무 티오프 미정' 유령 카드) 소지가 커 카드로 노출하지 않음.
-    if (pp !== primaryPart && isWork && !tp.teeTime) continue;
+    //  (조출은 명시 태그라 티오프 미정이어도 노출 — 근무 자체는 확정.)
+    if (pp !== primaryPart && isWork && !tp.teeTime && !isChulgn) continue;
     const tpISO = worklog.labelToISO(tp.date);
     const sameDay = !tpISO || tpISO === tISO || (!tISO && tpISO >= todayISOKST());
     if (!sameDay) continue;
