@@ -24,6 +24,7 @@ import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
 import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
+import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
@@ -728,6 +729,20 @@ const PORT = Number(process.env.PORT || 3000);
 // HOST 기본값은 '0.0.0.0'(기존과 동일 — 홈서버·Tailscale Funnel 무영향). Lightsail 공존 배치에선
 //  .env에 HOST=127.0.0.1 로 두어 Apache 리버스 프록시 뒤 로컬 전용 바인딩(외부 직결 차단).
 const HOST = process.env.HOST || '0.0.0.0';
+// ── 관리자 공지(팩스 출력지) — 회원 앱이 열릴 때 미열람 공지 1건을 '출력 연출'로 표시 ──
+//  audience 'admin'이면 관리자 회원에게만(테스트). 'all'이면 전체. 열람하면 seen 기록 → 다시 안 뜸.
+app.get('/api/notice/pending', requireAuth, (req, res) => {
+  try {
+    const uid = Number(req.user.id);
+    const isAdmin = adminUserIds().map(Number).includes(uid);
+    res.json({ ok: true, notice: noticePendingFor(uid, isAdmin) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/notice/seen', requireAuth, (req, res) => {
+  try { const id = String(req.body?.id || ''); if (id) noticeMarkSeen(Number(req.user.id), id); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.listen(PORT, HOST, () => console.log(`🌐 서버 실행: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`));
 
 function saveRecent(article, result, ai) {

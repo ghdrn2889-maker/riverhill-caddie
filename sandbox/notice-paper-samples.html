@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공지 출력지 디자인 5종</title>
+<style>
+  :root{
+    --bg:#eceae2; --paper:#f5efe0; --paper2:#f0e9d4; --paperbd:#c9bfa2; --dash:#c7bd9e;
+    --ink:#26331f; --body:#3f3a24; --muted:#7a7050; --green:#104d31; --greenL:#3a5a40;
+    --accent:#2f7d55; --amber:#7a5310; --amberBg:#f0e4c6; --amberBd:#d9c79a; --seal:#b23b2e; --admin:#7a3f34;
+    --slot:#0c120c;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif; }
+  .head{ text-align:center; padding:26px 16px 6px; }
+  .head h1{ font-size:18px; font-weight:850; margin:0 0 4px; color:#1c2b22; }
+  .head p{ font-size:12px; color:#6b7268; margin:0; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:26px 22px;
+    max-width:1180px; margin:0 auto; padding:22px 20px 60px; }
+  .cell{ display:flex; flex-direction:column; align-items:center; }
+  .cell .tag{ font-size:11.5px; font-weight:850; letter-spacing:.02em; color:#2a3a30; margin:0 0 3px; }
+  .cell .tag b{ color:var(--accent); }
+  .cell .cap{ font-size:10.5px; color:#8a938b; margin:0 0 13px; }
+
+  /* 슬롯 립(출력기에서 막 나온 느낌) */
+  .lip{ width:86%; height:8px; background:linear-gradient(#37493a,#26331f); border-radius:6px 6px 3px 3px; position:relative; z-index:2; box-shadow:0 6px 12px rgba(20,30,20,.2); }
+  .lip::after{ content:''; position:absolute; left:8%; right:8%; bottom:2px; height:3px; background:var(--slot); border-radius:3px; box-shadow:inset 0 1px 2px #000; }
+
+  /* ── 공통 출력지 ── */
+  .paper{ position:relative; width:322px; max-width:100%; background:var(--paper);
+    border:1px solid var(--paperbd); border-top:0; padding:18px 20px 22px;
+    filter:drop-shadow(0 12px 22px rgba(40,32,15,.16));
+    -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x;
+            mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x; }
+  .title{ font-size:18px; font-weight:800; color:var(--ink); line-height:1.4; letter-spacing:-.01em; }
+  .body{ font-size:12.5px; line-height:1.85; color:var(--body); white-space:pre-wrap; }
+  .ok{ width:100%; margin-top:16px; padding:13px; border:0; cursor:pointer; background:var(--green); color:#f3efe0;
+    font-family:inherit; font-size:13.5px; font-weight:800; letter-spacing:.16em; box-shadow:0 5px 12px rgba(16,77,49,.2); }
+  .mono{ font-family:'Consolas','Menlo',monospace; }
+
+  /* ═══ A. 영수증 전표 ═══ */
+  .v-receipt{ background:repeating-linear-gradient(var(--paper) 0 28px,var(--paper2) 28px 29px); }
+  .rc-top{ text-align:center; }
+  .rc-brand{ font-size:11px; font-weight:850; letter-spacing:.22em; color:var(--greenL); }
+  .rc-sub{ font-family:'Consolas',monospace; font-size:9px; letter-spacing:.14em; color:var(--muted); margin-top:3px; }
+  .rc-dash{ border-top:1.5px dashed var(--dash); margin:11px 0; }
+  .rc-meta{ display:flex; justify-content:space-between; font-family:'Consolas',monospace; font-size:9.5px; color:var(--muted); letter-spacing:.03em; }
+  .rc-kind{ display:inline-block; margin:11px 0 5px; font-size:10px; font-weight:800; letter-spacing:.14em; color:var(--amber); background:var(--amberBg); border:1px solid var(--amberBd); border-radius:3px; padding:3px 9px; }
+  .rc-stars{ text-align:center; font-family:'Consolas',monospace; font-size:11px; letter-spacing:.4em; color:#b7ad8c; margin:13px 0 10px; }
+  .rc-foot{ display:flex; justify-content:space-between; font-family:'Consolas',monospace; font-size:10px; color:#4a4326; }
+  .rc-bars{ height:34px; margin:13px 0 5px; background:repeating-linear-gradient(90deg,#26331f 0 2px,transparent 2px 4px,#26331f 4px 5px,transparent 5px 9px); opacity:.82; }
+  .rc-serial{ text-align:center; font-family:'Consolas',monospace; font-size:10px; letter-spacing:.28em; color:#5a5238; }
+
+  /* ═══ B. 공문(공고문) ═══ */
+  .v-official{ padding-top:20px; }
+  .of-head{ text-align:center; }
+  .of-org{ font-size:15px; font-weight:850; letter-spacing:.05em; color:#22301c; }
+  .of-org2{ font-size:10.5px; color:var(--muted); letter-spacing:.14em; margin-top:2px; }
+  .of-rule{ border-top:2px solid var(--greenL); border-bottom:1px solid var(--greenL); height:3px; margin:11px 0 12px; }
+  .of-no{ text-align:center; font-family:'Consolas',monospace; font-size:9.5px; color:var(--muted); letter-spacing:.08em; margin-bottom:12px; }
+  .of-title{ text-align:center; font-size:17px; }
+  .of-recv{ font-size:10.5px; color:var(--greenL); font-weight:700; letter-spacing:.02em; margin:11px 0; padding:7px 0; border-top:1px dashed var(--dash); border-bottom:1px dashed var(--dash); }
+  .of-sign{ position:relative; margin-top:16px; text-align:center; }
+  .of-date{ font-size:12px; color:#3a3524; letter-spacing:.06em; }
+  .of-by{ font-size:15px; font-weight:800; color:#22301c; letter-spacing:.24em; margin-top:5px; }
+  .of-seal{ position:absolute; right:6px; top:-4px; width:52px; height:52px; border:2px solid var(--seal); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; text-align:center; color:var(--seal); transform:rotate(-9deg);
+    font-size:11px; font-weight:850; line-height:1.15; letter-spacing:.02em; box-shadow:inset 0 0 0 1.5px rgba(178,59,46,.35); opacity:.9; }
+
+  /* ═══ C. 팩스 표지 ═══ */
+  .v-fax .fx-hd{ display:flex; align-items:center; gap:7px; font-family:'Consolas',monospace; font-size:12px; font-weight:800; letter-spacing:.12em; color:#22301c; }
+  .v-fax .fx-hd .sq{ width:11px; height:11px; background:var(--greenL); }
+  .fx-line{ border-top:2px solid #26331f; margin:9px 0 11px; }
+  .fx-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; margin-bottom:11px; }
+  .fx-grid .fx-c{ border:1px solid #cdbf9c; padding:6px 8px; }
+  .fx-grid small{ display:block; font-family:'Consolas',monospace; font-size:8px; letter-spacing:.14em; color:#9a8f68; margin-bottom:3px; }
+  .fx-grid .fx-v{ font-size:12px; font-weight:700; color:var(--ink); }
+  .fx-tags{ display:flex; gap:6px; margin-bottom:12px; }
+  .fx-tags span{ display:flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:var(--muted); }
+  .fx-tags .box{ width:12px; height:12px; border:1.5px solid #a99a72; display:inline-block; position:relative; }
+  .fx-tags .on{ color:#22301c; }
+  .fx-tags .on .box{ border-color:var(--greenL); background:var(--greenL); }
+  .fx-tags .on .box::after{ content:''; position:absolute; left:3px; top:0px; width:4px; height:8px; border:solid #f5efe0; border-width:0 2px 2px 0; transform:rotate(40deg); }
+  .fx-foot{ text-align:center; font-family:'Consolas',monospace; font-size:9.5px; letter-spacing:.1em; color:var(--muted); margin-top:13px; }
+
+  /* ═══ D. 뉴스레터 ═══ */
+  .v-news{ padding-top:20px; }
+  .nw-mast{ display:flex; align-items:baseline; justify-content:space-between; }
+  .nw-name{ font-size:20px; font-weight:850; letter-spacing:-.01em; color:#1c2b22; }
+  .nw-meta{ font-family:'Consolas',monospace; font-size:9px; color:var(--muted); letter-spacing:.06em; }
+  .nw-rule{ height:4px; border-top:2.5px solid #26331f; border-bottom:1px solid #26331f; margin:9px 0 13px; }
+  .nw-eye{ font-size:9.5px; font-weight:800; letter-spacing:.22em; color:var(--accent); margin-bottom:6px; }
+  .nw-title{ font-size:18px; line-height:1.35; }
+  .nw-body{ margin-top:10px; }
+  .nw-body::first-letter{ font-size:30px; font-weight:800; color:var(--greenL); float:left; line-height:.9; padding:2px 7px 0 0; }
+  .nw-orn{ display:flex; align-items:center; gap:9px; margin:13px 0 9px; color:#b7ad8c; }
+  .nw-orn i{ flex:1; height:0; border-top:1px solid #d3caa9; }
+  .nw-orn .d{ width:6px; height:6px; background:#b7ad8c; transform:rotate(45deg); }
+  .nw-foot{ text-align:center; font-size:10px; color:var(--muted); letter-spacing:.02em; }
+
+  /* ═══ E. 메모(게시) ═══ */
+  .v-memo .mm-hd{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .mm-tag{ font-family:'Consolas',monospace; font-size:12px; font-weight:850; letter-spacing:.16em; color:#f3efe0; background:#26331f; padding:5px 11px; border-radius:3px; }
+  .mm-req{ font-size:10px; font-weight:800; letter-spacing:.06em; color:var(--seal); border:1.5px solid var(--seal); border-radius:99px; padding:3px 10px; transform:rotate(-3deg); }
+  .mm-line{ display:flex; gap:8px; font-size:12.5px; padding:6px 0; border-bottom:1px dotted #d3caa9; }
+  .mm-line small{ flex-shrink:0; width:38px; font-size:9.5px; color:var(--muted); letter-spacing:.06em; padding-top:2px; font-weight:700; }
+  .mm-line b{ color:var(--ink); font-weight:700; }
+  .mm-body{ margin-top:12px; padding:11px 0 3px 13px; border-left:3px solid #d9a931; }
+
+  @media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>공지 출력지 디자인 5종</h1>
+    <p>현재 출력지를 베이스로 한 변주 — 마음에 드는 방향을 골라주세요</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- A. 영수증 전표 -->
+    <div class="cell">
+      <div class="tag"><b>A</b> · 영수증 전표</div>
+      <div class="cap">지금 것의 정밀판 — 바코드·일련번호·별점 구분선</div>
+      <div class="lip"></div>
+      <div class="paper v-receipt">
+        <div class="rc-top">
+          <div class="rc-brand">RIVERHILL CADDIE</div>
+          <div class="rc-sub">CADDIE NOTICE · 공지 전표</div>
+        </div>
+        <div class="rc-dash"></div>
+        <div class="rc-meta"><span>NO. 20260805-001</span><span>08/05 (화)</span></div>
+        <div class="rc-kind">공지사항</div>
+        <div class="title">배치표 판독 지연 정정 안내</div>
+        <div class="body" style="margin-top:9px">어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다. 휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 정정된 오늘 일정으로 다시 안내드려요.</div>
+        <div class="rc-stars">* * * * * * *</div>
+        <div class="rc-foot"><span>발신 · 관리자 김홍구</span><span>APPROVED</span></div>
+        <div class="rc-bars"></div>
+        <div class="rc-serial">RH-NOTICE-0805</div>
+        <button class="ok">확 인</button>
+      </div>
+    </div>
+
+    <!-- B. 공문 -->
+    <div class="cell">
+      <div class="tag"><b>B</b> · 공문(공고문)</div>
+      <div class="cap">격식 있는 문서 — 레터헤드·관인 도장</div>
+      <div class="lip"></div>
+      <div class="paper v-official">
+        <div class="of-head">
+          <div class="of-org">리버힐 컨트리클럽</div>
+          <div class="of-org2">캐디 운영팀</div>
+        </div>
+        <div class="of-rule"></div>
+        <div class="of-no">리버힐-캐디 제2026-15호</div>
+        <div class="title of-title">배치표 판독 지연 정정 안내</div>
+        <div class="of-recv">수신 · 전 캐디 &nbsp;|&nbsp; 참조 · 3부</div>
+        <div class="body">어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다. 휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 정정된 오늘 일정으로 다시 안내드립니다.</div>
+        <div class="of-sign">
+          <div class="of-date">2026년 8월 5일</div>
+          <div class="of-by">김 홍 구</div>
+          <div class="of-seal">리버힐<br>C·C</div>
+        </div>
+        <button class="ok">확 인</button>
+      </div>
+    </div>
+
+    <!-- C. 팩스 표지 -->
+    <div class="cell">
+      <div class="tag"><b>C</b> · 팩스 표지</div>
+      <div class="cap">출력기(팩스) 콘셉트에 딱 — 수·발신 양식</div>
+      <div class="lip"></div>
+      <div class="paper v-fax">
+        <div class="fx-hd"><span class="sq"></span>FAX TRANSMISSION</div>
+        <div class="fx-line"></div>
+        <div class="fx-grid">
+          <div class="fx-c"><small>TO</small><div class="fx-v">홍길동 님</div></div>
+          <div class="fx-c"><small>FROM</small><div class="fx-v">관리자 김홍구</div></div>
+          <div class="fx-c"><small>DATE</small><div class="fx-v mono">2026-08-05</div></div>
+          <div class="fx-c"><small>PAGES</small><div class="fx-v mono">1 / 1</div></div>
+        </div>
+        <div class="fx-tags">
+          <span class="on"><i class="box"></i>회람</span>
+          <span><i class="box"></i>긴급</span>
+          <span class="on"><i class="box"></i>확인요망</span>
+        </div>
+        <div class="title">배치표 판독 지연 정정 안내</div>
+        <div class="body" style="margin-top:9px">어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다. 휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 정정된 오늘 일정으로 다시 안내드려요.</div>
+        <div class="fx-foot">— TRANSMISSION OK · RIVERHILL —</div>
+        <button class="ok">확 인</button>
+      </div>
+    </div>
+
+    <!-- D. 뉴스레터 -->
+    <div class="cell">
+      <div class="tag"><b>D</b> · 뉴스레터</div>
+      <div class="cap">소식지 느낌 — 마스트헤드·발행호수·드롭캡</div>
+      <div class="lip"></div>
+      <div class="paper v-news">
+        <div class="nw-mast">
+          <div class="nw-name">리버힐 소식</div>
+          <div class="nw-meta">제15호 · 2026.08.05</div>
+        </div>
+        <div class="nw-rule"></div>
+        <div class="nw-eye">ANNOUNCEMENT · 관리자 공지</div>
+        <div class="title nw-title">배치표 판독 지연 정정 안내</div>
+        <div class="body nw-body">어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다. 휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 정정된 오늘 일정으로 다시 안내드려요.</div>
+        <div class="nw-orn"><i></i><span class="d"></span><i></i></div>
+        <div class="nw-foot">리버힐 캐디 소식지 · 발행 관리자 김홍구</div>
+        <button class="ok">확 인</button>
+      </div>
+    </div>
+
+    <!-- E. 메모(게시) -->
+    <div class="cell">
+      <div class="tag"><b>E</b> · 메모(게시)</div>
+      <div class="cap">사내 게시 메모 — 항목형·확인요망 태그</div>
+      <div class="lip"></div>
+      <div class="paper v-memo">
+        <div class="mm-hd"><span class="mm-tag">MEMO</span><span class="mm-req">확인 요망</span></div>
+        <div class="mm-line"><small>제목</small><b>배치표 판독 지연 정정 안내</b></div>
+        <div class="mm-line"><small>대상</small><b>전 캐디</b></div>
+        <div class="mm-line"><small>작성</small><b>관리자 김홍구 · 08/05</b></div>
+        <div class="body mm-body">어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다. 휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 정정된 오늘 일정으로 다시 안내드려요.</div>
+        <button class="ok">확 인</button>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

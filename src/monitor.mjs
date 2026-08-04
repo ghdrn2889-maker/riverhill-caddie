@@ -14,6 +14,7 @@ import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge
 import * as worklog from './worklog.mjs';
 import { DATA_DIR } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
+import { addNotice, listNotices } from './notices.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -542,6 +543,22 @@ app.post('/api/board-correct', gate, async (req, res) => {
   }
   console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
   res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
+});
+
+// ── 공지(팩스 출력지) 작성·발송 — 회원 앱이 열릴 때 출력 연출로 표시. ──
+//  audience: 'admin'(테스트=관리자만) | 'all'(전체). 미지정이면 안전하게 관리자만.
+app.post('/api/notice', gate, (req, res) => {
+  try {
+    const { title, body, audience, admin } = req.body || {};
+    if (!String(title || '').trim() || !String(body || '').trim()) return res.status(400).json({ ok: false, error: '제목·내용을 모두 입력해주세요.' });
+    const n = addNotice({ title, body, admin: admin || '김홍구', audience });
+    console.log(`[notice] 공지 발송 — "${n.title}" (대상 ${n.audience === 'all' ? '전체' : '관리자만'})`);
+    res.json({ ok: true, notice: n, audience: n.audience });
+  } catch (e) { console.error('notice 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+app.get('/api/notice/list', gate, (req, res) => {
+  try { res.json({ ok: true, notices: listNotices().slice(-20).reverse() }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));

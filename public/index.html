@@ -1095,6 +1095,77 @@
     @keyframes ob-printerpulse { 0% { box-shadow:0 0 0 0 rgba(120,197,150,.5); } 70% { box-shadow:0 0 0 13px rgba(120,197,150,0); } 100% { box-shadow:0 0 0 0 rgba(120,197,150,0); } }
     @media (prefers-reduced-motion:reduce) { #obOv .feed, #obOv .welcome { transition-duration:.01s; } #obOv .printer.run, #obOv .ob-taphint, #obOv .printer.await::after { animation:none; } }
 
+    /* ── 관리자 공지(팩스 출력지) 연출 — 출력기(팩스) + 디자인C 표지 ── */
+    #faxOv.scov { padding:0; background:#fbfbf9; overflow:hidden; }
+    #faxOv.scov:not([hidden]) { display:block; }
+    #faxOv .fx-stage { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:12vh 16px 44px; }
+    #faxOv .fx-col { width:400px; max-width:94vw; }
+    /* 출력기 본체 */
+    #faxOv .machine { position:relative; z-index:3; width:100%;
+      background:linear-gradient(#42563f,#2b3823 62%,#212c1c); border-radius:15px 15px 9px 9px;
+      box-shadow:0 12px 24px rgba(20,30,20,.30), inset 0 1px 0 rgba(255,255,255,.08); padding:13px 15px 16px; }
+    #faxOv .machine.printing { animation:fx-shake .09s linear infinite; }
+    @keyframes fx-shake { 0%,100%{transform:translateY(0)} 25%{transform:translateY(-.6px)} 75%{transform:translateY(.6px)} }
+    #faxOv .m-row { display:flex; align-items:center; justify-content:space-between; }
+    #faxOv .m-brand { display:flex; flex-direction:column; gap:2px; }
+    #faxOv .m-brand b { font-size:10.5px; letter-spacing:.16em; color:#cde0bd; font-weight:800; }
+    #faxOv .m-brand span { font-size:8px; letter-spacing:.26em; color:#8fa87f; font-weight:700; }
+    #faxOv .m-actions { display:flex; align-items:center; gap:8px; }
+    #faxOv .m-print { display:inline-flex; align-items:center; gap:5px; border:0; cursor:pointer; font-family:inherit;
+      background:linear-gradient(#3f7a4e,#2b5e39); color:#eafff0; border-radius:7px; padding:6px 11px; font-size:9.5px; font-weight:800; letter-spacing:.12em;
+      box-shadow:0 2px 0 #143d22, 0 3px 6px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.14); transition:transform .06s, box-shadow .06s, filter .3s; }
+    #faxOv .m-print svg { width:12px; height:12px; fill:none; stroke:#eafff0; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    #faxOv .m-print.pressed, #faxOv .m-print:active { transform:translateY(2px); box-shadow:0 0 0 #143d22, 0 1px 3px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.1); }
+    #faxOv .m-print.await { animation:fx-btnpulse 1.5s ease-in-out infinite; }
+    @keyframes fx-btnpulse { 0%,100%{filter:brightness(1);} 50%{filter:brightness(1.18);} }
+    #faxOv .m-ready { display:flex; align-items:center; gap:6px; font-size:8.5px; font-weight:800; letter-spacing:.14em; color:#b7d69a; background:rgba(0,0,0,.22); padding:5px 9px; border-radius:99px; }
+    #faxOv .m-led { width:8px; height:8px; border-radius:50%; background:#c6f24e; box-shadow:0 0 8px #c6f24e; animation:fx-blink 1.3s steps(1) infinite; }
+    #faxOv .machine.printing .m-led { animation-duration:.28s; }
+    @keyframes fx-blink { 50%{opacity:.4;} }
+    #faxOv .m-display { margin:11px 0 12px; background:#0e150c; border-radius:8px; box-shadow:inset 0 1px 5px rgba(0,0,0,.6); padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    #faxOv .dtext { display:flex; flex-direction:column; gap:4px; min-width:0; }
+    #faxOv .dlabel { display:flex; align-items:center; gap:5px; font-family:'Consolas','Menlo',monospace; font-size:8px; letter-spacing:.2em; color:#6f9a4a; font-weight:700; }
+    #faxOv .ndot { width:6px; height:6px; border-radius:50%; background:#a8e06a; box-shadow:0 0 6px #a8e06a; animation:fx-blink 1s steps(1) infinite; }
+    #faxOv .dmain { font-family:'Consolas','Menlo',monospace; font-size:12px; letter-spacing:.01em; color:#a8e06a; text-shadow:0 0 6px rgba(150,224,90,.45); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #faxOv .dbars { display:flex; gap:2px; align-items:flex-end; height:13px; flex-shrink:0; opacity:.3; transition:opacity .2s; }
+    #faxOv .machine.printing .dbars { opacity:1; }
+    #faxOv .dbars i { width:3px; background:#4a6a30; border-radius:1px; }
+    #faxOv .machine.printing .dbars i { animation:fx-eq 1s ease-in-out infinite; }
+    #faxOv .dbars i:nth-child(1){height:40%;animation-delay:0s;} #faxOv .dbars i:nth-child(2){height:80%;animation-delay:.15s;}
+    #faxOv .dbars i:nth-child(3){height:55%;animation-delay:.3s;} #faxOv .dbars i:nth-child(4){height:95%;animation-delay:.45s;}
+    @keyframes fx-eq { 0%,100%{transform:scaleY(.5);} 50%{transform:scaleY(1);} }
+    #faxOv .m-vents { display:flex; gap:4px; margin:0 0 11px; }
+    #faxOv .m-vents i { flex:1; height:3px; border-radius:2px; background:rgba(0,0,0,.22); box-shadow:inset 0 1px 1px rgba(0,0,0,.4); }
+    #faxOv .m-slot { position:relative; height:9px; margin:0 auto; width:90%; background:#0c120c; border-radius:5px; box-shadow:inset 0 2px 4px #000, 0 1px 0 rgba(255,255,255,.05); }
+    #faxOv .m-slot::after { content:''; position:absolute; left:6px; right:6px; top:3px; height:2px; background:rgba(120,150,110,.15); border-radius:2px; }
+    /* 출력물(디자인 C · 팩스 표지) */
+    #faxOv .feed { width:93%; margin:-4px auto 0; overflow:hidden; filter:drop-shadow(0 12px 20px rgba(40,32,15,.20)); display:none; }
+    #faxOv .feed > * { will-change:transform; }
+    #faxOv .paper { position:relative; background:repeating-linear-gradient(#f5efe0 0 29px, #f0e9d4 29px 30px);
+      border:1px solid #c9bfa2; border-top:0; padding:17px 18px 22px;
+      -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x;
+              mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x; }
+    #faxOv .fx-hd { display:flex; align-items:center; gap:7px; font-family:'Consolas',monospace; font-size:12px; font-weight:800; letter-spacing:.12em; color:#22301c; }
+    #faxOv .fx-hd .sq { width:11px; height:11px; background:#3a5a40; }
+    #faxOv .fx-line { border-top:2px solid #26331f; margin:9px 0 11px; }
+    #faxOv .fx-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; margin-bottom:11px; }
+    #faxOv .fx-c { border:1px solid #cdbf9c; padding:6px 8px; }
+    #faxOv .fx-c small { display:block; font-family:'Consolas',monospace; font-size:8px; letter-spacing:.14em; color:#9a8f68; margin-bottom:3px; }
+    #faxOv .fx-c .fx-v { font-size:12px; font-weight:700; color:#26331f; }
+    #faxOv .fx-tags { display:flex; gap:6px; margin-bottom:12px; }
+    #faxOv .fx-tags span { display:flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:#7a7050; }
+    #faxOv .fx-tags .box { width:12px; height:12px; border:1.5px solid #a99a72; display:inline-block; position:relative; }
+    #faxOv .fx-tags .on { color:#22301c; } #faxOv .fx-tags .on .box { border-color:#3a5a40; background:#3a5a40; }
+    #faxOv .fx-tags .on .box::after { content:''; position:absolute; left:3px; top:0; width:4px; height:8px; border:solid #f5efe0; border-width:0 2px 2px 0; transform:rotate(40deg); }
+    #faxOv .fx-title { font-size:19px; color:#26331f; font-weight:800; letter-spacing:-.01em; line-height:1.4; margin-top:2px; }
+    #faxOv .fx-body { font-size:12.5px; line-height:1.9; color:#3f3a24; white-space:pre-wrap; word-break:break-word; padding:11px 0 2px; }
+    #faxOv .fx-foot { text-align:center; font-family:'Consolas',monospace; font-size:9.5px; letter-spacing:.1em; color:#7a7050; margin-top:13px; }
+    #faxOv .fx-ok { width:100%; margin-top:16px; padding:14px; border:0; border-radius:2px; cursor:pointer; background:#104d31; color:#f3efe0; font-family:inherit; font-size:14px; font-weight:800; letter-spacing:.16em; box-shadow:0 5px 13px rgba(16,77,49,.22); transition:transform .08s; }
+    #faxOv .fx-ok:active { transform:translateY(1px); }
+    #faxOv .fx-ok.pulse { animation:fx-okpulse 1.5s ease-out infinite; }
+    @keyframes fx-okpulse { 0%{box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 0 rgba(47,125,85,.5);} 70%{box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 12px rgba(47,125,85,0);} 100%{box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 0 rgba(47,125,85,0);} }
+    @media (prefers-reduced-motion:reduce){ #faxOv .machine.printing, #faxOv .fx-ok.pulse, #faxOv .m-print.await, #faxOv .m-led, #faxOv .ndot { animation:none; } }
+
     .ov-badge { width:46px; height:46px; border-radius:14px; background:#e8f3eb; display:flex; align-items:center;
       justify-content:center; font-size:24px; margin-bottom:12px; }
     .ov-title { font-size:19px; letter-spacing:-.02em; margin:0 0 5px; color:#17231d; }
@@ -1611,6 +1682,56 @@
     <symbol id="ic-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 3v11"/><path d="M8 6.6 12 2.6l4 4"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/></symbol>
   </svg>
+
+  <!-- 관리자 공지(팩스 출력지) 연출 오버레이 -->
+  <div class="ov scov" id="faxOv" hidden>
+    <div class="fx-stage" id="fxStage">
+      <div class="fx-col">
+        <div class="machine" id="fxMachine">
+          <div class="m-row">
+            <div class="m-brand"><b>RIVERHILL CADDIE</b><span>NOTICE FAX</span></div>
+            <div class="m-actions">
+              <button class="m-print await" id="fxPrintBtn" aria-label="공지 출력">
+                <svg viewBox="0 0 24 24"><path d="M8 3h8v4H8z"/><path d="M6 7h12a3 3 0 0 1 3 3v6h-4v-3H7v3H3v-6a3 3 0 0 1 3-3z"/><path d="M7 16h10v5H7z"/></svg>
+                출력
+              </button>
+              <div class="m-ready"><span class="m-led"></span><span id="fxReady">수신</span></div>
+            </div>
+          </div>
+          <div class="m-display">
+            <div class="dtext">
+              <div class="dlabel"><span class="ndot"></span>RIVERHILL 소식 · NEW FAX</div>
+              <div class="dmain" id="fxDisp">새 팩스가 도착했어요</div>
+            </div>
+            <span class="dbars"><i></i><i></i><i></i><i></i></span>
+          </div>
+          <div class="m-vents"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="m-slot"></div>
+        </div>
+        <div class="feed" id="fxFeed">
+          <div class="paper">
+            <div class="fx-hd"><span class="sq"></span>FAX TRANSMISSION</div>
+            <div class="fx-line"></div>
+            <div class="fx-grid">
+              <div class="fx-c"><small>TO</small><div class="fx-v" id="fxTo">회원 님</div></div>
+              <div class="fx-c"><small>FROM</small><div class="fx-v"><span id="fxAdmin">관리자</span></div></div>
+              <div class="fx-c"><small>DATE</small><div class="fx-v" id="fxDate">2026-08-05</div></div>
+              <div class="fx-c"><small>PAGES</small><div class="fx-v">1 / 1</div></div>
+            </div>
+            <div class="fx-tags">
+              <span class="on"><i class="box"></i>회람</span>
+              <span><i class="box"></i>긴급</span>
+              <span class="on"><i class="box"></i>확인요망</span>
+            </div>
+            <div class="fx-title" id="fxTitle"></div>
+            <div class="fx-body" id="fxBody"></div>
+            <div class="fx-foot">— TRANSMISSION OK · RIVERHILL —</div>
+            <button class="fx-ok" id="fxOk">확 인</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="/html2pdf.bundle.min.js"></script>
   <script src="/app.js"></script>

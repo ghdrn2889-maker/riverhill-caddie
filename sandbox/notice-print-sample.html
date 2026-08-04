@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>공지 팩스 출력지 샘플</title>
+<style>
+  :root{
+    --bg:#f7f6f0; --ink:#17231d; --muted:#647168; --green:#104d31;
+    --slot:#0c120c; --lcd:#a8e06a;
+    --paper:#f5efe0; --paperbd:#c9bfa2; --dash:#c7bd9e;
+    --admin:#7a3f34; --accent:#2f7d55;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{ background:var(--bg); color:var(--ink); overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif; }
+
+  .stage{ position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:flex-start; padding:12vh 16px 40px; }
+  .col{ width:400px; max-width:94vw; }
+
+  /* ── 출력기 본체 ── */
+  .machine{ position:relative; z-index:3; width:100%;
+    background:linear-gradient(#42563f,#2b3823 62%,#212c1c);
+    border-radius:15px 15px 9px 9px;
+    box-shadow:0 12px 24px rgba(20,30,20,.30), inset 0 1px 0 rgba(255,255,255,.08);
+    padding:13px 15px 16px; }
+  .machine.printing{ animation:mshake .09s linear infinite; }
+  @keyframes mshake{ 0%,100%{ transform:translateY(0) } 25%{ transform:translateY(-.6px) } 75%{ transform:translateY(.6px) } }
+
+  .m-row{ display:flex; align-items:center; justify-content:space-between; }
+  .m-brand{ display:flex; flex-direction:column; gap:2px; }
+  .m-brand b{ font-size:10.5px; letter-spacing:.16em; color:#cde0bd; font-weight:800; }
+  .m-brand span{ font-size:8px; letter-spacing:.26em; color:#8fa87f; font-weight:700; }
+  .m-ready{ display:flex; align-items:center; gap:6px; font-size:8.5px; font-weight:800;
+    letter-spacing:.14em; color:#b7d69a; background:rgba(0,0,0,.22); padding:5px 9px; border-radius:99px; }
+  .m-led{ width:8px; height:8px; border-radius:50%; background:var(--lcd); box-shadow:0 0 8px var(--lcd); animation:blink 1.3s steps(1) infinite; }
+  .machine.printing .m-led{ animation-duration:.28s; }
+  @keyframes blink{ 50%{ opacity:.4; } }
+
+  /* LCD 디스플레이 — 뉴스레터 느낌의 팩스 도착 문구 */
+  .m-display{ margin:11px 0 12px; background:#0e150c; border-radius:8px;
+    box-shadow:inset 0 1px 5px rgba(0,0,0,.6); padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .dtext{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .dlabel{ display:flex; align-items:center; gap:5px; font-family:'Consolas','Menlo',monospace;
+    font-size:8px; letter-spacing:.2em; color:#6f9a4a; font-weight:700; }
+  .ndot{ width:6px; height:6px; border-radius:50%; background:var(--lcd); box-shadow:0 0 6px var(--lcd); animation:blink 1s steps(1) infinite; }
+  .dmain{ font-family:'Consolas','Menlo',monospace; font-size:12px; letter-spacing:.01em; color:var(--lcd);
+    text-shadow:0 0 6px rgba(150,224,90,.45); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dbars{ display:flex; gap:2px; align-items:flex-end; height:13px; flex-shrink:0; opacity:.3; transition:opacity .2s; }
+  .machine.printing .dbars{ opacity:1; }
+  .dbars i{ width:3px; background:#4a6a30; border-radius:1px; }
+  .machine.printing .dbars i{ animation:eq 1s ease-in-out infinite; }
+  .dbars i:nth-child(1){ height:40%; animation-delay:0s; }
+  .dbars i:nth-child(2){ height:80%; animation-delay:.15s; }
+  .dbars i:nth-child(3){ height:55%; animation-delay:.3s; }
+  .dbars i:nth-child(4){ height:95%; animation-delay:.45s; }
+  @keyframes eq{ 0%,100%{ transform:scaleY(.5); } 50%{ transform:scaleY(1); } }
+
+  /* 상단 우측 컨트롤: 작은 출력 버튼 + 수신 표시등 */
+  .m-actions{ display:flex; align-items:center; gap:8px; }
+  /* 출력 버튼 — 작게, '수신' 왼쪽에 배치 */
+  .m-print{ display:inline-flex; align-items:center; gap:5px; border:0; cursor:pointer; font-family:inherit;
+    background:linear-gradient(#3f7a4e,#2b5e39); color:#eafff0; border-radius:7px; padding:6px 11px;
+    font-size:9.5px; font-weight:800; letter-spacing:.12em;
+    box-shadow:0 2px 0 #143d22, 0 3px 6px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.14);
+    transition:transform .06s, box-shadow .06s, filter .3s; }
+  .m-print svg{ width:12px; height:12px; fill:none; stroke:#eafff0; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .m-print.pressed, .m-print:active{ transform:translateY(2px);
+    box-shadow:0 0 0 #143d22, 0 1px 3px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.1); }
+  .m-print.await{ animation:btnpulse 1.5s ease-in-out infinite; }
+  @keyframes btnpulse{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.18); } }
+  .m-print[disabled]{ cursor:default; }
+
+  .m-vents{ display:flex; gap:4px; margin:0 0 11px; }
+  .m-vents i{ flex:1; height:3px; border-radius:2px; background:rgba(0,0,0,.22); box-shadow:inset 0 1px 1px rgba(0,0,0,.4); }
+  .m-slot{ position:relative; height:9px; margin:0 auto; width:90%;
+    background:var(--slot); border-radius:5px; box-shadow:inset 0 2px 4px #000, 0 1px 0 rgba(255,255,255,.05); }
+  .m-slot::after{ content:''; position:absolute; left:6px; right:6px; top:3px; height:2px; background:rgba(120,150,110,.15); border-radius:2px; }
+
+  /* ── 출력물(공지 영수증) ── */
+  .feed{ width:93%; margin:-4px auto 0; overflow:hidden; filter:drop-shadow(0 12px 20px rgba(40,32,15,.20)); display:none; }
+  .feed > *{ will-change:transform; }
+  .paper{ position:relative;
+    background:repeating-linear-gradient(var(--paper) 0 29px, #f0e9d4 29px 30px);
+    border:1px solid var(--paperbd); border-top:0; padding:17px 18px 22px;
+    -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x;
+            mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat, conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 9px repeat-x; }
+  .p-hd{ display:flex; align-items:flex-start; justify-content:space-between; border-bottom:2px solid #3a5a40; padding-bottom:10px; }
+  .p-hd .t{ font-size:9.5px; letter-spacing:.2em; color:#3a5a40; font-weight:800; }
+  .p-hd .kind{ display:inline-block; margin-top:7px; font-size:11px; font-weight:800; letter-spacing:.12em;
+    color:#7a5310; background:#f0e4c6; border:1px solid #d9c79a; border-radius:3px; padding:3px 10px; }
+  .p-hd .no{ font-family:'Consolas',monospace; font-size:10px; color:#a99a72; letter-spacing:.04em; text-align:right; line-height:1.5; }
+  .p-title{ font-size:19px; color:#26331f; font-weight:800; letter-spacing:-.01em; line-height:1.4; margin:14px 0 2px; }
+  .p-body{ font-size:13px; line-height:1.9; color:#3f3a24; white-space:pre-wrap; word-break:break-word; padding:11px 0 2px; }
+  .p-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:14px; padding-top:11px; border-top:1px dashed var(--dash); }
+  .p-foot .who{ font-size:12px; color:var(--admin); font-weight:800; }
+  .p-foot .who small{ color:var(--muted); font-weight:600; margin-right:5px; }
+  .p-foot .ft{ font-family:'Consolas',monospace; font-size:9px; color:#9a8f68; text-align:right; line-height:1.5; letter-spacing:.02em; }
+  .p-ok{ width:100%; margin-top:17px; padding:14px; border:0; border-radius:2px; cursor:pointer;
+    background:#104d31; color:#f3efe0; font-family:inherit; font-size:14px; font-weight:800; letter-spacing:.16em;
+    box-shadow:0 5px 13px rgba(16,77,49,.22); transition:transform .08s; }
+  .p-ok:active{ transform:translateY(1px); }
+  .p-ok.pulse{ animation:okpulse 1.5s ease-out infinite; }
+  @keyframes okpulse{ 0%{ box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 0 rgba(47,125,85,.5);}
+    70%{ box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 12px rgba(47,125,85,0);}
+    100%{ box-shadow:0 5px 13px rgba(16,77,49,.22),0 0 0 0 rgba(47,125,85,0);} }
+
+  /* 홈 목업 */
+  .home{ position:fixed; inset:0; background:var(--bg); display:none; opacity:0; transition:opacity .6s ease;
+    flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; }
+  .home.show{ display:flex; opacity:1; }
+  .home .hb{ width:64px; height:64px; border-radius:20px; background:#e8f3eb; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
+  .home .ht{ font-size:20px; font-weight:800; color:#17231d; margin:0 0 6px; }
+  .home .hs{ font-size:13px; color:var(--muted); margin:0 0 26px; line-height:1.6; }
+  .home .replay{ background:#eef1ec; color:#3d4c43; border:0; border-radius:12px; padding:12px 22px; font-size:13px; font-weight:800; cursor:pointer; font-family:inherit; }
+
+  @media (prefers-reduced-motion:reduce){ .machine.printing,.p-ok.pulse,.m-print.await,.m-led,.ndot{ animation:none; } }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="col">
+      <div class="machine" id="machine">
+        <div class="m-row">
+          <div class="m-brand"><b>RIVERHILL CADDIE</b><span>NOTICE FAX</span></div>
+          <div class="m-actions">
+            <button class="m-print await" id="printBtn" aria-label="공지 출력">
+              <svg viewBox="0 0 24 24"><path d="M8 3h8v4H8z"/><path d="M6 7h12a3 3 0 0 1 3 3v6h-4v-3H7v3H3v-6a3 3 0 0 1 3-3z"/><path d="M7 16h10v5H7z"/></svg>
+              출력
+            </button>
+            <div class="m-ready"><span class="m-led"></span><span id="mReady">수신</span></div>
+          </div>
+        </div>
+        <div class="m-display">
+          <div class="dtext">
+            <div class="dlabel"><span class="ndot"></span>RIVERHILL 소식 · NEW FAX</div>
+            <div class="dmain" id="dMain">홍길동님께 새 팩스가 도착했어요</div>
+          </div>
+          <span class="dbars"><i></i><i></i><i></i><i></i></span>
+        </div>
+        <div class="m-vents"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="m-slot"></div>
+      </div>
+
+      <div class="feed" id="feed">
+        <div class="paper" id="paper">
+          <div class="p-hd">
+            <div><div class="t">RIVERHILL CADDIE</div><span class="kind">공지사항</span></div>
+            <div class="no" id="pNo">FAX #001<br>2026-08-05</div>
+          </div>
+          <div class="p-title" id="pTitle"></div>
+          <div class="p-body" id="pBody"></div>
+          <div class="p-foot">
+            <span class="who"><small>관리자</small><span id="pAdmin">김홍구</span></span>
+            <span class="ft">RIVERHILL NOTICE<br>AUTO-FAX OK</span>
+          </div>
+          <button class="p-ok" id="pOk">확 인</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="home" id="home">
+    <div class="hb"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0b5d34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></div>
+    <div class="ht">홈 화면</div>
+    <div class="hs">확인을 누르면 출력지가 뜯겨 배출되고<br>여기(실제 앱 홈)로 전환됩니다.</div>
+    <button class="replay" id="replay">샘플 다시 재생</button>
+  </div>
+
+<script>
+  const SAMPLE = {
+    name: '홍길동',
+    title: '배치표 판독 지연 정정 안내',
+    body: '어제 배치표 판독이 늦어지면서 일부 근무 알림이 잘못 전달되었습니다.\n\n' +
+          '휴무·병가이신 분들께 스페어 알림이 나간 점 사과드립니다. 판독 시스템을 보완했고, ' +
+          '정정된 오늘 일정으로 다시 안내드립니다. 홈 화면에서 확정 근무를 확인해 주세요.',
+    admin: '김홍구'
+  };
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // ── 오디오(가입 연출과 동일 합성) ──
+  let ac, prLoop=null;
+  function actx(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ac.state==='suspended') ac.resume(); return ac; }
+  function clickSound(){ const c=actx(); if(!c) return; const t0=c.currentTime;   // 버튼 눌림 '딸깍'
+    const o=c.createOscillator(), g=c.createGain(); o.type='square';
+    o.frequency.setValueAtTime(330,t0); o.frequency.exponentialRampToValueAtTime(130,t0+.05);
+    g.gain.setValueAtTime(.12,t0); g.gain.exponentialRampToValueAtTime(.001,t0+.09);
+    o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0+.11); }
+  function printLoopStart(sec){ const c=actx(); if(!c) return; const t0=c.currentTime, secs=sec||3.2;
+    const master=c.createGain(); master.gain.value=1; master.connect(c.destination);
+    const inner=c.createGain(); inner.connect(master);
+    const osc=c.createOscillator(); osc.type='square'; osc.frequency.value=112; osc.connect(inner); osc.start(t0);
+    const step=0.072, N=Math.ceil(secs/step);
+    for(let i=0;i<N;i++){ const t=t0+i*step; inner.gain.setValueAtTime(0.05,t); inner.gain.setValueAtTime(0,t+step*0.5);
+      const dn=0.02, buf=c.createBuffer(1,Math.max(1,Math.floor(c.sampleRate*dn)),c.sampleRate), ch=buf.getChannelData(0);
+      for(let k=0;k<ch.length;k++) ch[k]=(Math.random()*2-1)*(1-k/ch.length);
+      const sn=c.createBufferSource(); sn.buffer=buf; const ng=c.createGain(); ng.gain.value=0.05; sn.connect(ng); ng.connect(master); sn.start(t); }
+    osc.stop(t0+secs+0.2); prLoop={master,osc}; }
+  function printLoopFade(d){ const c=actx(); if(!c||!prLoop) return; const t=c.currentTime, g=prLoop.master;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value||1,t); g.gain.linearRampToValueAtTime(0.0001,t+(d||0.5));
+    try{ prLoop.osc.stop(t+(d||0.5)+0.1); }catch(e){} prLoop=null; }
+  function ejectSound(){ const c=actx(); if(!c) return; const t0=c.currentTime, dur=.4, N=Math.floor(c.sampleRate*dur);
+    const b=c.createBuffer(1,N,c.sampleRate), ch=b.getChannelData(0);
+    for(let i=0;i<N;i++){ const e=i/N; const buzz=(Math.sin(2*Math.PI*e*95)>-0.25)?1:0.28; const env=Math.pow(1-e,1.35)*(e<0.035?e/0.035:1); ch[i]=(Math.random()*2-1)*buzz*env; }
+    const s=c.createBufferSource(); s.buffer=b; const hp=c.createBiquadFilter(); hp.type='highpass';
+    hp.frequency.setValueAtTime(1200,t0); hp.frequency.linearRampToValueAtTime(2300,t0+dur);
+    const g=c.createGain(); g.gain.value=.34; s.connect(hp); hp.connect(g); g.connect(c.destination); s.start(t0); s.stop(t0+dur+.02); }
+
+  // 용지가 슬롯에서 아래로 밀려나옴
+  function printOut(feedEl, dur){ const p=feedEl.firstElementChild;
+    feedEl.style.display='block'; p.style.transition='none';   // .feed 기본 CSS none → block 명시
+    const H=p.scrollHeight+6; p.style.transform='translateY(-'+H+'px)'; void p.offsetWidth;
+    requestAnimationFrame(()=>{ p.style.transition='transform '+(dur||1900)+'ms steps(24)'; p.style.transform='translateY(0)'; }); }
+  // 왼쪽부터 비스듬히 뜯겨 배출
+  function ejectFeed(feedEl){ ejectSound(); feedEl.style.transformOrigin='left top';
+    feedEl.style.transition='transform .8s cubic-bezier(.42,.03,.58,1)';
+    requestAnimationFrame(()=>{ feedEl.style.transform='translate(-52px, calc(100vh + 560px)) rotate(7.5deg)'; }); }
+
+  function reset(){
+    $('home').classList.remove('show'); $('home').style.display='none';
+    const feed=$('feed'), paper=$('paper'), m=$('machine'), ok=$('pOk'), btn=$('printBtn');
+    feed.style.display='none'; feed.style.transition='none'; feed.style.transform=''; feed.style.transformOrigin='';
+    paper.style.transition='none'; paper.style.transform='';
+    ok.classList.remove('pulse'); ok.disabled=false;
+    m.classList.remove('printing');
+    btn.disabled=false; btn.classList.remove('pressed'); btn.classList.add('await');
+    $('mReady').textContent='수신';
+    $('dMain').textContent = SAMPLE.name + '님께 새 팩스가 도착했어요';
+    $('pTitle').textContent=SAMPLE.title; $('pBody').textContent=SAMPLE.body; $('pAdmin').textContent=SAMPLE.admin;
+  }
+
+  async function onPrint(){
+    const btn=$('printBtn'); if(btn.disabled) return; btn.disabled=true;
+    actx(); clickSound();
+    btn.classList.remove('await'); btn.classList.add('pressed');   // 눌리는 모션
+    await sleep(150); btn.classList.remove('pressed');
+    // 출력 시작
+    const m=$('machine'); m.classList.add('printing');
+    $('mReady').textContent='출력'; $('dMain').textContent='공지 출력 중…';
+    printLoopStart(reduce?0.6:3.2);
+    printOut($('feed'), reduce?200:1950);
+    await sleep(reduce?260:2100);
+    m.classList.remove('printing'); printLoopFade(0.5);
+    $('mReady').textContent='완료'; $('dMain').textContent='출력 완료 · 확인하세요';
+    $('pOk').classList.add('pulse');
+  }
+
+  async function onConfirm(){
+    const ok=$('pOk'); if(ok.disabled) return; ok.disabled=true; ok.classList.remove('pulse');
+    ejectFeed($('feed'));
+    await sleep(reduce?150:720);
+    $('feed').style.display='none';
+    const home=$('home'); home.style.display='flex'; void home.offsetWidth; home.classList.add('show');
+  }
+
+  $('printBtn').addEventListener('click', onPrint);
+  // ★버튼을 못 찾아도 되게 — 공지 화면(stage) 아무 데나 탭해도 출력(onPrint가 disabled 가드로 중복 무시).
+  //  홈은 stage 위 별도 오버레이라 홈/재생 클릭은 여기로 안 옴.
+  $('stage').addEventListener('click', onPrint);
+  $('pOk').addEventListener('click', onConfirm);
+  $('replay').addEventListener('click', reset);
+  window.addEventListener('load', reset);
+</script>
+</body>
+</html>

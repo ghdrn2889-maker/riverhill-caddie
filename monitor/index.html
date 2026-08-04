@@ -286,6 +286,22 @@
   .tb.on .tb-badge{ background:rgba(255,255,255,.28); }
   .tab-page{ display:none; }
   .tab-page.on{ display:block; }
+  /* 공지 작성 */
+  .nt-form{ display:flex; flex-direction:column; gap:12px; max-width:560px; }
+  .nt-fld{ display:flex; flex-direction:column; gap:6px; }
+  .nt-fld > span{ font-size:11.5px; font-weight:800; color:var(--tx2); }
+  .nt-fld input, .nt-fld textarea{ font:inherit; font-size:13.5px; padding:10px 12px; border:1px solid var(--bord2); border-radius:10px; background:var(--panel); color:var(--tx); width:100%; resize:vertical; }
+  .nt-aud{ display:flex; gap:8px; }
+  .nt-aud button{ flex:1; font:inherit; font-size:12.5px; font-weight:800; padding:9px; border:1px solid var(--bord2); border-radius:10px; background:var(--panel2); color:var(--tx2); cursor:pointer; }
+  .nt-aud button.on{ background:#e7f1ea; color:#1f6d43; border-color:#bfdcca; }
+  .nt-warn{ font-size:12px; color:#c0392b; font-weight:700; }
+  .nt-msg{ font-size:12px; color:#1f6d43; font-weight:800; min-height:16px; }
+  .nt-send{ appearance:none; border:1px solid #1a5c39; background:#1f6d43; color:#fff; font:inherit; font-size:14px; font-weight:800; padding:12px; border-radius:11px; cursor:pointer; }
+  .nt-send:disabled{ opacity:.6; cursor:default; }
+  .nt-item{ border:1px solid var(--bord); border-radius:11px; padding:10px 12px; margin-bottom:9px; background:var(--panel2); }
+  .nt-item .ti{ font-size:13px; font-weight:800; color:var(--tx); }
+  .nt-item .bd{ font-size:12px; color:var(--tx2); margin-top:4px; white-space:pre-wrap; }
+  .nt-item .mt{ font-size:10.5px; color:var(--tx3); margin-top:6px; }
 
   /* 회원 승인 카드 */
   .appr-empty{ text-align:center; color:var(--tx3); font-size:13px; padding:26px 12px; }
@@ -322,6 +338,7 @@
     <button class="tb" data-tab="push">🔔 알림</button>
     <button class="tb" data-tab="userdash">📊 대시보드</button>
     <button class="tb" data-tab="review">🔍 배치표 검수</button>
+    <button class="tb" data-tab="notice">📢 공지</button>
   </nav>
 </header>
 
@@ -341,6 +358,33 @@
       <h2>전체 회원</h2>
       <p class="desc">활성 · 대기 · 차단 전체 — 상태 변경 가능</p>
       <div id="apprAll"></div>
+    </div>
+  </div>
+
+  <!-- ── 공지 탭 ── -->
+  <div class="tab-page" id="page-notice">
+    <div class="sectlab">공지 · 팩스 출력지</div>
+    <div class="panel full">
+      <h2>공지 작성 · 발송</h2>
+      <p class="desc">회원이 앱을 열면 '팩스 출력' 연출로 이 공지가 표시됩니다. 확인하면 다시 안 뜹니다.</p>
+      <div class="nt-form">
+        <label class="nt-fld"><span>제목</span><input id="ntTitle" type="text" maxlength="80" placeholder="예: 배치표 판독 지연 정정 안내"></label>
+        <label class="nt-fld"><span>내용</span><textarea id="ntBody" rows="6" maxlength="2000" placeholder="회원에게 전할 내용을 적어주세요."></textarea></label>
+        <div class="nt-fld"><span>대상</span>
+          <div class="nt-aud" id="ntAud">
+            <button type="button" class="on" data-aud="admin">관리자만 (테스트)</button>
+            <button type="button" data-aud="all">전체 회원</button>
+          </div>
+        </div>
+        <div class="nt-warn" id="ntWarn"></div>
+        <button class="nt-send" id="ntSend">공지 보내기</button>
+        <div class="nt-msg" id="ntMsg"></div>
+      </div>
+    </div>
+    <div class="panel full" style="margin-top:14px">
+      <h2>보낸 공지</h2>
+      <p class="desc">최근 20건</p>
+      <div id="ntList"></div>
     </div>
   </div>
 
@@ -676,6 +720,46 @@
     window.scrollTo(0,0);
   }
   Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
+
+  // ── 공지(팩스 출력지) 작성·발송 ──
+  (function(){
+    var aud='admin';
+    var audWrap=document.getElementById('ntAud');
+    if(audWrap){ Array.prototype.forEach.call(audWrap.querySelectorAll('button'), function(b){
+      b.addEventListener('click', function(){ aud=b.getAttribute('data-aud');
+        Array.prototype.forEach.call(audWrap.querySelectorAll('button'), function(x){ x.classList.toggle('on', x===b); }); }); }); }
+    var sendBtn=document.getElementById('ntSend');
+    if(sendBtn) sendBtn.addEventListener('click', async function(){
+      var title=(document.getElementById('ntTitle').value||'').trim();
+      var body=(document.getElementById('ntBody').value||'').trim();
+      var warn=document.getElementById('ntWarn'), msg=document.getElementById('ntMsg');
+      warn.textContent=''; msg.textContent='';
+      if(!title||!body){ warn.textContent='제목과 내용을 모두 입력해주세요.'; return; }
+      var label = aud==='all' ? '전체 회원' : '관리자(김홍구)만';
+      if(!confirm('“'+title+'”\n대상: '+label+'\n\n보낼까요?')) return;
+      sendBtn.disabled=true;
+      try{
+        var r=await fetch(apiUrl('/api/notice'), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:title, body:body, audience:aud})});
+        var j=await r.json();
+        if(j.ok){ msg.textContent='보냈어요 — 대상 '+(j.audience==='all'?'전체 회원':'관리자만')+'. 앱을 (다시) 열면 출력 연출이 재생됩니다.';
+          document.getElementById('ntTitle').value=''; document.getElementById('ntBody').value=''; loadNotices(); }
+        else warn.textContent=j.error||'발송 실패';
+      }catch(e){ warn.textContent='발송 실패'; }
+      sendBtn.disabled=false;
+    });
+    window.loadNotices=async function(){
+      var box=document.getElementById('ntList'); if(!box) return;
+      try{ var r=await fetch(apiUrl('/api/notice/list'),{cache:'no-store'}); var j=await r.json();
+        if(!j.ok){ box.innerHTML=''; return; }
+        box.innerHTML=(j.notices||[]).map(function(n){
+          var w=new Date(n.createdAt); var ws=(w.getMonth()+1)+'/'+w.getDate()+' '+String(w.getHours()).padStart(2,'0')+':'+String(w.getMinutes()).padStart(2,'0');
+          var a=n.audience==='all'?'전체':'관리자만';
+          return '<div class="nt-item"><div class="ti">'+esc(n.title)+'</div><div class="bd">'+esc(n.body)+'</div><div class="mt">'+a+' · '+ws+' · '+esc(n.admin||'')+'</div></div>';
+        }).join('')||'<div class="desc">아직 보낸 공지가 없어요.</div>';
+      }catch(e){}
+    };
+    loadNotices();
+  })();
 
   // ── 회원 승인(실시간) ──
   var BLOCK_KO = { roster:'명부에 없는 이름', other:'기타' };

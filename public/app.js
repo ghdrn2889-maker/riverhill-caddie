@@ -2212,7 +2212,7 @@ async function loadMe() {
   renderNotifyNudge();               // 알림 미설정이면 유도 카드 노출
   sendTelemetry();                   // 기기·알림 상태 기록
   if (meState && meState.authed && meState.needsOnboarding) await enterOnboarding();
-  else if (meState && meState.authed) maybeAutoAskNotifications();  // 온보딩 끝난 회원 → 첫 탭에 알림 요청
+  else if (meState && meState.authed) { maybeAutoAskNotifications(); checkNotice(); }  // 온보딩 끝난 회원 → 알림 요청 + 미열람 공지 팩스
 }
 // '방금 로그인함' 판별 — 콜백의 ?new 마커(부팅 때 캡처) 또는 이번 세션 플래그.
 //  새로고침엔 세션 플래그가 남아 폼 유지, 앱을 완전히 닫으면 sessionStorage가 비워져 자동 로그아웃된다.
@@ -2632,6 +2632,97 @@ function obPromptTap() {
   };
   printer.addEventListener('click', onTap);
 }
+// ── 관리자 공지(팩스 출력지) 연출 — 회원 앱 열 때 미열람 공지 1건을 팩스 출력으로 표시 ──
+//  audience 'admin'(테스트=관리자만) / 'all'(전체). 확인하면 /api/notice/seen 기록 → 다시 안 뜸.
+//  오디오는 가입 연출과 동일 합성 재사용(obActx·obPrinterLoop·obEjectSound). 출력/배출은 전용(display 제어).
+let _noticeChecked = false, _faxId = null;
+async function checkNotice() {
+  if (_noticeChecked) return; _noticeChecked = true;
+  try {
+    await obSleep(700);
+    // 홈에 있을 때만 — 로그인·온보딩·승인대기·이미 팩스 중이면 방해하지 않음.
+    if (!$('obOv').hidden) return;
+    if ($('loginOv') && !$('loginOv').hidden) return;
+    if ($('pendingOv') && !$('pendingOv').hidden) return;
+    if (!$('faxOv').hidden) return;
+    const r = await (await fetch('/api/notice/pending')).json();
+    const n = r && r.notice;
+    if (n && n.id) playFax(n);
+  } catch { /* 무해 */ }
+}
+function fmtNoticeDate(ts) {
+  try { const d = ts ? new Date(ts) : new Date(); const p = (x) => String(x).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); } catch { return ''; }
+}
+function playFax(n) {
+  _faxId = n.id;
+  const nm = (meState && meState.profile && meState.profile.boardName) || '회원';
+  $('fxTo').textContent = nm + ' 님';
+  $('fxAdmin').textContent = n.admin || '관리자';
+  $('fxDate').textContent = fmtNoticeDate(n.createdAt);
+  $('fxTitle').textContent = n.title || '';
+  $('fxBody').textContent = n.body || '';
+  $('fxDisp').textContent = nm + '님께 새 팩스가 도착했어요';
+  faxReset();
+  $('faxOv').hidden = false;
+}
+function faxReset() {
+  const feed = $('fxFeed'), m = $('fxMachine'), ok = $('fxOk'), btn = $('fxPrintBtn');
+  feed.style.display = 'none'; feed.style.transition = 'none'; feed.style.transform = ''; feed.style.transformOrigin = '';
+  feed.firstElementChild.style.transition = 'none'; feed.firstElementChild.style.transform = '';
+  ok.classList.remove('pulse'); ok.disabled = false;
+  m.classList.remove('printing');
+  btn.disabled = false; btn.classList.remove('pressed'); btn.classList.add('await');
+  $('fxReady').textContent = '수신';
+}
+// 용지가 슬롯에서 아래로 밀려나옴(display 명시 — #faxOv .feed 기본 none이라 ''로는 안 보임)
+function faxPrintOut(feedEl, dur) {
+  const p = feedEl.firstElementChild;
+  feedEl.style.display = 'block'; feedEl.style.transition = 'none'; feedEl.style.transform = ''; feedEl.style.transformOrigin = '';
+  p.style.transition = 'none';
+  const H = p.scrollHeight + 6; p.style.transform = 'translateY(-' + H + 'px)';
+  void p.offsetWidth;
+  requestAnimationFrame(() => { p.style.transition = 'transform ' + (dur || 1900) + 'ms steps(24)'; p.style.transform = 'translateY(0)'; });
+}
+function faxEjectFeed(feedEl) {
+  obEjectSound();
+  feedEl.style.transformOrigin = 'left top';
+  feedEl.style.transition = 'transform .8s cubic-bezier(.42,.03,.58,1)';
+  requestAnimationFrame(() => { feedEl.style.transform = 'translate(-52px, calc(100vh + 560px)) rotate(7.5deg)'; });
+}
+async function faxPrint() {
+  const btn = $('fxPrintBtn'); if (btn.disabled) return; btn.disabled = true;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  obActx(); obSound(110);                          // 탭 제스처 → 오디오 잠금 해제 + 버튼 딸깍
+  btn.classList.remove('await'); btn.classList.add('pressed');
+  await obSleep(150); btn.classList.remove('pressed');
+  const m = $('fxMachine'); m.classList.add('printing');
+  $('fxReady').textContent = '출력'; $('fxDisp').textContent = '공지 출력 중…';
+  obPrinterLoopStart(reduce ? 0.6 : 3.4);
+  faxPrintOut($('fxFeed'), reduce ? 200 : 1950);
+  await obSleep(reduce ? 260 : 2100);
+  m.classList.remove('printing'); obPrinterLoopFade(0.5);
+  $('fxReady').textContent = '완료'; $('fxDisp').textContent = '출력 완료 · 확인하세요';
+  $('fxOk').classList.add('pulse');
+}
+async function faxConfirm() {
+  const ok = $('fxOk'); if (ok.disabled) return; ok.disabled = true; ok.classList.remove('pulse');
+  faxEjectFeed($('fxFeed'));                        // 뜯겨 배출
+  if (_faxId) { try { postJSON('/api/notice/seen', { id: _faxId }); } catch { /* 무해 */ } }
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  await obSleep(reduce ? 150 : 760);
+  const ov = $('faxOv'); ov.style.transition = 'opacity .5s ease'; ov.style.opacity = '0';
+  await obSleep(reduce ? 30 : 520);
+  ov.hidden = true; ov.style.opacity = ''; ov.style.transition = '';
+  $('fxFeed').style.display = 'none';
+}
+function initFax() {
+  const btn = $('fxPrintBtn'), stage = $('fxStage'), ok = $('fxOk');
+  if (!btn || !stage || !ok) return;
+  btn.addEventListener('click', faxPrint);
+  stage.addEventListener('click', faxPrint);       // 버튼 못 찾아도 화면 아무 데나 탭하면 출력(faxPrint가 가드)
+  ok.addEventListener('click', faxConfirm);
+}
 function openAccount() {
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
   $('ovTitle').textContent = '내 계정 · 프로필';
@@ -2695,7 +2786,7 @@ async function main() {
     const q = new URLSearchParams(location.search);
     if (q.has('new')) { _freshLogin = true; q.delete('new'); const s = q.toString(); history.replaceState(null, '', location.pathname + (s ? '?' + s : '') + location.hash); }
   } catch { /* 무해 */ }
-  tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount();
+  tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount(); initFax();
   initInstallPrompt();
   $('readAll').onclick = markAllRead;
   await registerSW();
