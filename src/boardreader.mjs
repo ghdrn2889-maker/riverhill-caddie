@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, claudeBudgetLeft } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, claudeBudgetLeft } from './claudereader.mjs';
 import { snapStrong, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR } from './store.mjs';
 
@@ -178,7 +178,22 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   if (!best) return null;
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
-  return { boundaries: bestBounds, parts: best, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
+  // ★근태(휴무/병가/휴가) 판독 — 부 크롭엔 없는 별도 근태 목록을 전체판 1회 판독으로 잡는다(합본당 +1 호출).
+  //  전체판을 3배 업스케일해 근태 칸까지 읽음. 명단 스냅으로 회원 이름과 정렬(1글자 오독 흡수). 실패면 [](오프 미검출).
+  let offList = [];
+  if (claudeBudgetLeft() > 0) {
+    try {
+      const offPath = path.join(TMP, `off_${Date.now()}.png`);
+      await runPy({ image: img, crop_only: offPath, slice: { x0: 0, x1: 1, y1: 1 }, scale: 3 }, 45000);
+      const ol = await readOffList(offPath);
+      try { fs.unlinkSync(offPath); } catch { /* noop */ }
+      if (Array.isArray(ol)) {
+        offList = ol.map((o) => ({ name: snapStrong(o.name) || o.name, reason: o.reason }));
+        console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
+      }
+    } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
+  }
+  return { boundaries: bestBounds, parts: best, offList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -199,13 +214,13 @@ function parseCell(cell) {
   const isNum = /^[\d,.]+$/.test(inner);
   if (tail && /[가-힣]/.test(tail)) return { name: tail, holder: tail.replace(/\s/g, ''), duty: isNum ? inner : '', cross: isNum };
   if (isNum) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: true };
-  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: false };
+  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리)$/.test(inner)) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: false };
   return { name: inner || base, holder: (inner || base).replace(/\s/g, ''), duty: '', cross: false };
 }
 
 // 부별 Claude 판독({roster,tee,cut}) → judge()가 쓰는 verdict 형식. localvlm.readBoardLocalVerdict와 동일 계약 +
 //  괄호 태그에서 crewDuty·guaranteedWork(54/찾근)·crossPartNames를 파생(3부 54·1,3 근무판정 게이트 근거).
-function verdictFromPart(article, member, pd, allParts) {
+function verdictFromPart(article, member, pd, allParts, offList = []) {
   const roster = Array.isArray(pd?.roster) ? pd.roster.slice() : [];
   if (!roster.length) return null;
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
@@ -226,8 +241,13 @@ function verdictFromPart(article, member, pd, allParts) {
     if (c.cross && c.name) cross.push(c.name);
     if (nk && c.holder === nk && myPos === 0) myPos = i + 1;
   });
-  const myStatus = myPos > 0 ? (cut && myPos <= cut ? 'assigned' : 'spare') : 'off';
-  const tee = myPos > 0 ? teeGrid.find((t) => t.pos === myPos) : null;
+  // ★근태(휴무/병가/휴가…) 주입 — 부 크롭엔 없어 전용 판독(readOffList)으로 잡은 근태를 crewDuty에 넣는다.
+  //  이래야 judge.fixMemberPosByRoster의 근태 오프 게이트가 발화(무조건 오프 + offType sick/vacation 확정).
+  //  근태가 근무태그보다 우선(오늘 안 나옴) → 뒤에 덮어씀. 명단에 이름이 남아 스페어로 잡혀도 게이트가 오프로 못박음.
+  for (const o of (offList || [])) { if (o && o.name) crewDuty[o.name] = o.reason; }
+  const onLeave = nk && /휴무|휴가|병가|격리|연차|반차|월차/.test(String(crewDuty[nk] || ''));
+  const myStatus = onLeave ? 'off' : (myPos > 0 ? (cut && myPos <= cut ? 'assigned' : 'spare') : 'off');
+  const tee = (!onLeave && myPos > 0) ? teeGrid.find((t) => t.pos === myPos) : null;
   return {
     part, category: '배치표', relevant: true, rosterReliable: true,
     part3Roster: roster,
@@ -282,7 +302,7 @@ export async function readBoardClaudeVerdict(article, member) {
   const cut = Number(pd.cut) || 0;
   const rl = pd.roster.filter(Boolean).length;
   if (cut > 0 && rl < _rosterFloor(cut)) { console.warn(`[claude] ${part}부 명단 심각부족(${rl}<${_rosterFloor(cut)}, 커트 ${cut}) — 발송용 판독 보류(폴백)`); return null; }
-  return verdictFromPart(article, member, pd, Object.keys(board.parts));
+  return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList);
 }
 
 // 모니터(board-parts-store) 채움용 — 이미 캐시된 whole-board 판독에서 지정 부들을 뽑아 setBoardPart payload로.
@@ -297,7 +317,7 @@ export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
   for (const p of wantParts) {
     const pd = board.parts[String(p)];
     if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue;
-    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts));
+    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList);
     out[String(p)] = {
       roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teamCount: Number(v.teamCount) || 0,
       internTees: v.internTees, internCount: v.internCount,

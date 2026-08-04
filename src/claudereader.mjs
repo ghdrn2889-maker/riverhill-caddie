@@ -221,6 +221,43 @@ export async function readSummaryCounts(imagePath) {
   } catch { return null; }
 }
 
+// 배치표의 '근태(휴무·병가·휴가…) 명단' 판독 — 부별 순번명단·티오프에는 없고 별도 근태 칸/목록에 인쇄된다.
+//  ★Claude 부 판독기는 부 크롭만 봐서 근태를 통째로 놓친다(병가→휴무 강등, 오프 캐디가 스페어로 잔류).
+//   전용 1회 판독으로 근태를 잡아 crewDuty에 주입 → 기존 오프 게이트(judge fixMemberPosByRoster)가 발화한다.
+//  반환: [{name, reason}] reason∈{휴무,병가,휴가,연차,반차,월차,격리}. 근태 없음=[](빈 배열, 유효). 실패=null.
+const OFF_PROMPT = (
+  'Read the given local image with the Read tool. It is a full Korean golf caddie assignment board (배치표). '
+  + 'Somewhere on it — often a SEPARATE 근태/휴무 list or column, NOT inside the numbered 순번 tee rosters — there are caddies marked ABSENT for the day '
+  + 'with a reason such as 휴무, 병가, 휴가, 연차, 반차, 월차, or 격리. '
+  + 'List EVERY caddie marked with one of those absence reasons, paired with that exact reason word. '
+  + 'Do NOT include caddies who appear in a numbered 순번 roster / tee-time table (those are working, not absent). '
+  + 'If nobody is marked absent, return an empty list. '
+  + 'Output ONLY strict JSON: {"off":[{"name":"김홍구","reason":"병가"},{"name":"성지현","reason":"휴무"}]}'
+);
+
+const OFF_REASONS = ['병가', '휴가', '연차', '반차', '월차', '격리', '휴무'];   // 구체(병가/휴가류) 우선, 일반 휴무 최후
+export async function readOffList(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 근태 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${OFF_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 근태 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const raw = Array.isArray(j.off) ? j.off : [];
+    const list = raw.map((r) => {
+      const name = String(r?.name || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
+      const rtext = String(r?.reason || '');
+      const reason = OFF_REASONS.find((k) => rtext.includes(k)) || '휴무';   // 신호 애매하면 일반 휴무
+      return { name, reason };
+    }).filter((r) => /^[가-힣]{2,4}$/.test(r.name));   // 이름만(잡텍스트·헤더 제거)
+    return list;   // 빈 배열도 유효(그날 근태 없음). null은 판독 실패(폴백 판단용).
+  } catch { return null; }
+}
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
