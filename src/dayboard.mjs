@@ -189,6 +189,15 @@ export function validate(board) {
   let maxTeePos = 0;
   for (const t of teamsArray(board)) if (t.tee && t.pos > maxTeePos) maxTeePos = t.pos;
   if (board.cut > 0 && maxTeePos < board.cut) issues.push({ level: 'error', kind: 'grid_short', msg: `티오프 최대순번 ${maxTeePos} < 컷 ${board.cut} — 최신 배치표 티오프 필요(낡음)` });
+  // ★이름 중복 — 한 캐디는 배치표에 한 번만(사용자 규칙). 두 순번에 같은 이름 = 명단 오독 신호.
+  const byName = {};
+  for (const t of teamsArray(board)) {
+    const nm = bareName(t.name); if (!nm) continue;
+    (byName[nm] ||= []).push(t.pos);
+  }
+  for (const nm of Object.keys(byName)) {
+    if (byName[nm].length > 1) issues.push({ level: 'error', kind: 'dup_name', name: nm, positions: byName[nm], msg: `'${nm}' 이(가) 순번 ${byName[nm].join('·')}에 중복 — 명단 오독(한 명은 다른 사람이어야 함)` });
+  }
   return issues;
 }
 
