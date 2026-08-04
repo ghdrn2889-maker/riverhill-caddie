@@ -19,7 +19,7 @@ import * as journal from './journal.mjs';
 import * as ledger from './ledger.mjs';
 import { analyzeReceiptLocal } from './ollama.mjs';
 import * as cheer from './cheer.mjs';
-import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL } from './store.mjs';
+import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL, DATA_DIR } from './store.mjs';
 import { recordVisit, recordBoardRead, recordPresence } from './analytics.mjs';
 import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken, adminUserIds, allUserIds, setUserStatus, listMembersForAdmin, isTestCaddieName, markTestAccount } from './users.mjs';
 import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
