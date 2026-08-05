@@ -8,7 +8,7 @@
 //
 //  불변식: 리듀스는 순수함수 — 같은 log 를 다시 먹이면 같은 board (순서 무관·멱등).
 //  각 화면(대시보드·알림·판독·검수)은 board 에서만 파생 → 낡은 값이 남을 자리가 없음.
-import { loadJSON, saveJSON, DATA_DIR } from './store.mjs';
+import { loadJSON, saveJSON, DATA_DIR, appendJSONL } from './store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -45,9 +45,14 @@ export function addEvent(date, ev) {
   if (db.log.some((e) => e.id === id)) return db;            // 중복 방지
   const seq = (db.seq || 0) + 1;
   db.seq = seq;
+  // ★방어선(근원 재발 차단) — at 없으면 '지금(도착시각)'. 절대 0(에폭=최고참)으로 두지 않는다.
+  //  at=0이면 리듀서가 이 이벤트를 아무리 최신이어도 '가장 오래된 것'으로 정렬해 뒤 이벤트가 덮어버린다
+  //  (구두 '25팀' 미반영 버그의 근원). eventsFromVerdict가 이미 채우지만, 어떤 생산자가 빠뜨려도 여기서 막는다.
+  const evAt = Number(ev.at) || Date.now();
+  if (!(Number(ev.at) > 0)) console.warn(`[칠판] 이벤트 at 누락 → 도착시각으로 보정 (id=${id}, kind=${ev.kind})`);
   db.log.push({
     id,
-    at: Number(ev.at) || 0,
+    at: evAt,
     seq,
     source: norm(ev.source) || 'text',                       // 'image' | 'text' | 'comment'
     kind: norm(ev.kind) || 'note',
@@ -285,7 +290,18 @@ export function eventsFromVerdict(article, rv = {}) {
 export function ingestVerdict(date, article, rv) {
   try {
     if (!date) return null;
-    for (const ev of eventsFromVerdict(article, rv || {})) addEvent(date, ev);
+    const evs = eventsFromVerdict(article, rv || {});
+    for (const ev of evs) addEvent(date, ev);
+    // ★재발 탐지 가드 — 방금 인입한 '텍스트 컷'이 리듀스된 칠판에 실제 반영됐는지 확인. 안 됐으면(옛 이벤트에
+    //  밀려 덮임 등) 조용히 삼키지 말고 이상 로그(dayboard-anomaly.jsonl)에 큰 소리로 남긴다 → 모니터에서 즉시 포착.
+    //  (구두 '25팀'이 며칠 뒤에야 발견되던 걸 원천 차단: 다음엔 시스템이 스스로 "반영 안 됨"을 알린다.)
+    const board = (loadDayboard(date).board) || {};
+    for (const ev of evs) {
+      if (ev.kind === 'cut' && Number(ev.payload?.cut) > 0 && Number(board.cut) !== Number(ev.payload.cut)) {
+        console.warn(`⚠️ [칠판 정합성] 인입 컷 ${ev.payload.cut}이 반영 안 됨(현재 board.cut=${board.cut}) — 이벤트 순서/타임스탬프 의심: ${article?.id}`);
+        try { appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), date, kind: 'cut_not_applied', want: Number(ev.payload.cut), got: Number(board.cut) || 0, eventId: ev.id, articleId: String(article?.id || '') }); } catch { /* noop */ }
+      }
+    }
     return summarize(date);
   } catch (e) { return { error: e.message }; }
 }
