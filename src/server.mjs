@@ -966,7 +966,27 @@ const envMember = () => {
 //    (이미지가 그대로면 Gemini를 호출하지 않으므로 비용 낭비 없음)
 const BOARD_WATCH_FILE = 'boardwatch.json';
 let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at }
-const imgFingerprint = (full) => (full.images || []).map((u) => String(u).split('?')[0]).join('|');
+// 이미지 지문 — URL 경로 + 콘텐츠 서명(길이·최종수정)으로 '조용한 수정(같은 글 이미지 교체)'을 잡는다.
+//  네이버는 재업로드 시 보통 URL도 바뀌지만(그건 경로로 잡힘), 같은 URL로 바이트만 갈리는 경우·CDN 캐시
+//  엣지케이스까지 HEAD의 content-length·last-modified로 함께 본다(본문 다운로드 없음 → 무비용·무LLM).
+//  HEAD 실패 시 URL 경로만으로 폴백 → 기존 동작 보존(회귀 0). ETag은 네이버가 안 줌 → 길이+최종수정 사용.
+const IMG_FP_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Referer': 'https://cafe.naver.com/',
+};
+async function imageContentSig(u) {
+  const base = String(u).split('?')[0];
+  try {
+    const res = await fetch(u, { method: 'HEAD', headers: IMG_FP_HEADERS, signal: AbortSignal.timeout(8000) });
+    const sig = [res.headers.get('etag'), res.headers.get('content-length'), res.headers.get('last-modified')].filter(Boolean).join(',');
+    return sig ? `${base}#${sig}` : base;
+  } catch { return base; }
+}
+async function imgFingerprint(full) {
+  const urls = full.images || [];
+  if (!urls.length) return '';
+  return (await Promise.all(urls.map(imageContentSig))).join('|');
+}
 // '전체(정본) 배치표' 판독인지 — 순번표 신뢰 + 날짜 + (팀수 또는 커트) + 최소 순번수.
 //  '금일 변동 사항입니다' 류 부분 글은 teeGrid는 있어도 dateLabel·teamCount·cutoff가 비어,
 //  이걸로 정본을 덮으면 배치표 검수·판독 스냅샷(lastboard)이 옛/부분 표로 오염된다.
@@ -977,7 +997,7 @@ function isAuthoritativeBoard(v) {
   return Array.isArray(v.part3Roster) && v.part3Roster.length >= 9;
 }
 
-function rememberBoard(full, out) {
+async function rememberBoard(full, out) {
   const v = out && out.rawVerdict;
   const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
@@ -1009,7 +1029,7 @@ function rememberBoard(full, out) {
       return;
     }
   }
-  boardWatch = { id: String(full.id), fp: imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
+  boardWatch = { id: String(full.id), fp: await imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   // ★관리자 교정 보존 — 같은 배치표(같은 id·같은 날) 재판독이면, 검수에서 고친 이름(part3Roster)·근태·교정표식을
   //  유지한다. 자동 판독이 다시 '서동명'으로 읽어도 관리자가 '서동환'으로 고친 걸 되돌리지 않게. (다른 글/다른 날이면 정상 갱신.)
@@ -1117,7 +1137,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
-  rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
+  await rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
 
   // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
   //  ★3부(위 primary 경로)와 '완전 분리'된 평행 슬롯. 각 부: Gate C(그 부 표가 보일 때만) + 전체배치표 안전망
@@ -1988,8 +2008,8 @@ async function recheckBoard() {
   let full;
   try { full = await fetchArticle(boardWatch.id); }
   catch (e) { console.error('배치표 재확인 조회 실패:', e.message); return; }
-  const fp = imgFingerprint(full);
-  if (fp === boardWatch.fp) return;                        // 이미지 그대로 → Gemini 미호출(무비용)
+  const fp = await imgFingerprint(full);
+  if (fp === boardWatch.fp) return;                        // 이미지 그대로(콘텐츠 서명 동일) → 재판독 안 함(무비용)
   console.log(`🔁 배치표 이미지 교체 감지(같은 글 #${boardWatch.id}) → 재판독`);
   boardWatch.fp = fp; boardWatch.at = Date.now();
   saveJSON(BOARD_WATCH_FILE, boardWatch);
