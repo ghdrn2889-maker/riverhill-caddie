@@ -18,3 +18,9 @@ export function loadEnv() {
     if (!(k in process.env)) process.env[k] = v;
   }
 }
+
+// ★import 시점 자동 로드(근본) — 다른 모듈이 '모듈 로드 시점'에 process.env를 읽는 상수(예: DAILY_CAP,
+//  QUIET_END_HOUR)를 정의하는데, server.mjs 본문의 loadEnv()는 그 import들보다 '늦게' 실행돼 .env가
+//  무시되던 클래스 버그가 있었다(CLAUDE_DAILY_CAP=150이 40으로, QUIET_END=8이 7로 동작). env.mjs는
+//  대개 첫 import라, 여기서 즉시 로드하면 이후 어떤 모듈의 모듈-로드 상수도 .env 값을 본다. 멱등(위 가드).
+loadEnv();
