@@ -13,9 +13,21 @@ export function loadJSON(name, fallback) {
   }
 }
 
+// ★원자적 저장 — 임시파일에 쓰고 rename 으로 교체(POSIX rename 은 원자적). 동시에 읽는 프로세스가
+//  '찢긴 JSON'을 보거나, 다른 프로세스의 쓰기와 겹쳐 파일이 깨지는 걸 방지(감시 클로드 진단으로 발견한
+//  비원자적 쓰기 취약점 대응). 단일 프로세스 내 addEvent 는 동기라 이미 안전하지만, 크로스-프로세스(모니터
+//  읽기·수동 스크립트) 안전을 위해 원자화. tmp 이름에 pid+카운터로 두 writer 충돌도 회피.
 export function saveJSON(name, obj) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(path.join(DATA_DIR, name), JSON.stringify(obj, null, 2));
+  const target = path.join(DATA_DIR, name);
+  const tmp = `${target}.tmp-${process.pid}-${(saveJSON._n = (saveJSON._n || 0) + 1)}`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    fs.renameSync(tmp, target);
+  } catch (e) {
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* noop */ }
+    throw e;
+  }
 }
 
 // 한 줄씩 누적 기록(JSONL). 진단 로그용(예: 판독 불확실 사유) — 나중에 패턴 분석·근본원인 대응.
