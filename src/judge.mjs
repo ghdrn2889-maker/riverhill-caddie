@@ -1575,5 +1575,27 @@ export function interpretForMember(article, shared, member, today = null) {
     const cp = Number(v.cutoffPosition) || Number(v.teamCount) || 0;
     v.myStatus = cp && Number(v.myPosition) <= cp ? 'assigned' : 'spare';
   }
+  // ★칠판(단일 진실원) 최종 정합화 [Stage2] — 오버레이된 컷·티오프표가 곧 정본 근무선.
+  //  '내 순번 ≤ 칠판 컷'이면 정의상 근무(dayboard teamsArray: spare=pos>cut). 스테일 workLimit(gridMax<컷)·
+  //  색 오독으로 컷 이내 순번이 스페어로 강등된 것을 되돌린다(조하빈 26 사고: 컷26인데 티표 25까지라 스페어로
+  //  굳던 문제). 티오프는 칠판 표에 내 순번 시각이 있으면 그 값으로 확정, 아직 없으면 스페어 강등만 취소(시각 보류).
+  //  off/병가/부재/동명이인/판독불안정은 위에서 이미 확정·return 됐으므로 여기선 안 건드림(회귀 0).
+  if (!v._dutyOff && !v._absent && !v._ambiguousIdentity && !v._uncertain) {
+    const mp = Number(v.myPosition) || 0;
+    const cut = Number(v.cutoffPosition) || 0;
+    if (mp > 0 && cut > 0 && mp <= cut) {
+      const g = Array.isArray(v.teeGrid)
+        ? v.teeGrid.find((x) => Number(x?.pos) === mp && /\d{1,2}:\d{2}/.test(String(x?.time || '')))
+        : null;
+      if (g) {                                    // 칠판 티오프표에 내 순번 시각 있음 → 근무 확정 + 그 시각
+        v.teeTime = String(g.time).match(/\d{1,2}:\d{2}/)[0];
+        if (g.course) v.course = /IN/i.test(String(g.course)) ? 'IN' : 'OUT';
+        if (!['work', 'your_turn'].includes(v.myStatus)) v.myStatus = 'assigned';
+        v._teeSource = 'dayboard-canonical';
+      } else if (v.myStatus === 'spare') {        // 컷 이내인데 티오프 아직 없음 → 스페어 강등만 취소(시각 보류)
+        v.myStatus = 'work'; v._teeSource = 'dayboard-cut-within';
+      }
+    }
+  }
   return { ...decide(article, v, member), rawVerdict: v };
 }

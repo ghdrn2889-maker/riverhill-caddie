@@ -301,6 +301,14 @@ async function handleIngest(req, res) {
   const text = String(b.text || q.text || '').trim();
   const token = req.get('x-token') || q.token || b.token;
   console.log(`💬 [ingest] 수신됨: text="${text.slice(0, 30)}"(${text.length}자) token=${token ? '있음' : '없음'} room=${b.room || q.room || '-'}`);
+  // ★브릿지(카톡 포워더) 정체 파악용 — 이 앱이 사진 파일도 보낼 수 있는지 판단하려면 뭔지 알아야 한다.
+  //  다음 인입의 User-Agent + 바디 키를 남겨 어떤 포워더인지 식별(1회 진단용, 사진 첨부 여부도 함께 확인).
+  try {
+    const ua = req.get('user-agent') || '(없음)';
+    const bodyKeys = Object.keys(b || {}).join(',') || '(빈바디)';
+    const hasImageLike = !!(b.image || b.img || b.photo || b.picture || b.attachment || b.media || b.base64 || b.file);
+    console.log(`🔎 [브릿지식별] UA="${ua}" | body키=[${bodyKeys}] | 이미지필드=${hasImageLike ? '있음(!)' : '없음'}`);
+  } catch { /* noop */ }
   if (!text) return res.status(400).json({ error: 'text 필요 (알림 내용이 비어있음)' });
   if (process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
     return res.status(401).json({ error: '인증 실패' });
