@@ -292,15 +292,23 @@ export function ingestVerdict(date, article, rv) {
     if (!date) return null;
     const evs = eventsFromVerdict(article, rv || {});
     for (const ev of evs) addEvent(date, ev);
-    // ★재발 탐지 가드 — 방금 인입한 '텍스트 컷'이 리듀스된 칠판에 실제 반영됐는지 확인. 안 됐으면(옛 이벤트에
-    //  밀려 덮임 등) 조용히 삼키지 말고 이상 로그(dayboard-anomaly.jsonl)에 큰 소리로 남긴다 → 모니터에서 즉시 포착.
-    //  (구두 '25팀'이 며칠 뒤에야 발견되던 걸 원천 차단: 다음엔 시스템이 스스로 "반영 안 됨"을 알린다.)
-    const board = (loadDayboard(date).board) || {};
+    // ★자가복구 가드 — 방금 인입한 '텍스트 컷'(구두 "25팀" 등)이 리듀스된 칠판에 실제 반영됐는지 확인.
+    //  안 됐으면(옛/미래오표기 이벤트에 밀려 덮임) 조용히 삼키지 않고 스스로 정상 궤도로 되돌린다:
+    //  그 컷을 '가장 최신 시각(max at + 1)'으로 재-단언하는 보정 이벤트를 append(로그는 append-only 유지) → 재리듀스.
+    //  구두 선언은 '사람이 지금 알려준 현재 사실'이라 최신으로 이겨야 맞다. 이후 진짜 새 배치표가 오면 그게 더
+    //  최신 at으로 다시 이긴다(핑퐁 없음: 텍스트 cut만·메시지당 1회·board_full은 건드리지 않음).
     for (const ev of evs) {
-      if (ev.kind === 'cut' && Number(ev.payload?.cut) > 0 && Number(board.cut) !== Number(ev.payload.cut)) {
-        console.warn(`⚠️ [칠판 정합성] 인입 컷 ${ev.payload.cut}이 반영 안 됨(현재 board.cut=${board.cut}) — 이벤트 순서/타임스탬프 의심: ${article?.id}`);
-        try { appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), date, kind: 'cut_not_applied', want: Number(ev.payload.cut), got: Number(board.cut) || 0, eventId: ev.id, articleId: String(article?.id || '') }); } catch { /* noop */ }
-      }
+      if (!(ev.kind === 'cut' && Number(ev.payload?.cut) > 0)) continue;
+      const want = Number(ev.payload.cut);
+      let board = (loadDayboard(date).board) || {};
+      if (Number(board.cut) === want) continue;                 // 이미 반영됨 → 정상
+      const log = loadDayboard(date).log || [];
+      const maxAt = Math.max(0, ...log.map((e) => Number(e.at) || 0));
+      addEvent(date, { id: `${ev.id}:heal`, at: maxAt + 1, source: 'text', kind: 'cut', payload: { cut: want }, note: 'auto-heal' });
+      board = (loadDayboard(date).board) || {};
+      const ok = Number(board.cut) === want;
+      console.warn(`${ok ? '🩹 [칠판 자가복구]' : '⛔ [칠판 복구실패]'} 인입 컷 ${want} 미반영 → 재단언: board.cut → ${board.cut} (${article?.id || ''})`);
+      try { appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), date, kind: ok ? 'cut_auto_healed' : 'cut_heal_failed', want, got: Number(board.cut) || 0, eventId: ev.id, articleId: String(article?.id || '') }); } catch { /* noop */ }
     }
     return summarize(date);
   } catch (e) { return { error: e.message }; }
