@@ -169,8 +169,17 @@ async function readPartsOnce(img, sorted, cuts) {
       // ★3부 홀리스틱 우선(토글) — 명단·티오프를 이 크롭에서 '한 번에' 대응 판독(순번↔시각 어긋남 원천 차단).
       //  부실(명단 심각부족)하면 아래 기존 분할 판독으로 폴백. 티오프 배열은 verdictFromPart이 그대로 소비.
       if (String(b.part) === '3' && useHolisticP3()) {
+        // ★홀리스틱 전용 크롭 — 티오프표 '전체 세로'(하단 18:45까지)가 필요하다. y1:0.73(공지영역 배제용)로
+        //  자르면 그리드 하단 티오프가 통째로 잘려, 무거운 scale6 업스케일과 겹쳐 판독기가 timeout/null →
+        //  분할판독(하단 누락 18개)으로 '조용히' 폴백하던 근원(8/5 #26994 사고). 전체높이+가벼운 업스케일로 읽는다.
+        //  (실증: 원본 전체이미지 홀리스틱 = 티오프 25개 정확·빠름 / y1:0.73·scale6 = 타임아웃.)
+        const holPath = path.join(TMP, `part3hol_${b.part}_${Date.now()}_${i}.png`);
+        let holReady = false;
+        try { await runPy({ image: img, crop_only: holPath, slice: { x0: b.x0, x1, margin, y1: 0.98 }, scale: 3 }, 30000); holReady = true; }
+        catch (e) { console.error('[boardreader] 홀리스틱 크롭 오류 → 기본 크롭 사용:', e.message); }
+        const holImg = holReady ? holPath : cropPath;
         try {
-          let h = await readPart3Holistic(cropPath);
+          let h = await readPart3Holistic(holImg);
           if (h && Array.isArray(h.roster) && h.roster.length) {
             const maxPos = h.roster.reduce((mx, x) => Math.max(mx, x.pos), 0);
             const names = new Array(maxPos).fill('');
@@ -185,7 +194,7 @@ async function readPartsOnce(img, sorted, cuts) {
             if (cut > 0 && gridMax < cut && claudeBudgetLeft() > 0) {
               console.log(`[boardreader] 3부 티오프 하단 누락 감지(티max ${gridMax} < 컷 ${cut}) → 꼬리 집중 재판독`);
               try {
-                const h2 = await readPart3Holistic(cropPath, { tailRetry: true });
+                const h2 = await readPart3Holistic(holImg, { tailRetry: true });
                 if (h2 && Array.isArray(h2.tees) && h2.tees.length) {
                   const byPos = new Map((h.tees || []).map((t) => [t.pos, t]));
                   for (const t of h2.tees) if (Number(t.pos) > 0 && t.time) byPos.set(Number(t.pos), t);
@@ -198,6 +207,7 @@ async function readPartsOnce(img, sorted, cuts) {
             // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
             if (filled >= _rosterFloor(cut || filled)) {
               try { fs.unlinkSync(cropPath); } catch { /* noop */ }
+              try { if (holReady) fs.unlinkSync(holPath); } catch { /* noop */ }
               parts[String(b.part)] = { roster: snapRoster(names), tee: h.tees, cut, x0: b.x0, x1: b.x1 };
               console.log(`[boardreader] 3부 홀리스틱 채택: 명단${filled}·티${(h.tees || []).length}·컷${cut}(스페어첫 ${Number.isFinite(firstSpare) ? firstSpare : '-'})`);
               // ★재판독 후에도 티오프가 컷보다 짧으면 이상 기록 — 감시 클로드·모니터가 잡아 사람이 정정하도록(무음 통과 금지).
@@ -209,6 +219,7 @@ async function readPartsOnce(img, sorted, cuts) {
             console.log(`[boardreader] 3부 홀리스틱 부실(명단${filled}<floor ${_rosterFloor(cut || filled)}) → 분할판독 폴백`);
           }
         } catch (e) { console.error('[boardreader] 3부 홀리스틱 오류 → 폴백:', e.message); }
+        try { if (holReady) fs.unlinkSync(holPath); } catch { /* noop */ }
       }
       const r = await readPartWithClaude(cropPath);
       // ★열 경계 — part 판독의 rosterCols가 있으면 쓰고, 없으면(들쭉날쭉) 전용 호출로 확실히 잡는다.
