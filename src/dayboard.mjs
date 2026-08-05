@@ -164,13 +164,17 @@ export function teamsArray(board) {
   for (let i = 1; i <= max; i++) {
     const t = board.teams[i] || { pos: i, name: '', tee: '', course: '' };
     const spare = board.cut > 0 ? i > board.cut : !!t.spare;
-    out.push({ ...t, pos: i, spare });
+    // ★스페어(컷 초과)는 티오프를 노출하지 않는다 — board_full 비파괴병합이 남긴 옛 티가
+    //  검수·대시보드·오버레이로 새어 '한 시각 3명 몰림'을 만드는 걸 파생 단계에서 원천 차단.
+    out.push({ ...t, pos: i, spare, tee: spare ? '' : (t.tee || ''), course: spare ? '' : (t.course || '') });
   }
   return out;
 }
 
 export function teeForPos(board, pos) {
-  const t = board.teams[Number(pos)];
+  const p = Number(pos);
+  if (board.cut > 0 && p > board.cut) return { tee: '', course: '' }; // 컷 초과 = 스페어 = 티 없음
+  const t = board.teams[p];
   return t ? { tee: t.tee || '', course: t.course || '' } : { tee: '', course: '' };
 }
 
