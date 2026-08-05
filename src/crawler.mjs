@@ -2,7 +2,7 @@
 // 쿠키 만료 등으로 감시가 조용히 멈추면 onCafeError 로 알린다.
 import { fetchLatestArticles } from './naverCafe.mjs';
 import { analyze } from './analyzer.mjs';
-import { loadJSON, saveJSON } from './store.mjs';
+import { loadJSON, saveJSON, appendJSONL } from './store.mjs';
 
 const SEEN_FILE = 'seen.json';
 const MAX_SEEN = 800;
@@ -80,7 +80,12 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
             console.warn(`⏳ 배치표 판독 실패 → seen 미기록, 다음 폴링 재시도 (${boardRetries[a.id]}/${MAX_BOARD_RETRIES}): ${a.subject}`);
           } else {
             if (boardRetries[a.id]) { delete boardRetries[a.id]; saveJSON('board-retries.json', boardRetries); }
-            if (r && r.boardReadFailed) console.warn(`⚠️ 배치표 판독 재시도 ${MAX_BOARD_RETRIES}회 소진 — seen 처리(수동 확인 필요): ${a.subject}`);
+            if (r && r.boardReadFailed) {
+              // ★재시도 소진 = 최신 배치표를 못 읽고 옛 배치표에 동결될 위험 — 조용히 넘기지 않고 이상 기록.
+              //  감시 클로드가 이 신호를 잡아 관리자에게 '최신 배치표 판독 실패(수동 확인)'를 에스컬레이션한다.
+              console.warn(`⚠️ 배치표 판독 재시도 ${MAX_BOARD_RETRIES}회 소진 — seen 처리(수동 확인 필요): ${a.subject}`);
+              appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'board_read_exhausted', articleId: String(a.id), subject: String(a.subject || ''), retries: MAX_BOARD_RETRIES, note: '최신 배치표 판독 반복 실패 — 옛 배치표 동결 위험, 관리자 확인 필요' });
+            }
             markSeen(a.id);
           }
         }

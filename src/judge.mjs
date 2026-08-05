@@ -8,6 +8,7 @@ import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested 
 import { loadJSON } from './store.mjs';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
 import { readBoardClaudeVerdict, useClaudeReader } from './boardreader.mjs';
+import { looksLikeBoardPost } from './analyzer.mjs';
 
 // ★Gemini 판독 폴백 스위치 — 기본 OFF(더 이상 사용 안 함). Claude(주)+로컬VLM만 사용.
 //  Claude가 특정 부를 못 읽어도(부분 크롭에 그 부 없음) Gemini로 넘겨 429·과금을 일으키지 않는다.
@@ -1230,11 +1231,9 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //   "배치표/번호표" 키워드뿐 아니라 "N팀"·"○○님까지 근무" 컷 공지도 전체 순번판이 붙어 오므로 포함.
   //   (이걸 놓치면 이미지의 괄호 교환 "정진영(조하빈)"이 해석 안 돼 회원에게 교환 전 순번이 나감.)
   const subj = article.subject || '';
-  const isBoard = !!img && (
-    /배치표|시간표|번호표/.test(subj)
-    || /\d+\s*팀/.test(subj)                                   // "3부 17팀"
-    || /[가-힣]{2,4}\s*님\s*(?:\([^)]*\)\s*)?까지\s*(?:근무|일)/.test(subj)  // "○○님(□□)까지 근무"
-  );
+  // ★배치표 판정 = 공용 게이트(analyzer.looksLikeBoardPost) — 제목 키워드뿐 아니라 번호표작성자·부표기까지.
+  //  (제목이 "3부"뿐인 갱신 배치표를 놓쳐 옛 배치표에 동결되던 근원 차단. server._isBoardImg와 동일 기준.)
+  const isBoard = looksLikeBoardPost(article);
   // ★배치표(이미지)는 여러 번 읽어 '표결'(신뢰도↑·정직한 불확실). 텍스트/카톡/일반 글은 1회(기본 모델).
   //  ★로컬 VLM 스위치(data/use-local-vlm) — 배치표 판독을 홈 GPU(qwen2.5vl)로. 비용0. 실패하면 Gemini 폴백.
   //   롤백: rm data/use-local-vlm (즉시). 로컬 verdict는 _local=true → 아래 Gemini 명단 재판독 블록을 건너뛴다.

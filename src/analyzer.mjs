@@ -18,6 +18,21 @@ export function isScheduleWriter(writer) {
   return list.some((n) => w === n || w.includes(n) || n.includes(w));
 }
 
+// ★배치표(이미지) 글 판정 — 판독 파이프라인 진입 게이트(judge.isBoard·server._isBoardImg 공용).
+//  근원 재발차단: 제목이 "3부"처럼 최소여도, 번호표작성자(정용만 등)가 올린 이미지 글이면 배치표다.
+//  (8/5 사고: 배치표가 연속 두 번 갱신됐는데 두 번째 제목이 "3부"뿐이라 키워드 미스 → 이미지 미판독 →
+//   시스템이 옛 배치표에 동결. 제목 키워드에만 의존하던 판정을 '작성자·부표기'까지 확장.)
+export function looksLikeBoardPost(article) {
+  if (!(article && article.images && article.images.length)) return false; // 티오프표는 이미지에만
+  const subj = String(article.subject || '');
+  if (/배치표|시간표|번호표/.test(subj)) return true;
+  if (/\d+\s*팀/.test(subj)) return true;                                       // "3부 25팀"
+  if (/[가-힣]{2,4}\s*님\s*(?:\([^)]*\)\s*)?까지\s*(?:근무|일)/.test(subj)) return true; // "○○님까지 근무"
+  if (/[123]\s*부/.test(subj)) return true;                                     // "3부"(부만 적힌 배치표)
+  if (isScheduleWriter(article.writer)) return true;                            // 번호표작성자의 이미지 글 = 배치표
+  return false;
+}
+
 export function analyze(article) {
   const name = (process.env.MY_NAME || '').trim();               // 김홍구
   const part = (process.env.MY_PART || '').trim();               // 3

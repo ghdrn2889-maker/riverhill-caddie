@@ -7,7 +7,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { initPush, addSubscription, broadcast, flushDeferred } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
-import { isScheduleWriter, PERSONAL_REQUEST_RE } from './analyzer.mjs';
+import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
@@ -1111,7 +1111,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   // ★내일 예고(통합) 판단 — '전체 배치표'가 그 날짜로 처음 판독되면 previewMode:
   //  개별 부 알림을 억제하고, 아래에서 판독된 전 회원에게 통합 예고 1건씩. (재판독은 dedup으로 재발송 안 함.)
   const boardISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '');
-  const _isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
+  const _isBoardImg = looksLikeBoardPost(full);   // 공용 판정(제목 키워드+번호표작성자+부표기) — judge.isBoard와 동일 기준
   const _boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
   const _isFullBoard = /전체|전부/.test(full.subject || '') || _boardTables.length >= 2;
   const previewMode = !!(_isBoardImg && _isFullBoard && boardISO && out.rawVerdict?.rosterReliable && !isPreviewSent(boardISO));
