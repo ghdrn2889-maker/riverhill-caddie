@@ -183,7 +183,12 @@ export function overlayDayboardOnVerdict(v, iso) {
     const db = loadDayboard(iso);
     if (!db || !Array.isArray(db.log) || !db.log.length) return v;
     const board = db.board || {};
-    if (Number(board.cut) > 0) { v.cutoffPosition = board.cut; v.cutLine = board.cut; }
+    if (Number(board.cut) > 0) {
+      v.cutoffPosition = board.cut; v.cutLine = board.cut;
+      // ★'현재 3부 N팀' 문구 동기화 — 컷이 곧 확정 팀수. teamCount가 옛값(25)이면 컷(26)과 어긋나
+      //  "26번 근무확정"인데 "25팀"이라 뜨는 모순 문구가 나간다. 컷 이상으로만 올려(내리진 않음) 일치시킨다.
+      if (!(Number(v.teamCount) >= Number(board.cut))) v.teamCount = board.cut;
+    }
     const byPos = new Map((v.teeGrid || []).map((g) => [Number(g.pos), { pos: Number(g.pos), time: String(g.time || ''), course: g.course || '' }]));
     for (const t of teamsArray(board)) {
       if (t.tee && /^\d{1,2}:\d{2}$/.test(t.tee)) byPos.set(t.pos, { pos: t.pos, time: t.tee, course: t.course || '' });
