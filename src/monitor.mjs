@@ -13,7 +13,7 @@ import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
 import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge.mjs';
 import * as worklog from './worklog.mjs';
-import { DATA_DIR } from './store.mjs';
+import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
@@ -52,6 +52,20 @@ app.get('/api/dayboard', gate, (req, res) => {
     const db = loadDayboard(date);
     res.json({ ok: true, dates, summary: dayboardSummary(date), log: db.log });
   } catch (e) { console.error('dayboard 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+// 감시 클로드 진단서 — 최근 것부터. 관리자가 자율 진단을 검토(코드 수정은 여기서 안 함, 자문만).
+app.get('/api/watchdog', gate, (req, res) => {
+  try {
+    const p = path.join(DATA_DIR, 'watchdog-reports.jsonl');
+    let reports = [];
+    if (fs.existsSync(p)) {
+      reports = fs.readFileSync(p, 'utf8').trim().split(/\n/).filter(Boolean)
+        .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+        .filter(Boolean).slice(-30).reverse();
+    }
+    const state = loadJSON('watchdog-state.json', {});
+    res.json({ ok: true, reports, lastScanAt: state.lastAt || 0, diagPastHour: (state.diagAts || []).length });
+  } catch (e) { console.error('watchdog 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 // 판독검증 1·2·3부 탭 데이터 — 모니터가 직접 부별 판독(board별 1회 캐시). 앱 무관·읽기 전용.
 app.get('/api/board-parts', gate, async (req, res) => {

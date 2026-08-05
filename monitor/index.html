@@ -348,6 +348,7 @@
     <button class="tb" data-tab="push">🔔 알림</button>
     <button class="tb" data-tab="userdash">📊 대시보드</button>
     <button class="tb" data-tab="review">🔍 배치표 검수</button>
+    <button class="tb" data-tab="watchdog">🐕 감시 <span class="tb-badge" id="badgeWatch" hidden>0</span></button>
     <button class="tb" data-tab="notice">📢 공지</button>
   </nav>
 </header>
@@ -485,6 +486,16 @@
       <h2>시스템 판독 배치표 — 원본과 대조해 틀린 칸만 수정</h2>
       <p class="desc">판독 결과를 순번표로 재구성했습니다. 오른쪽(또는 아래) 원본 이미지와 대조해 <b>이름·티오프가 틀린 칸만</b> 고치고, <b>확정선</b>(여기까지 근무)을 맞춘 뒤 저장하세요. 저장하면 <b>전 회원 대시보드가 이 배치표 기준으로 다시 계산</b>됩니다. (교정은 이 배치표에만 적용 · 새 배치표가 오면 자동 교체)</p>
       <div id="boardReview"><div class="muted">불러오는 중…</div></div>
+    </div>
+  </div>
+
+  <div class="tab-page" id="page-watchdog">
+    <div class="sectlab">감시 클로드 · 자율 진단</div>
+    <div class="panel full">
+      <h2>시스템 이상 자동 진단</h2>
+      <p class="desc">시스템이 오류·이상을 뱉으면 감시 클로드가 <b>스스로 소스코드와 로그를 읽어</b> 원인·심각도·수정안을 진단합니다. <b>읽기 전용·자문</b>이라 코드를 자동으로 고치거나 배포하지 않습니다 — 아래 진단서를 검토하고, 고칠지는 사람이 결정합니다.</p>
+      <div id="wdMeta" class="desc" style="margin-bottom:8px;"></div>
+      <div id="wdList"><div class="muted">불러오는 중…</div></div>
     </div>
   </div>
 
@@ -753,7 +764,39 @@
     try{ localStorage.setItem('monTab', name); }catch(e){}
     if(name==='userdash') loadUserDash();
     if(name==='review'){ brDirty=false; loadBoardReview(true); }
+    if(name==='watchdog') loadWatchdog();
     window.scrollTo(0,0);
+  }
+  // ── 감시 클로드 진단서 렌더 ──
+  async function loadWatchdog(){
+    var list=document.getElementById('wdList'), meta=document.getElementById('wdMeta');
+    if(!list) return;
+    try{
+      var r=await fetch(apiUrl('/api/watchdog'),{cache:'no-store'}); var j=await r.json();
+      var reps=(j&&j.reports)||[];
+      if(meta) meta.textContent = '최근 스캔: '+(j.lastScanAt? new Date(j.lastScanAt).toLocaleString('ko-KR'):'—')+' · 지난 1시간 진단 '+(j.diagPastHour||0)+'건';
+      if(!reps.length){ list.innerHTML='<div class="muted">아직 진단서가 없어요. 시스템이 이상을 뱉으면 여기 자동으로 쌓입니다.</div>'; return; }
+      var sevColor={high:'var(--bad)',med:'var(--warn,#c77)',low:'var(--tx3)'};
+      list.innerHTML = reps.map(function(rec){
+        var rp=rec.report||{};
+        var sev=rp.severity||'—';
+        var col=sevColor[sev]||'var(--tx3)';
+        var real=rp.isRealBug? '실제 버그':'무해/외부요인';
+        var sigs=(rec.signals||[]).map(function(s){return esc(s.source+': '+s.summary);}).join(' · ');
+        return '<div class="ud-card" style="border-left-color:'+col+';margin-bottom:10px;">'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+          +   '<span class="ud-chip" style="background:'+col+';color:#fff;">'+esc(sev)+'</span>'
+          +   '<b>'+esc(real)+'</b>'
+          +   '<span class="desc" style="margin-left:auto;">'+new Date(rec.at).toLocaleString('ko-KR')+'</span>'
+          + '</div>'
+          + (rp.rootCause? '<div style="margin-top:8px;"><b>원인</b> · '+esc(rp.rootCause)+'</div>':'')
+          + (rp.evidence? '<div class="desc" style="margin-top:5px;"><b>근거</b> · '+esc(rp.evidence)+'</div>':'')
+          + (rp.proposedFix? '<div style="margin-top:5px;"><b>제안</b> · '+esc(rp.proposedFix)+'</div>':'')
+          + (rp.autoRecoverable!=null? '<div class="desc" style="margin-top:5px;">상태복구 가능: '+(rp.autoRecoverable?'예':'아니오')+'</div>':'')
+          + '<div class="desc" style="margin-top:6px;font-size:11px;">신호: '+sigs+'</div>'
+          + '</div>';
+      }).join('');
+    }catch(e){ list.innerHTML='<div class="muted">불러오기 실패: '+esc(e.message)+'</div>'; }
   }
   Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
 
