@@ -29,6 +29,7 @@ import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, 
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
+import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
 
 // 피드는 흘려보낸다: 오래된 소식은 자동 정리(기본 36시간 = 어젯밤~오늘).
 const FEED_KEEP_MS = Number(process.env.FEED_KEEP_HOURS ?? 36) * 3600 * 1000;
@@ -312,9 +313,36 @@ async function handleIngest(req, res) {
   try {
     const out = await notifyForArticle(pseudo, {}, {});
     res.json({ ok: true, pushed: !!out.pushed, push: out.push, body: out.body });
+    // ★섀도우: 범용 변경셋 추출(순번교환·당추·휴무·티오프변경까지) — 로그만, 회원/칠판 무영향.
+    //  모니터에서 현 정규식 판독과 대조해 검증되면 칠판 이벤트로 스위치. 응답 후 비동기(응답 지연 없음).
+    shadowChangeSet(pseudo, text, out).catch(() => {});
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+}
+
+// 섀도우 변경셋 추출 — 관련 구두 메시지에 한해 클로드로 구조화, changeset-shadow.jsonl 에 기록(대조용).
+async function shadowChangeSet(pseudo, text, out) {
+  try {
+    const lb = loadJSON('lastboard.json', null);
+    const roster = lb?.rawVerdict?.part3Roster || [];
+    const cs = await extractChangeSet(text, { roster });
+    if (!cs) return;
+    const rvSig = { teamCount: out?.rawVerdict?.teamCount || 0, cutoffPosition: out?.rawVerdict?.cutoffPosition || 0, relevant: !!out?.relevant };
+    appendJSONL('changeset-shadow.jsonl', {
+      at: Date.now(), text: String(text).slice(0, 200), articleId: pseudo.id,
+      changeset: cs, hasContent: changeSetHasContent(cs), regex: rvSig,
+    });
+    if (changeSetHasContent(cs)) {
+      const parts = [];
+      if (cs.cut) parts.push(`컷${cs.cut}`);
+      if (cs.swaps?.length) parts.push(`교환${cs.swaps.length}`);
+      if (cs.adds?.length) parts.push(`당추${cs.adds.length}`);
+      if (cs.duties?.length) parts.push(`근태${cs.duties.length}`);
+      if (cs.tees?.length) parts.push(`티오프${cs.tees.length}`);
+      console.log(`🧪 [변경셋 섀도우] "${String(text).slice(0, 24)}" → ${parts.join(' ')}`);
+    }
+  } catch (e) { console.error('[변경셋 섀도우]', e.message); }
 }
 app.post('/api/ingest', handleIngest);
 app.get('/api/ingest', handleIngest); // 폰 브라우저·간단 포워더용(쿼리 파라미터로도 수신)

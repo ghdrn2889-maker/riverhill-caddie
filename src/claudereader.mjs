@@ -349,6 +349,14 @@ export async function readCrewColumn(imagePath) {
   } catch { return null; }
 }
 
+// 텍스트-only 클로드 호출(구두 변동 해석 등). 하루 캡 공유 — 폭주 방지. 예산 없으면 null.
+export async function runClaudeText(prompt) {
+  if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 텍스트 호출 스킵`); return null; }
+  bumpCalls();
+  try { return await runClaude(prompt); }
+  catch (e) { console.error('[claude] 텍스트 호출 오류:', e.message); return null; }
+}
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
