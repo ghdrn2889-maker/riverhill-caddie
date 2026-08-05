@@ -1512,13 +1512,19 @@ async function processForMember(userId, member, out, full, opts = {}) {
   // ★판독 불확실(check) 발생 사유를 진단 로그에 기록 — 얼리액세스 동안 이걸 분석해 불확실 케이스를 줄여간다.
   //  (불확실 알림 자체가 '앱이 덜 완성됐다'는 신호 → 사유별 빈도를 보고 근본 원인에 대응)
   if (out.push === 'check') {
-    appendJSONL('uncertain-log.jsonl', {
-      at: Date.now(), userId, part: member.part, articleId: full.id, subject: full.subject,
-      status: out.status, category: v?.category || null,
-      confidence: v?.confidence ?? null,
-      reason: v?._uncertain || (v ? `저확신(confidence=${v?.confidence ?? '-'})` : '자동 판독 실패(Gemini 응답 없음)'),
-      partSource: v?._partSource || null, reads: v?._reads || null,
-    });
+    // ★verdict 없음 = 배치표 자체를 못 읽은 '보드 단위' 실패다. 회원마다(13명) 남기면 판독 실패율이 13배로
+    //  부풀어 착시(#26994 1건이 24건으로 보이던 문제). 보드단위 실패는 1번 회원에서 1회만 기록. 저확신(회원별
+    //  판정)은 그대로 회원별. 라벨도 정정 — Gemini는 꺼둔 상태라 '응답 없음'은 오표기, 실제 원인은 이미지 미판독.
+    const noVerdict = !v;
+    if (!noVerdict || userId === 1) {
+      appendJSONL('uncertain-log.jsonl', {
+        at: Date.now(), userId, part: member.part, articleId: full.id, subject: full.subject,
+        status: out.status, category: v?.category || null,
+        confidence: v?.confidence ?? null,
+        reason: v?._uncertain || (v ? `저확신(confidence=${v?.confidence ?? '-'})` : '배치표 이미지 판독 결과 없음(감지·판독 확인 필요)'),
+        partSource: v?._partSource || null, reads: v?._reads || null, boardLevel: noVerdict || undefined,
+      });
+    }
   }
 
   if (out.push === 'low') {
