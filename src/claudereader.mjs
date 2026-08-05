@@ -33,18 +33,30 @@ const HOLISTIC_P3_PROMPT = (
   + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(찾근).\n'
   + '- Right: a tee-time grid with three columns [OUT | time | IN]. Each row shows a tee time (e.g. 16:32). The OUT cell and/or the IN cell of a row may contain a 순번 number. That number identifies which caddie (by their 순번) tees off at that time on that course. A blank/yellow cell means no one on that course/row.\n'
   + 'TASK: Match 순번 -> name (from roster) and 순번 -> tee time+course (from the grid).\n'
+  + '★★CRITICAL — scan the tee grid ALL THE WAY DOWN to its LAST time row. Do NOT stop early.\n'
+  + '  The grid gets SPARSE near the bottom (many rows have a number in ONLY the OUT cell or ONLY the IN cell, and some rows are fully blank). Those single-side rows STILL count — read every one to the very last printed time (e.g. 18:17, 18:31, 18:38, 18:45).\n'
+  + '  INVARIANT: the LARGEST 순번 that has a tee MUST reach the last working caddie — i.e. max(tees.pos) should equal teamCount (the number after "3부"). If your tees stop well short of teamCount, you missed the sparse bottom rows — go back and read them.\n'
   + 'Output STRICT JSON ONLY, no prose:\n'
   + '{"teamCount": <integer after "3부" in the header if visible, else null>,\n'
   + ' "roster": [{"pos":1,"name":"차은경(54)","spare":false}, ... EVERY numbered roster row in order ...],\n'
-  + ' "tees": [{"pos":1,"time":"16:32","course":"OUT"}, ... ONE entry for EACH OUT/IN cell that contains a 순번 ...]}'
+  + ' "tees": [{"pos":1,"time":"16:32","course":"OUT"}, ... ONE entry for EACH OUT/IN cell that contains a 순번, INCLUDING the sparse bottom rows, up to max(pos)=teamCount ...]}'
+);
+
+// 재판독 넛지 — 직전 판독이 티오프 하단을 놓쳤을 때 덧붙이는 교정 지시(꼬리 집중).
+const HOLISTIC_TAIL_NUDGE = (
+  '\n\n★RETRY: the previous read MISSED the bottom of the tee grid — its tees stopped short of teamCount. '
+  + 'Look again at the LOWER part of the [OUT|time|IN] grid, below the last tee you found. '
+  + 'Read EVERY remaining time row down to the very bottom, including rows where only the OUT cell or only the IN cell has a 순번. '
+  + 'Return the FULL tees list so that max(tees.pos) reaches teamCount.'
 );
 
 // 로컬 이미지(전체판 또는 3부 크롭) → { teamCount, roster:[{pos,name,spare}], tees:[{pos,time,course}] } 또는 null.
-export async function readPart3Holistic(imagePath) {
+export async function readPart3Holistic(imagePath, opts = {}) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 홀리스틱 스킵`); return null; }
+  const prompt = HOLISTIC_P3_PROMPT + (opts.tailRetry ? HOLISTIC_TAIL_NUDGE : '');
   let out;
-  try { out = await runClaude(`${HOLISTIC_P3_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${prompt}\nImage path: ${imagePath}`); }
   catch (e) { console.error('[claude] 홀리스틱 호출 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);

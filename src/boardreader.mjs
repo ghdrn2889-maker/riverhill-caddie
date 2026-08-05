@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
-import { DATA_DIR } from './store.mjs';
+import { DATA_DIR, appendJSONL } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -170,20 +170,40 @@ async function readPartsOnce(img, sorted, cuts) {
       //  부실(명단 심각부족)하면 아래 기존 분할 판독으로 폴백. 티오프 배열은 verdictFromPart이 그대로 소비.
       if (String(b.part) === '3' && useHolisticP3()) {
         try {
-          const h = await readPart3Holistic(cropPath);
+          let h = await readPart3Holistic(cropPath);
           if (h && Array.isArray(h.roster) && h.roster.length) {
             const maxPos = h.roster.reduce((mx, x) => Math.max(mx, x.pos), 0);
             const names = new Array(maxPos).fill('');
             h.roster.forEach((x) => { if (x.pos >= 1 && x.pos <= maxPos) names[x.pos - 1] = x.name; });
             const filled = names.filter(Boolean).length;
             const firstSpare = h.roster.filter((x) => x.spare).reduce((mn, x) => Math.min(mn, x.pos), Infinity);
-            const gridMax = (h.tees || []).reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
+            let gridMax = (h.tees || []).reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
             const cut = Number(cuts[b.part]) || (Number.isFinite(firstSpare) ? firstSpare - 1 : 0) || gridMax || 0;
+            // ★티오프 하단 누락 자가검증(근원 재발차단) — 컷 이내인데 티오프 최대순번이 컷에 못 미치면
+            //  (=그리드 하단 sparse 행을 통째로 놓친 것) 꼬리 집중 넛지로 1회 재판독해 pos 기준 병합.
+            //  (실제 8/5 사고: 25팀인데 20까지만 읽고 21~25 티오프 통째 누락 → 근무확정자 티오프 미매칭.)
+            if (cut > 0 && gridMax < cut && claudeBudgetLeft() > 0) {
+              console.log(`[boardreader] 3부 티오프 하단 누락 감지(티max ${gridMax} < 컷 ${cut}) → 꼬리 집중 재판독`);
+              try {
+                const h2 = await readPart3Holistic(cropPath, { tailRetry: true });
+                if (h2 && Array.isArray(h2.tees) && h2.tees.length) {
+                  const byPos = new Map((h.tees || []).map((t) => [t.pos, t]));
+                  for (const t of h2.tees) if (Number(t.pos) > 0 && t.time) byPos.set(Number(t.pos), t);
+                  h = { ...h, tees: [...byPos.values()].sort((a, z) => a.pos - z.pos) };
+                  gridMax = h.tees.reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
+                  console.log(`[boardreader] 재판독 병합 후 티max ${gridMax}(컷 ${cut})`);
+                }
+              } catch (e) { console.error('[boardreader] 꼬리 재판독 오류:', e.message); }
+            }
             // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
             if (filled >= _rosterFloor(cut || filled)) {
               try { fs.unlinkSync(cropPath); } catch { /* noop */ }
               parts[String(b.part)] = { roster: snapRoster(names), tee: h.tees, cut, x0: b.x0, x1: b.x1 };
               console.log(`[boardreader] 3부 홀리스틱 채택: 명단${filled}·티${(h.tees || []).length}·컷${cut}(스페어첫 ${Number.isFinite(firstSpare) ? firstSpare : '-'})`);
+              // ★재판독 후에도 티오프가 컷보다 짧으면 이상 기록 — 감시 클로드·모니터가 잡아 사람이 정정하도록(무음 통과 금지).
+              if (cut > 0 && gridMax < cut) {
+                appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'grid_short', part: 3, teeMax: gridMax, cut, articleHint: '3부 홀리스틱', note: '티오프 하단 누락 — 꼬리 재판독 후에도 컷 미달(사람 확인 필요)' });
+              }
               continue;
             }
             console.log(`[boardreader] 3부 홀리스틱 부실(명단${filled}<floor ${_rosterFloor(cut || filled)}) → 분할판독 폴백`);
