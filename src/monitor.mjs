@@ -7,7 +7,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts, effectivePart3Verdict } from './analytics.mjs';
-import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
+import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser, adminUserIds } from './users.mjs';
+import { startWatchdog } from './watchdog.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
 import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge.mjs';
@@ -609,4 +610,16 @@ app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'in
 app.listen(PORT, HOST, () => {
   console.log(`📊 모니터링 사이트 실행: http://localhost:${PORT}`
     + (TOKEN ? '  (접속 시 ?k=토큰 필요)' : '  (⚠️ MONITOR_TOKEN 미설정 — 접근 제한 없음)'));
+});
+
+// ── 감시 클로드(골격) ── 메인 서버가 뱉는 이상/오류를 이 별도 프로세스가 감지→클로드 자가진단.
+//  진단이 '실제 버그·심각'이면 관리자에게 알림(읽기전용·자문, 코드 자동배포 안 함).
+startWatchdog({
+  notify: async (report, signals) => {
+    const body = `${report.rootCause || ''}\n제안: ${report.proposedFix || ''}`.slice(0, 300);
+    for (const id of adminUserIds()) {
+      try { await broadcast({ title: `시스템 진단(${report.severity}) — 확인 필요`, body, url: '/', level: 'high', bypassQuiet: true }, id); }
+      catch (e) { console.error('[감시] 관리자 알림 실패:', e.message); }
+    }
+  },
 });
