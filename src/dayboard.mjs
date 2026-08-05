@@ -249,7 +249,10 @@ export function parseTeeAnnouncements(text) {
 
 export function eventsFromVerdict(article, rv = {}) {
   const events = [];
-  const at = Number(article.writeDate || article.at) || 0;
+  // ★도착 시각 폴백 — 카톡/구두 인입(writeDate 없음)은 '지금' 온 최신 정보다. at=0으로 두면 리듀서가
+  //  이걸 아침 이미지(at=큰값)보다 과거로 정렬해 board_full이 덮어써 '25팀' 같은 구두 컷이 무시된다.
+  //  (근원: 구두 25팀이 칠판·검수에 반영 안 되던 버그.) 실제 글 시각이 있으면 그걸, 없으면 now.
+  const at = Number(article.writeDate || article.at) || Date.now();
   const id = String(article.id || `${at}`);
   const roster = Array.isArray(rv.part3Roster) ? rv.part3Roster : [];
   const grid = Array.isArray(rv.teeGrid) ? rv.teeGrid : [];
