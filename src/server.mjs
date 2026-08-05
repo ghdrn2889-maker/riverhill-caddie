@@ -276,6 +276,25 @@ app.post('/api/admin/user-status', requireAdmin, (req, res) => {
 // 외부 메시지 수신(카톡 단톡방 등) → 카페 글과 동일한 judge 파이프라인으로 처리.
 //  폰의 알림 포워더(MacroDroid/Tasker/커스텀앱)가 단톡방 메시지를 여기로 POST 한다.
 //  보안: 공개 URL이므로 INGEST_TOKEN(.env) 이 있으면 x-token 헤더/쿼리로 검사(위조 방지).
+// ★소스간 신선도 경보 — 카톡의 '더 새 배치표 사진'을 (읽진 못해도) 감지해 낡음 표식.
+//  현재 배치표(lastboard.at)보다 나중 사진일 때만. 5분내 중복 억제. 감시 클로드가 anomaly를 잡아 관리자 알림.
+//  data/board-stale.json = { since, source, boardAt, note } — 카페 새 배치표 처리 시 rememberBoard가 해제.
+function flagStaleBoardPhoto(src) {
+  try {
+    const now = Date.now();
+    const lb = loadJSON('lastboard.json', null);
+    const boardAt = (lb && Number(lb.at)) || 0;
+    if (boardAt && now <= boardAt) return;                         // 사진이 현재 배치표보다 이전이면 무시
+    const prev = loadJSON('board-stale.json', null);
+    if (prev && prev.since && now - prev.since < 5 * 60 * 1000) return; // 중복 경보 억제(5분)
+    const rec = { since: now, source: String(src || ''), boardAt, note: '카톡에 더 새 배치표 사진 — 카톡 알림엔 이미지가 없어 판독 불가, 수동 확인(ingest-image) 필요' };
+    saveJSON('board-stale.json', rec);
+    appendJSONL('dayboard-anomaly.jsonl', { at: now, kind: 'stale_board_kakao_photo', source: rec.source, boardAt, note: rec.note });
+    const ago = boardAt ? `${Math.round((now - boardAt) / 60000)}분 뒤` : '(현 배치표 없음)';
+    console.warn(`⚠️ [신선도] 카톡(${rec.source})에 현재 배치표보다 ${ago} 새 사진 감지 — 이미지 없어 판독불가, 낡음 경보(수동 확인 필요)`);
+  } catch (e) { console.error('[신선도 경보]', e.message); }
+}
+
 async function handleIngest(req, res) {
   const b = req.body || {};
   const q = req.query || {};
@@ -289,6 +308,13 @@ async function handleIngest(req, res) {
   const source = b.source || q.source || '카톡';
   const roomName = b.room || q.room || '';
   const sender = b.sender || q.sender || '';
+  // ★소스간 신선도 감지(사장님 지적) — 배치표 작성자(정용만 등)/주임이 카톡에 '사진'을 올렸는데, 그 시각이
+  //  현재 배치표(카페 최신)보다 나중이면 = '더 새 배치표가 카톡에 올라왔다'는 강한 신호. 카톡 알림엔 이미지가
+  //  없어 판독은 못 하지만, 옛 배치표를 조용히 최신인 양 두지 않고 '낡음' 경보를 남긴다(감시 클로드→관리자).
+  //  필터(화이트리스트/일정단서)로 버려지기 '전에' 신호를 살린다. 카페에 같은 배치표가 뜨면 rememberBoard가 해제.
+  if (/사진(을)?\s*보냈습니다|^\s*사진\s*$/.test(text) && (isScheduleWriter(sender) || isScheduleWriter(roomName) || /주임|번호표/.test(`${roomName} ${sender}`))) {
+    flagStaleBoardPhoto(roomName || sender);
+  }
   // 카톡 그룹 알림은 제목({not_title})에 '방 이름'이 아니라 '보낸 사람'이 담겨 오므로
   // 방 이름으로 거를 수 없다 → 내용 기반 판독기(judge)가 3부 관련성으로 거른다(무관 메시지는 피드에만·숨김).
   // (선택) ALLOWED_SENDERS 를 설정하면 그 발신자만 통과시키는 화이트리스트로 동작(사생활 강화).
@@ -1075,6 +1101,8 @@ async function rememberBoard(full, out) {
   //  latestImage* = '원본 배치표' 표시 이미지 추적(정본 판독이면 자기 이미지가 곧 최신).
   saveJSON('lastboard.json', { id: String(full.id), dateLabel: v.dateLabel || '', article: full, rawVerdict: v, at: Date.now(),
     latestImage: newImg, latestImageId: String(full.id), latestImageAt: Date.now() });
+  // ★카페가 새 배치표를 실제 판독·기록함 → 카톡 '낡음' 경보 해제(카페가 따라잡음). 카톡 전용이면 경보 유지.
+  try { const st = loadJSON('board-stale.json', null); if (st && st.since) { saveJSON('board-stale.json', null); console.log('·  [신선도] 카페 새 배치표 기록 — 카톡 낡음 경보 해제'); } } catch { /* noop */ }
 }
 
 // 가입/프로필 저장 직후: 현재 감시 중인 최신 배치표를 이 회원 기준으로 즉시 소급 반영.
