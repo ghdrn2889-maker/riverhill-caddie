@@ -188,21 +188,29 @@ async function readPartsOnce(img, sorted, cuts) {
             const firstSpare = h.roster.filter((x) => x.spare).reduce((mn, x) => Math.min(mn, x.pos), Infinity);
             let gridMax = (h.tees || []).reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
             const cut = Number(cuts[b.part]) || (Number.isFinite(firstSpare) ? firstSpare - 1 : 0) || gridMax || 0;
-            // ★티오프 하단 누락 자가검증(근원 재발차단) — 컷 이내인데 티오프 최대순번이 컷에 못 미치면
-            //  (=그리드 하단 sparse 행을 통째로 놓친 것) 꼬리 집중 넛지로 1회 재판독해 pos 기준 병합.
-            //  (실제 8/5 사고: 25팀인데 20까지만 읽고 21~25 티오프 통째 누락 → 근무확정자 티오프 미매칭.)
-            if (cut > 0 && gridMax < cut && claudeBudgetLeft() > 0) {
-              console.log(`[boardreader] 3부 티오프 하단 누락 감지(티max ${gridMax} < 컷 ${cut}) → 꼬리 집중 재판독`);
-              try {
-                const h2 = await readPart3Holistic(holImg, { tailRetry: true });
-                if (h2 && Array.isArray(h2.tees) && h2.tees.length) {
-                  const byPos = new Map((h.tees || []).map((t) => [t.pos, t]));
-                  for (const t of h2.tees) if (Number(t.pos) > 0 && t.time) byPos.set(Number(t.pos), t);
-                  h = { ...h, tees: [...byPos.values()].sort((a, z) => a.pos - z.pos) };
-                  gridMax = h.tees.reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
-                  console.log(`[boardreader] 재판독 병합 후 티max ${gridMax}(컷 ${cut})`);
-                }
-              } catch (e) { console.error('[boardreader] 꼬리 재판독 오류:', e.message); }
+            // ★티오프 누락 자가검증(근원 재발차단) — 컷 이내인데 티가 빈 순번(중간 구멍 or 하단 누락)을
+            //  콕 집어 1회 재판독. 하단누락(8/5: 21~25 통째누락)·중간구멍(8/6: 18:10 OUT 정용만 단독행 흘림) 모두 커버.
+            //  재판독은 '구멍만 채움'(기존 값은 안 덮음) → 오판독으로 나빠질 일 없음. 재판독에도 빈 자리는
+            //  원본이 진짜 빈 것(작성자 미매칭: 신지현·홍아름)으로 확정. ※코스 오독(있는 티의 IN/OUT 뒤바뀜)은 별개.
+            if (cut > 0 && claudeBudgetLeft() > 0) {
+              const have = new Set((h.tees || []).map((t) => Number(t.pos)));
+              const gaps = []; for (let p = 1; p <= cut; p++) if (!have.has(p)) gaps.push(p);
+              if (gaps.length) {
+                console.log(`[boardreader] 3부 티오프 누락 감지(컷 이내 티없음 ${gaps.join(',')}) → 집중 재판독`);
+                try {
+                  const h2 = await readPart3Holistic(holImg, { gapPositions: gaps, tailRetry: gridMax < cut });
+                  if (h2 && Array.isArray(h2.tees) && h2.tees.length) {
+                    const byPos = new Map((h.tees || []).map((t) => [t.pos, t]));
+                    let rec = 0;
+                    for (const t of h2.tees) if (Number(t.pos) > 0 && t.time && !byPos.has(Number(t.pos))) { byPos.set(Number(t.pos), t); rec += 1; }
+                    h = { ...h, tees: [...byPos.values()].sort((a, z) => a.pos - z.pos) };
+                    gridMax = h.tees.reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
+                    const now = new Set(h.tees.map((t) => Number(t.pos)));
+                    const still = []; for (let p = 1; p <= cut; p += 1) if (!now.has(p)) still.push(p);
+                    console.log(`[boardreader] 집중 재판독: ${rec}개 복구, 잔여 티없음 ${still.join(',') || '없음'}(원본이 진짜 빈 자리)`);
+                  }
+                } catch (e) { console.error('[boardreader] 집중 재판독 오류:', e.message); }
+              }
             }
             // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
             if (filled >= _rosterFloor(cut || filled)) {

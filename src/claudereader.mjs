@@ -50,11 +50,22 @@ const HOLISTIC_TAIL_NUDGE = (
   + 'Return the FULL tees list so that max(tees.pos) reaches teamCount.'
 );
 
+// 재판독 넛지 — 컷 이내인데 티가 빈 특정 순번(중간 구멍)을 콕 집어 재확인. 단독행/더블행 뒤 흘림 교정.
+const HOLISTIC_GAP_NUDGE = (positions) => (
+  `\n\n★RETRY: your previous read left these 순번 with NO tee time: [${positions.join(', ')}]. `
+  + 'They are within the working range, so most likely they DO have a tee in the [OUT|time|IN] grid — you probably skipped a single-side row (only OUT or only IN filled) or a row right after a double (OUT+IN) row. '
+  + 'For EACH listed 순번, search the grid carefully for the OUT or IN cell containing that exact number and report its time+course. '
+  + 'Omit a 순번 ONLY if it is genuinely absent from every grid cell (no tee assigned yet). '
+  + 'Return the FULL tees list including any you recover.'
+);
+
 // 로컬 이미지(전체판 또는 3부 크롭) → { teamCount, roster:[{pos,name,spare}], tees:[{pos,time,course}] } 또는 null.
 export async function readPart3Holistic(imagePath, opts = {}) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 홀리스틱 스킵`); return null; }
-  const prompt = HOLISTIC_P3_PROMPT + (opts.tailRetry ? HOLISTIC_TAIL_NUDGE : '');
+  const prompt = HOLISTIC_P3_PROMPT
+    + (opts.tailRetry ? HOLISTIC_TAIL_NUDGE : '')
+    + (Array.isArray(opts.gapPositions) && opts.gapPositions.length ? HOLISTIC_GAP_NUDGE(opts.gapPositions) : '');
   let out;
   try { out = await runClaude(`${prompt}\nImage path: ${imagePath}`); }
   catch (e) { console.error('[claude] 홀리스틱 호출 오류:', e.message); return null; }
