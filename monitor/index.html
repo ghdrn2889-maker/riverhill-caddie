@@ -1366,11 +1366,15 @@
         byTarget[tp].forEach(function(nm){ maxp++; trows.push({pos:maxp,name:nm,tee:'',course:'',duty:''}); });
         var tints=(tj.board.interns||[]).map(function(x){return {time:x.time,course:x.course};});
         var tcut=Number(tj.board.cutLine)||0;
-        await rvPostCorrect(tp, trows, tints, tcut, notify);
+        await rvPostCorrect(tp, trows, tints, tcut, false);
         moveMsg+=' · '+byTarget[tp].join(',')+'→'+tp+'부';
       }
       msg.className='rv-msg ok'; msg.textContent='저장됨 · '+(res.updated||0)+'명 재계산'+moveMsg;
       save.disabled=false; brDirty=false; brSig='';
+      if(notify){
+        if(res.notifyToken && res.pending && res.pending.length){ rvNotifyPreview(res.notifyToken, res.pending); }
+        else { rvToast('상태가 바뀐 회원이 없어 보낼 정정 알림이 없어요.'); }
+      }
       setTimeout(function(){ loadBoardReview(true); },900);
     }catch(e){ save.disabled=false; msg.className='rv-msg err'; msg.textContent=e.message||'통신 오류'; }
   }
@@ -1519,6 +1523,42 @@
     rvToast('순서 반영됨 — 저장을 눌러 확정하세요');
   }
   function rvReorderClose(){ var ov=$('roOv'); if(ov)ov.remove(); roList=null; roLadder=null; roDrag=null; }
+
+  // ── ★정정 알림 미리보기·발송 ── board-correct가 돌려준 대상·문구를 보여주고, 확인 시 실제 발송.
+  function rvNtInjectStyle(){
+    if($('rvntStyle'))return; var s=document.createElement('style'); s.id='rvntStyle';
+    s.textContent='.rvnt-ov{position:fixed;inset:0;z-index:10000;background:rgba(20,28,42,.5);display:flex;align-items:flex-end;justify-content:center;padding:0}'
+     +'.rvnt-sheet{width:100%;max-width:560px;max-height:86vh;display:flex;flex-direction:column;background:var(--panel);border-radius:18px 18px 0 0;padding:18px 16px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 40px rgba(10,18,30,.3)}'
+     +'.rvnt-sheet h3{margin:0 0 4px;font-size:17px;color:var(--tx)}'
+     +'.rvnt-sub{margin:0 0 12px;font-size:13px;color:var(--tx2);line-height:1.5}'
+     +'.rvnt-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}'
+     +'.rvnt-it{padding:11px 12px;margin:7px 4px;background:var(--panel2);border:1px solid var(--bord2);border-radius:11px}'
+     +'.rvnt-nm{font-weight:800;font-size:14px;color:var(--tx);margin-bottom:3px}'
+     +'.rvnt-bd{font-size:12.5px;color:var(--tx2);line-height:1.5}'
+     +'.rvnt-btns{display:flex;gap:9px;margin-top:14px}'
+     +'.rvnt-x,.rvnt-go{flex:1;font:inherit;font-weight:800;font-size:15px;border:0;border-radius:12px;padding:13px;cursor:pointer}'
+     +'.rvnt-x{flex:.6;background:var(--panel2);color:var(--tx2);border:1px solid var(--bord2)}'
+     +'.rvnt-go{background:var(--good);color:#fff}.rvnt-go:disabled{opacity:.6}';
+    document.head.appendChild(s);
+  }
+  function rvNotifyPreview(token, pending){
+    rvNtInjectStyle();
+    var ov=document.createElement('div'); ov.className='rvnt-ov'; ov.id='rvntOv';
+    var items=pending.map(function(p){ return '<div class="rvnt-it"><div class="rvnt-nm">'+esc(p.name)+'</div><div class="rvnt-bd">'+esc(p.body)+'</div></div>'; }).join('');
+    ov.innerHTML='<div class="rvnt-sheet"><h3>정정 알림 미리보기</h3><p class="rvnt-sub">아래 <b>'+pending.length+'명</b>에게 정정 알림이 발송됩니다. 문구를 확인하고 보내세요.</p><div class="rvnt-list">'+items+'</div><div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button><button class="rvnt-go" type="button">'+pending.length+'명에게 보내기</button></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){ if(e.target===ov)ov.remove(); });
+    ov.querySelector('.rvnt-x').addEventListener('click',function(){ ov.remove(); });
+    ov.querySelector('.rvnt-go').addEventListener('click',async function(){
+      var go=ov.querySelector('.rvnt-go'); go.disabled=true; go.textContent='보내는 중…';
+      try{
+        var r=await fetch(apiUrl('/api/board-notify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})});
+        var j=await r.json();
+        if(j.ok){ rvToast('정정 알림 '+(j.sent||0)+'명 발송 완료'); ov.remove(); }
+        else { go.disabled=false; go.textContent='다시 보내기'; rvToast(j.error||'발송 실패'); }
+      }catch(e){ go.disabled=false; go.textContent='다시 보내기'; rvToast('통신 오류'); }
+    });
+  }
 
   // 저장된 탭 복원(기본: 승인)
   var savedTab=null; try{ savedTab=localStorage.getItem('monTab'); }catch(e){}

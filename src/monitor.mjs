@@ -408,6 +408,25 @@ app.get('/api/board-review', gate, (req, res) => {
     } });
   } catch (e) { console.error('board-review 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
+// ★교정 정정알림 — 저장 시 '실제 바뀐 회원'만 골라 문구를 만들되, 즉시 발송하지 않고
+//  토큰에 담아 관리자에게 미리보기로 돌려준다. /api/board-notify 로 확인해야 실제 발송.
+const pendingNotify = {};
+function correctionMsg(partLabel, name, s) {
+  if (s.nowOff && !s.wasOff) return { title: `${partLabel} 휴무`, body: `${name}님, ${partLabel} 오늘은 휴무로 확인됐어요. 편히 쉬세요.` };
+  if ((s.wasWait || s.wasOff) && s.nowWork && s.pos > 0) return { title: `${partLabel} 근무 전환`, body: `${name}님, ${partLabel} 근무로 확정됐어요${s.newTee ? ` — 티오프 ${s.newTee}` : ''}. 배치표를 확인해주세요.` };
+  if (s.wasWork && s.nowSpare) return { title: `${partLabel} 스페어 전환`, body: `${name}님, ${partLabel} 스페어(대기)로 전환됐어요.` };
+  if (s.wasWork && s.nowWork && s.oldTee && s.newTee && s.oldTee !== s.newTee) return { title: `${partLabel} 티오프 변경!`, body: `${name}님, ${partLabel} 티오프가 ${s.oldTee} → ${s.newTee}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
+  return null;
+}
+function stashNotify(pending) {
+  // 오래된 대기건 정리(15분 초과)
+  const now = Date.now();
+  for (const k of Object.keys(pendingNotify)) { if (now - (pendingNotify[k].at || 0) > 15 * 60 * 1000) delete pendingNotify[k]; }
+  if (!pending.length) return null;
+  const token = 'nt_' + now.toString(36) + Math.random().toString(36).slice(2, 7);
+  pendingNotify[token] = { at: now, items: pending };
+  return token;
+}
 app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
@@ -457,7 +476,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const rosterNk = new Set(roster.map(nkey).filter(Boolean));
     const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
     const dk = dayKey(vpart.dateLabel);
-    let updated = 0, notified = 0;
+    let updated = 0; const pending = [];
     for (const m of activeMembers()) {
       const today = loadToday(m.id, part) || {};
       const hadState = !!(today.myPosition || today.teeTime || (today.status && today.status !== 'unknown'));
@@ -488,18 +507,15 @@ app.post('/api/board-correct', gate, async (req, res) => {
       const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
       const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
       saveToday(next, m.id, part); updated++;
-      if (notify && pushReady) {
+      if (notify) {
         const pl = part === '1' ? '1부(조출)' : `${part}부`;
-        let title = '', body = '';
-        if (nowOff && !wasOff) { title = `${pl} 휴무`; body = `${m.board_name}님, ${pl} 오늘은 휴무로 확인됐어요. 편히 쉬세요.`; }
-        else if ((wasWait || wasOff) && nowWork && pos > 0) { title = `${pl} 근무 전환`; body = `${m.board_name}님, ${pl} 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
-        else if (wasWork && nowSpare) { title = `${pl} 스페어 전환`; body = `${m.board_name}님, ${pl} 스페어(대기)로 전환됐어요.`; }
-        else if (wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime) { title = `${pl} 티오프 변경!`; body = `${m.board_name}님, ${pl} 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요.`; }
-        if (title) { try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, m.id); notified++; } catch (e) { console.error('교정 알림 실패:', e.message); } }
+        const cm = correctionMsg(pl, m.board_name, { wasWait, wasOff, wasWork, nowWork, nowSpare, nowOff, pos, oldTee: today.teeTime || '', newTee: next.teeTime || '' });
+        if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });
       }
     }
-    console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
-    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
+    const notifyToken = (notify && pushReady) ? stashNotify(pending) : null;
+    console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
+    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
   }
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) return res.status(400).json({ ok: false, error: '현재 배치표가 없어요.' });
@@ -537,7 +553,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const rosterNk = new Set(roster.map(nkey).filter(Boolean));
   const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
   const dk = dayKey(v.dateLabel || lb.dateLabel || '');
-  let updated = 0, notified = 0;
+  let updated = 0; const pending = [];
   for (const m of activeMembers()) {
     const today = loadToday(m.id) || {};
     // 이 배치표에 없는 휴무자(다른 근태로 쉬는 사람)는 건드리지 않음 — 배치표에 이름이 있으면 재계산.
@@ -568,17 +584,31 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
     const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
     saveToday(next, m.id); updated++;
-    if (notify && pushReady) {
-      let title = '', body = '';
-      if (nowOff && !wasOff) { title = `${member.part}부 휴무`; body = `${m.board_name}님, 오늘은 휴무로 확인됐어요. 편히 쉬세요.`; }
-      else if ((wasWait || wasOff) && nowWork && pos > 0) { title = `${member.part}부 근무 전환`; body = `${m.board_name}님, 근무로 확정됐어요${next.teeTime ? ` — 티오프 ${next.teeTime}` : ''}. 배치표를 확인해주세요.`; }
-      else if (wasWork && nowSpare) { title = `${member.part}부 스페어 전환`; body = `${m.board_name}님, 스페어(대기)로 전환됐어요.`; }
-      else if (wasWork && nowWork && today.teeTime && next.teeTime && today.teeTime !== next.teeTime) { title = '티오프 시간 변경!'; body = `${m.board_name}님, 티오프가 ${today.teeTime} → ${next.teeTime}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.`; }
-      if (title) { try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, m.id); notified++; } catch (e) { console.error('교정 알림 실패:', e.message); } }
+    if (notify) {
+      const pl = `${member.part}부`;
+      const cm = correctionMsg(pl, m.board_name, { wasWait, wasOff, wasWork, nowWork, nowSpare, nowOff, pos, oldTee: today.teeTime || '', newTee: next.teeTime || '' });
+      if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });
     }
   }
-  console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${notified ? ` · 알림 ${notified}명` : ''}`);
-  res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, notified });
+  const notifyToken = (notify && pushReady) ? stashNotify(pending) : null;
+  console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
+  res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
+});
+
+// ★교정 정정알림 확정 발송 — board-correct가 돌려준 notifyToken을 관리자가 미리보기 후 확인하면 실제 발송.
+app.post('/api/board-notify', gate, async (req, res) => {
+  const token = String(req.body?.token || req.query.token || '');
+  const entry = pendingNotify[token];
+  if (!entry) return res.status(404).json({ ok: false, error: '대기 중인 알림이 없어요(이미 보냈거나 만료됨).' });
+  if (Date.now() - (entry.at || 0) > 15 * 60 * 1000) { delete pendingNotify[token]; return res.status(410).json({ ok: false, error: '알림이 만료됐어요. 다시 저장해주세요.' }); }
+  delete pendingNotify[token];   // 재발송 방지 — 먼저 제거
+  let sent = 0;
+  for (const it of entry.items) {
+    try { await broadcast({ title: it.title, body: it.body, url: '/', level: 'high', bypassQuiet: true }, it.id); sent++; }
+    catch (e) { console.error('정정알림 발송 실패:', e.message); }
+  }
+  console.log(`📢 [monitor] 정정 알림 발송: ${sent}/${entry.items.length}명`);
+  res.json({ ok: true, sent, total: entry.items.length });
 });
 
 // ── 공지(팩스 출력지) 작성·발송 — 회원 앱이 열릴 때 출력 연출로 표시. ──
