@@ -418,6 +418,19 @@ function correctionMsg(partLabel, name, s) {
   if (s.wasWork && s.nowWork && s.oldTee && s.newTee && s.oldTee !== s.newTee) return { title: `${partLabel} 티오프 변경!`, body: `${name}님, ${partLabel} 티오프가 ${s.oldTee} → ${s.newTee}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
   return null;
 }
+// 사후(이미 저장된 교정) 정정 알림용 — 현재 배정 상태 그대로 안내하는 문구.
+function currentStateMsg(pl, name, today) {
+  if (today.status === 'off') { const ot = today.offType; const w = ot === 'sick' ? '병가' : ot === 'vacation' ? '휴가' : '휴무'; return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 오늘은 ${w}예요.` }; }
+  const pos = Number(today.myPosition) || 0;
+  const work = ['work', 'assigned', 'your_turn'].includes(today.status);
+  if (work) return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 근무${today.teeTime ? ` · 티오프 ${today.teeTime}${today.course ? `(${today.course})` : ''}` : ''}${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
+  return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 스페어(대기)${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
+}
+function boardCtxForPart(part) {
+  if (part === '3') { const lb = loadLastBoard(); if (!lb || !lb.rawVerdict) return null; const v = lb.rawVerdict; return { articleId: String(lb.id), dk: dayKey(v.dateLabel || lb.dateLabel || ''), roster: v.part3Roster || [], dateLabel: v.dateLabel || lb.dateLabel || '' }; }
+  const bp = loadBoardPartsStore(); const pd = bp && bp.parts && bp.parts[part]; if (!pd || !Array.isArray(pd.roster)) return null;
+  return { articleId: String(bp.articleId), dk: dayKey(pd.dateLabel || bp.dateLabel || ''), roster: pd.roster || [], dateLabel: pd.dateLabel || bp.dateLabel || '' };
+}
 function stashNotify(pending) {
   // 오래된 대기건 정리(15분 초과)
   const now = Date.now();
@@ -609,6 +622,48 @@ app.post('/api/board-notify', gate, async (req, res) => {
   }
   console.log(`📢 [monitor] 정정 알림 발송: ${sent}/${entry.items.length}명`);
   res.json({ ok: true, sent, total: entry.items.length });
+});
+
+// ★사후 정정 알림 — 이미 저장된 교정에 대해, 현재 배치표 기준 대상 회원 목록을 돌려준다.
+//  교정으로 실제 바뀐 회원(_adminLock 일치)은 sel:true로 미리 체크 제안. 관리자가 확인·선택해 발송.
+app.get('/api/board-notify-candidates', gate, (req, res) => {
+  try {
+    const part = String(req.query.part || '3');
+    const ctx = boardCtxForPart(part);
+    if (!ctx) return res.json({ ok: true, part, candidates: [] });
+    const rosterNk = new Set(ctx.roster.map(nkey).filter(Boolean));
+    const pl = part === '1' ? '1부(조출)' : `${part}부`;
+    const out = [];
+    for (const m of activeMembers()) {
+      const today = (part === '3' ? loadToday(m.id) : loadToday(m.id, part)) || {};
+      const inRoster = rosterNk.has(nkey(m.board_name));
+      const hasState = !!(today.myPosition || today.teeTime || (today.status && today.status !== 'unknown'));
+      if (!inRoster && !hasState) continue;
+      const cm = currentStateMsg(pl, m.board_name, today);
+      const locked = !!(today._adminLock && String(today._adminLock.articleId) === ctx.articleId);
+      out.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body, sel: locked });
+    }
+    res.json({ ok: true, part, dateLabel: ctx.dateLabel, candidates: out });
+  } catch (e) { console.error('notify-candidates 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+app.post('/api/board-notify-adhoc', gate, async (req, res) => {
+  try {
+    const part = String(req.body?.part || '3');
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ ok: false, error: '받는 회원을 한 명 이상 선택해주세요.' });
+    if (!pushReady) return res.status(400).json({ ok: false, error: '푸시 발송 준비가 안 됐어요(VAPID 키 확인).' });
+    const pl = part === '1' ? '1부(조출)' : `${part}부`;
+    const idset = new Set(ids); let sent = 0;
+    for (const m of activeMembers()) {
+      if (!idset.has(m.id)) continue;
+      const today = (part === '3' ? loadToday(m.id) : loadToday(m.id, part)) || {};
+      const cm = currentStateMsg(pl, m.board_name, today);
+      try { await broadcast({ title: cm.title, body: cm.body, url: '/', level: 'high', bypassQuiet: true }, m.id); sent++; }
+      catch (e) { console.error('사후 정정알림 발송 실패:', e.message); }
+    }
+    console.log(`📢 [monitor] 사후 정정 알림(수동 선택) 발송: ${sent}/${ids.length}명`);
+    res.json({ ok: true, sent });
+  } catch (e) { console.error('notify-adhoc 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ── 공지(팩스 출력지) 작성·발송 — 회원 앱이 열릴 때 출력 연출로 표시. ──

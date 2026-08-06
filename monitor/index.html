@@ -1316,6 +1316,7 @@
       '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
       '<button class="rv-reord" id="rvReord" type="button" style="width:100%;margin-top:11px;font:inherit;font-weight:800;font-size:14px;border:1.5px solid var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--panel));color:var(--acc);border-radius:12px;padding:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M4 9h16M4 15h16"/><path d="m8 5-4 4 4 4M16 11l4 4-4 4"/></svg>순서 바꾸기 · 드래그로 끼워넣기</button>'+
       '<div class="rv-savebar"><label class="rv-notify"><input type="checkbox" id="rvNotify"> 알림</label><button class="rv-save" id="rvSave">저장 · 전원 반영 <span class="pd" id="rvPd"></span></button></div>'+
+      '<button class="rv-adhoc" id="rvAdhoc" type="button" style="width:100%;margin-top:8px;font:inherit;font-weight:700;font-size:13px;border:1px solid var(--bord2);background:var(--panel2);color:var(--tx2);border-radius:11px;padding:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>이미 수정한 배치표 · 정정 알림 보내기</button>'+
       '<div class="rv-msg" id="rvMsg"></div>'+
       '<div class="rv-modal" id="rvModal"><div class="rv-sheet"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>저장할 수 없어요</h3><p id="rvBlkMsg"></p><div class="sub" id="rvBlkSub"></div><button id="rvBlkOk" type="button">돌아가서 정리</button></div></div>';
     rvWireTabs(el);
@@ -1326,6 +1327,7 @@
     var warn=$('rvWarn'); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); });
     var sv=$('rvSave'); if(sv) sv.addEventListener('click',rvSaveCorrect);
     var rord=$('rvReord'); if(rord) rord.addEventListener('click',rvReorderOpen);
+    var adh=$('rvAdhoc'); if(adh) adh.addEventListener('click',rvAdhocNotify);
     var iadd=$('rvIAdd'); if(iadd) iadd.addEventListener('click',function(){ var box=$('rvInterns'); if(box)box.insertAdjacentHTML('beforeend',rvInternRow(null)); brDirty=true; });
     var ints=$('rvInterns'); if(ints) ints.addEventListener('click',function(e){ if(e.target.classList.contains('br-idel')){ var row=e.target.closest('.br-intern'); if(row)row.remove(); brDirty=true; } });
     var ok=$('rvBlkOk'); if(ok) ok.addEventListener('click',function(){ var mo=$('rvModal'); if(mo)mo.classList.remove('show'); var c=rvConf()[0]; if(c)rvJump(c.rows[0].pos); });
@@ -1538,8 +1540,35 @@
      +'.rvnt-btns{display:flex;gap:9px;margin-top:14px}'
      +'.rvnt-x,.rvnt-go{flex:1;font:inherit;font-weight:800;font-size:15px;border:0;border-radius:12px;padding:13px;cursor:pointer}'
      +'.rvnt-x{flex:.6;background:var(--panel2);color:var(--tx2);border:1px solid var(--bord2)}'
-     +'.rvnt-go{background:var(--good);color:#fff}.rvnt-go:disabled{opacity:.6}';
+     +'.rvnt-go{background:var(--good);color:#fff}.rvnt-go:disabled{opacity:.6}'
+     +'.rvnt-ck{display:flex;align-items:flex-start;gap:11px;cursor:pointer}'
+     +'.rvnt-ck input{margin-top:2px;width:19px;height:19px;flex:none;accent-color:var(--good)}';
     document.head.appendChild(s);
+  }
+  function rvCandUrl(){ var u=apiUrl('/api/board-notify-candidates'); return u+(u.indexOf('?')>=0?'&':'?')+'part='+brPart; }
+  async function rvAdhocNotify(){
+    try{ var r=await fetch(rvCandUrl(),{cache:'no-store'}); var j=await r.json();
+      if(!j.ok){ rvToast(j.error||'불러오기 실패'); return; }
+      rvAdhocPreview(j.candidates||[]);
+    }catch(e){ rvToast('통신 오류'); }
+  }
+  function rvAdhocPreview(cands){
+    rvNtInjectStyle();
+    var ov=document.createElement('div'); ov.className='rvnt-ov'; ov.id='rvntOv';
+    var items=cands.map(function(p,i){ return '<label class="rvnt-it rvnt-ck"><input type="checkbox" data-i="'+i+'"'+(p.sel?' checked':'')+'><div style="flex:1"><div class="rvnt-nm">'+esc(p.name)+'</div><div class="rvnt-bd">'+esc(p.body)+'</div></div></label>'; }).join('');
+    ov.innerHTML='<div class="rvnt-sheet"><h3>정정 알림 보내기</h3><p class="rvnt-sub">이미 수정된 배치표 기준입니다. <b>보낼 회원을 체크</b>하세요. (교정으로 바뀐 사람은 미리 체크돼 있어요)</p><div class="rvnt-list">'+(items||'<div class="rvnt-bd" style="padding:12px">대상 회원이 없어요.</div>')+'</div><div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button><button class="rvnt-go" type="button">선택한 회원에게 보내기</button></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){ if(e.target===ov)ov.remove(); });
+    ov.querySelector('.rvnt-x').addEventListener('click',function(){ ov.remove(); });
+    ov.querySelector('.rvnt-go').addEventListener('click',async function(){
+      var ids=[]; Array.prototype.forEach.call(ov.querySelectorAll('input[type=checkbox]'),function(c){ if(c.checked)ids.push(cands[Number(c.getAttribute('data-i'))].id); });
+      if(!ids.length){ rvToast('보낼 회원을 선택하세요'); return; }
+      var go=ov.querySelector('.rvnt-go'); go.disabled=true; go.textContent='보내는 중…';
+      try{ var r=await fetch(apiUrl('/api/board-notify-adhoc'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:brPart,ids:ids})}); var j=await r.json();
+        if(j.ok){ rvToast('정정 알림 '+(j.sent||0)+'명 발송 완료'); ov.remove(); }
+        else{ go.disabled=false; go.textContent='다시 보내기'; rvToast(j.error||'발송 실패'); }
+      }catch(e){ go.disabled=false; go.textContent='다시 보내기'; rvToast('통신 오류'); }
+    });
   }
   function rvNotifyPreview(token, pending){
     rvNtInjectStyle();
