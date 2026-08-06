@@ -429,7 +429,10 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     v.teeTime = ''; v.course = '';
     v._teeSource = `duty-off(${dutyCd})`;
     v._dutyOff = dutyCd;   // ★interpretForMember가 이 표식을 보고 표/명단 재해석을 건너뛰게(오프가 되살아나지 않게)
-    v.offType = /병가/.test(dutyCd) ? 'sick' : /휴가|연차|반차|월차/.test(dutyCd) ? 'vacation' : 'off';
+    // ★확정된 병가·휴가는 다일 지속 근태 — 이번 판독이 일반 '휴무'로 강등(블루셀 병가→옐로 휴무 오독·근태칸 누락)해도 이어받는다.
+    //  안 그러면 새 배치표 첫 판독마다 병가자에게 '휴무' 알림이 나간다(사용자 지적).
+    const _persistOff = (today && (today.offType === 'sick' || today.offType === 'vacation')) ? today.offType : null;
+    v.offType = /병가/.test(dutyCd) ? 'sick' : /휴가|연차|반차|월차/.test(dutyCd) ? 'vacation' : (_persistOff || 'off');
     delete v._uncertain;
     return;
   }
@@ -480,6 +483,8 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     if (sameDayLabel(today?.date, v.dateLabel)) {
       v.myStatus = 'off';
       v._offReason = 'removed';
+      // ★확정 병가·휴가면 '순번 빠짐'이 아니라 그 근태를 이어받는다(병가자에게 '순번이 빠졌어요' 오알림 방지).
+      if (today && (today.offType === 'sick' || today.offType === 'vacation')) v.offType = today.offType;
       v._prevPosition = todayPos || prevPos || null;
       v.teeTime = ''; v.course = '';
     } else {
@@ -761,11 +766,11 @@ export function decide(article, verdict, member = memberFromEnv()) {
     // ★순번 제외(removed)는 쉼·사유를 단정하지 않고 사실만(문제가 생긴 걸 수도 있음).
     //  ★offType 존중: 병가·휴가는 그대로 문구에 — '휴무'로 뭉뚱그리지 않는다(사용자 지적).
     const offKind = verdict.offType === 'sick' ? '병가' : verdict.offType === 'vacation' ? '휴가' : '휴무';
-    body = verdict._offReason === 'removed'
-      ? `${name}님, ${verdict.dateLabel || '오늘'} 최신 배치표에서 순번이 빠졌어요.`
-      : (offKind === '휴무'
-          ? `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`
-          : `${name}님, ${verdict.dateLabel || '오늘'} ${offKind}로 확인됐어요. 편히 쉬세요`);
+    body = (offKind !== '휴무')   // ★병가·휴가 확정이면 '순번 빠짐'·'휴무'보다 그 근태를 우선 표기
+      ? `${name}님, ${verdict.dateLabel || '오늘'} ${offKind}로 확인됐어요. 편히 쉬세요`
+      : (verdict._offReason === 'removed'
+          ? `${name}님, ${verdict.dateLabel || '오늘'} 최신 배치표에서 순번이 빠졌어요.`
+          : `${name}님, ${verdict.dateLabel || '오늘'} 휴무입니다. 편히 쉬세요`);
   }
 
   if (verdict.note && String(verdict.note).trim()) body += `\n${String(verdict.note).trim()}`;
