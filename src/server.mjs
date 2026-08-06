@@ -1130,9 +1130,66 @@ function backfillFromLastBoard(userId, member) {
   } catch (e) { console.error('가입 소급 오류:', e.message); return false; }
 }
 
+// ── ★단독 부-배치표 라우터(1·2부) ── "2부배치표입니다"처럼 특정 부만 온 배치표를 3부 판독경로에 넣으면
+//  3부로 오독해 정본(lastboard)·3부 회원을 오염시킨다. 제목의 명시 부를 감지해 3부 코드에 진입시키지 않고,
+//  '그 부'만 판독→모니터(board-parts) 저장 + (MINOR_PART_PUSH 켜지면)그 부 회원 처리. 3부 경로 완전 불변.
+function detectDeclaredBoardPart(full) {
+  const m = String(full?.subject || '').match(/([123])\s*부\s*(?:배치표|번호표|시간표)/);
+  return m ? m[1] : null;   // '1'|'2'|'3'|null(전체/불명확 → 기존 3부 경로)
+}
+
+async function handleStandalonePartBoard(full, part, opts = {}) {
+  const primary = envMember();
+  const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
+  const win = partWindow(part);
+  const mp = { name: primary.name, part, commuteMin: primary.commuteMin, teeMin: win.min, teeMax: win.max };
+  const outP = await judge(full, loadToday(1, part), mp);   // 그 부로만 판독(3부 판독 안 함)
+  const vp = outP.rawVerdict || {};
+  const crewDuty = vp.crewDuty || {};
+  const okRoster = Array.isArray(vp.part3Roster) && vp.part3Roster.length > 0;
+  if (okRoster) {
+    try {
+      setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
+        image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, {
+        roster: vp.part3Roster.slice(), teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
+        teamCount: Number(vp.teamCount) || 0, internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
+        internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
+        cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
+      });
+      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})`);
+    } catch (e) { console.error('[단독부 board-parts 저장 오류]', e.message); }
+  } else {
+    console.log(`·  [단독 ${part}부 배치표] 판독 명단 없음 → 모니터 스킵: ${full.subject}`);
+  }
+  // ★회원 처리 — MINOR_PART_PUSH 켜졌을 때만(트라이얼). 꺼지면 모니터 저장까지만(3부 불변·유령 알림 0).
+  if (minorPartOn && okRoster) {
+    try {
+      const m1 = interpretForMember(full, vp, mp, loadToday(1, part));
+      await processForMemberPart(1, mp, m1, full, { ...opts, crewDuty, crossPart: null });
+      for (const m of activeMembers()) {
+        if (m.id === 1) continue;
+        const memberP = { name: m.board_name, part, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+        const moutP = interpretForMember(full, vp, memberP, loadToday(m.id, part));
+        await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart: null });
+      }
+    } catch (e) { console.error(`[단독 ${part}부 회원 처리 오류]`, e.message); }
+  }
+  try { appendJSONL('part-detect.jsonl', { at: Date.now(), kind: 'standalone_board', part, minorPartOn,
+    articleId: String(full.id || ''), subject: String(full.subject || '').slice(0, 40),
+    roster: (vp.part3Roster || []).length, cut: Number(vp.cutoffPosition) || 0, reliable: !!vp.rosterReliable }); } catch { /* noop */ }
+  return { pushed: false, push: 'low', relevant: true, title: '', body: full.subject || '', standalonePart: part };
+}
+
 // 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
 async function notifyForArticle(full, result = {}, opts = {}) {
   const primary = envMember(); // 1번 회원(김홍구)
+
+  // ★단독 부-배치표 라우팅(1·2부) — 3부 경로에 넣으면 오독·정본오염 → 감지 시 전용 처리 후 종료(3부 코드 미진입).
+  const _declaredPart = detectDeclaredBoardPart(full);
+  if (_declaredPart && _declaredPart !== '3' && full.images && full.images.length) {
+    console.log(`·  [단독 ${_declaredPart}부 배치표 감지] 3부 경로 우회 → 전용 처리: ${full.subject}`);
+    return await handleStandalonePartBoard(full, _declaredPart, opts);
+  }
 
   // ★값싼 사전 필터(1번 회원 기준): 명백히 남의 부/개인근태면 Gemini 호출 없이 종료(할당량 절약).
   //  (현재 테스터는 3부라 1번 회원의 3부 board가 곧 그들 board — 부가 늘면 '어느 회원에게든 관련' 기준으로 확장)
