@@ -182,9 +182,9 @@ async function readPartsOnce(img, sorted, cuts) {
           let h = await readPart3Holistic(holImg);
           if (h && Array.isArray(h.roster) && h.roster.length) {
             const maxPos = h.roster.reduce((mx, x) => Math.max(mx, x.pos), 0);
-            const names = new Array(maxPos).fill('');
+            let names = new Array(maxPos).fill('');
             h.roster.forEach((x) => { if (x.pos >= 1 && x.pos <= maxPos) names[x.pos - 1] = x.name; });
-            const filled = names.filter(Boolean).length;
+            let filled = names.filter(Boolean).length;
             const firstSpare = h.roster.filter((x) => x.spare).reduce((mn, x) => Math.min(mn, x.pos), Infinity);
             let gridMax = (h.tees || []).reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
             const cut = Number(cuts[b.part]) || (Number.isFinite(firstSpare) ? firstSpare - 1 : 0) || gridMax || 0;
@@ -212,6 +212,21 @@ async function readPartsOnce(img, sorted, cuts) {
                 } catch (e) { console.error('[boardreader] 집중 재판독 오류:', e.message); }
               }
             }
+            // ★명단 완전성 보완 — 홀리스틱이 순번명단 '2번째 서브컬럼(뒤 스페어)'을 통째 놓치는 경우가 있다
+            //  (8/7: 왼쪽 1~20 + 오른쪽 첫줄 21만 읽고 22~35 유실). 열분할로 전체 명단을 다시 읽어 '더 완전하면'
+            //  명단만 교체한다(티오프는 홀리스틱 값 유지). 열분할은 서브컬럼을 좌→우로 이어붙여 순번 순서 보존.
+            try {
+              if (claudeBudgetLeft() > 0 && cut > 0 && filled <= cut + 3) {   // 스페어가 거의 안 읽힘 = 뒤 서브컬럼 유실 의심일 때만
+                const rc = await getRosterColumns(holImg);
+                if (rc && rc.length) {
+                  const colR = await readColumnsAssemble(img, rc, b.x0, x1, 0.98, b.part);
+                  if (colR && colR.length > filled && colR.length <= 60 && _bare(colR[0]) === _bare(names[0] || '')) {
+                    console.log(`[boardreader] 3부 명단 열분할 보완: ${filled}→${colR.length}명(뒤 스페어 복구)`);
+                    names = colR.slice(); filled = names.filter(Boolean).length;
+                  }
+                }
+              }
+            } catch (e) { console.error('[boardreader] 3부 명단 열분할 보완 오류:', e.message); }
             // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
             if (filled >= _rosterFloor(cut || filled)) {
               try { fs.unlinkSync(cropPath); } catch { /* noop */ }
