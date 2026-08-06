@@ -140,6 +140,109 @@
   .br-imgbox .lbl{ font-size:11px; font-weight:800; color:var(--tx3); margin-bottom:6px; }
   .br-imgbox img{ width:100%; border:1px solid var(--bord); border-radius:10px; display:block; }
   .br-imgbox .noimg{ padding:24px; text-align:center; color:var(--tx3); background:var(--panel2); border:1px dashed var(--bord); border-radius:10px; font-size:12px; }
+
+  /* ── 배치표 검수 v2 (모바일 카드) ── */
+  #page-review .rv-parts{ display:flex; gap:6px; margin-bottom:9px; }
+  #page-review .rv-pt{ flex:1; font:inherit; font-size:13px; font-weight:800; padding:9px 0; border-radius:11px; background:var(--panel2); border:1px solid var(--bord2); color:var(--tx2); cursor:pointer; transition:.15s; }
+  #page-review .rv-pt.on{ background:var(--acc); border-color:var(--acc); color:#fff; }
+  #page-review .rv-pt .c{ font-size:10px; font-weight:700; opacity:.7; margin-left:3px; }
+  #page-review .rv-sb{ position:relative; margin-bottom:7px; }
+  #page-review .rv-sb svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:17px; height:17px; color:var(--tx3); pointer-events:none; }
+  #page-review .rv-search{ width:100%; font:inherit; font-size:15px; padding:11px 40px 11px 38px; border-radius:12px; border:1px solid var(--bord2); background:var(--panel); color:var(--tx); }
+  #page-review .rv-search:focus{ outline:none; border-color:var(--acc); box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 16%,transparent); }
+  #page-review .rv-clr{ position:absolute; right:8px; top:50%; transform:translateY(-50%); width:27px; height:27px; border:none; background:var(--panel2); border-radius:50%; color:var(--tx2); font-size:14px; cursor:pointer; display:none; align-items:center; justify-content:center; }
+  #page-review .rv-clr.show{ display:inline-flex; }
+  #page-review .rv-all{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--tx2); margin:0 0 8px 2px; cursor:pointer; }
+  #page-review .rv-all input{ width:15px; height:15px; accent-color:var(--acc); }
+  #page-review .rv-meta{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:9px; }
+  #page-review .rv-chip{ font-size:11px; font-weight:700; color:var(--tx2); background:var(--panel2); border:1px solid var(--bord); border-radius:999px; padding:4px 10px; }
+  #page-review .rv-chip.ok{ color:var(--good); background:color-mix(in srgb,var(--good) 12%,transparent); border-color:transparent; }
+  #page-review .rv-chip.warn{ color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); border-color:transparent; }
+  #page-review .rv-cut{ margin-left:auto; font-size:11.5px; font-weight:800; color:var(--good); background:color-mix(in srgb,var(--good) 12%,transparent); border:1px solid color-mix(in srgb,var(--good) 30%,transparent); border-radius:999px; padding:5px 11px; }
+  #page-review .rv-img{ margin-bottom:9px; }
+  #page-review .rv-img summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:700; color:var(--info); background:color-mix(in srgb,var(--info) 10%,transparent); border:1px solid color-mix(in srgb,var(--info) 25%,transparent); border-radius:11px; padding:10px 13px; }
+  #page-review .rv-img summary::-webkit-details-marker{ display:none; }
+  #page-review .rv-img[open] summary{ border-radius:11px 11px 0 0; }
+  #page-review .rv-img .box{ border:1px solid color-mix(in srgb,var(--info) 25%,transparent); border-top:none; border-radius:0 0 11px 11px; background:var(--panel); padding:10px; }
+  #page-review .rv-img img{ width:100%; border-radius:8px; display:block; border:1px solid var(--bord); }
+  #page-review .rv-img .noimg{ padding:22px; text-align:center; color:var(--tx3); font-size:12px; }
+  #page-review .rv-warn{ background:color-mix(in srgb,var(--bad) 9%,var(--panel)); border:1px solid color-mix(in srgb,var(--bad) 38%,transparent); border-radius:12px; padding:11px 13px; margin-bottom:9px; display:none; }
+  #page-review .rv-warn.show{ display:block; }
+  #page-review .rv-warn .wt{ font-size:12.5px; font-weight:800; color:var(--bad); display:flex; align-items:center; gap:7px; }
+  #page-review .rv-warn .wt svg{ width:16px; height:16px; flex:none; }
+  #page-review .rv-witem{ font-size:12px; color:var(--tx); background:var(--panel); border:1px solid color-mix(in srgb,var(--bad) 25%,transparent); border-radius:9px; padding:7px 10px; margin-top:7px; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
+  #page-review .rv-witem b{ color:var(--bad); }
+  #page-review .rv-wgo{ font-size:11px; font-weight:800; color:var(--bad); white-space:nowrap; }
+  #page-review .rv-pager{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+  #page-review .rv-rng{ font-size:12.5px; font-weight:800; color:var(--tx2); }
+  #page-review .rv-rng b{ color:var(--tx); }
+  #page-review .rv-pg{ font:inherit; font-size:13px; font-weight:800; padding:9px 15px; border-radius:10px; border:1px solid var(--bord2); background:var(--panel); color:var(--tx); cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+  #page-review .rv-pg:disabled{ opacity:.4; cursor:default; }
+  #page-review .rv-pg svg{ width:15px; height:15px; }
+  #page-review .rv-list{ display:flex; flex-direction:column; gap:8px; }
+  #page-review .rv-card{ background:var(--panel); border:1px solid var(--bord); border-radius:14px; overflow:hidden; transition:border-color .15s,box-shadow .15s,opacity .2s; }
+  #page-review .rv-card.editing{ border-color:var(--acc); box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 20%,transparent); }
+  #page-review .rv-card.moved{ opacity:.55; }
+  #page-review .rv-card.conflict{ border-color:var(--bad); box-shadow:0 0 0 2px color-mix(in srgb,var(--bad) 20%,transparent); }
+  #page-review .rv-hd{ display:flex; align-items:center; gap:10px; padding:12px 13px; cursor:pointer; user-select:none; }
+  #page-review .rv-pos{ position:relative; min-width:30px; height:30px; border-radius:9px; background:var(--panel2); border:1px solid var(--bord); display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--tx2); font-variant-numeric:tabular-nums; }
+  #page-review .rv-card.work .rv-pos{ background:color-mix(in srgb,var(--good) 13%,transparent); border-color:color-mix(in srgb,var(--good) 35%,transparent); color:var(--good); }
+  #page-review .rv-card.dirty .rv-pos::after{ content:""; position:absolute; top:-4px; right:-4px; width:9px; height:9px; border-radius:50%; background:var(--warn); border:2px solid var(--panel); }
+  #page-review .rv-nm{ font-size:16px; font-weight:800; flex:1; min-width:0; }
+  #page-review .rv-nm .mine{ width:6px; height:6px; border-radius:50%; background:var(--acc); display:inline-block; margin-left:5px; vertical-align:middle; }
+  #page-review .rv-nm .mis{ color:var(--bad); font-weight:900; margin-left:5px; }
+  #page-review .rv-nm .h{ background:color-mix(in srgb,var(--warn) 32%,transparent); border-radius:3px; }
+  #page-review .rv-tee{ font-size:13px; font-weight:700; color:var(--tx2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  #page-review .rv-tee.none{ color:var(--tx3); }
+  #page-review .rv-tee .cc{ font-size:10px; font-weight:800; padding:1px 5px; border-radius:5px; margin:0 3px; }
+  #page-review .rv-tee .cc.IN{ background:color-mix(in srgb,var(--info) 15%,transparent); color:var(--info); }
+  #page-review .rv-tee .cc.OUT{ background:color-mix(in srgb,var(--good) 15%,transparent); color:var(--good); }
+  #page-review .rv-tee .pp{ font-size:10px; font-weight:800; color:var(--tx3); }
+  #page-review .rv-bd{ font-size:11px; font-weight:800; padding:6px 11px; border-radius:999px; white-space:nowrap; border:1px solid transparent; cursor:pointer; user-select:none; }
+  #page-review .rv-bd.work{ color:var(--good); background:color-mix(in srgb,var(--good) 13%,transparent); border-color:color-mix(in srgb,var(--good) 28%,transparent); }
+  #page-review .rv-bd.spare{ color:var(--tx2); background:var(--panel2); border-color:var(--bord2); }
+  #page-review .rv-bd.off{ color:var(--warn); background:color-mix(in srgb,var(--warn) 14%,transparent); border-color:color-mix(in srgb,var(--warn) 30%,transparent); cursor:default; }
+  #page-review .rv-chev{ color:var(--tx3); width:16px; height:16px; flex:none; transition:transform .18s; }
+  #page-review .rv-card.editing .rv-chev{ transform:rotate(180deg); color:var(--acc); }
+  #page-review .rv-ed{ display:none; padding:2px 13px 14px; border-top:1px dashed var(--bord2); }
+  #page-review .rv-card.editing .rv-ed{ display:block; }
+  #page-review .rv-fr{ display:flex; gap:8px; margin-top:11px; }
+  #page-review .rv-fl{ flex:1; }
+  #page-review .rv-fl label{ display:block; font-size:10.5px; font-weight:800; color:var(--tx3); margin:0 0 4px 2px; }
+  #page-review .rv-fl input,#page-review .rv-fl select{ width:100%; font:inherit; font-size:15px; padding:10px 11px; border:1px solid var(--bord2); border-radius:10px; background:var(--panel2); color:var(--tx); }
+  #page-review .rv-fl input:focus,#page-review .rv-fl select:focus{ outline:none; border-color:var(--acc); background:var(--panel); }
+  #page-review .rv-seg{ display:flex; border:1px solid var(--bord2); border-radius:10px; overflow:hidden; }
+  #page-review .rv-seg button{ flex:1; font:inherit; font-size:13px; font-weight:800; padding:10px 0; border:none; background:var(--panel2); color:var(--tx2); cursor:pointer; border-right:1px solid var(--bord2); }
+  #page-review .rv-seg button:last-child{ border-right:none; }
+  #page-review .rv-seg button.on{ background:var(--acc); color:#fff; }
+  #page-review .rv-seg button.on.IN{ background:var(--info); }
+  #page-review .rv-seg.st button.on.spare{ background:var(--tx3); }
+  #page-review .rv-seg.mv button.on{ background:var(--info); }
+  #page-review .rv-seg.mv button:disabled{ opacity:.4; cursor:not-allowed; color:var(--tx3); }
+  #page-review .rv-tb{ display:none; }
+  #page-review .rv-tb.show{ display:block; }
+  #page-review .rv-hint{ font-size:10.5px; color:var(--tx3); margin:6px 2px 0; }
+  #page-review .rv-eb{ display:flex; gap:8px; margin-top:12px; }
+  #page-review .rv-eb button{ font:inherit; font-size:13.5px; font-weight:800; padding:10px 0; border-radius:10px; cursor:pointer; border:1px solid var(--bord2); }
+  #page-review .rv-done{ flex:2; background:var(--acc); color:#fff; border-color:var(--acc); }
+  #page-review .rv-cancel{ flex:1; background:var(--panel2); color:var(--tx2); }
+  #page-review .rv-savebar{ position:sticky; bottom:0; z-index:5; background:color-mix(in srgb,var(--panel) 92%,transparent); backdrop-filter:blur(8px); border-top:1px solid var(--bord); margin:12px -4px 0; padding:11px 4px calc(6px + env(safe-area-inset-bottom)); display:flex; gap:8px; align-items:center; }
+  #page-review .rv-notify{ display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--tx2); white-space:nowrap; }
+  #page-review .rv-notify input{ width:15px; height:15px; accent-color:var(--acc); }
+  #page-review .rv-save{ flex:1; font:inherit; font-size:15px; font-weight:800; padding:13px 0; border-radius:12px; border:none; background:var(--acc); color:#fff; cursor:pointer; }
+  #page-review .rv-save.blocked{ background:var(--bad); }
+  #page-review .rv-save:disabled{ background:var(--bord2); color:var(--tx3); }
+  #page-review .rv-save .pd{ font-size:11px; font-weight:700; opacity:.85; }
+  #page-review .rv-msg{ font-size:11.5px; font-weight:700; margin-top:7px; text-align:center; min-height:15px; }
+  #page-review .rv-msg.ok{ color:var(--good); } #page-review .rv-msg.err{ color:var(--bad); }
+  #page-review .rv-modal{ position:fixed; inset:0; z-index:200; background:rgba(15,20,26,.5); display:none; align-items:center; justify-content:center; padding:22px; }
+  #page-review .rv-modal.show{ display:flex; }
+  #page-review .rv-sheet{ background:var(--panel); border:1px solid var(--bord); border-radius:18px; max-width:360px; width:100%; padding:20px 18px 16px; box-shadow:0 8px 28px rgba(0,0,0,.25); }
+  #page-review .rv-sheet h3{ margin:0 0 6px; font-size:16px; color:var(--bad); display:flex; align-items:center; gap:8px; }
+  #page-review .rv-sheet h3 svg{ width:19px; height:19px; }
+  #page-review .rv-sheet p{ margin:0; font-size:13px; color:var(--tx); line-height:1.55; }
+  #page-review .rv-sheet .sub{ font-size:12px; color:var(--tx2); margin-top:8px; }
+  #page-review .rv-sheet button{ width:100%; font:inherit; font-size:14px; font-weight:800; padding:12px 0; border-radius:11px; cursor:pointer; border:none; background:var(--acc); color:#fff; margin-top:16px; }
   .br-toolbar{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:14px; padding-top:13px; border-top:1px solid var(--bord); }
   .br-cutset{ display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; color:var(--tx2); }
   .br-cutset input{ width:64px; font:inherit; font-size:12.5px; padding:6px 8px; border:1px solid var(--bord); border-radius:8px; text-align:center; font-variant-numeric:tabular-nums; }
@@ -1089,114 +1192,193 @@
 
   // ── 배치표 검수(판독 교정) v2 — 부 탭 · 근태 · 인턴 · 회원태그 통합 ──
   var brPart='3';
-  function dtyOpt(v,label,cur){ return '<option value="'+v+'"'+(String(cur||'')===v?' selected':'')+'>'+label+'</option>'; }
-  function brRow(r){
-    var row='<div class="br-row'+(r.misread?' br-misread':'')+'" data-pos="'+r.pos+'">'+
-      '<span class="no2">'+r.pos+(r.isMember?'<i class="br-mine" title="우리 회원"></i>':'')+(r.misread?'<i class="br-warn" title="'+esc(r.misread)+' 오독 의심">!</i>':'')+'</span>'+
-      '<input class="nm" value="'+esc(r.name||'')+'" placeholder="이름">'+
-      '<input class="tee" value="'+esc(r.tee||'')+'" placeholder="—">'+
-      '<select class="crs"><option value="OUT"'+(r.course!=='IN'?' selected':'')+'>OUT</option><option value="IN"'+(r.course==='IN'?' selected':'')+'>IN</option></select>'+
-      '<select class="dty">'+dtyOpt('','배치표대로',r.duty)+dtyOpt('휴무','휴무',r.duty)+dtyOpt('병가','병가',r.duty)+dtyOpt('휴가','휴가',r.duty)+'</select>'+
-      '<span class="br-badge"></span></div>';
-    if(!r.misread) return row;
-    // 오독 의심(회원 이름과 한 글자 차이) — 모바일에서도 보이게 텍스트 경고 줄. 자동 개명 아님(관리자가 확인 후 교정).
-    return '<div class="br-rw">'+row+'<div class="br-warnline">⚠ 회원 <b>'+esc(r.misread)+'</b>와(과) 한 글자 차이 — 오독 의심. 이 칸이 <b>'+esc(r.misread)+'</b>이면 이름을 고쳐 저장하세요.</div></div>';
+  var boardReviewBusy=false, brDirty=false, brSig='';
+  var rvBoard=null, rvRows=[], rvOrig=[], rvInterns=[], rvSyncSig='';
+  var rvEditing={}, rvSearch='', rvPage=0, rvPresence={};
+  var RV_PER=5;
+  function rvNk(s){ return String(s||'').replace(/\s/g,''); }
+  function rvMin(t){ var m=String(t).match(/(\d{1,2}):(\d{2})/); return m?Number(m[1])*60+Number(m[2]):0; }
+  function rvOff(r){ return !!r.duty; }
+  function rvReviewUrl(part){ var u=apiUrl('/api/board-review'); return u+(u.indexOf('?')>=0?'&':'?')+'part='+part; }
+  function rvInit(b){
+    rvBoard=b; rvSyncSig=String(b.syncSig||''); rvInterns=(b.interns||[]).slice();
+    var cut=Number(b.cutLine)||0;
+    rvRows=(b.rows||[]).map(function(r){ return { pos:Number(r.pos), name:r.name||'', tee:r.tee||'', course:r.course||(r.tee?'OUT':''), duty:r.duty||'', isMember:!!r.isMember, misread:r.misread||'', moveTo:null, status:(!r.duty&&cut>0&&Number(r.pos)<=cut)?'work':'spare' }; });
+    rvOrig=JSON.parse(JSON.stringify(rvRows)); rvEditing={};
   }
-  function brInternRow(it){
-    var isIn=it&&it.course==='IN';
-    return '<div class="br-intern"><input class="itime" value="'+esc((it&&it.time)||'')+'" placeholder="예 18:38"><select class="icrs"><option value="OUT"'+(isIn?'':' selected')+'>OUT</option><option value="IN"'+(isIn?' selected':'')+'>IN</option></select><button class="br-idel" type="button">삭제</button></div>';
+  function rvDirtyMap(){ var d={}; rvRows.forEach(function(r){ var o=rvOrig.find(function(x){return x.pos===r.pos;}); if(!o){d[r.pos]=1;return;} if(o.name!==r.name||o.tee!==r.tee||o.course!==r.course||o.duty!==r.duty||o.status!==r.status||r.moveTo){d[r.pos]=1;} }); return d; }
+  function rvChanged(){ return Object.keys(rvDirtyMap()).length; }
+  function rvActive(){ return rvRows.filter(function(r){return !r.moveTo;}); }
+  function rvCutPos(){ var c=0; rvRows.forEach(function(r){ if(r.status==='work'&&!rvOff(r)&&!r.moveTo&&r.pos>c)c=r.pos; }); return c; }
+  function rvCutName(){ var c=rvCutPos(),r=rvRows.find(function(x){return x.pos===c;}); return r?r.name:''; }
+  function rvSetWork(pos){ rvRows.forEach(function(r){ if(!r.moveTo&&!rvOff(r)&&r.pos<=pos&&r.status!=='work')r.status='work'; }); }
+  function rvSetSpare(pos){ rvRows.forEach(function(r){ if(!r.moveTo&&!rvOff(r)&&r.pos>=pos&&r.status!=='spare'){r.status='spare';r.tee='';r.course='';} }); }
+  function rvDayTimes(){ var s={}; rvRows.forEach(function(r){ if(r.tee&&!r.moveTo)s[r.tee]=1; }); return Object.keys(s).sort(function(a,b){return rvMin(a)-rvMin(b);}); }
+  function rvConf(){ var m={}; rvRows.forEach(function(r){ if(r.status==='work'&&!rvOff(r)&&!r.moveTo&&r.tee){ var k=r.tee+'|'+(r.course||'OUT'); (m[k]=m[k]||[]).push(r);} }); return Object.keys(m).filter(function(k){return m[k].length>1;}).map(function(k){var p=k.split('|');return {tee:p[0],course:p[1],rows:m[k]};}).sort(function(a,b){return rvMin(a.tee)-rvMin(b.tee);}); }
+  function rvConfPos(){ var s={}; rvConf().forEach(function(c){c.rows.forEach(function(r){s[r.pos]=1;});}); return s; }
+  function rvPresHas(name,p){ var s=rvPresence[rvNk(name)]; return !!(s&&s.indexOf(p)>=0); }
+  function rvHi(name,q){ if(!q)return esc(name); var i=name.indexOf(q); if(i<0)return esc(name); return esc(name.slice(0,i))+'<span class="h">'+esc(name.slice(i,i+q.length))+'</span>'+esc(name.slice(i+q.length)); }
+  function rvTabs(){ return '<div class="rv-parts">'+['1','2','3'].map(function(p){return '<button class="rv-pt'+(p===brPart?' on':'')+'" data-tab-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
+  function rvWireTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.rv-pt'),function(b){ b.onclick=function(){ brPart=b.getAttribute('data-tab-p'); brDirty=false; rvSearch=''; rvPage=0; loadBoardReview(true); }; }); }
+  function rvMeta(b){ return '<div class="rv-meta"><span class="rv-chip">글 #'+esc(String(b.articleId||'-'))+'</span>'+(b.dateLabel?'<span class="rv-chip">'+esc(b.dateLabel)+'</span>':'')+'<span class="rv-chip">판독 '+rel(b.at)+'</span>'+(b.corrected?'<span class="rv-chip ok">관리자 교정됨</span>':(b.uncertain?'<span class="rv-chip warn">불확실</span>':''))+'<span class="rv-cut" id="rvCut"></span></div>'; }
+  function rvImg(b){ var note=(b.imageId&&String(b.imageId)!==String(b.articleId))?' · 변동 #'+esc(String(b.imageId)):''; if(!b.image) return '<details class="rv-img"><summary>원본 배치표 (이미지 없음 · 텍스트 공지)</summary><div class="box"><div class="noimg">이 배치표엔 이미지가 없어요. 표만 보고 교정하세요.</div></div></details>'; return '<details class="rv-img"><summary>원본 배치표 이미지 보기'+note+'</summary><div class="box"><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본"></div></details>'; }
+  function rvInternRow(it){ var isIn=it&&it.course==='IN'; return '<div class="br-intern"><input class="itime" value="'+esc((it&&it.time)||'')+'" placeholder="예 18:38"><select class="icrs"><option value="OUT"'+(isIn?'':' selected')+'>OUT</option><option value="IN"'+(isIn?' selected':'')+'>IN</option></select><button class="br-idel" type="button">삭제</button></div>'; }
+  function rvToast(m){ var el=$('rvMsg'); if(!el)return; el.className='rv-msg'; el.textContent=m; clearTimeout(el._t); el._t=setTimeout(function(){ if(el.textContent===m)el.textContent=''; },2400); }
+  function rvBlock(msg,sub){ var mo=$('rvModal'); if(!mo)return; $('rvBlkMsg').innerHTML=msg; $('rvBlkSub').innerHTML=sub||''; mo.classList.add('show'); }
+  function rvJump(pos){ rvSearch=''; var s=$('rvSearch'); if(s)s.value=''; var idx=rvActive().findIndex(function(r){return r.pos===pos;}); if(idx<0)return; rvPage=Math.floor(idx/RV_PER); rvPaint(); var c=document.querySelector('.rv-card[data-pos="'+pos+'"]'); if(c)c.scrollIntoView({block:'center',behavior:'smooth'}); }
+
+  function rvCard(r,q,cp){
+    var work=r.status==='work'&&!rvOff(r)&&!r.moveTo;
+    var cls='rv-card '+(work?'work ':'')+(rvEditing[r.pos]?'editing ':'')+(rvDirtyMap()[r.pos]?'dirty ':'')+(cp[r.pos]?'conflict ':'')+(r.moveTo?'moved':'');
+    var teetag=(rvOff(r)||!work||!r.tee)?'<span class="rv-tee none">티오프 —</span>':'<span class="rv-tee">'+esc(r.tee)+'<span class="cc '+(r.course||'OUT')+'">'+(r.course||'OUT')+'</span><span class="pp">'+brPart+'부</span></span>';
+    var bdg=r.moveTo?'<span class="rv-bd spare" style="color:var(--info);cursor:default">→ '+r.moveTo+'부</span>':(rvOff(r)?'<span class="rv-bd off">'+esc(r.duty)+'</span>':(r.status==='work'?'<span class="rv-bd work" data-act="status">근무</span>':'<span class="rv-bd spare" data-act="status">스페어</span>'));
+    var nameHtml=rvHi(r.name,q)+(r.isMember?'<span class="mine" title="우리 회원"></span>':'')+(r.misread?'<span class="mis" title="'+esc(r.misread)+' 오독 의심">!</span>':'');
+    var dutySel='<select class="e-duty">'+['','휴무','휴가','병가'].map(function(d){return '<option '+(r.duty===d?'selected':'')+'>'+(d||'—')+'</option>';}).join('')+'</select>';
+    var teeSel='<select class="e-tee"><option value="">시간 선택</option>'+rvDayTimes().map(function(t){return '<option value="'+t+'"'+(r.tee===t?' selected':'')+'>'+t+'</option>';}).join('')+'</select>';
+    var moveBtns=['1','2','3'].map(function(p){ var sel=(r.moveTo||brPart); var cur=sel===p; var dis=!cur&&(p==='3'||brPart==='3'||rvPresHas(r.name,p)); return '<button data-mp="'+p+'" class="'+(cur?'on':'')+'"'+(dis?' disabled':'')+'>'+p+'부</button>'; }).join('');
+    return '<div class="'+cls+'" data-pos="'+r.pos+'">'+
+      '<div class="rv-hd" data-act="toggle"><span class="rv-pos">'+r.pos+'</span><span class="rv-nm">'+nameHtml+'</span>'+teetag+bdg+'<svg class="rv-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>'+
+      '<div class="rv-ed">'+
+        (r.misread?'<div class="rv-hint" style="color:var(--bad)">회원 <b>'+esc(r.misread)+'</b>와 한 글자 차이 — 오독 의심. 맞으면 이름을 고치세요.</div>':'')+
+        '<div class="rv-fr"><div class="rv-fl"><label>이름</label><input class="e-name" value="'+esc(r.name)+'"></div><div class="rv-fl" style="flex:.9"><label>근태</label>'+dutySel+'</div></div>'+
+        '<div class="rv-fr"><div class="rv-fl"><label>상태 (앞/뒤 함께 확정)</label><div class="rv-seg st e-status"><button data-s="work" class="'+(r.status==='work'?'on':'')+'">근무</button><button data-s="spare" class="'+(r.status==='spare'?'on spare':'')+'">스페어</button></div></div>'+
+          '<div class="rv-fl"><label>부 이동</label><div class="rv-seg mv e-move">'+moveBtns+'</div></div></div>'+
+        '<div class="rv-tb'+(work?' show':'')+'"><div class="rv-fr"><div class="rv-fl"><label>티오프 시간</label>'+teeSel+'</div><div class="rv-fl"><label>코스</label><div class="rv-seg e-course"><button data-c="OUT" class="'+(r.course!=='IN'?'on':'')+'">OUT</button><button data-c="IN" class="'+(r.course==='IN'?'on IN':'')+'">IN</button></div></div></div><div class="rv-hint">그날 있는 티오프 시간만 떠요. 이미 찬 자리를 고르면 상단에 중복 경고.</div></div>'+
+        '<div class="rv-eb"><button class="rv-cancel" data-act="cancel">되돌리기</button><button class="rv-done" data-act="done">이 사람 적용</button></div>'+
+      '</div></div>';
   }
-  function brApplyCut(){
-    var cut=Number(($('brCut')||{}).value)||0;
-    Array.prototype.forEach.call(document.querySelectorAll('#brTable .br-row'), function(row){
-      var pos=Number(row.getAttribute('data-pos'));
-      var duty=row.querySelector('.dty').value;
-      var bd=row.querySelector('.br-badge');
-      if(duty){ row.classList.remove('work'); row.classList.add('spare'); bd.textContent=duty; bd.className='br-badge br-b-off'; return; }
-      var work=cut>0 && pos<=cut;
-      row.classList.toggle('work',work); row.classList.toggle('spare',!work);
-      bd.textContent=work?'근무':'스페어'; bd.className='br-badge '+(work?'br-b-work':'br-b-spare');
-    });
+
+  function rvPaint(){
+    if(!rvBoard)return;
+    var q=rvSearch.trim();
+    var rows=rvActive().filter(function(r){ if(!q)return true; return r.name.indexOf(q)>=0||String(r.pos)===q; });
+    var total=rows.length, pages=Math.max(1,Math.ceil(total/RV_PER));
+    if(rvPage>=pages)rvPage=pages-1; if(rvPage<0)rvPage=0;
+    var a=total?rvPage*RV_PER+1:0, b2=Math.min(total,(rvPage+1)*RV_PER);
+    var pg=$('rvPager'); if(pg) pg.innerHTML='<button class="rv-pg" data-pg="-1"'+(rvPage<=0?' disabled':'')+'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>앞</button><span class="rv-rng"><b>'+a+'–'+b2+'</b> / '+total+'명</span><button class="rv-pg" data-pg="1"'+(rvPage>=pages-1?' disabled':'')+'>뒤<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg></button>';
+    var cs=rvConf(); var w=$('rvWarn');
+    if(w){ if(!cs.length){ w.className='rv-warn'; w.innerHTML=''; } else { w.className='rv-warn show'; w.innerHTML='<div class="wt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>티오프 중복 '+cs.length+'건 — 저장하려면 먼저 정리</div>'+cs.map(function(c){return '<div class="rv-witem" data-jump="'+c.rows[0].pos+'"><span><b>'+c.tee+' '+c.course+'</b> · '+c.rows.map(function(r){return esc(r.name);}).join(' · ')+'</span><span class="rv-wgo">이동 ›</span></div>';}).join(''); } }
+    var cp=rvConfPos();
+    var page=rows.slice(rvPage*RV_PER,(rvPage+1)*RV_PER);
+    var list=$('rvList'); if(list) list.innerHTML= page.length? page.map(function(r){return rvCard(r,q,cp);}).join('') : '<div class="muted" style="padding:20px;text-align:center">검색 결과가 없어요</div>';
+    var cc=$('rvCut'); if(cc){ var cpos=rvCutPos(); cc.textContent= cpos?('확정선 '+cpos+'번 · '+rvCutName()+'까지'):'확정선 미정'; }
+    var n=rvChanged(); var sv=$('rvSave'); if(sv){ sv.disabled=n===0; sv.classList.toggle('blocked',cs.length>0&&n>0); } var pd=$('rvPd'); if(pd) pd.textContent=n?('· '+n+'명'+(cs.length?' · 중복'+cs.length:'')):'';
+    brDirty = n>0 || Object.keys(rvEditing).length>0;
   }
-  function brPartTabs(){ return '<div class="br-parts">'+['1','2','3'].map(function(p){return '<button class="br-pt'+(p===brPart?' on':'')+'" data-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
-  function brWirePartTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.br-pt'), function(b){ b.onclick=function(){ brPart=b.getAttribute('data-p'); brDirty=false; loadBoardReview(true); }; }); }
+
+  function rvListClick(e){
+    var segBtn=e.target.closest('.rv-seg button');
+    if(segBtn){ if(segBtn.disabled){ rvToast(segBtn.textContent.trim()+'엔 이미 근무 중 — 한 부에서 두 번 근무 불가'); return; } var seg=segBtn.closest('.rv-seg'); if(seg.classList.contains('mv')){ Array.prototype.forEach.call(seg.querySelectorAll('button'),function(b){b.classList.remove('on');}); segBtn.classList.add('on'); return; } Array.prototype.forEach.call(seg.querySelectorAll('button'),function(b){b.className='';}); var c=segBtn.getAttribute('data-c'),s=segBtn.getAttribute('data-s'); segBtn.className='on'+(c==='IN'?' IN':'')+(s==='spare'?' spare':''); if(s){ var tb=seg.closest('.rv-ed').querySelector('.rv-tb'); if(tb)tb.classList.toggle('show',s==='work'); } return; }
+    var actEl=e.target.closest('[data-act]'); var card=e.target.closest('.rv-card'); if(!card)return; var pos=Number(card.getAttribute('data-pos')); var act=actEl?actEl.getAttribute('data-act'):null;
+    if(act==='status'){ e.stopPropagation(); var r=rvRows.find(function(x){return x.pos===pos;}); if(rvOff(r)||r.moveTo)return; if(r.status==='work'){rvSetSpare(pos);} else {rvSetWork(pos);} rvPaint(); }
+    else if(act==='toggle'){ e.stopPropagation(); if(rvEditing[pos]){ rvCommit(pos,card); } else { rvEditing[pos]=1; rvPaint(); var c2=document.querySelector('.rv-card[data-pos="'+pos+'"]'); if(c2)c2.scrollIntoView({block:'center',behavior:'smooth'}); } }
+    else if(act==='done'){ rvCommit(pos,card); }
+    else if(act==='cancel'){ var o=rvOrig.find(function(x){return x.pos===pos;}); var r3=rvRows.find(function(x){return x.pos===pos;}); r3.name=o.name;r3.tee=o.tee;r3.course=o.course;r3.duty=o.duty;r3.status=o.status;r3.moveTo=null; delete rvEditing[pos]; rvPaint(); }
+  }
+  function rvCommit(pos,card){
+    var r=rvRows.find(function(x){return x.pos===pos;});
+    r.name=card.querySelector('.e-name').value.trim();
+    var dv=card.querySelector('.e-duty').value; r.duty=(dv==='—')?'':dv;
+    var mp=card.querySelector('.e-move button.on'); mp=mp?mp.getAttribute('data-mp'):brPart; r.moveTo=(mp===brPart)?null:mp;
+    var st=card.querySelector('.e-status button.on').getAttribute('data-s');
+    if(st==='work'&&!rvOff(r)&&!r.moveTo){ rvSetWork(pos); r.tee=card.querySelector('.e-tee').value; r.course=card.querySelector('.e-course button.on').getAttribute('data-c')||'OUT'; }
+    else if(st==='spare'){ rvSetSpare(pos); }
+    if(rvOff(r)||r.moveTo){ r.tee=''; r.course=''; }
+    delete rvEditing[pos]; rvPaint();
+    if(r.moveTo) rvToast(r.name+' → '+r.moveTo+'부 이동 (저장 시 반영)');
+  }
+
   function renderBoardReview(b){
     var el=$('boardReview'); if(!el) return;
-    var tabs=brPartTabs();
-    if(!b){ el.innerHTML=tabs+'<div class="muted" style="padding:18px 2px">'+(brPart==='3'?'아직 판독된 배치표가 없어요.':brPart+'부 표가 있는 전체 배치표가 아직 안 올라왔어요. (그 부가 포함된 배치표가 판독되면 여기서 수정할 수 있어요)')+'</div>'; brWirePartTabs(el); return; }
-    var meta='<div class="br-meta"><span class="chip">글 #'+esc(String(b.articleId||'-'))+'</span>'+
-      (b.dateLabel?'<span class="chip">'+esc(b.dateLabel)+'</span>':'')+
-      (b.teamCount?'<span class="chip">'+b.teamCount+'팀</span>':'')+
-      '<span class="chip">판독 '+rel(b.at)+'</span>'+
-      (b.corrected?'<span class="chip ok">관리자 교정됨</span>':(b.uncertain?'<span class="chip warn">불확실 판독 — 검수 권장</span>':''))+'</div>';
-    var imgNote = (b.imageId && String(b.imageId)!==String(b.articleId)) ? ' <span class="chip warn" style="font-size:10px">변동 반영 #'+esc(String(b.imageId))+'</span>' : '';
-    var img = b.image ? '<div class="br-imgbox"><div class="lbl">원본 배치표'+imgNote+'</div><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본 배치표"></div>'
-      : '<div class="br-imgbox"><div class="lbl">원본 배치표</div><div class="noimg">이 배치표엔 이미지가 없어요<br>(텍스트 공지). 표만 보고 교정하세요.</div></div>';
-    var interns=(b.interns||[]).map(brInternRow).join('');
-    el.innerHTML = tabs + meta +
-      '<div class="br-wrap"><div>'+
-        '<div class="br-hd"><span>순번</span><span>이름</span><span>티오프</span><span>코스</span><span>근태</span><span>판정</span></div>'+
-        '<div class="br-table" id="brTable">'+b.rows.map(brRow).join('')+'</div>'+
-        '<div class="br-intbox"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)</div>'+
-          '<div id="brInterns">'+interns+'</div>'+
-          '<button class="br-iadd" type="button" id="brIAdd">+ 인턴 추가</button></div>'+
-        '<div class="br-toolbar">'+
-          '<span class="br-cutset">확정선(여기까지 근무) <input id="brCut" type="number" min="0" value="'+(b.cutLine||'')+'"><span>번</span></span>'+
-          '<label class="br-notify"><input type="checkbox" id="brNotify"> 바뀐 회원에게 알림</label>'+
-          '<button class="br-save" id="brSave">저장 · 전원 반영</button>'+
-          '<span class="br-msg" id="brMsg"></span>'+
-        '</div></div>'+ img +'</div>';
-    brApplyCut();
-    brWirePartTabs(el);
-    $('brCut').addEventListener('input', brApplyCut);
-    $('brTable').addEventListener('change', function(e){ if(e.target && e.target.className==='dty') brApplyCut(); });
-    $('brIAdd').addEventListener('click', function(){ var box=$('brInterns'); box.insertAdjacentHTML('beforeend', brInternRow(null)); });
-    $('brInterns').addEventListener('click', function(e){ if(e.target && e.target.className==='br-idel'){ var row=e.target.closest('.br-intern'); if(row) row.remove(); } });
-    $('brSave').addEventListener('click', saveBoardCorrect);
+    if(!b){ rvBoard=null; el.innerHTML=rvTabs()+'<div class="muted" style="padding:18px 2px">'+(brPart==='3'?'아직 판독된 배치표가 없어요.':brPart+'부 표가 있는 전체 배치표가 아직 안 올라왔어요. (그 부가 포함된 배치표가 판독되면 여기서 수정할 수 있어요)')+'</div>'; rvWireTabs(el); return; }
+    rvInit(b);
+    el.innerHTML = rvTabs()+
+      '<div class="rv-sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg><input class="rv-search" id="rvSearch" inputmode="search" placeholder="이름 또는 순번으로 찾기" value="'+esc(rvSearch)+'"><button class="rv-clr'+(rvSearch?' show':'')+'" id="rvClr" type="button">✕</button></div>'+
+      rvMeta(b)+ rvImg(b)+
+      '<div class="rv-warn" id="rvWarn"></div>'+
+      '<div class="rv-pager" id="rvPager"></div>'+
+      '<div class="rv-list" id="rvList"></div>'+
+      '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
+      '<div class="rv-savebar"><label class="rv-notify"><input type="checkbox" id="rvNotify"> 알림</label><button class="rv-save" id="rvSave">저장 · 전원 반영 <span class="pd" id="rvPd"></span></button></div>'+
+      '<div class="rv-msg" id="rvMsg"></div>'+
+      '<div class="rv-modal" id="rvModal"><div class="rv-sheet"><h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>저장할 수 없어요</h3><p id="rvBlkMsg"></p><div class="sub" id="rvBlkSub"></div><button id="rvBlkOk" type="button">돌아가서 정리</button></div></div>';
+    rvWireTabs(el);
+    var s=$('rvSearch'); if(s) s.addEventListener('input',function(){ rvSearch=s.value; rvPage=0; var clr=$('rvClr'); if(clr)clr.classList.toggle('show',!!rvSearch); rvPaint(); });
+    var clr=$('rvClr'); if(clr) clr.addEventListener('click',function(){ rvSearch=''; if(s)s.value=''; clr.classList.remove('show'); rvPage=0; rvPaint(); if(s)s.focus(); });
+    var list=$('rvList'); if(list) list.addEventListener('click',rvListClick);
+    var pager=$('rvPager'); if(pager) pager.addEventListener('click',function(e){ var b2=e.target.closest('[data-pg]'); if(!b2||b2.disabled)return; rvPage+=Number(b2.getAttribute('data-pg')); rvPaint(); });
+    var warn=$('rvWarn'); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); });
+    var sv=$('rvSave'); if(sv) sv.addEventListener('click',rvSaveCorrect);
+    var iadd=$('rvIAdd'); if(iadd) iadd.addEventListener('click',function(){ var box=$('rvInterns'); if(box)box.insertAdjacentHTML('beforeend',rvInternRow(null)); brDirty=true; });
+    var ints=$('rvInterns'); if(ints) ints.addEventListener('click',function(e){ if(e.target.classList.contains('br-idel')){ var row=e.target.closest('.br-intern'); if(row)row.remove(); brDirty=true; } });
+    var ok=$('rvBlkOk'); if(ok) ok.addEventListener('click',function(){ var mo=$('rvModal'); if(mo)mo.classList.remove('show'); var c=rvConf()[0]; if(c)rvJump(c.rows[0].pos); });
+    rvPaint();
   }
-  async function saveBoardCorrect(){
-    var btn=$('brSave'), msg=$('brMsg');
-    var cut=Number(($('brCut')||{}).value)||0;
-    var rows=[];
-    Array.prototype.forEach.call(document.querySelectorAll('#brTable .br-row'), function(row){
-      rows.push({ pos:Number(row.getAttribute('data-pos')), name:row.querySelector('.nm').value.trim(), tee:row.querySelector('.tee').value.trim(), course:row.querySelector('.crs').value, duty:row.querySelector('.dty').value });
-    });
-    var interns=[];
-    Array.prototype.forEach.call(document.querySelectorAll('#brInterns .br-intern'), function(row){ var t=row.querySelector('.itime').value.trim(); if(t) interns.push({ time:t, course:row.querySelector('.icrs').value }); });
-    var notify=($('brNotify')||{}).checked;
-    btn.disabled=true; msg.className='br-msg'; msg.textContent='저장·재계산 중…';
+  async function rvPostCorrect(part, rows, interns, cutLine, notify){
+    var r=await fetch(apiUrl('/api/board-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:part,rows:rows,interns:interns,cutLine:cutLine,notify:notify})});
+    return await r.json();
+  }
+  async function rvSaveCorrect(){
+    var n=rvChanged(); if(!n)return;
+    var cs=rvConf();
+    if(cs.length){ rvBlock('티오프 <b>중복 '+cs.length+'건</b>이 남아 저장할 수 없어요.', cs.map(function(c){return '· <b>'+c.tee+' '+c.course+'</b> — '+c.rows.map(function(r){return esc(r.name);}).join(', ');}).join('<br>')+'<br><br>같은 시간·코스엔 한 명만 들어갈 수 있어요. 중복을 정리한 뒤 저장하세요.'); return; }
+    var save=$('rvSave'), msg=$('rvMsg'); save.disabled=true; msg.className='rv-msg'; msg.textContent='저장 전 최신 배치표 확인…';
     try{
-      var r=await fetch(apiUrl('/api/board-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:brPart,rows:rows,interns:interns,cutLine:cut,notify:notify})});
-      var j=await r.json();
-      if(j.ok){ msg.className='br-msg ok'; msg.textContent='저장됨 · '+j.updated+'명 재계산'+(j.notified?' · 알림 '+j.notified+'명':'')+(j.cellChanges?' · 교정 '+j.cellChanges+'칸':' · 변경 없음'); btn.disabled=false; brDirty=false; brSig=''; setTimeout(function(){ loadBoardReview(true); }, 700); }
-      else { msg.className='br-msg err'; msg.textContent=j.error||'실패'; btn.disabled=false; }
-    }catch(e){ msg.className='br-msg err'; msg.textContent='통신 오류'; btn.disabled=false; }
+      var chk=await fetch(rvReviewUrl(brPart),{cache:'no-store'}); var cj=await chk.json();
+      if(cj.ok && cj.board && String(cj.board.syncSig||'')!==rvSyncSig){ save.disabled=false; msg.textContent=''; rvBlock('그 사이 배치표가 <b>갱신</b>됐어요.','당추·변동이 새로 들어왔습니다. 최신본을 다시 불러온 뒤 교정하세요.'); brSig=''; setTimeout(function(){ loadBoardReview(true); },500); return; }
+      msg.textContent='저장·재계산 중…';
+      var moves=rvRows.filter(function(r){return r.moveTo;});
+      var byTarget={}; moves.forEach(function(r){ (byTarget[r.moveTo]=byTarget[r.moveTo]||[]).push(r.name); });
+      var keep=rvRows.filter(function(r){return !r.moveTo;});
+      var srcRows=keep.map(function(r,i){ var w=(r.status==='work'&&!rvOff(r)); return { pos:i+1, name:r.name, tee:w?r.tee:'', course:w?(r.course||'OUT'):'', duty:r.duty }; });
+      var workCount=keep.filter(function(r){return r.status==='work'&&!rvOff(r);}).length;
+      var interns=[]; Array.prototype.forEach.call(document.querySelectorAll('#rvInterns .br-intern'),function(row){ var t=row.querySelector('.itime').value.trim(); if(t)interns.push({time:t,course:row.querySelector('.icrs').value}); });
+      var notify=($('rvNotify')||{}).checked;
+      var res=await rvPostCorrect(brPart, srcRows, interns, workCount, notify);
+      if(!res.ok) throw new Error(res.error||'저장 실패');
+      var moveMsg='';
+      for(var tp in byTarget){
+        var tr=await fetch(rvReviewUrl(tp),{cache:'no-store'}); var tj=await tr.json();
+        if(!tj.ok||!tj.board){ moveMsg+=' · '+tp+'부 없음(이동보류)'; continue; }
+        var trows=(tj.board.rows||[]).map(function(x){ return {pos:x.pos,name:x.name,tee:x.tee,course:x.course,duty:x.duty}; });
+        var maxp=trows.reduce(function(mx,x){return Math.max(mx,Number(x.pos)||0);},0);
+        byTarget[tp].forEach(function(nm){ maxp++; trows.push({pos:maxp,name:nm,tee:'',course:'',duty:''}); });
+        var tints=(tj.board.interns||[]).map(function(x){return {time:x.time,course:x.course};});
+        var tcut=Number(tj.board.cutLine)||0;
+        await rvPostCorrect(tp, trows, tints, tcut, notify);
+        moveMsg+=' · '+byTarget[tp].join(',')+'→'+tp+'부';
+      }
+      msg.className='rv-msg ok'; msg.textContent='저장됨 · '+(res.updated||0)+'명 재계산'+moveMsg;
+      save.disabled=false; brDirty=false; brSig='';
+      setTimeout(function(){ loadBoardReview(true); },900);
+    }catch(e){ save.disabled=false; msg.className='rv-msg err'; msg.textContent=e.message||'통신 오류'; }
   }
-  var boardReviewBusy=false, brDirty=false, brSig='';
   async function loadBoardReview(force){
     if(boardReviewBusy) return;
-    if(!force && brDirty) return;   // 관리자가 교정 입력 중 — 폴링이 입력값을 덮어쓰지 않게 보류(저장·부전환·새로고침 때 재개)
+    if(!force && brDirty) return;   // 관리자가 교정 입력 중 — 폴링이 입력값을 덮어쓰지 않게 보류
     boardReviewBusy=true;
-    var u=apiUrl('/api/board-review'); u+=(u.indexOf('?')>=0?'&':'?')+'part='+brPart;
     try{
-      var r=await fetch(u,{cache:'no-store'}); var j=await r.json();
+      var r=await fetch(rvReviewUrl(brPart),{cache:'no-store'}); var j=await r.json();
       if(j.ok){
         var b=j.board;
         var sig=brPart+'|'+(b?(String(b.articleId||'')+'|'+(b.at||0)+'|'+(b.syncSig||'')+'|'+(b.corrected?b.corrected.at:0)):'none');
-        if(!force && sig===brSig) return;   // 바뀐 게 없으면 재렌더 생략(깜빡임·스크롤 튐 방지)
+        if(!force && sig===brSig) return;
         brSig=sig; brDirty=false;
         renderBoardReview(b);
+        rvLoadPresence();
       } else if($('boardReview')) $('boardReview').innerHTML='<div class="err">'+esc(j.error||'불러오기 실패')+'</div>';
     }
     catch(e){ if($('boardReview')) $('boardReview').innerHTML='<div class="err">통신 오류</div>'; } finally{ boardReviewBusy=false; }
+  }
+  async function rvLoadPresence(){
+    try{ var r=await fetch(apiUrl('/api/board-parts'),{cache:'no-store'}); var j=await r.json(); if(!j.ok||!j.board)return; var pr={}; ['1','2','3'].forEach(function(p){ var pv=j.board.parts&&j.board.parts[p]; if(!pv||!pv.rows)return; pv.rows.forEach(function(row){ if(row.work&&row.name){ var k=rvNk(row.name); pr[k]=pr[k]||[]; if(pr[k].indexOf(p)<0)pr[k].push(p); } }); }); rvPresence=pr; if(rvBoard)rvPaint(); }catch(e){ /* best-effort */ }
   }
 
   // 저장된 탭 복원(기본: 승인)
   var savedTab=null; try{ savedTab=localStorage.getItem('monTab'); }catch(e){}
   if(savedTab && document.getElementById('page-'+savedTab)) switchTab(savedTab);
 
-  // 검수 폼을 관리자가 건드리면 dirty 표시 — 자동 폴링이 입력 중인 교정을 덮어쓰지 않게(#boardReview는 재렌더돼도 컨테이너는 유지되므로 위임 1회 등록).
-  (function(){ var rv=$('boardReview'); if(rv){ rv.addEventListener('input', function(){ brDirty=true; }); rv.addEventListener('change', function(){ brDirty=true; }); } })();
+  // 검수 v2 dirty 관리는 rvPaint()가 직접 수행(brDirty = 변경/편집중). 옛 전역 input 감시 제거.
 
   // ── 배치표 이미지 업로드 → 판독·반영 ──
   (function(){
