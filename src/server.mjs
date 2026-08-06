@@ -26,7 +26,7 @@ import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
-import { setBoardPart } from './boardparts.mjs';
+import { setBoardPart, loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
@@ -1149,14 +1149,26 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
   const okRoster = Array.isArray(vp.part3Roster) && vp.part3Roster.length > 0;
   if (okRoster) {
     try {
-      setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
-        image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, {
+      const partData = {
         roster: vp.part3Roster.slice(), teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
         teamCount: Number(vp.teamCount) || 0, internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
         internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
         cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
-      });
-      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})`);
+      };
+      // ★다른 부(1·3부) 보존 병합 — 단독 부-배치표는 whole-board와 articleId가 달라, setBoardPart의
+      //  'id 바뀌면 parts 리셋'을 그대로 타면 오늘의 1·3부가 지워진다. 같은 날이면 그 부만 덮고 나머지 유지.
+      const store = loadBoardPartsStore();
+      const sameDay = !!(store && store.parts && vp.dateLabel && String(store.dateLabel || '') === String(vp.dateLabel || ''));
+      if (sameDay) {
+        store.parts[String(part)] = partData;
+        store.at = Date.now();
+        if (!store.subject) store.subject = full.subject || '';
+        saveBoardPartsStore(store);
+      } else {
+        setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
+          image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, partData);
+      }
+      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'}) [${sameDay ? '병합' : '신규'}]`);
     } catch (e) { console.error('[단독부 board-parts 저장 오류]', e.message); }
   } else {
     console.log(`·  [단독 ${part}부 배치표] 판독 명단 없음 → 모니터 스킵: ${full.subject}`);
