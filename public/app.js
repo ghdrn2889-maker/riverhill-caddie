@@ -1198,12 +1198,53 @@ function jDayToEdit(d) {
   return { kind: 'work', parts: ['3'] };
 }
 
+// ── ★연/월 점프 피커 ── 제목을 탭하면 연도(‹ ›)와 월(1~12)을 바로 골라 이동. 일지·정산 공용.
+function injectJumpStyle() {
+  if (document.getElementById('mjStyle')) return;
+  const s = document.createElement('style'); s.id = 'mjStyle';
+  s.textContent = '.mj-ov{position:fixed;inset:0;z-index:9000;background:rgba(16,40,26,.42);display:flex;align-items:center;justify-content:center;padding:20px}'
+    + '.mj-sheet{width:100%;max-width:322px;background:#fff;border-radius:16px;padding:16px 16px 18px;box-shadow:0 16px 46px rgba(16,40,26,.3)}'
+    + '.mj-yr{display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:14px}'
+    + '.mj-yr b{font-size:17px;font-weight:800;color:#153f29;min-width:80px;text-align:center;font-variant-numeric:tabular-nums}'
+    + '.mj-ystep{font-family:inherit;width:34px;height:34px;border-radius:9px;border:1px solid #dbe2d9;background:#f4f8f4;color:#2f6b45;font-size:16px;cursor:pointer}'
+    + '.mj-ystep:disabled{opacity:.3;cursor:default}'
+    + '.mj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
+    + '.mj-m{font-family:inherit;padding:12px 0;border-radius:10px;border:1px solid #e3ebe3;background:#fff;color:#3a453d;font-weight:700;font-size:14px;cursor:pointer;font-variant-numeric:tabular-nums}'
+    + '.mj-m.on{background:#0b5d34;border-color:#0b5d34;color:#fff}'
+    + '.mj-m:disabled{opacity:.32;cursor:default}'
+    + '#jTitle{cursor:pointer}#jTitle::after{content:" ▾";font-size:11px;opacity:.5}'
+    + '.wl-mlabel{cursor:pointer}.wl-mlabel b::after{content:" ▾";font-size:10px;opacity:.75}';
+  document.head.appendChild(s);
+}
+function openMonthJump(cur, onPick) {
+  injectJumpStyle();
+  const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
+  const st = { y: cur.y };
+  const ov = document.createElement('div'); ov.className = 'mj-ov';
+  ov.innerHTML = '<div class="mj-sheet"><div class="mj-body"></div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+  function render() {
+    let ms = '';
+    for (let m = 1; m <= 12; m++) {
+      const fut = (st.y > realY) || (st.y === realY && m > realM);
+      const on = (st.y === cur.y && m === cur.m);
+      ms += `<button type="button" class="mj-m${on ? ' on' : ''}" data-m="${m}"${fut ? ' disabled' : ''}>${m}월</button>`;
+    }
+    ov.querySelector('.mj-body').innerHTML = `<div class="mj-yr"><button type="button" class="mj-ystep" data-d="-1" aria-label="이전 해">‹</button><b>${st.y}년</b><button type="button" class="mj-ystep" data-d="1" aria-label="다음 해"${st.y >= realY ? ' disabled' : ''}>›</button></div><div class="mj-grid">${ms}</div>`;
+    ov.querySelectorAll('.mj-ystep').forEach((b) => { b.onclick = () => { if (b.disabled) return; st.y += Number(b.getAttribute('data-d')); render(); }; });
+    ov.querySelectorAll('.mj-m').forEach((b) => { b.onclick = () => { if (b.disabled) return; ov.remove(); onPick(st.y, Number(b.getAttribute('data-m'))); }; });
+  }
+  render();
+}
+
 async function renderJournalCal() {
   if (!$('jCal')) return;
   if (jCache.year !== jViewY) { await loadJournal(jViewY); return; }  // 연도 바뀌면 로드
   if ($('jPrev')) $('jPrev').onclick = () => jMonthShift(-1);
   if ($('jNext')) $('jNext').onclick = () => jMonthShift(1);
   $('jTitle').textContent = `${jViewY}년 ${jViewM}월`;
+  $('jTitle').onclick = () => openMonthJump({ y: jViewY, m: jViewM }, (y, m) => { jViewY = y; jViewM = m; jSelDate = null; jEdit = null; renderJournalCal(); });
 
   const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
   const md = jCache.days.filter((d) => d.date.startsWith(pre));
@@ -1590,6 +1631,7 @@ function renderLedger() {
   lgDayList = lgBuildDays();
   const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
   $('lgMLabel').textContent = `${lgYear}년 ${lgMonth}월`;
+  $('lgMLabel').onclick = () => openMonthJump({ y: lgYear, m: lgMonth }, (y, m) => { lgFlushTips().then(() => { lgYear = y; lgMonth = m; lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); }); });
   const isNow = lgYear === realY && lgMonth === realM;
   $('lgMSub').textContent = isNow ? '이번 달' : '지난 기록';
   $('lgThisMo').hidden = isNow;
