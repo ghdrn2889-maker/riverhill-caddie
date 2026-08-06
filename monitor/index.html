@@ -1259,6 +1259,7 @@
         '<div class="rv-fr"><div class="rv-fl"><label>상태 (앞/뒤 함께 확정)</label><div class="rv-seg st e-status"><button data-s="work" class="'+(r.status==='work'?'on':'')+'">근무</button><button data-s="spare" class="'+(r.status==='spare'?'on spare':'')+'">스페어</button></div></div>'+
           '<div class="rv-fl"><label>부 이동</label><div class="rv-seg mv e-move">'+moveBtns+'</div></div></div>'+
         '<div class="rv-tb'+(work?' show':'')+'"><div class="rv-fr"><div class="rv-fl"><label>티오프 시간</label>'+teeSel+'</div><div class="rv-fl"><label>코스</label><div class="rv-seg e-course"><button data-c="OUT" class="'+(r.course!=='IN'?'on':'')+'">OUT</button><button data-c="IN" class="'+(r.course==='IN'?'on IN':'')+'">IN</button></div></div></div><div class="rv-hint">그날 있는 티오프 시간만 떠요. 이미 찬 자리를 고르면 상단에 중복 경고.</div></div>'+
+        ((rvOff(r)||r.moveTo)?'':'<div style="margin-top:2px"><button data-act="swap" type="button" style="width:100%;font:inherit;font-weight:700;font-size:13px;border:1px dashed var(--acc);background:transparent;color:var(--acc);border-radius:10px;padding:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>대바 · 다른 부 캐디와 자리 맞바꿈</button></div>')+
         '<div class="rv-eb"><button class="rv-cancel" data-act="cancel">되돌리기</button><button class="rv-done" data-act="done">이 사람 적용</button></div>'+
       '</div></div>';
   }
@@ -1287,6 +1288,7 @@
     var actEl=e.target.closest('[data-act]'); var card=e.target.closest('.rv-card'); if(!card)return; var pos=Number(card.getAttribute('data-pos')); var act=actEl?actEl.getAttribute('data-act'):null;
     if(act==='status'){ e.stopPropagation(); var r=rvRows.find(function(x){return x.pos===pos;}); if(rvOff(r)||r.moveTo)return; if(r.status==='work'){rvSetSpare(pos);} else {rvPromote(pos);} rvPaint(); }
     else if(act==='toggle'){ e.stopPropagation(); if(rvEditing[pos]){ rvCommit(pos,card); } else { rvEditing[pos]=1; rvPaint(); var c2=document.querySelector('.rv-card[data-pos="'+pos+'"]'); if(c2)c2.scrollIntoView({block:'center',behavior:'smooth'}); } }
+    else if(act==='swap'){ e.stopPropagation(); rvSwapOpen(pos); }
     else if(act==='done'){ rvCommit(pos,card); }
     else if(act==='cancel'){ var r3=rvRows.find(function(x){return x.pos===pos;}); if(r3){ var o=rvOrig.find(function(x){return x._id===r3._id;}); if(o){ r3.name=o.name;r3.tee=o.tee;r3.course=o.course;r3.duty=o.duty;r3.status=o.status; } r3.moveTo=null; } delete rvEditing[pos]; rvPaint(); }
   }
@@ -1544,6 +1546,65 @@
      +'.rvnt-ck{display:flex;align-items:flex-start;gap:11px;cursor:pointer}'
      +'.rvnt-ck input{margin-top:2px;width:19px;height:19px;flex:none;accent-color:var(--good)}';
     document.head.appendChild(s);
+  }
+  // ── ★크로스파트 대바(자리 맞바꿈) ── 다른 부 캐디를 골라 두 좌석을 통째로 교환.
+  var rvSwapA=null;
+  function rvSwapInjectStyle(){
+    if($('rvswStyle'))return; var s=document.createElement('style'); s.id='rvswStyle';
+    s.textContent='.rvsw-parts{display:flex;gap:8px;margin:2px 0 10px}'
+     +'.rvsw-pt{flex:1;font:inherit;font-weight:800;font-size:14px;padding:11px;border-radius:11px;border:1px solid var(--bord2);background:var(--panel2);color:var(--tx);cursor:pointer}'
+     +'.rvsw-pt.on{background:var(--acc);border-color:var(--acc);color:#fff}'
+     +'.rvsw-cand{display:flex;align-items:center;gap:11px;width:100%;text-align:left;font:inherit;padding:12px;margin:6px 0;border:1px solid var(--bord2);background:var(--panel);border-radius:11px;cursor:pointer;color:var(--tx)}'
+     +'.rvsw-pos{min-width:22px;text-align:right;color:var(--tx3);font-weight:800;font-variant-numeric:tabular-nums}'
+     +'.rvsw-nm{flex:1;font-weight:700}.rvsw-tee{font-size:12px;color:var(--tx2)}'
+     +'.rvsw-vs{display:flex;align-items:center;justify-content:space-around;gap:10px;padding:15px;margin:6px 0 4px;background:var(--panel2);border-radius:12px;text-align:center}'
+     +'.rvsw-vs b{font-size:15px;color:var(--tx)}.rvsw-vs span{font-size:12px;color:var(--tx2)}.rvsw-ar{font-size:22px;color:var(--acc);font-weight:800}';
+    document.head.appendChild(s);
+  }
+  function rvSwapOpen(pos){
+    var A=rvRows.find(function(x){return x.pos===pos;}); if(!A)return;
+    if(rvOff(A)||A.moveTo){ rvToast('근태·부이동 중인 사람은 대바할 수 없어요'); return; }
+    rvSwapA={pos:pos, name:A.name, part:brPart};
+    rvNtInjectStyle(); rvSwapInjectStyle();
+    var others=['1','2','3'].filter(function(p){return p!==brPart;});
+    var ov=document.createElement('div'); ov.className='rvnt-ov'; ov.id='rvSwapOv';
+    ov.innerHTML='<div class="rvnt-sheet"><h3>대바 · 자리 맞바꿈</h3><p class="rvnt-sub"><b>'+esc(A.name)+'</b> ('+brPart+'부 '+pos+'번)와(과) 맞바꿀 <b>상대 부·캐디</b>를 고르세요. 두 사람이 순번·티오프를 통째로 바꿉니다.</p><div class="rvsw-parts">'+others.map(function(p){return '<button class="rvsw-pt" data-p="'+p+'" type="button">'+p+'부</button>';}).join('')+'</div><div class="rvnt-list" id="rvswList"><div class="rvnt-bd" style="padding:12px">상대 부를 먼저 고르세요.</div></div><div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(e){ if(e.target===ov)ov.remove(); });
+    ov.querySelector('.rvnt-x').addEventListener('click',function(){ ov.remove(); });
+    Array.prototype.forEach.call(ov.querySelectorAll('.rvsw-pt'),function(b){ b.addEventListener('click',function(){ Array.prototype.forEach.call(ov.querySelectorAll('.rvsw-pt'),function(x){x.classList.remove('on');}); b.classList.add('on'); rvSwapLoadPart(b.getAttribute('data-p')); }); });
+  }
+  async function rvSwapLoadPart(part){
+    var list=$('rvswList'); if(!list)return; list.innerHTML='<div class="rvnt-bd" style="padding:12px">불러오는 중…</div>';
+    try{
+      var u=apiUrl('/api/board-review'); u=u+(u.indexOf('?')>=0?'&':'?')+'part='+part;
+      var r=await fetch(u,{cache:'no-store'}); var j=await r.json();
+      if(!j.ok||!j.board){ list.innerHTML='<div class="rvnt-bd" style="padding:12px">'+part+'부 배치표가 아직 없어요.</div>'; return; }
+      var rows=(j.board.rows||[]).filter(function(x){return x.name&&!x.duty;});
+      if(!rows.length){ list.innerHTML='<div class="rvnt-bd" style="padding:12px">대상이 없어요.</div>'; return; }
+      list.innerHTML=rows.map(function(x){ return '<button class="rvsw-cand" type="button" data-p="'+part+'" data-pos="'+x.pos+'" data-nm="'+esc(x.name)+'"><span class="rvsw-pos">'+x.pos+'</span><span class="rvsw-nm">'+esc(x.name)+'</span><span class="rvsw-tee">'+(x.tee?esc(x.tee)+' '+(x.course||''):'스페어')+'</span></button>'; }).join('');
+      Array.prototype.forEach.call(list.querySelectorAll('.rvsw-cand'),function(b){ b.addEventListener('click',function(){ rvSwapConfirm(part, Number(b.getAttribute('data-pos')), b.getAttribute('data-nm')); }); });
+    }catch(e){ list.innerHTML='<div class="rvnt-bd" style="padding:12px">통신 오류</div>'; }
+  }
+  function rvSwapConfirm(bPart,bPos,bName){
+    var ov=$('rvSwapOv'); if(!ov)return; var sheet=ov.querySelector('.rvnt-sheet');
+    var pts=sheet.querySelector('.rvsw-parts'); if(pts)pts.style.display='none';
+    $('rvswList').innerHTML='<div class="rvsw-vs"><div><b>'+esc(rvSwapA.name)+'</b><br><span>'+rvSwapA.part+'부 '+rvSwapA.pos+'번</span></div><div class="rvsw-ar">⇄</div><div><b>'+esc(bName)+'</b><br><span>'+bPart+'부 '+bPos+'번</span></div></div><p class="rvnt-sub">두 사람이 자리(순번·티오프)를 통째로 맞바꿉니다. 되돌리려면 다시 대바하세요.</p>';
+    var btns=sheet.querySelector('.rvnt-btns');
+    btns.innerHTML='<button class="rvnt-x" type="button">취소</button><button class="rvnt-go" type="button">맞바꾸기</button>';
+    btns.querySelector('.rvnt-x').addEventListener('click',function(){ ov.remove(); });
+    btns.querySelector('.rvnt-go').addEventListener('click',async function(){
+      var go=btns.querySelector('.rvnt-go'); go.disabled=true; go.textContent='처리 중…';
+      var notify=($('rvNotify')||{}).checked;
+      try{
+        var r=await fetch(apiUrl('/api/board-swap'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({aPart:rvSwapA.part,aPos:rvSwapA.pos,bPart:bPart,bPos:bPos,notify:notify})});
+        var j=await r.json();
+        if(!j.ok){ go.disabled=false; go.textContent='맞바꾸기'; rvToast(j.error||'대바 실패'); return; }
+        ov.remove(); rvToast('대바 반영: '+j.aName+' ↔ '+j.bName);
+        if(notify && j.notifyToken && j.pending && j.pending.length){ rvNotifyPreview(j.notifyToken, j.pending); }
+        brSig=''; setTimeout(function(){ loadBoardReview(true); },700);
+      }catch(e){ go.disabled=false; go.textContent='맞바꾸기'; rvToast('통신 오류'); }
+    });
   }
   function rvCandUrl(){ var u=apiUrl('/api/board-notify-candidates'); return u+(u.indexOf('?')>=0?'&':'?')+'part='+brPart; }
   async function rvAdhocNotify(){

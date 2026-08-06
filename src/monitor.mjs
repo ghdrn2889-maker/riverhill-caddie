@@ -10,7 +10,7 @@ import { computeStats, computeBoardParts, effectivePart3Verdict } from './analyt
 import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser, adminUserIds } from './users.mjs';
 import { startWatchdog } from './watchdog.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
-import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
+import { loadToday, saveToday, dayKey, applyVerdict, clearTodayPart } from './today.mjs';
 import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge.mjs';
 import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
@@ -431,6 +431,37 @@ function boardCtxForPart(part) {
   const bp = loadBoardPartsStore(); const pd = bp && bp.parts && bp.parts[part]; if (!pd || !Array.isArray(pd.roster)) return null;
   return { articleId: String(bp.articleId), dk: dayKey(pd.dateLabel || bp.dateLabel || ''), roster: pd.roster || [], dateLabel: pd.dateLabel || bp.dateLabel || '' };
 }
+// 대바(크로스파트)용 — 부의 명단을 읽고 쓸 수 있는 핸들. 3부=lastboard, 1·2부=board-parts-store.
+function loadPartBoardRW(part) {
+  const p = String(part);
+  if (p === '3') {
+    const lb = loadLastBoard(); if (!lb || !lb.rawVerdict) return null;
+    const v = lb.rawVerdict; if (!Array.isArray(v.part3Roster)) v.part3Roster = [];
+    return { part: '3', roster: v.part3Roster, article: lb.article || { id: lb.id, images: [], comments: [] },
+      verdict: () => v, dateLabel: v.dateLabel || lb.dateLabel || '', articleId: String(lb.id),
+      cutLine: Number(v.cutoffPosition) || Number(v.cutLine) || 0,
+      save: () => { v._adminCorrected = { at: Date.now(), by: 'admin' }; lb.rawVerdict = v; fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } };
+  }
+  const bp = loadBoardPartsStore(); const pd = bp && bp.parts && bp.parts[p]; if (!pd || !Array.isArray(pd.roster)) return null;
+  const article = bp.article || { id: bp.articleId, subject: bp.subject || '', images: bp.image ? [bp.image] : [], comments: [] };
+  return { part: p, roster: pd.roster, article,
+    verdict: () => ({ part3Roster: pd.roster, teeGrid: pd.teeGrid || [], crewDuty: pd.crewDuty || {}, teamCount: Number(pd.teamCount) || 0,
+      cutoffPosition: Number(pd.cutoffPosition) || Number(pd.cutLine) || null, cutoffName: pd.cutoffName || '', rosterReliable: true,
+      dateLabel: pd.dateLabel || bp.dateLabel || '', internTees: pd.internTees || [], internCount: pd.internCount || 0 }),
+    dateLabel: pd.dateLabel || bp.dateLabel || '', articleId: String(bp.articleId),
+    cutLine: Number(pd.cutoffPosition) || Number(pd.cutLine) || 0,
+    save: () => { pd._adminCorrected = { at: Date.now(), by: 'admin' }; saveBoardPartsStore(bp); } };
+}
+// 대바로 어떤 부를 '떠난' 회원의 그 부 상태 정리. 1·2부=파일 삭제, 3부(베이스)=blank로(근무 부가 포커스 이김).
+function leaveMemberPart(userId, part, dateLabel, articleId) {
+  const p = String(part);
+  if (p === '1' || p === '2') { clearTodayPart(userId, p); return; }
+  const t = { date: dateLabel || '', myPosition: null, status: 'unknown', teeTime: '', course: '', cutoffName: '', cutoffPosition: null,
+    timeline: [], updatedAt: Date.now(), articleId: String(articleId || ''), _leftBoard: true,
+    _adminLock: { dk: dayKey(dateLabel || ''), articleId: String(articleId || ''), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() } };
+  saveToday(t, userId, '3');
+}
+const bareName = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
 function stashNotify(pending) {
   // 오래된 대기건 정리(15분 초과)
   const now = Date.now();
@@ -664,6 +695,67 @@ app.post('/api/board-notify-adhoc', gate, async (req, res) => {
     console.log(`📢 [monitor] 사후 정정 알림(수동 선택) 발송: ${sent}/${ids.length}명`);
     res.json({ ok: true, sent });
   } catch (e) { console.error('notify-adhoc 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ★크로스파트 대바 — 1부↔3부 등 다른 두 부의 두 좌석 이름을 맞바꿈(좌석=순번·티오프 고정, 사람만 교환).
+//  두 이동자 회원만 상태 갱신(도착 부 세팅 + 출발 부 정리). dryRun=true면 저장 없이 결과만 계산해 반환(검증용).
+app.post('/api/board-swap', gate, async (req, res) => {
+  try {
+    const aPart = String(req.body?.aPart || ''), bPart = String(req.body?.bPart || '');
+    const aPos = Number(req.body?.aPos || 0), bPos = Number(req.body?.bPos || 0);
+    const notify = !!req.body?.notify, dryRun = !!req.body?.dryRun;
+    if (!aPart || !bPart || !aPos || !bPos) return res.status(400).json({ ok: false, error: 'aPart·aPos·bPart·bPos 필요' });
+    if (aPart === bPart) return res.status(400).json({ ok: false, error: '같은 부 안에서는 순서편집(끼워넣기)을 쓰세요.' });
+    const A = loadPartBoardRW(aPart), B = loadPartBoardRW(bPart);
+    if (!A || !B) return res.status(400).json({ ok: false, error: '두 부의 배치표가 모두 있어야 대바가 됩니다.' });
+    const aName = bareName(A.roster[aPos - 1]), bName = bareName(B.roster[bPos - 1]);
+    if (!aName || !bName) return res.status(400).json({ ok: false, error: '선택한 자리에 사람이 없어요.' });
+    if (nkey(aName) === nkey(bName)) return res.status(400).json({ ok: false, error: '같은 사람은 대바할 수 없어요.' });
+    // 스왑 반영 명단 사본(dryRun이어도 계산은 스왑 후 기준)
+    const rosterA2 = A.roster.slice(); const rosterB2 = B.roster.slice();
+    rosterA2[aPos - 1] = bName; rosterB2[bPos - 1] = aName;
+    if (!dryRun) {
+      A.roster[aPos - 1] = bName; B.roster[bPos - 1] = aName; A.save(); B.save();
+      try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify({ at: Date.now(), type: 'swap', a: { part: aPart, pos: aPos, name: aName }, b: { part: bPart, pos: bPos, name: bName } }) + '\n'); } catch { /* noop */ }
+    }
+    const movers = [
+      { name: aName, from: aPart, fromBoard: A, to: bPart, toBoard: B, roster: rosterB2 },
+      { name: bName, from: bPart, fromBoard: B, to: aPart, toBoard: A, roster: rosterA2 },
+    ];
+    const pending = [], results = [];
+    for (const mv of movers) {
+      const m = activeMembers().find((x) => nkey(x.board_name) === nkey(mv.name));
+      if (!m) { results.push({ name: mv.name, member: false }); continue; }
+      const win = partWindow(mv.to);
+      const member = { name: m.board_name, part: mv.to, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+      const todayTo = (mv.to === '3' ? loadToday(m.id) : loadToday(m.id, mv.to)) || {};
+      const vTo = JSON.parse(JSON.stringify(mv.toBoard.verdict())); vTo.part3Roster = mv.roster;   // 스왑 반영 명단
+      let nextTo;
+      try {
+        const mo = interpretForMember(mv.toBoard.article, vTo, member, todayTo);
+        nextTo = applyVerdict(todayTo, mo.rawVerdict, mv.toBoard.article, { teeMin: win.min, teeMax: win.max, name: m.board_name, part: mv.to }).next;
+      } catch (e) { results.push({ name: mv.name, member: true, error: e.message }); continue; }
+      const cutLine = mv.toBoard.cutLine;
+      const pos = Number(nextTo.myPosition) || 0;
+      if (nextTo.status !== 'off' && pos > 0 && cutLine > 0) {
+        nextTo.cutLine = cutLine; const hasTee = nextTo.teeTime && /\d{1,2}:\d{2}/.test(String(nextTo.teeTime)); const inWork = pos <= cutLine;
+        nextTo.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare'; if (!inWork) { nextTo.teeTime = ''; nextTo.course = ''; }
+      }
+      nextTo._adminLock = { dk: dayKey(mv.toBoard.dateLabel), articleId: mv.toBoard.articleId, fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() };
+      nextTo.updatedAt = Date.now();
+      results.push({ name: mv.name, member: true, to: mv.to, from: mv.from, status: nextTo.status, teeTime: nextTo.teeTime || '', pos: nextTo.myPosition || 0 });
+      if (!dryRun) {
+        if (mv.to === '3') saveToday(nextTo, m.id); else saveToday(nextTo, m.id, mv.to);
+        leaveMemberPart(m.id, mv.from, mv.fromBoard.dateLabel, mv.fromBoard.articleId);
+      }
+      const pl = mv.to === '1' ? '1부(조출)' : `${mv.to}부`;
+      const work = ['work', 'assigned', 'your_turn'].includes(nextTo.status);
+      pending.push({ id: m.id, name: m.board_name, title: `대바 반영 · ${pl}`, body: `${m.board_name}님, 대바로 ${pl} ${work ? '근무' : '배정'}가 됐어요${nextTo.teeTime ? ` — 티오프 ${nextTo.teeTime}` : ''}. 배치표를 확인해주세요.` });
+    }
+    const notifyToken = (!dryRun && notify && pushReady) ? stashNotify(pending) : null;
+    if (!dryRun) console.log(`🔄 [monitor] 대바: ${aName}(${aPart}부#${aPos}) ↔ ${bName}(${bPart}부#${bPos})`);
+    res.json({ ok: true, dryRun, aName, bName, results, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
+  } catch (e) { console.error('board-swap 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ── 공지(팩스 출력지) 작성·발송 — 회원 앱이 열릴 때 출력 연출로 표시. ──
