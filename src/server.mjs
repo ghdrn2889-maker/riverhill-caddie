@@ -1138,6 +1138,18 @@ function detectDeclaredBoardPart(full) {
   return m ? m[1] : null;   // '1'|'2'|'3'|null(전체/불명확 → 기존 3부 경로)
 }
 
+// ★시스템 전체 관련성 — '회원#1 3부'가 아니라 '어느 부·어느 회원에게든 일정 영향'이 있으면 true.
+//  다중 부 방향 반영: 남의 부 배치표·텍스트 당추도 아래 1·2부 감지 블록(부별 흡수)에 닿게 통과시킨다.
+//  cheapRelevance(3부 1인 기준, 남의 부·창 밖이면 폐기)를 대체하는 게이트. 순수 잡담/사진/광고/타인 개인근태만 false.
+function systemRelevant(full) {
+  const t = `${full?.subject || ''} ${full?.text || ''}`;
+  if (Array.isArray(full?.images) && full.images.length && /배치표|번호표|시간표/.test(full?.subject || '')) return true; // 배치표 이미지(어느 부든)
+  if (/[123]\s*부/.test(t)) return true;                                    // 부 명시(1·2·3)
+  if (/당추|당일\s*추가|추가|커트|컷|취소|변경|배정|콜|님\s*까지|순번|스페어|대기\s*바꿈|대바/.test(t)) return true; // 변동 신호
+  try { for (const m of activeMembers()) if (m.board_name && t.includes(m.board_name)) return true; } catch { /* noop */ } // 활성 회원 이름
+  return false;
+}
+
 async function handleStandalonePartBoard(full, part, opts = {}) {
   const primary = envMember();
   const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
@@ -1203,11 +1215,28 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     return await handleStandalonePartBoard(full, _declaredPart, opts);
   }
 
-  // ★값싼 사전 필터(1번 회원 기준): 명백히 남의 부/개인근태면 Gemini 호출 없이 종료(할당량 절약).
-  //  (현재 테스터는 3부라 1번 회원의 3부 board가 곧 그들 board — 부가 늘면 '어느 회원에게든 관련' 기준으로 확장)
-  if (!opts.force && cheapRelevance(`${full.subject || ''} ${full.text || ''}`, primary) === 'other') {
-    console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
-    return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+  // ★비용절감 사전필터 완화(2026-08-06) — Claude 정액 판독이라 '남의 부'라고 읽기 전에 버리지 않는다.
+  //  기존 cheapRelevance(3부 1인 기준)는 2부 배치표·텍스트 당추(12~13시)를 '창 밖'이라 폐기해서
+  //  아래 1·2부 감지 블록(부별 흡수)에 닿지도 못했다. 이제 '시스템 전체 관련성'으로 판단:
+  //  일정 영향 있으면 어느 부든 통과(3부 judge는 남의 부를 '무관' 반환 → 3부 불변), 순수 잡담만 버림.
+  //  RELEVANCE_FILTER_OFF=0 으로 옛 동작 복귀. Claude 판독 OFF면 자동으로 옛 필터(비용보호) 사용.
+  const _relText = `${full.subject || ''} ${full.text || ''}`;
+  const _filterRelax = useClaudeReader() && !['0', 'false', 'no'].includes(String(process.env.RELEVANCE_FILTER_OFF ?? '').toLowerCase());
+  if (!opts.force) {
+    if (_filterRelax) {
+      const _sysRel = systemRelevant(full);
+      // 섀도우 관찰: 옛 필터라면 버렸을 걸 이제 통과시킨 건수·내용을 기록(정확도·과통과 점검용).
+      if (cheapRelevance(_relText, primary) === 'other') {
+        try { fs.appendFileSync(path.join(DATA_DIR, 'filter-relax.jsonl'), JSON.stringify({ at: Date.now(), id: String(full.id || ''), subject: full.subject || '', hasImg: !!(full.images && full.images.length), pass: _sysRel }) + '\n'); } catch { /* noop */ }
+      }
+      if (!_sysRel) {
+        console.log(`·  (사전필터[완화]: 일정신호 없음 → 무시) ${full.subject}`);
+        return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+      }
+    } else if (cheapRelevance(_relText, primary) === 'other') {
+      console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
+      return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+    }
   }
 
   // ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
