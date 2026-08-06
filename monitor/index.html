@@ -1397,7 +1397,7 @@
 
   // ── ★순서편집(드래그 끼워넣기) 모드 ── 전체 명단을 한 화면에 펼쳐 드래그로 순번을 바꾸고
   //  확정선(근무/스페어 경계)을 옮긴다. 티오프는 순번 슬롯 고정 — 사람이 밀리면 그 자리 티오프를 물려받음.
-  var RODIV={divider:true}; var roList=null, roLadder=null, roDrag=null;
+  var RODIV={divider:true}; var roList=null, roLadder=null, roDrag=null, roAF=null, roPtrX=0, roPtrY=0;
   function rvReorderOpen(){
     if(!rvBoard)return;
     var active=rvActive().slice().sort(function(a,b){return a.pos-b.pos;});
@@ -1460,22 +1460,38 @@
     e.preventDefault(); var item=e.target.closest('.ro-item'); if(!item)return;
     roDrag={el:item}; item.classList.add('drag');
     try{ item.setPointerCapture(e.pointerId); }catch(_){}
+    roPtrX=e.clientX; roPtrY=e.clientY;
     document.addEventListener('pointermove',roMove); document.addEventListener('pointerup',roUp); document.addEventListener('pointercancel',roUp);
+    if(!roAF) roAF=requestAnimationFrame(roTick);
   }
-  function roMove(e){
-    if(!roDrag)return; e.preventDefault();
-    var listEl=$('roListEl'); if(!listEl)return;
+  // 끌던 항목의 현재 포인터 위치 기준으로 순서 재삽입(자동스크롤 중에도 매 프레임 호출)
+  function roReorderAt(){
+    var listEl=$('roListEl'); if(!listEl||!roDrag)return;
     var prev=roDrag.el.style.pointerEvents; roDrag.el.style.pointerEvents='none';
-    var under=document.elementFromPoint(e.clientX,e.clientY);
+    var under=document.elementFromPoint(roPtrX,roPtrY);
     roDrag.el.style.pointerEvents=prev||'';
     var target=under&&under.closest?under.closest('.ro-item'):null;
     if(!target||target===roDrag.el)return;
     var rect=target.getBoundingClientRect();
-    if(e.clientY < rect.top+rect.height/2) listEl.insertBefore(roDrag.el,target);
+    if(roPtrY < rect.top+rect.height/2) listEl.insertBefore(roDrag.el,target);
     else listEl.insertBefore(roDrag.el,target.nextSibling);
+  }
+  function roMove(e){ if(!roDrag)return; e.preventDefault(); roPtrX=e.clientX; roPtrY=e.clientY; roReorderAt(); }
+  // ★가장자리 자동스크롤 — 손잡이를 잡은 채 위/아래 끝으로 끌면 목록이 스스로 스크롤(모바일 긴 명단 이동)
+  function roTick(){
+    if(!roDrag){ roAF=null; return; }
+    var listEl=$('roListEl');
+    if(listEl){
+      var r=listEl.getBoundingClientRect(), edge=70, maxStep=16, before=listEl.scrollTop;
+      if(roPtrY < r.top+edge){ listEl.scrollTop -= maxStep*Math.min(1,(r.top+edge-roPtrY)/edge); }
+      else if(roPtrY > r.bottom-edge){ listEl.scrollTop += maxStep*Math.min(1,(roPtrY-(r.bottom-edge))/edge); }
+      if(listEl.scrollTop!==before) roReorderAt();
+    }
+    roAF=requestAnimationFrame(roTick);
   }
   function roUp(){
     if(!roDrag)return;
+    if(roAF){ cancelAnimationFrame(roAF); roAF=null; }
     document.removeEventListener('pointermove',roMove); document.removeEventListener('pointerup',roUp); document.removeEventListener('pointercancel',roUp);
     roDrag.el.classList.remove('drag'); roDrag.el.style.pointerEvents='';
     var listEl=$('roListEl'); var order=[];
