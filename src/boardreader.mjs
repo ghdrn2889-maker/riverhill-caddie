@@ -267,8 +267,51 @@ function boardReadFault(parts, cuts) {
     const rl = (parts[p].roster || []).filter(Boolean).length;
     const floor = _rosterFloor(cut);
     if (cut > 0 && rl < floor) return `${p}부 명단 심각부족(${rl} < ${floor}, 커트 ${cut}) — 순번열 누락`;
+    // ★티오프 구조 위반(김홍구님 규칙: 한 시각 = OUT·IN 최대 2명). 3명↑ 또는 같은 코스 중복 = 사다리 밀림 오판독 → 재시도.
+    const tees = parts[p].tee || parts[p].tees || [];
+    const byTime = {};
+    for (const t of tees) { const m = String((t && t.time) || '').match(/\d{1,2}:\d{2}/); if (!m) continue; (byTime[m[0]] = byTime[m[0]] || []).push(t); }
+    for (const tm in byTime) {
+      const arr = byTime[tm];
+      if (arr.length > 2) return `${p}부 티오프 ${tm}에 ${arr.length}명 — 한 시각 최대 2명 위반(사다리 밀림)`;
+      if (arr.filter((t) => /IN/i.test(String(t.course))).length > 1) return `${p}부 티오프 ${tm} IN 코스 중복 — 판독 어긋남`;
+      if (arr.filter((t) => /OUT/i.test(String(t.course))).length > 1) return `${p}부 티오프 ${tm} OUT 코스 중복 — 판독 어긋남`;
+    }
   }
   return '';
+}
+
+// ── 부 간 앞순번 교차보정 (근본: 유령 이름 제거) ──
+//  리버힐 규칙(김홍구님): 54·1,3·2,3 중복근무자는 각 부의 '앞 순번'을 '같은 순서'로 차지한다(대바 없으면).
+//  → 1부·3부의 (1,3)·54 워커, 2부·3부의 (2,3)·54 워커는 이름·순서가 동일해야 한다. 한쪽이 정본 이름,
+//    다른쪽이 정본에 없는 유령이면 확인된 쪽으로 보정(예: 3부 '하유린'(유령) → 1부에서 확인된 '정유경').
+const _bare = (c) => String(c || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
+const _tag = (c) => { const m = String(c || '').match(/\(([^)]*)\)/); return m ? m[1].replace(/\s/g, '') : ''; };
+function _sharesParts(tag, a, b) {
+  if (/54/.test(tag)) return true;                                   // 54 = 전 부 근무
+  const nums = tag.split(/[,、]/).map((s) => s.trim()).filter(Boolean);
+  return nums.includes(a) && nums.includes(b);
+}
+export function reconcileCrossPart(parts, known) {
+  try {
+    const CONF = new Set((known || []).map(_bare));
+    const isConf = (c) => CONF.has(_bare(c));
+    for (const [a, b] of [['1', '3'], ['2', '3']]) {
+      if (!parts[a] || !parts[b]) continue;
+      const listA = (parts[a].roster || []).map((c, i) => ({ c, i })).filter((x) => x.c && _sharesParts(_tag(x.c), a, b));
+      const listB = (parts[b].roster || []).map((c, i) => ({ c, i })).filter((x) => x.c && _sharesParts(_tag(x.c), a, b));
+      const n = Math.min(listA.length, listB.length);
+      for (let k = 0; k < n; k++) {
+        const A = listA[k], B = listB[k];
+        if (_bare(A.c) === _bare(B.c)) continue;                     // 이름 일치 → OK
+        const okA = isConf(A.c), okB = isConf(B.c);
+        if (okA && !okB) { console.log(`[교차보정] ${b}부 순번${B.i + 1} '${B.c}'(유령)→'${A.c}'(${a}부 확인)`); parts[b].roster[B.i] = A.c; }
+        else if (okB && !okA) { console.log(`[교차보정] ${a}부 순번${A.i + 1} '${A.c}'(유령)→'${B.c}'(${b}부 확인)`); parts[a].roster[A.i] = B.c; }
+        // 둘 다 정본(대바 가능) 또는 둘 다 유령(복구불가) → 손대지 않음
+      }
+    }
+  } catch (e) { console.error('[교차보정 오류]', e.message); }
+  return parts;
 }
 
 // ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. 경계 흔들림 대비 검증+재시도(최대 3회). ──
@@ -305,6 +348,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   if (!best) return null;
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
+  reconcileCrossPart(best, known);   // ★부 간 앞순번 교차보정 — 유령 이름 제거(하유린→정유경)
   // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표' 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 판독.
   //  ★조 열분할 우선: 통짜 크루 크롭은 다열이 빽빽해 이름을 다른 유효이름으로 뭉갠다(박시윤→박신훈, 스냅으로도 못 잡음).
   //   조별 단일 크롭(8배)이면 이름·근태 안정(실측 박시윤·서동명 정확). 조 경계 실패 시 통짜 크루 크롭(6배)으로 폴백.
