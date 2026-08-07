@@ -979,7 +979,8 @@
       ? '<span style="color:var(--tx3);font-size:12px;padding:8px 2px;">관리자 계정</span>'
       : '<button class="ab approve" data-id="'+m.id+'" data-s="active">승인</button>'
       + '<button class="ab block" data-id="'+m.id+'" data-s="disabled">차단</button>'
-      + '<button class="ab del" data-id="'+m.id+'" data-s="delete">삭제</button>';
+      + '<button class="ab del" data-id="'+m.id+'" data-s="delete">삭제</button>'
+      + '<button class="ab tester" data-id="'+m.id+'" data-s="'+(m.role==='tester'?'untester':'tester')+'">'+(m.role==='tester'?'테스터 해제':'테스터 지정')+'</button>';
     return '<div class="mcard'+(pend?' pend':'')+'">'+
       '<div class="mc-top"><span class="mc-name">'+esc(m.boardName||'(이름 없음)')+'</span>'+
         (m.part?'<span class="mc-part">'+esc(m.part)+'부</span>':'')+
@@ -991,7 +992,9 @@
   function bindMemberBtns(){
     Array.prototype.forEach.call(document.querySelectorAll('.mc-btns .ab'), function(b){
       b.onclick = function(){ var id=Number(b.getAttribute('data-id')), s=b.getAttribute('data-s');
-        if(s==='disabled') askBlock(id, b); else if(s==='delete') askDelete(id, b); else setMember(id, s); };
+        if(s==='disabled') askBlock(id, b); else if(s==='delete') askDelete(id, b);
+        else if(s==='tester') setTester(id, true); else if(s==='untester') setTester(id, false);
+        else setMember(id, s); };
     });
   }
   // 삭제 확인 — 인라인(구글 계정·이름·데이터 완전 삭제, 되돌릴 수 없음)
@@ -1030,6 +1033,16 @@
       var j = await r.json();
       if(!j.ok) throw new Error(j.error||'변경 실패');
       if(status==='active') toast(j.notified ? '✅ 승인 완료 · 알림 발송됨' : '✅ 승인 완료 (알림 미발송)');
+      loadMembers();
+    }catch(e){ alert(e.message||'변경 실패'); }
+  }
+  // 테스터 킷 지정/해제 — 계정을 role='tester'로(또는 member 복귀). 테스터는 실제 캐디에 안 섞이고 앱에서 테스터 킷만 켜짐.
+  async function setTester(id, on){
+    try{
+      var r = await fetch(apiUrl('/api/user-role'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:id, tester:on}) });
+      var j = await r.json();
+      if(!j.ok) throw new Error(j.error||'변경 실패');
+      toast(on ? '🧪 테스터로 지정 (활성 승인도 필요)' : '테스터 해제');
       loadMembers();
     }catch(e){ alert(e.message||'변경 실패'); }
   }

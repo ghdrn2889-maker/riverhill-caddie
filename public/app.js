@@ -328,8 +328,11 @@ async function loadWatchHealth() {
 }
 
 /* ── 오늘: 상황판 히어로 + 행동 보드 ── */
+// ★테스터 킷(role='tester') — 프로필 버튼에서 고른 회원 기준으로 배치표 대시보드를 본다. 일반 사용자엔 null(무영향).
+let testerAsMember = Number(localStorage.getItem('testerAsMember')) || null;
 async function loadToday() {
-  try { const t = await (await fetch('/api/today')).json(); lastToday = t; todayOk = true; renderToday(t); }
+  const q = testerAsMember ? ('?asMember=' + testerAsMember) : '';
+  try { const t = await (await fetch('/api/today' + q)).json(); lastToday = t; todayOk = true; renderToday(t); }
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
   loadWeather();
   loadCheer();
@@ -2801,7 +2804,33 @@ function openAccount() {
   $('ovErr').textContent = '';
   ovDismissable = true;              // 계정 화면: 배경 클릭·뒤로가기로 닫힘
   $('ov').hidden = false;
+  renderTesterPicker();              // ★테스터 계정이면 배치표 대시보드 회원 선택기 노출(일반 사용자엔 무동작)
   pushOvHistory();
+}
+// ★테스터 킷 — 프로필 팝업 안에 '배치표 대시보드 회원 선택' 드롭다운을 주입. role='tester'가 아니면 아무것도 안 함.
+async function renderTesterPicker() {
+  const old = document.getElementById('testerPick'); if (old) old.remove();
+  const role = meState && meState.user && meState.user.role;
+  if (role !== 'tester') return;
+  const box = document.createElement('div');
+  box.id = 'testerPick';
+  box.style.cssText = 'margin:14px 0 2px;padding:12px 13px;border:1px solid var(--line,#e4e8ec);border-radius:12px;background:rgba(120,140,180,.07)';
+  box.innerHTML = '<div style="font-size:12px;font-weight:800;margin-bottom:8px">테스터 · 배치표 대시보드 회원 선택</div>'
+    + '<select id="testerSel" style="width:100%;padding:9px 10px;border-radius:9px;border:1px solid var(--line,#ccc);font:inherit;font-size:14px;background:transparent;color:inherit"></select>';
+  const desc = $('ovDesc'); if (desc && desc.parentNode) desc.parentNode.insertBefore(box, desc.nextSibling);
+  try {
+    const j = await (await fetch('/api/tester/members')).json();
+    const sel = document.getElementById('testerSel');
+    const opts = ['<option value="">— 내 계정(기본) —</option>'].concat(((j && j.members) || []).map((m) =>
+      '<option value="' + m.id + '"' + (String(testerAsMember) === String(m.id) ? ' selected' : '') + '>' + esc(m.name) + ' · ' + esc(m.part) + '부</option>'));
+    sel.innerHTML = opts.join('');
+    sel.onchange = function () {
+      testerAsMember = Number(sel.value) || null;
+      if (testerAsMember) localStorage.setItem('testerAsMember', String(testerAsMember));
+      else localStorage.removeItem('testerAsMember');
+      closeOv(); loadToday();
+    };
+  } catch { /* 무해 — 목록 못 받으면 선택기 비움 */ }
 }
 async function submitProfile() {
   const boardName = $('obName').value.trim();

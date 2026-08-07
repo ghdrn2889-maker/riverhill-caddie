@@ -42,6 +42,16 @@ export function setUserStatus(id, status, reason = null) {
 
 export function touchLogin(id) { run('UPDATE users SET last_login = ? WHERE id = ?', Date.now(), id); }
 
+// ★역할 토글 — 테스터 킷 지정/해제(운영 모니터 관리자 전용). member↔tester만 허용, admin 계정은 불변.
+//  tester 계정은 activeMembers에서 제외돼 실제 캐디/알림에 안 섞이고, 앱에선 테스터 킷 기능만 켜진다.
+export function setUserRole(id, role) {
+  if (!['member', 'tester'].includes(role)) return null;
+  const u = getUser(id);
+  if (!u || u.role === 'admin') return null;   // 관리자 역할은 절대 변경 안 함
+  run('UPDATE users SET role = ? WHERE id = ?', role, id);
+  return getUser(id);
+}
+
 // ★회원 완전 삭제 — 계정·프로필·세션·푸시구독까지 DB에서 제거(관리자 제외).
 //  (개인 데이터 폴더 data/users/<id> 는 호출측에서 별도 삭제.)
 export function deleteUser(id) {
@@ -193,7 +203,7 @@ function getLegacyWorklogSettings() {
 export function activeMembers() {
   return all(`SELECT u.id, p.board_name, p.part, p.commute_min
               FROM users u JOIN profiles p ON p.user_id = u.id
-              WHERE u.status = 'active' AND p.board_name != '' AND u.role != 'test'
+              WHERE u.status = 'active' AND p.board_name != '' AND u.role != 'test' AND u.role != 'tester'
               ORDER BY u.id`);
 }
 

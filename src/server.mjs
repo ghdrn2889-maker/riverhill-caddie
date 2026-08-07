@@ -43,6 +43,9 @@ initPush();                      // VAPID + subscriptions.json → SQLite 이관
 console.log(`🔐 인증 모드: ${soloMode() ? '솔로(로그인 없이 1번 회원)' : '회원제(네이버 로그인)'}${authConfigured() ? '' : ' · 네이버 미설정'}`);
 
 const app = express();
+// ★테스터 킷 — 별도 인스턴스 없이 '테스터 계정'(role='tester')으로만 켜진다(팀장·테스터 시연용).
+//  실제 캐디/회원은 전혀 영향 없음(activeMembers에서 제외). 테스터는 배치표 대시보드를 고른 회원 기준으로 본다(읽기전용).
+const isTester = (u) => !!(u && u.role === 'tester');
 app.use(express.json({ limit: '12mb' }));         // 계기판 사진(base64) 업로드 허용
 app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
 app.use(attachUser);                              // req.user 채움(세션 쿠키 or 솔로 폴백)
@@ -472,8 +475,20 @@ function todayISOKST() {
 }
 
 // 오늘의 상황판 조회 (온디맨드 요약 / 디버깅).
+// ★테스터 킷 — 프로필 버튼 회원 선택기용 회원 목록(테스터 계정 전용). 실제 캐디/회원에겐 노출 안 됨.
+app.get('/api/tester/members', (req, res) => {
+  if (!isTester(req.user)) return res.status(403).json({ ok: false });
+  const members = activeMembers().map((m) => ({ id: m.id, name: m.board_name, part: m.part }));
+  res.json({ ok: true, members });
+});
 app.get('/api/today', (req, res) => {
-  const uid = req.user?.id || 1;
+  let uid = req.user?.id || 1;
+  // ★테스터 킷(TESTER_KIT=1) 전용 — 프로필 버튼에서 고른 회원 기준으로 배치표 대시보드를 읽기전용 표시.
+  //  실앱(플래그 꺼짐)에선 asMember를 완전히 무시 → 동작 100% 동일. 유효 회원만 허용.
+  if (isTester(req.user) && req.query.asMember) {
+    const asId = Number(req.query.asMember);
+    if (Number.isFinite(asId) && activeMembers().some((m) => m.id === asId)) uid = asId;
+  }
   const nowISO = todayISOKST();
   let t = loadToday(uid);            // 3부(홈 베이스) 우선
   let primaryPart = '3';

@@ -7,7 +7,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts, effectivePart3Verdict } from './analytics.mjs';
-import { listMembersForAdmin, setUserStatus, getUser, getProfile, activeMembers, deleteUser, adminUserIds } from './users.mjs';
+import { listMembersForAdmin, setUserStatus, setUserRole, getUser, getProfile, activeMembers, deleteUser, adminUserIds } from './users.mjs';
+import { seedTesterData } from './testerseed.mjs';
 import { startWatchdog } from './watchdog.mjs';
 import { initPush, broadcast, getSubscriptions } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict, clearTodayPart } from './today.mjs';
@@ -248,6 +249,21 @@ app.post('/api/user-delete', gate, (req, res) => {
   try { fs.rmSync(path.join(DATA_DIR, 'users', String(id)), { recursive: true, force: true }); } catch (e) { /* 폴더 없거나 무해 */ }
   console.log(`🗑️ [monitor] 회원 #${id}(${r.boardName || '이름없음'}) 완전 삭제 — 계정·프로필·세션·구독·데이터`);
   res.json({ ok: true, id, boardName: r.boardName });
+});
+// ★테스터 킷 지정/해제 — 계정을 role='tester'로(또는 member 복귀). 테스터는 실제 캐디/알림에 안 섞이고, 앱에서 테스터 킷 기능만 켜진다.
+app.post('/api/user-role', gate, (req, res) => {
+  const id = Number(req.body?.id);
+  const tester = !!req.body?.tester;
+  if (!id) return res.status(400).json({ ok: false, error: 'id 필요' });
+  const target = getUser(id);
+  if (!target) return res.status(404).json({ ok: false, error: '회원을 찾을 수 없어요.' });
+  if (target.role === 'admin') return res.status(400).json({ ok: false, error: '관리자 계정 역할은 바꿀 수 없어요.' });
+  const u = setUserRole(id, tester ? 'tester' : 'member');
+  if (!u) return res.status(400).json({ ok: false, error: '역할 변경 실패' });
+  let seeded = null;
+  if (tester) { try { seeded = seedTesterData(id); } catch (e) { console.error('[테스터 시드 오류]', e.message); } } // 정산·일지 샘플(비어있을 때만)
+  console.log(`🧪 [monitor] 회원 #${id} 역할 → ${u.role}${seeded && seeded.seeded ? ` · 샘플시드(${seeded.workdays}일)` : ''}`);
+  res.json({ ok: true, id, role: u.role, seeded });
 });
 
 // ── 관리자 수동 교정: 판독이 틀렸을 때 관리자가 실제 배치표를 보고 대시보드를 바로잡음 ──
