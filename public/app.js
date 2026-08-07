@@ -2835,6 +2835,9 @@ function initFax() {
 }
 function openAccount() {
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
+  // ★테스터: 계정/프로필 옵션 대신 '어떤 회원 배치표로 볼지' 선택 UI를 바로 띄운다.
+  if (meState && meState.user && meState.user.role === 'tester') { openTesterPicker(); return; }
+  $('ov').classList.remove('pickonly');
   $('ovTitle').textContent = '내 계정 · 프로필';
   const p = (meState && meState.profile) || {};
   const label = caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디';
@@ -2849,6 +2852,19 @@ function openAccount() {
   ovDismissable = true;              // 계정 화면: 배경 클릭·뒤로가기로 닫힘
   $('ov').hidden = false;
   renderTesterPicker();              // ★테스터 계정이면 배치표 대시보드 회원 선택기 노출(일반 사용자엔 무동작)
+  pushOvHistory();
+}
+// ★테스터 전용 — 프로필 버튼을 누르면 계정 옵션 대신 '배치표 대시보드 회원 선택'만 바로 뜬다(폼은 pickonly로 숨김).
+function openTesterPicker() {
+  $('ov').classList.add('pickonly');
+  $('ovTitle').textContent = '배치표 대시보드 · 회원 선택';
+  $('ovDesc').innerHTML = '어떤 회원의 배치표로 볼지 선택하세요. <b>정산·일지</b>는 체험 계정 기준으로 표시됩니다.';
+  $('obSwitch').hidden = true;
+  $('ovErr').textContent = '';
+  $('ovActions').hidden = false;     // 로그아웃/닫기는 유지
+  ovDismissable = true;
+  $('ov').hidden = false;
+  renderTesterPicker();
   pushOvHistory();
 }
 // ★테스터 킷 — 프로필 팝업 안에 '배치표 대시보드 회원 선택' 드롭다운을 주입. role='tester'가 아니면 아무것도 안 함.
