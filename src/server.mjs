@@ -2179,25 +2179,16 @@ startCrawler({
     }
   },
   onComment: async (article, prevCount, newCount) => {
-    // 일정글에 달린 새 댓글을 '텍스트 글'처럼 판단(변동이 댓글로도 오므로).
+    // ★댓글은 소식/알림에 '텍스트 글'로 직접 노출하지 않는다(노이즈 댓글까지 판독돼 [댓글] 항목·알림으로 뜨던 문제).
+    //  대신 '배치표가 바뀌었을 수 있다'는 내부 신호로만 사용 — 지금 감시 중인 배치표 이미지를 재판독해,
+    //  이미지가 실제로 바뀐 경우에만 정상 경로(피드·알림)로 반영한다(변동 없으면 조용히 무시). 상황판 오염·오알림 방지.
     try {
-      const full = await fetchArticle(article.id);
-      const added = Math.max(1, newCount - prevCount);
-      const newComments = (full.comments || []).slice(-added);
-      for (let i = 0; i < newComments.length; i++) {
-        const c = newComments[i];
-        if (!c.content || !c.content.trim()) continue;
-        const pseudo = {
-          id: `${full.id}#c${newCount - added + i + 1}`,
-          subject: `[댓글] ${full.subject}`,
-          text: c.content, writer: c.nick || full.writer,
-          menuId: full.menuId, menuName: full.menuName,
-          images: [], writeDate: full.writeDate, url: full.url,
-        };
-        await notifyForArticle(pseudo, {}, {});
+      if (boardWatch && boardWatch.id && String(boardWatch.id) === String(article.id)) {
+        console.log(`💬 댓글 감지(#${article.id}) → 배치표 이미지 재판독으로 확인(소식·알림엔 댓글 미노출)`);
+        await recheckBoard();
       }
     } catch (e) {
-      console.error('댓글 분석 실패:', e.message);
+      console.error('댓글→재판독 오류:', e.message);
     }
   },
   onCafeError: async () => {
