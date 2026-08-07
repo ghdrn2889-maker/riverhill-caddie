@@ -275,9 +275,10 @@ export function caddieNameKnown(name) {
 
 // 관리자 회원관리 화면용 — 전체 회원 + 상태 + 명부 일치 여부.
 export function listMembersForAdmin() {
+  // ★테스트(test)·테스터 체험(tester) 계정은 관리자 회원/승인 목록에서 제외 — 실제 캐디 승인 흐름과 무관한 임시 데모 계정.
   const rows = all(`SELECT u.id, u.role, u.status, u.created_at, u.last_login, u.block_reason, p.board_name, p.part
                     FROM users u LEFT JOIN profiles p ON p.user_id = u.id
-                    WHERE u.role != 'test' ORDER BY u.status='pending' DESC, u.id`);
+                    WHERE u.role != 'test' AND u.role != 'tester' ORDER BY u.status='pending' DESC, u.id`);
   return rows.map((r) => ({
     id: r.id, role: r.role, status: r.status, createdAt: r.created_at, lastLogin: r.last_login,
     boardName: r.board_name || '', part: r.part || '', nameKnown: caddieNameKnown(r.board_name),
