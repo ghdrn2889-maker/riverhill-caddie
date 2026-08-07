@@ -2339,7 +2339,8 @@ function showLogin() {
   lo.hidden = false;
   lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
 }
-// 테스터 체험 시작 — OAuth 없이 세션을 받고 곧장 출력기(환영) 애니메이션 → 실제 테스터 앱.
+// 테스터 체험 시작 — OAuth 없이 세션을 받고, 실제 가입과 동일한 온보딩(신청서 출력 → 이름·소요시간 입력 → 환영 → 앱)으로 진입.
+//  ★세션마다 별도 격리 계정이라 두 사람 이상이 동시에 써도 안 겹친다. 이름은 하드코딩하지 않고 테스터가 직접 입력.
 async function startTesterDemo(token) {
   const btn = $('testerDemoBtn'); if (btn) btn.disabled = true;
   obActx();   // ★탭 제스처(동기)에 오디오 잠금 해제 — 이후 애니메이션 소리가 나도록(모바일 autoplay 정책)
@@ -2348,25 +2349,10 @@ async function startTesterDemo(token) {
   catch (e) { if (btn) btn.disabled = false; $('loginErr').textContent = '체험 시작에 실패했어요. 잠시 후 다시.'; return; }
   if (!r || !r.ok) { if (btn) btn.disabled = false; $('loginErr').textContent = (r && r.error) || '유효하지 않은 체험 링크예요.'; return; }
   try { sessionStorage.setItem('rhFresh', '1'); } catch { /* 무해 */ }
+  try { testerAsMember = null; localStorage.removeItem('testerAsMember'); } catch { /* 무해 */ }
+  try { meState = await (await fetch('/api/me')).json(); } catch { /* 무해 */ }  // 세션 반영(meState=tester)
   hideLogin();
-  await runTesterEntry(r.name || '체험');
-}
-// 폼(가입 신청서) 없이 곧장 환영(출력기) 애니메이션 → 데모 홈 배경 노출 → 실제 테스터 앱(회원 선택기) 로드.
-async function runTesterEntry(name) {
-  hideSplash();
-  $('ov').hidden = true;
-  const obOv = $('obOv');
-  obOv.style.opacity = ''; obOv.style.transition = '';
-  obOv.hidden = false;
-  // ★가입 신청서·대기 안내문·힌트 전부 숨김 — 테스터는 폼 없이 '가입 완료' 이후의 환영 연출만 재생.
-  $('obPrinter').style.display = 'none';
-  $('obFeed').style.display = 'none';
-  $('obNoticeFeed').style.display = 'none';
-  $('obTapHint').hidden = true;
-  try { await obWelcomeFlow(name, ++obSeq, true); } catch { /* 무해 */ }
-  // ★loadMe만 호출(계정 버튼·회원 선택기 활성). loadToday는 안 불러 방금 연출한 데모 홈이 그대로 유지된다.
-  //  (프로필의 회원 선택기에서 회원을 고르면 그때 실제 배치표로 교체됨.)
-  try { await loadMe(); } catch { /* 무해 */ }
+  openOnboarding();   // 실제 가입과 동일: 신청서 출력 → 이름·소요시간 입력 → 제출 → 환영 → 앱
 }
 // 구글 버튼은 <a href="/api/auth/google"> 그대로 → 일반 리다이렉트 로그인(자연스러운 흐름). 팝업·핸드오프 없음.
 function hideLogin() { $('loginOv').hidden = true; }

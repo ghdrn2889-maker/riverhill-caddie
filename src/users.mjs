@@ -1,7 +1,8 @@
 // 회원·프로필·세션 로직. (판독/기능은 아직 1번 회원 기준으로 동작 — 이관은 단계적)
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { db, run, get, all } from './db.mjs';
-import { loadJSON } from './store.mjs';
+import { loadJSON, userDataDir } from './store.mjs';
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 90);
 
@@ -54,20 +55,27 @@ export function setUserRole(id, role) {
 
 // ★회원 완전 삭제 — 계정·프로필·세션·푸시구독까지 DB에서 제거(관리자 제외).
 //  (개인 데이터 폴더 data/users/<id> 는 호출측에서 별도 삭제.)
-// 무인증 '테스터 체험' 계정(멱등) — 비공개 링크로 들어온 테스터가 OAuth 없이 앱을 둘러보는 단일 데모 계정.
+// 무인증 '테스터 체험' 계정 — 비공개 링크로 들어온 테스터가 OAuth 없이 앱을 둘러보는 데모 계정.
+//  ★세션(브라우저)마다 새로 만든다 → 두 사람 이상이 동시에 써도 이름·정산·일지가 서로 안 겹친다(격리).
+//  board_name은 비워둔다 → 진입 시 실제 가입과 동일한 온보딩(이름·소요시간 입력)을 거치게.
 //  role='tester'라 activeMembers(실제 캐디/알림)에서 제외되고, 앱에선 테스터 킷 기능(회원 선택기 등)만 켜진다.
-//  google_id 센티넬('demo:tester')로 재사용 — 여러 테스터가 같은 계정을 공유(합성/공개 대시보드만 노출).
-const DEMO_TESTER_KEY = 'demo:tester';
-export function ensureDemoTester() {
-  let u = getUserByGoogle(DEMO_TESTER_KEY);
-  if (!u) {
-    u = createUser({ googleId: DEMO_TESTER_KEY, role: 'tester', status: 'active' });
-    setProfile(u.id, { board_name: '김리버', part: '3', caddie_type: 'part3' });
-  } else if (u.role !== 'tester' || u.status !== 'active') {
-    run("UPDATE users SET role = 'tester', status = 'active' WHERE id = ?", u.id);
-    u = getUser(u.id);
+export function createTesterAccount() {
+  return createUser({ role: 'tester', status: 'active' });
+}
+
+// 오래된 테스터 계정 청소 — last_login(없으면 created_at)이 maxAgeHours 지난 tester 계정 + 데이터 폴더 제거.
+//  세션마다 계정이 생기므로 무한정 쌓이지 않게 진입 때마다 한 번 훑는다. 반환: 지운 id 수.
+export function pruneStaleTesters(maxAgeHours = 48) {
+  const cutoff = Date.now() - maxAgeHours * 3600 * 1000;
+  const rows = all("SELECT id, last_login, created_at FROM users WHERE role = 'tester'");
+  let gone = 0;
+  for (const r of rows) {
+    const seen = r.last_login || r.created_at || 0;
+    if (seen >= cutoff) continue;
+    const d = deleteUser(r.id);
+    if (d.ok) { try { fs.rmSync(userDataDir(r.id), { recursive: true, force: true }); } catch { /* 무해 */ } gone++; }
   }
-  return u;
+  return gone;
 }
 
 export function deleteUser(id) {

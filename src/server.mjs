@@ -122,6 +122,17 @@ app.post('/api/profile', requireAuth, (req, res) => {
     return res.json({ ok: true, approved: true, test: true,
       profile: { boardName: '', part: '', caddieType: 'part3', homeKm: 0, commuteMin: 0, carNo: '' } });
   }
+  // ★테스터 체험 — 실제 가입과 동일한 온보딩(이름·소요시간 입력)을 거치되, 명부 대조·이름 중복·관리자 알림·소급 없이
+  //  입력값만 저장하고 항상 approved 반환(환영 연출로 진행). role='tester'라 실제 캐디/알림엔 안 섞인다.
+  if (isTester(req.user)) {
+    const ct = ['house', 'part3'].includes(String(b.caddieType)) ? String(b.caddieType) : 'part3';
+    const pt = ct === 'part3' ? '3' : (['1', '2'].includes(String(b.part)) ? String(b.part) : '1');
+    const prof = setProfile(req.user.id, {
+      board_name: boardName, part: pt, caddie_type: ct, home_km: b.homeKm, commute_min: b.commuteMin, car_no: b.carNo,
+    });
+    return res.json({ ok: true, approved: true, boardName: prof.board_name,
+      profile: { boardName: prof.board_name, part: prof.part, caddieType: prof.caddie_type, homeKm: prof.home_km, commuteMin: prof.commute_min, carNo: prof.car_no } });
+  }
   const existing = getProfile(req.user.id) || {};
   // ★캐디 구분(하우스/3부). 없으면 기존값·part에서 유추. part는 호환 위해 유지: 3부→'3', 하우스→기존 1·2부(없으면 '1').
   const caddieType = ['house', 'part3'].includes(String(b.caddieType)) ? String(b.caddieType)

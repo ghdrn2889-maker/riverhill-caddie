@@ -5,7 +5,7 @@ import {
   getUserByNaver, getUserByGoogle, createUser, touchLogin, seedPrimaryUser,
   createSession, userForSession, destroySession, newOAuthState, consumeOAuthState,
   newLoginHandoff, completeLoginHandoff, pollLoginHandoff, redeemLoginHandoff,
-  ensureDemoTester, getProfile,
+  createTesterAccount, pruneStaleTesters, getProfile,
 } from './users.mjs';
 import { seedTesterData } from './testerseed.mjs';
 
@@ -303,12 +303,18 @@ const TESTER_LINK = process.env.TESTER_LINK || 'riverhill2026';
 export function testerEnter(req, res) {
   const t = String((req.query && req.query.t) || (req.body && req.body.t) || '');
   if (t !== TESTER_LINK) return res.status(403).json({ ok: false, error: '유효하지 않은 체험 링크입니다.' });
-  const u = ensureDemoTester();
-  try { seedTesterData(u.id); } catch (e) { console.error('[테스터 시드 오류]', e.message); }
+  // 이미 테스터 세션이면 그대로 재사용(새로고침·재클릭), 아니면 세션마다 '새 격리 계정' 생성 → 동시 사용 충돌 방지.
+  let u = (req.user && req.user.role === 'tester') ? req.user : null;
+  if (!u) {
+    try { pruneStaleTesters(48); } catch (e) { console.error('[테스터 청소 오류]', e.message); }
+    u = createTesterAccount();
+    try { seedTesterData(u.id); } catch (e) { console.error('[테스터 시드 오류]', e.message); }
+  }
   touchLogin(u.id);
   const tok = createSession(u.id, req.headers['user-agent'] || '');
   setSessionCookie(req, res, tok);
   const prof = getProfile(u.id) || {};
-  res.json({ ok: true, name: prof.board_name || '체험', part: prof.part || '3' });
+  // board_name이 비어 있으면(새 계정) 클라이언트가 온보딩(이름·소요시간 입력)을 띄운다.
+  res.json({ ok: true, name: prof.board_name || '', needsOnboarding: !prof.board_name, part: prof.part || '3' });
 }
 
