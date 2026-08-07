@@ -675,6 +675,24 @@ function removedBoardHTML(s) {
 function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
 let _holdHomeAnim = false;  // ★가입완료 흐름: 오버레이 뒤에서 등장 모션을 낭비하지 않게 보류 → 아이리스 후 수동 재생.
+// 보고 있는 board의 '나' 이름(테스터면 선택한 회원, 아니면 내 프로필).
+function boardOwnerName() {
+  return ((testerAsMember && _boardOwnerName) ? _boardOwnerName : (meState && meState.profile && meState.profile.boardName || '')).trim();
+}
+// board(순번표)는 확보됐는데 그 안에 내 이름이 없고 순번도 0 → '오늘 미배치'(스페어 아님, 로딩도 아님).
+//  ★로딩(roster 없음)·이름미상엔 발동 안 함(오탐 방지). 근무·휴무 등 스페어 아닌 상태도 제외.
+function notOnBoard(s) {
+  if (!s || !['spare', 'waiting', 'near'].includes(s.status)) return false;
+  if (Number(s.myPosition) > 0) return false;
+  const roster = Array.isArray(s.roster3) ? s.roster3 : [];
+  if (roster.length === 0) return false;
+  const owner = boardOwnerName();
+  const mn = owner.replace(/\s/g, '');
+  if (!mn) return false;
+  const norm = (x) => String(x || '').replace(/\s/g, '');
+  const found = roster.some((nm) => norm(nm) === mn) || roster.some((nm) => nameLooseEq(nm, owner));
+  return !found;
+}
 function renderToday(t) {
   if (_holdHomeAnim) { hideSplash(); }   // 스플래시만 내리고 등장 모션은 보류(홈 오브젝트는 home-prep로 숨겨둠)
   else if (!_heroEntered) {
@@ -718,6 +736,7 @@ function renderToday(t) {
   const offSick = st === 'off' && s.offType === 'sick';
   const offVac = st === 'off' && s.offType === 'vacation';
   const offToday = st === 'off' && off < 1 && !offRemoved && !offSick && !offVac;   // 평소 휴무만 랜덤 쉼 문구 로테이션
+  const notOn = notOnBoard(s);   // board는 확보됐는데 내 이름이 없음 → 오늘 미배치
   if (offToday) {
     startOffTitle();                    // 랜덤 문구 + 슬라이드 로테이션 시작
   } else {
@@ -729,6 +748,7 @@ function renderToday(t) {
       : offSick ? `${dayW} 병가예요`
       : offVac ? `${dayW} 휴가예요`
       : st === 'off' ? `${dayW} 휴무예요`
+      : notOn ? `${dayW} 배치 없음`
       : isSpare ? `${dayW} ${heroPart} 스페어${posTxt}` : '대기 중';
   }
   $('heroSub').textContent = st === 'your_turn' ? '앞 순번이 모두 찼어요. 지금 바로 출근 준비하세요.'
@@ -739,6 +759,7 @@ function renderToday(t) {
     : offSick ? '무리하지 말고 몸부터 잘 회복해요.'
     : offVac ? (off >= 1 ? `${dayW}은 휴가예요. 잘 보내요.` : '오늘은 휴가예요. 잘 보내요.')
     : st === 'off' ? (off >= 1 ? `${dayW}은 예정된 근무가 없어요. 미리 푹 쉬어요.` : '예정된 근무가 없어요. 오늘은 푹 쉬어요.')
+    : notOn ? `${dayW} ${heroPart} 배치표에 이름이 아직 없어요. 배치되면 바로 알려드릴게요.`
     : isSpare ? '아래에서 대기 순번과 확정선을 확인하세요.'
     : '아직 상황이 확정되지 않았어요.';
   // ★부별 동일 수준: focus 라운드의 리치 보드(근무 게이지 or 스페어 순번리스트)를 항상 그린다.
@@ -1062,7 +1083,11 @@ function renderSpareBoard(s, partLabel = '3부') {
   // 명단에서 내 이름을 못 찾고(정확 우선 미충족), 서버 순번으로도 신뢰 못하면 → 숫자 요약 폴백.
   if (myIdx < 0 && !trustByPos) {
     const mp = Number(s.myPosition) || 0;
-    if (!mp) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
+    if (!mp) {
+      // ★board(순번표)가 확보됐는데 내 이름이 없으면 '오늘 미배치', 아직 board 자체가 없으면 '불러오는 중'.
+      if (roster.length) return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span><span>오늘 <b>${esc(partLabel)} 배치표</b>에 이름이 아직 없어요. 배치되면 바로 알려드릴게요.</span></div></div>`;
+      return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span><span>대기 정보를 불러오는 중이에요. 배치표 소식이 오면 순번을 표시할게요.</span></div></div>`;
+    }
     const ahead = (cut && mp > cut) ? Math.max(0, mp - cut - 1) : 0;
     if (!cut || mp <= cut) {
       return `<div class="sp-board"><div class="sp-foot" style="border-top:0"><span class="sp-fi">${CLOCK_SVG}</span>` +
