@@ -2939,11 +2939,12 @@ async function main() {
   tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount(); initFax();
   initInstallPrompt();
   $('readAll').onclick = markAllRead;
-  await registerSW();
-  await refreshPushHealth();
+  // ★렌더를 서비스워커·푸시 준비보다 먼저 — 초기 화면(홈)이 최대한 빨리 뜨게(SW register/update 대기로 스플래시가 길어지던 문제).
   loadMe();
   loadToday(); loadWatchHealth(); loadRecent();
-  setTimeout(hideSplash, 3500);   // 안전장치: 어떤 이유로든 3.5초 뒤엔 대기화면 해제(무한 대기 방지)
+  setTimeout(hideSplash, 2000);   // 안전장치: 어떤 이유로든 2초 뒤엔 대기화면 해제(무한 대기 방지)
+  // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
+  registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
   setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
   setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
   startHeartbeat();
