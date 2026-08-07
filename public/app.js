@@ -2317,14 +2317,23 @@ window.addEventListener('popstate', () => {
 });
 function showLogin() {
   hideSplash();
-  $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
-  $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
   // ★비공개 링크(?tester=<토큰>)로 들어온 테스터만 무인증 '체험' 버튼을 본다. 값 검증은 서버가 함.
   const tp = new URLSearchParams(location.search).get('tester');
   const tb = $('testerDemoBtn');
-  if (tb) {
-    if (tp) { tb.hidden = false; tb.disabled = false; tb.onclick = () => startTesterDemo(tp); }
-    else tb.hidden = true;
+  const gb = $('googleLoginBtn');
+  const terms = document.querySelector('#loginOv .dl-terms');
+  if (tp && tb) {
+    // 테스터 링크 — 구글 로그인은 감추고 '체험' 버튼만 단독(메인)으로 남긴다.
+    gb.style.display = 'none';
+    $('loginErr').textContent = '';
+    if (terms) terms.style.display = 'none';
+    tb.hidden = false; tb.disabled = false; tb.classList.add('solo');
+    tb.onclick = () => startTesterDemo(tp);
+  } else {
+    gb.style.display = meState.googleEnabled ? 'flex' : 'none';
+    $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
+    if (terms) terms.style.display = '';
+    if (tb) { tb.hidden = true; tb.classList.remove('solo'); }
   }
   const lo = $('loginOv');
   lo.hidden = false;
@@ -2349,12 +2358,31 @@ async function runTesterEntry(name) {
   const obOv = $('obOv');
   obOv.style.opacity = ''; obOv.style.transition = '';
   obOv.hidden = false;
-  $('obPrinter').style.display = 'none';        // 테스터는 가입 폼 프린터 없이 환영 연출만
+  // ★가입 신청서·대기 안내문·힌트 전부 숨김 — 테스터는 폼 없이 '가입 완료' 이후의 환영 연출만 재생.
+  $('obPrinter').style.display = 'none';
+  $('obFeed').style.display = 'none';
+  $('obNoticeFeed').style.display = 'none';
+  $('obTapHint').hidden = true;
   try { await obWelcomeFlow(name, ++obSeq, true); } catch { /* 무해 */ }
-  try { await loadMe(); loadToday(); } catch { /* 무해 */ } // 데모 홈 → 실제 테스터 앱으로 교체(계정 버튼·회원 선택기 활성)
+  // ★loadMe만 호출(계정 버튼·회원 선택기 활성). loadToday는 안 불러 방금 연출한 데모 홈이 그대로 유지된다.
+  //  (프로필의 회원 선택기에서 회원을 고르면 그때 실제 배치표로 교체됨.)
+  try { await loadMe(); } catch { /* 무해 */ }
 }
 // 구글 버튼은 <a href="/api/auth/google"> 그대로 → 일반 리다이렉트 로그인(자연스러운 흐름). 팝업·핸드오프 없음.
 function hideLogin() { $('loginOv').hidden = true; }
+// 빠른 로그아웃 — 전체 리로드(스플래시·재부팅)로 몇 초씩 걸리던 것을, 세션만 지우고 즉시 로그인 화면으로 전환.
+async function doLogout() {
+  const btn = $('obLogout'); if (btn) btn.disabled = true;
+  try { await postJSON('/api/logout', {}); } catch { /* 무해 */ }
+  try { testerAsMember = null; localStorage.removeItem('testerAsMember'); } catch { /* 무해 */ }
+  lastToday = null;
+  ['ov', 'pendingOv', 'blockedOv', 'obOv'].forEach((id) => { const e = $(id); if (e) { e.hidden = true; e.style.opacity = ''; } });
+  if (typeof _pendTimer !== 'undefined' && _pendTimer) { clearInterval(_pendTimer); _pendTimer = null; }
+  if (meState) meState.authed = false;
+  renderAccount();               // 계정 버튼 숨김
+  showLogin();                   // 즉시 로그인 화면(테스터 링크면 체험 버튼 유지)
+  if (btn) btn.disabled = false;
+}
 function renderAccount() {
   const btn = $('acctBtn');
   if (!meState || !meState.authed) { btn.hidden = true; return; }
@@ -2894,7 +2922,7 @@ function initAccount() {
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
-  $('obLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
+  $('obLogout').onclick = () => doLogout();
   $('pendReload').onclick = () => location.reload();
   $('pendEnableBtn').onclick = () => enableNotifications('pendEnableBtn', 'pendEnableMsg');
   $('pendLogout').onclick = async () => { try { await postJSON('/api/logout', {}); } catch {} location.reload(); };
