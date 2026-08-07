@@ -2241,6 +2241,15 @@ async function loadMe() {
   try { meState = await (await fetch('/api/me')).json(); } catch { meState = null; }
   // 회원제 모드에서 비로그인이면 로그인 게이트, 로그인했으면 앱 사용.
   if (meState && !meState.authed) { showLogin(); renderAccount(); return; }
+  // ★테스터 세션은 일시적 — 앱/창을 닫으면(=sessionStorage 갱신마커 소멸) 자동 로그아웃 → 로그인부터 다시.
+  //  같은 세션 안 새로고침(F5)엔 마커가 남아 유지된다. 실제 회원/관리자에겐 해당 없음(role==='tester'만).
+  if (meState.authed && meState.user && meState.user.role === 'tester' && !isFreshLogin()) {
+    try { await postJSON('/api/logout', {}); } catch { /* 무해 */ }
+    try { testerAsMember = null; localStorage.removeItem('testerAsMember'); } catch { /* 무해 */ }
+    meState = { ...meState, authed: false };
+    hidePending(); renderAccount(); showLogin();
+    return;
+  }
   hideLogin();
   // ★차단(disabled): '승인 대기'가 아니라 별도 '차단됨' 화면 + 사유 + 관리자 문의 안내.
   if (meState && meState.status === 'disabled') { hidePending(); renderAccount(); showBlocked(meState.blockReason); return; }
