@@ -1626,6 +1626,16 @@ async function processForMember(userId, member, out, full, opts = {}) {
     return { pushed: false, ...ret };
   }
 
+  // ★당일 off 잠금(사용자 지적) — 그날 off(휴무/휴가/병가/순번 제외) 알림이 이미 나갔으면 날짜가 바뀔 때까지
+  //  off 재알림 금지. dedup(8h)·번복(reversal)보다 우선 — 수정배치표가 뜰 때마다 off가 반복·오분류되던 문제 차단.
+  if (merged && merged.next && merged.next.status === 'off' && !opts.force && !opts.previewMode && !opts.noPush) {
+    const offISO = worklog.labelToISO(merged.next.date) || todayISOKST();
+    if (offNotified(userId, offISO)) {
+      if (userId === 1) console.log(`·  (당일 off 잠금 → 무푸시) ${full.subject} [${offISO}]`);
+      return { pushed: false, ...ret };
+    }
+  }
+
   // 중복 푸시 방지 — '결과 상태' 기준, 회원별 pushlog.
   if (!opts.force && !change.reversal) {
     const ns = merged ? merged.next : null;
@@ -1660,6 +1670,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
   if (opts.noPush) { console.log(`·  [noPush·회원${userId}] 발송 억제(상태만 갱신): ${title}`); return { pushed: false, suppressed: true, ...ret }; }
   await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
+  if (merged && merged.next && merged.next.status === 'off')   // off 알림 발송 표식 → 그날 재발송 잠금
+    markOffNotified(userId, worklog.labelToISO(merged.next.date) || todayISOKST());
   return { pushed: true, ...ret };
 }
 
@@ -1712,9 +1724,9 @@ function composePreview(userId, dayISO, dayW) {
     return { title: `${dayW} ${pl} 근무 배정!`, body: `${name}님, ${dayW} ${pl} 근무예요. 티오프 ${s.teeTime || '미정'}${s.course ? `(${s.course})` : ''}${s.myPosition ? ` · 순번 ${s.myPosition}번` : ''}. 배치표를 확인해주세요.` };
   }
   const t3 = slots['3'];
-  if (t3 && t3.status === 'off') {                               // 휴무
+  if (t3 && t3.status === 'off') {                               // 휴무/휴가/병가/순번 제외
     const kind = t3.offType === 'sick' ? '병가' : t3.offType === 'vacation' ? '휴가' : (t3.offReason === 'removed' ? '순번 제외' : '휴무');
-    return { title: `${dayW} ${kind}`, body: kind === '휴무' ? `${name}님, ${dayW}은 휴무로 확인됐어요. 편히 쉬세요.` : `${name}님, ${dayW}은 ${kind}로 확인됐어요.` };
+    return { off: true, title: `${dayW} ${kind}`, body: kind === '휴무' ? `${name}님, ${dayW}은 휴무로 확인됐어요. 편히 쉬세요.` : `${name}님, ${dayW}은 ${kind}로 확인됐어요.` };
   }
   for (const p of ['3', '1', '2']) {                             // 스페어(먼 순번 포함)
     const s = slots[p];
@@ -1731,6 +1743,22 @@ function isPreviewSent(dayISO) {
   const store = loadJSON('preview-sent.json', {});
   return Array.isArray(store[dayISO]) && store[dayISO].length > 0;
 }
+// ★당일 off 잠금 — 그날 off(휴무/휴가/병가/순번 제외) 알림이 이미 한 번 나갔으면, 날짜가 바뀔 때까지
+//  off 재알림을 금지한다. (본배치표 예고로 off를 안내한 뒤, 수정배치표가 뜰 때마다 off가 8h dedup 창을
+//  넘겨 재발송되고, 재판독 때 근태칸 누락으로 병가→'휴무'로 오분류돼 다시 나가던 문제 차단. 사용자 지적.)
+function offNotified(userId, dISO) {
+  if (!dISO) return false;
+  return !!loadUserJSON(userId, 'offlock.json', {})[dISO];
+}
+function markOffNotified(userId, dISO) {
+  if (!dISO) return;
+  const lock = loadUserJSON(userId, 'offlock.json', {});
+  const today = todayISOKST();
+  for (const k of Object.keys(lock)) if (k < today) delete lock[k];   // 지난 날짜 정리
+  lock[dISO] = Date.now();
+  saveUserJSON(userId, 'offlock.json', lock);
+}
+
 // 본배치표 최초 판독 시 호출 — 판독된 전 회원에게 통합 예고 1건씩(이미 받은 회원·날짜는 건너뜀).
 async function sendDailyPreview(dayISO, full, opts = {}) {
   if (!dayISO) return;
@@ -1746,8 +1774,10 @@ async function sendDailyPreview(dayISO, full, opts = {}) {
     let msg = null;
     try { msg = composePreview(m.id, dayISO, dayW); } catch (e) { console.error(`[예고 구성 오류 회원${m.id}]`, e.message); }
     if (!msg) continue;                                          // 그날 상태 없음(판독 안 됨) → 스킵
+    if (msg.off && offNotified(m.id, dayISO)) { sent.add(m.id); continue; } // 이미 그날 off 알림 나감 → 재발송 안 함
     try { await broadcast({ title: msg.title, body: msg.body, url: full.url, level: 'high' }, m.id); }
     catch (e) { console.error(`[예고 발송 오류 회원${m.id}]`, e.message); continue; }
+    if (msg.off) markOffNotified(m.id, dayISO);                  // 그날 off 알림 발송 표식 → 이후 재발송 잠금
     sent.add(m.id); count++;
     console.log(`📢 [내일예고·회원${m.id}] ${msg.title} | ${msg.body.replace(/\n/g, ' ')}`);
   }
