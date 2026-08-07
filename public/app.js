@@ -2319,9 +2319,39 @@ function showLogin() {
   hideSplash();
   $('googleLoginBtn').style.display = meState.googleEnabled ? 'flex' : 'none';
   $('loginErr').textContent = !meState.googleEnabled ? '구글 로그인 준비 중입니다. 잠시만요.' : '';
+  // ★비공개 링크(?tester=<토큰>)로 들어온 테스터만 무인증 '체험' 버튼을 본다. 값 검증은 서버가 함.
+  const tp = new URLSearchParams(location.search).get('tester');
+  const tb = $('testerDemoBtn');
+  if (tb) {
+    if (tp) { tb.hidden = false; tb.disabled = false; tb.onclick = () => startTesterDemo(tp); }
+    else tb.hidden = true;
+  }
   const lo = $('loginOv');
   lo.hidden = false;
   lo.classList.remove('dl-play'); void lo.offsetWidth; lo.classList.add('dl-play'); // 진입 모션 재생(태양·땅)
+}
+// 테스터 체험 시작 — OAuth 없이 세션을 받고 곧장 출력기(환영) 애니메이션 → 실제 테스터 앱.
+async function startTesterDemo(token) {
+  const btn = $('testerDemoBtn'); if (btn) btn.disabled = true;
+  obActx();   // ★탭 제스처(동기)에 오디오 잠금 해제 — 이후 애니메이션 소리가 나도록(모바일 autoplay 정책)
+  let r;
+  try { r = await postJSON('/api/tester/enter?t=' + encodeURIComponent(token), {}); }
+  catch (e) { if (btn) btn.disabled = false; $('loginErr').textContent = '체험 시작에 실패했어요. 잠시 후 다시.'; return; }
+  if (!r || !r.ok) { if (btn) btn.disabled = false; $('loginErr').textContent = (r && r.error) || '유효하지 않은 체험 링크예요.'; return; }
+  try { sessionStorage.setItem('rhFresh', '1'); } catch { /* 무해 */ }
+  hideLogin();
+  await runTesterEntry(r.name || '체험');
+}
+// 폼(가입 신청서) 없이 곧장 환영(출력기) 애니메이션 → 데모 홈 배경 노출 → 실제 테스터 앱(회원 선택기) 로드.
+async function runTesterEntry(name) {
+  hideSplash();
+  $('ov').hidden = true;
+  const obOv = $('obOv');
+  obOv.style.opacity = ''; obOv.style.transition = '';
+  obOv.hidden = false;
+  $('obPrinter').style.display = 'none';        // 테스터는 가입 폼 프린터 없이 환영 연출만
+  try { await obWelcomeFlow(name, ++obSeq, true); } catch { /* 무해 */ }
+  try { await loadMe(); loadToday(); } catch { /* 무해 */ } // 데모 홈 → 실제 테스터 앱으로 교체(계정 버튼·회원 선택기 활성)
 }
 // 구글 버튼은 <a href="/api/auth/google"> 그대로 → 일반 리다이렉트 로그인(자연스러운 흐름). 팝업·핸드오프 없음.
 function hideLogin() { $('loginOv').hidden = true; }

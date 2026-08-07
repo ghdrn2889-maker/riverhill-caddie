@@ -25,7 +25,7 @@ import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken,
 import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
-import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
+import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
@@ -83,6 +83,8 @@ app.post('/api/logout', logout);
 app.post('/api/login/start', startLoginHandoff);
 app.get('/api/login/poll', pollLoginHandoffRoute);
 app.post('/api/login/exchange', exchangeLoginHandoff);
+// ★무인증 '테스터 체험' 진입(비공개 링크 ?tester=<토큰> 전용, 게이트 앞 통과). OAuth 없이 데모 테스터 세션 발급.
+app.post('/api/tester/enter', testerEnter);
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };

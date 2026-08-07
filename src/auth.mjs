@@ -5,7 +5,9 @@ import {
   getUserByNaver, getUserByGoogle, createUser, touchLogin, seedPrimaryUser,
   createSession, userForSession, destroySession, newOAuthState, consumeOAuthState,
   newLoginHandoff, completeLoginHandoff, pollLoginHandoff, redeemLoginHandoff,
+  ensureDemoTester, getProfile,
 } from './users.mjs';
+import { seedTesterData } from './testerseed.mjs';
 
 const COOKIE = 'rh_sess';
 
@@ -292,5 +294,21 @@ export function logout(req, res) {
   destroySession(req._sessionToken);
   clearSessionCookie(req, res);
   res.json({ ok: true });
+}
+
+// ── 무인증 '테스터 체험' 진입(비공개 링크 전용) ──────────────────────────
+//  ?t=<TESTER_LINK> 토큰이 맞을 때만 데모 테스터 세션을 심는다(OAuth 없음).
+//  ★공개 도메인이지만 링크(토큰)를 아는 사람만 접근 — 노출되는 건 합성 샘플 + 공개 배치표 대시보드뿐(실제 캐디 개인정보 아님).
+const TESTER_LINK = process.env.TESTER_LINK || 'riverhill2026';
+export function testerEnter(req, res) {
+  const t = String((req.query && req.query.t) || (req.body && req.body.t) || '');
+  if (t !== TESTER_LINK) return res.status(403).json({ ok: false, error: '유효하지 않은 체험 링크입니다.' });
+  const u = ensureDemoTester();
+  try { seedTesterData(u.id); } catch (e) { console.error('[테스터 시드 오류]', e.message); }
+  touchLogin(u.id);
+  const tok = createSession(u.id, req.headers['user-agent'] || '');
+  setSessionCookie(req, res, tok);
+  const prof = getProfile(u.id) || {};
+  res.json({ ok: true, name: prof.board_name || '체험', part: prof.part || '3' });
 }
 

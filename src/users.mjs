@@ -54,6 +54,22 @@ export function setUserRole(id, role) {
 
 // ★회원 완전 삭제 — 계정·프로필·세션·푸시구독까지 DB에서 제거(관리자 제외).
 //  (개인 데이터 폴더 data/users/<id> 는 호출측에서 별도 삭제.)
+// 무인증 '테스터 체험' 계정(멱등) — 비공개 링크로 들어온 테스터가 OAuth 없이 앱을 둘러보는 단일 데모 계정.
+//  role='tester'라 activeMembers(실제 캐디/알림)에서 제외되고, 앱에선 테스터 킷 기능(회원 선택기 등)만 켜진다.
+//  google_id 센티넬('demo:tester')로 재사용 — 여러 테스터가 같은 계정을 공유(합성/공개 대시보드만 노출).
+const DEMO_TESTER_KEY = 'demo:tester';
+export function ensureDemoTester() {
+  let u = getUserByGoogle(DEMO_TESTER_KEY);
+  if (!u) {
+    u = createUser({ googleId: DEMO_TESTER_KEY, role: 'tester', status: 'active' });
+    setProfile(u.id, { board_name: '김리버', part: '3', caddie_type: 'part3' });
+  } else if (u.role !== 'tester' || u.status !== 'active') {
+    run("UPDATE users SET role = 'tester', status = 'active' WHERE id = ?", u.id);
+    u = getUser(u.id);
+  }
+  return u;
+}
+
 export function deleteUser(id) {
   const uid = Number(id);
   if (!uid) return { ok: false, error: 'id 필요' };
