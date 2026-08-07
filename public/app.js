@@ -2610,6 +2610,25 @@ async function obWelcomeFlow(name, my, isTest) {
   scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
   $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
   // ★테스트캐디도 홈까지 진입(데모 홈). 프로필은 서버에 저장 안 되므로 앱 종료·재실행 시 자동으로 온보딩으로 초기화됨.
+  // ★테스터: 홈 진입 직후 프로필(회원 배치표 선택) 유도 가이드 1회 노출.
+  if (meState && meState.user && meState.user.role === 'tester') setTimeout(maybeShowTesterGuide, 650);
+}
+// ── 테스터 유도 가이드(코치마크) — 프로필 버튼으로 회원 배치표를 볼 수 있음을 세션당 1회 안내 ──
+function maybeShowTesterGuide() {
+  if (!(meState && meState.user && meState.user.role === 'tester')) return;
+  if (!$('acctBtn') || $('acctBtn').hidden) return;              // 프로필 버튼이 떠 있을 때만
+  try { if (sessionStorage.getItem('testerGuideShown') === '1') return; } catch { /* 무해 */ }
+  const g = $('testerGuide'); if (!g) return;
+  g.hidden = false;
+  requestAnimationFrame(() => g.classList.add('show'));
+  $('acctBtn').classList.add('tguide-pulse');
+  try { sessionStorage.setItem('testerGuideShown', '1'); } catch { /* 무해 */ }
+}
+function hideTesterGuide() {
+  const g = $('testerGuide'); if (!g || g.hidden) return;
+  g.classList.remove('show');
+  const a = $('acctBtn'); if (a) a.classList.remove('tguide-pulse');
+  setTimeout(() => { g.hidden = true; }, 280);
 }
 // 테스트캐디 데모 홈(서버 미저장) — 실제 회원 홈과 같은 리치 진입 모션을 보여주기 위한 표본 데이터.
 function demoHomeToday() {
@@ -2844,6 +2863,7 @@ function initFax() {
 }
 function openAccount() {
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
+  hideTesterGuide();                 // 프로필을 열면 유도 가이드는 닫기
   // ★테스터: 계정/프로필 옵션 대신 '어떤 회원 배치표로 볼지' 선택 UI를 바로 띄운다.
   if (meState && meState.user && meState.user.role === 'tester') { openTesterPicker(); return; }
   $('ov').classList.remove('pickonly');
@@ -2917,6 +2937,8 @@ async function submitProfile() {
 }
 function initAccount() {
   $('acctBtn').onclick = openAccount;
+  const tgOk = $('tguideOk'); if (tgOk) tgOk.onclick = hideTesterGuide;
+  const tgSc = $('tguideScrim'); if (tgSc) tgSc.onclick = hideTesterGuide;
   $('obSubmit').onclick = submitProfile;
   bindToggle('acType'); bindToggle('sgType');
   $('sgSubmit').onclick = obSubmitClick;

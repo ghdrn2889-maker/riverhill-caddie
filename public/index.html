@@ -1186,6 +1186,23 @@
     .ov-actions { display:flex; gap:8px; margin-top:10px; }
     /* ★테스터: 프로필 폼 숨기고 '배치표 대시보드 회원 선택'만 노출 */
     #ov.pickonly .ov-field, #ov.pickonly #obSubmit, #ov.pickonly #ovEnableBtn, #ov.pickonly #ovEnableMsg, #ov.pickonly .ov-badge { display:none; }
+    /* ★테스터 유도 가이드(코치마크) — 프로필 버튼 안내 */
+    .tguide { position:fixed; inset:0; z-index:1400; }
+    .tguide[hidden] { display:none; }
+    .tguide-scrim { position:absolute; inset:0; background:rgba(10,16,12,.32); opacity:0; transition:opacity .25s ease; }
+    .tguide.show .tguide-scrim { opacity:1; }
+    .tguide-pop { position:absolute; top:54px; right:12px; width:min(280px,82vw); transform:translateY(-8px) scale(.98); opacity:0; transition:transform .28s cubic-bezier(.2,.8,.3,1), opacity .28s ease; }
+    .tguide.show .tguide-pop { transform:none; opacity:1; }
+    .tguide-arrow { position:absolute; top:-7px; right:20px; width:15px; height:15px; background:#12341f; transform:rotate(45deg); border-radius:3px; }
+    .tguide-card { position:relative; background:#12341f; color:#eaf3ec; border-radius:14px; padding:14px 15px 13px; box-shadow:0 14px 34px rgba(10,20,12,.42); }
+    .tguide-t { font-size:14px; font-weight:800; margin-bottom:6px; }
+    .tguide-d { font-size:12.5px; line-height:1.62; color:#c7d8cc; }
+    .tguide-d b { color:#eaf3ec; }
+    .tguide-ok { margin-top:12px; width:100%; background:#eaf3ec; color:#12341f; border:0; border-radius:10px; padding:9px; font-weight:800; font-size:13px; cursor:pointer; }
+    #acctBtn.tguide-pulse { position:relative; }
+    #acctBtn.tguide-pulse::after { content:''; position:absolute; inset:-5px; border-radius:12px; border:2px solid #7fe0a6; animation:tguidePulse 1.3s ease-out infinite; pointer-events:none; }
+    @keyframes tguidePulse { 0%{ box-shadow:0 0 0 0 rgba(127,224,166,.5); opacity:1; } 100%{ box-shadow:0 0 0 12px rgba(127,224,166,0); opacity:0; } }
+    @media (prefers-reduced-motion:reduce){ #acctBtn.tguide-pulse::after{ animation:none; } .tguide-pop,.tguide-scrim{ transition:none; } }
     .ov-ghost { flex:1; background:#eef1ec; color:#647168; border:0; border-radius:11px; padding:11px;
       font-size:12.5px; font-weight:800; cursor:pointer; }
     .ov-switch { display:inline-block; margin-top:13px; color:#647168; font-size:12.5px; font-weight:700;
@@ -1423,6 +1440,19 @@
         </div>
       </div>
     </header>
+
+    <!-- ★테스터 유도 가이드 — 첫 진입 시 프로필 버튼(회원 배치표 선택)로 안내(세션당 1회) -->
+    <div class="tguide" id="testerGuide" hidden>
+      <div class="tguide-scrim" id="tguideScrim"></div>
+      <div class="tguide-pop">
+        <div class="tguide-arrow"></div>
+        <div class="tguide-card">
+          <div class="tguide-t">회원 배치표 둘러보기</div>
+          <div class="tguide-d">오른쪽 위 <b>프로필</b>을 누르면, 원하는 회원을 골라 그 회원의 <b>배치표·순번</b>을 그대로 볼 수 있어요.</div>
+          <button class="tguide-ok" id="tguideOk">알겠어요</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 오늘 -->
     <section class="view body" id="view-today" role="tabpanel" aria-labelledby="tab-today">
