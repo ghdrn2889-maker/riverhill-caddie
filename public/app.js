@@ -2319,6 +2319,8 @@ function closeOv() {
   $('ov').hidden = true;
   ovDismissable = false;
   if (history.state && history.state.ov) history.back(); // 쌓아둔 히스토리 정리
+  // ★진입 직후 자동으로 열린 '회원 선택' 팝업이 닫히면(닫기·선택 무관) 코치마크로 '언제든 여기서 변경' 안내.
+  if (_testerPickerAuto) { _testerPickerAuto = false; setTimeout(maybeShowTesterGuide, 340); }
 }
 // 폰 뒤로가기: 오버레이가 열려 있으면 앱을 나가지 않고 팝업만 닫는다.
 window.addEventListener('popstate', () => {
@@ -2359,6 +2361,9 @@ async function startTesterDemo(token) {
   if (!r || !r.ok) { if (btn) btn.disabled = false; $('loginErr').textContent = (r && r.error) || '유효하지 않은 체험 링크예요.'; return; }
   try { sessionStorage.setItem('rhFresh', '1'); } catch { /* 무해 */ }
   try { testerAsMember = null; localStorage.removeItem('testerAsMember'); } catch { /* 무해 */ }
+  // 새 체험 진입마다 자동팝업·코치마크 1회 안내를 다시 켠다(같은 탭에서 재진입해도 안내가 뜨도록).
+  try { sessionStorage.removeItem('testerAutoPicked'); sessionStorage.removeItem('testerGuideShown'); } catch { /* 무해 */ }
+  _testerPickerAuto = false;
   try { meState = await (await fetch('/api/me')).json(); } catch { /* 무해 */ }  // 세션 반영(meState=tester)
   hideLogin();
   openOnboarding();   // 실제 가입과 동일: 신청서 출력 → 이름·소요시간 입력 → 제출 → 환영 → 앱
@@ -2610,8 +2615,8 @@ async function obWelcomeFlow(name, my, isTest) {
   scene.style.display = 'none'; scene.style.transform = ''; wel.style.display = 'none';
   $('obPrinter').style.display = '';                    // 폼 프린터 원복(재실행 대비)
   // ★테스트캐디도 홈까지 진입(데모 홈). 프로필은 서버에 저장 안 되므로 앱 종료·재실행 시 자동으로 온보딩으로 초기화됨.
-  // ★테스터: 홈 진입 직후 프로필(회원 배치표 선택) 유도 가이드 1회 노출.
-  if (meState && meState.user && meState.user.role === 'tester') setTimeout(maybeShowTesterGuide, 650);
+  // ★테스터: 홈 진입 직후 '배치표 회원 선택' 팝업을 바로 띄운다(세션당 1회). 팝업이 닫히면 코치마크로 '언제든 변경 가능' 안내.
+  if (meState && meState.user && meState.user.role === 'tester') setTimeout(autoOpenTesterPicker, 650);
 }
 // ── 테스터 유도 가이드(코치마크) — 프로필 버튼으로 회원 배치표를 볼 수 있음을 세션당 1회 안내 ──
 function maybeShowTesterGuide() {
@@ -2882,6 +2887,15 @@ function openAccount() {
   $('ov').hidden = false;
   renderTesterPicker();              // ★테스터 계정이면 배치표 대시보드 회원 선택기 노출(일반 사용자엔 무동작)
   pushOvHistory();
+}
+// ★진입 직후 자동으로 열린 '회원 선택' 팝업인지 표시 — 이 팝업이 닫히면 코치마크를 띄운다(세션당 1회).
+let _testerPickerAuto = false;
+function autoOpenTesterPicker() {
+  if (!(meState && meState.user && meState.user.role === 'tester')) return;
+  try { if (sessionStorage.getItem('testerAutoPicked') === '1') return; } catch { /* 무해 */ }
+  try { sessionStorage.setItem('testerAutoPicked', '1'); } catch { /* 무해 */ }
+  _testerPickerAuto = true;
+  openTesterPicker();
 }
 // ★테스터 전용 — 프로필 버튼을 누르면 계정 옵션 대신 '배치표 대시보드 회원 선택'만 바로 뜬다(폼은 pickonly로 숨김).
 function openTesterPicker() {
