@@ -26,7 +26,7 @@ import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff } from './auth.mjs';
-import { setBoardPart, loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
+import { setBoardPart } from './boardparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
@@ -1167,20 +1167,12 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
         internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
         cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
       };
-      // ★다른 부(1·3부) 보존 병합 — 단독 부-배치표는 whole-board와 articleId가 달라, setBoardPart의
-      //  'id 바뀌면 parts 리셋'을 그대로 타면 오늘의 1·3부가 지워진다. 같은 날이면 그 부만 덮고 나머지 유지.
-      const store = loadBoardPartsStore();
-      const sameDay = !!(store && store.parts && vp.dateLabel && String(store.dateLabel || '') === String(vp.dateLabel || ''));
-      if (sameDay) {
-        store.parts[String(part)] = partData;
-        store.at = Date.now();
-        if (!store.subject) store.subject = full.subject || '';
-        saveBoardPartsStore(store);
-      } else {
-        setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
-          image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, partData);
-      }
-      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'}) [${sameDay ? '병합' : '신규'}]`);
+      // ★형제 부(1·3부) 보존은 이제 setBoardPart가 '같은 날 병합'으로 보장한다(단독 수정 배치표가
+      //  새 글로 와도 1부를 지우지 않음). 여긴 그 부만 upsert.
+      const saved = setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
+        image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, partData);
+      const kept = Object.keys(saved.parts || {}).filter((k) => k !== String(part));
+      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})${kept.length ? ` · 보존 부: ${kept.join(',')}부` : ''}`);
     } catch (e) { console.error('[단독부 board-parts 저장 오류]', e.message); }
   } else {
     console.log(`·  [단독 ${part}부 배치표] 판독 명단 없음 → 모니터 스킵: ${full.subject}`);
@@ -1319,7 +1311,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           if (mparts) {
             const meta = { at: Date.now(), dateLabel: out.rawVerdict?.dateLabel || '', subject: full.subject || '',
               image: (full.images && full.images[0]) || '', url: full.url || '' };
-            for (const p of ['1', '2']) if (mparts[p]) setBoardPart(full.id, meta, full, p, mparts[p]);
+            // ★명단이 있는 부만 저장 — 빈 명단으로 형제 부를 덮지 않도록(오독 방어).
+            for (const p of ['1', '2']) if (mparts[p] && Array.isArray(mparts[p].roster) && mparts[p].roster.length) setBoardPart(full.id, meta, full, p, mparts[p]);
             console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
             // ★조출(1부) 회원 대시보드 복구 — MINOR_PART_PUSH 꺼져도 '조출'처럼 배치표에 명시 태그된 고신뢰
             //  1부 배정은 회원 today1에 반영(대시보드·일지). 이미 읽은 1부 캐시만 사용(추가 판독·Gemini 0),

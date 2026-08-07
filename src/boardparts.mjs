@@ -25,20 +25,36 @@ function trimArticle(a) {
   };
 }
 
-// 부별 순번표 저장(upsert). 새 배치표(articleId 변경)면 parts 초기화 → 옛 부 데이터가 남지 않음.
+const localDayStr = (ts) => { const d = new Date(Number(ts) || 0); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+
+// 부별 순번표 저장(upsert).
+//  ★핵심 불변식: '같은 날'이면 이번 판독에 담긴 그 부만 덮고 형제 부(예: 1부)는 절대 지우지 않는다.
+//   과거엔 articleId만 다르면 parts를 통째로 리셋 → 2부만 담긴 '수정 배치표'가 새 글로 오면 1부가 통째로
+//   사라졌다(모니터에서 1부 실종). 리셋은 '확실히 다른 날'일 때만 한다:
+//    (a) 판독 날짜라벨이 둘 다 있고 서로 다르거나, (b) 저장본이 지난 달력일(자정 넘김).
+//   같은 날 병합에선 원 배치표 정체성(articleId·이미지·URL·제목)은 유지하고, 그 부 데이터와 at만 갱신한다
+//   (부별 이미지 스키마가 없어, 먼저 잡힌 본배치표 이미지를 유지하는 편이 검수에 덜 혼란스럽다).
 export function setBoardPart(articleId, meta, article, part, data) {
   const id = String(articleId || '');
   let s = loadBoardPartsStore();
-  if (!s || String(s.articleId) !== id) {
-    s = { articleId: id, at: meta.at || null, dateLabel: meta.dateLabel || '', subject: meta.subject || '',
+  const incomingDay = String(meta.dateLabel || '');
+  const storeDay = String((s && s.dateLabel) || '');
+  const labelSaysNewDay = !!(incomingDay && storeDay && incomingDay !== storeDay);
+  const atSaysNewDay = !!(s && s.at && localDayStr(s.at) !== localDayStr(Date.now()));
+  if (!s || !s.parts || labelSaysNewDay || atSaysNewDay) {
+    // 저장소 없음 또는 확실히 새 날 → 새로 시작(옛 부 데이터 폐기가 맞음).
+    s = { articleId: id, at: meta.at || Date.now(), dateLabel: meta.dateLabel || '', subject: meta.subject || '',
       image: meta.image || '', url: meta.url || '', article: trimArticle(article), parts: {} };
+  } else {
+    // 같은 날 → 형제 부 보존. 메타는 비어 있을 때만 채워 원 배치표 정체성을 유지.
+    if (meta.at) s.at = meta.at;
+    if (!s.articleId && id) s.articleId = id;
+    if (!s.dateLabel && meta.dateLabel) s.dateLabel = meta.dateLabel;
+    if (!s.subject && meta.subject) s.subject = meta.subject;
+    if (!s.image && meta.image) s.image = meta.image;
+    if (!s.url && meta.url) s.url = meta.url;
+    if (!s.article && article) s.article = trimArticle(article);
   }
-  if (meta.at) s.at = meta.at;
-  if (meta.dateLabel) s.dateLabel = meta.dateLabel;
-  if (meta.subject) s.subject = meta.subject;
-  if (meta.image) s.image = meta.image;
-  if (meta.url) s.url = meta.url;
-  if (article) s.article = trimArticle(article);
   s.parts[String(part)] = data;
   saveBoardPartsStore(s);
   return s;
