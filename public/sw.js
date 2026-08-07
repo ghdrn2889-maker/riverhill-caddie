@@ -1,6 +1,6 @@
 // 서비스워커: (1)백그라운드 푸시 알림 (2)network-first로 항상 최신 앱 서빙 + 자동 갱신.
 //  ★버전 문자열을 바꾸면 브라우저가 이 파일의 변경을 감지해 새 SW를 설치→활성화한다.
-const SW_VERSION = 'v5-netfirst-2026-08-07b';
+const SW_VERSION = 'v6-netfirst-2026-08-07c';
 const SHELL_CACHE = 'rh-shell-v3';
 
 // ★첫 설치(첫 방문)인지 '기존 SW 교체(업데이트)'인지 구분 — 첫 설치엔 창을 새로고침하지 않는다.
