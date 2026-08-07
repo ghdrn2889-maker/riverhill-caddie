@@ -330,9 +330,11 @@ async function loadWatchHealth() {
 /* ── 오늘: 상황판 히어로 + 행동 보드 ── */
 // ★테스터 킷(role='tester') — 프로필 버튼에서 고른 회원 기준으로 배치표 대시보드를 본다. 일반 사용자엔 null(무영향).
 let testerAsMember = Number(localStorage.getItem('testerAsMember')) || null;
+// ★테스터가 회원을 선택해 볼 때 그 회원의 실명(순번 리스트에서 '나'를 찾는 기준). 일반 사용자는 빈 값(자기 프로필 이름 사용).
+let _boardOwnerName = '';
 async function loadToday() {
   const q = testerAsMember ? ('?asMember=' + testerAsMember) : '';
-  try { const t = await (await fetch('/api/today' + q)).json(); lastToday = t; todayOk = true; renderToday(t); }
+  try { const t = await (await fetch('/api/today' + q)).json(); lastToday = t; todayOk = true; _boardOwnerName = (testerAsMember && t && t.ownerName) ? t.ownerName : ''; renderToday(t); }
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
   loadWeather();
   loadCheer();
@@ -1034,7 +1036,8 @@ function renderSpareBoard(s, partLabel = '3부') {
   // ★명단에서 내 이름을 직접 찾아 순번을 확정한다(정확·자기일관 우선).
   //  서버가 잠가둔 myPosition과 최신 명단이 한 칸 어긋나도, '표시 이름'과 '내 위치'가
   //  같은 배열(roster)에서 나오므로 순번 리스트가 간헐적으로 숨겨지던 문제를 없앤다.
-  const myName = (meState && meState.profile && meState.profile.boardName || '').trim();
+  // ★테스터가 회원을 골라 볼 땐 그 회원 실명으로 '나'를 찾는다(테스터 이름으로 찾으면 명단에 없어 리스트가 안 뜸).
+  const myName = ((testerAsMember && _boardOwnerName) ? _boardOwnerName : (meState && meState.profile && meState.profile.boardName || '')).trim();
   const norm = (x) => String(x || '').replace(/\s/g, '');
   const mn = norm(myName);
   let myIdx = mn ? roster.findIndex((nm) => norm(nm) === mn) : -1;   // 정확 일치 우선

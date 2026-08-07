@@ -593,7 +593,7 @@ app.get('/api/today', (req, res) => {
   // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
   const r2 = rounds.find((r) => r.part === '2' && r.kind === 'work');
   const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
-  res.json({ ok: true, date: t.date, dayOffset, primaryPart, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2 });
+  res.json({ ok: true, date: t.date, dayOffset, primaryPart, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2, ownerName: prof.board_name || '' });
 });
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
