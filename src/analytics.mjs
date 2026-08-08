@@ -338,10 +338,18 @@ function _effPart3VerdictRaw(lb) {
 // ★검수·판독검증·즉시렌더가 '같은 신선도 기준'으로 비교되도록 단일 서명 — 3부(today.json _t1Sig) + 1·2부(store 상태).
 //  얼어붙은 articleId/at이 아니라 대시보드 소스(today.json·board-parts-store)가 바뀌면 값이 달라진다.
 //  buildLatestBoard·computeBoardParts가 '동일 포맷'으로 내보내야 프런트 게이트(재요청 판단)가 정확히 맞물린다.
+// ★1·2부 관리자 교정 지문 — store.at은 '배치표 도착시각'이라 교정해도 안 바뀐다. 교정(_adminCorrected.at)을
+//  서명에 넣어야 캐시·프런트 게이트가 '1·2부 교정'에도 갱신된다. (안 넣으면 검수엔 보여도 판독검증이 교정 전에
+//  굳던 버그 — 예: 2부 pos5·6 권미영·정이슬 티오프 자유입력이 판독검증에 반영 안 됨.)
+function bpCorrSig(bpStore) {
+  if (!bpStore || !bpStore.parts) return '';
+  return Object.keys(bpStore.parts).sort()
+    .map((p) => `${p}:${(bpStore.parts[p] && bpStore.parts[p]._adminCorrected && bpStore.parts[p]._adminCorrected.at) || ''}`).join(',');
+}
 export function boardSyncSig(lb, bpStore) {
   const v = effectivePart3Verdict(lb);
   const keys = (bpStore && bpStore.parts) ? Object.keys(bpStore.parts).sort().join('') : '';
-  return `${v._t1Sig || ''}|${(bpStore && bpStore.at) || ''}|${keys}`;
+  return `${v._t1Sig || ''}|${(bpStore && bpStore.at) || ''}|${keys}|${bpCorrSig(bpStore)}`;
 }
 
 // ★모니터 전용 — 앱을 건드리지 않고 모니터가 '직접' 1·2·3부 부별 판독(온디맨드, board별 1회 캐시).
@@ -357,7 +365,7 @@ export async function computeBoardParts() {
   //  ★★1·2부는 board-parts-store에 lastboard와 '독립적으로'(3부 저장 뒤) 채워지므로, 그 상태도 키에 포함해야
   //     1·2부가 뒤늦게 들어오거나 교정돼도 캐시가 갱신된다. (안 넣으면 판독검증이 3부만 뜨고 굳던 버그)
   const bpStore = loadBoardPartsStore();
-  const bpSig = bpStore ? `${bpStore.articleId || ''}:${bpStore.at || ''}:${Object.keys(bpStore.parts || {}).sort().join(',')}` : '';
+  const bpSig = bpStore ? `${bpStore.articleId || ''}:${bpStore.at || ''}:${Object.keys(bpStore.parts || {}).sort().join(',')}:${bpCorrSig(bpStore)}` : '';
   // ★3부는 이제 대시보드와 같은 today.json 최신본을 얹으므로(effectivePart3Verdict), 그 신선도 서명(_t1Sig)도
   //  캐시 키에 포함 — 안 넣으면 당추로 대시보드가 바뀌어도 판독검증 캐시가 옛 스냅샷에 굳는다.
   const v3 = effectivePart3Verdict(lb);
