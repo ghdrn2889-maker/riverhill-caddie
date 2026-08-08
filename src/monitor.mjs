@@ -362,6 +362,41 @@ function flagMisreads(rows) {
   }
   return rows;
 }
+// ── 크로스파트 대바(자리 맞바꿈) 자동 반영 ──
+//  어떤 부의 셀이 'X(Y)'(Y=실제 다른 캐디 이름)면, Y가 대바로 그 자리에 온 것 → Y가 원래 있던 다른 부의
+//  'Y' 자리를 '(Y)X'로 바꿔 검수에 보여준다(예: 2부 '박선하(연승준)' → 3부 연승준 자리 '(연승준)박선하').
+//  3부 순번·티오프·커트는 불변(스페어 자리 '이름'만 치환). 읽는 시점 계산이라 lastboard 원본은 안 건드림.
+const _swapBare = (cell) => String(cell || '').replace(/\s*\([^)]*\)\s*/g, '').replace(/\s/g, '').trim();
+const _SWAP_TAGWORDS = new Set(['조출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어']);
+function collectPartRosters() {
+  const out = {};
+  try { const bp = loadBoardPartsStore(); if (bp && bp.parts) for (const p of ['1', '2']) { const d = bp.parts[p]; if (d && Array.isArray(d.roster)) out[p] = d.roster.slice(); } } catch { /* noop */ }
+  try { const lb = loadLastBoard(); const v = lb && lb.rawVerdict ? effectivePart3Verdict(lb) : null; if (v && Array.isArray(v.part3Roster)) out['3'] = v.part3Roster.slice(); } catch { /* noop */ }
+  return out;
+}
+function buildCrossPartSwaps(rosters) {
+  const known = new Set();
+  for (const p of Object.keys(rosters)) for (const c of rosters[p]) { const n = _swapBare(c); if (/^[가-힣]{2,4}$/.test(n)) known.add(n); }
+  const swaps = [];
+  for (const p of Object.keys(rosters)) rosters[p].forEach((c) => {
+    const m = String(c || '').match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
+    if (m && m[1] !== m[2] && known.has(m[2]) && !_SWAP_TAGWORDS.has(m[2])) swaps.push({ owner: m[1], sub: m[2], part: p });
+  });
+  return swaps;
+}
+function reflectCrossPartSwaps(part, rows) {
+  try {
+    const rosters = collectPartRosters();
+    const swaps = buildCrossPartSwaps(rosters);
+    if (!swaps.length) return;
+    for (const r of rows) {
+      if (!r.name || /\(/.test(r.name)) continue;             // 빈칸·이미 태그(대바 표기) 있으면 skip
+      const bn = _swapBare(r.name);
+      const sw = swaps.find((s) => s.sub === bn && s.part !== part);   // Y가 다른 부로 대바돼 나감
+      if (sw) { r.name = `(${bn})${sw.owner}`; r.swapReflected = true; }
+    }
+  } catch { /* noop — 반영 실패해도 원본 rows 그대로 */ }
+}
 app.get('/api/board-review', gate, (req, res) => {
   try {
     const part = String(req.query.part || '3');
@@ -389,6 +424,7 @@ app.get('/api/board-review', gate, (req, res) => {
       }
       const interns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
       flagMisreads(rows);   // 쌍둥이 이름 오독 표시(1·2부)
+      reflectCrossPartSwaps(part, rows);   // 크로스파트 대바 반영(예: 3부 연승준 자리 → (연승준)박선하)
       return res.json({ ok: true, part, board: {
         articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
@@ -417,6 +453,7 @@ app.get('/api/board-review', gate, (req, res) => {
     }
     const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
     flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
+    reflectCrossPartSwaps(part, rows);   // 크로스파트 대바 반영(예: 3부 연승준 자리 → (연승준)박선하)
     // ★원본 이미지: '전체 배치표'(article 본문) 우선. latestImage는 3부만 잘린 당추 변동 크롭이라
     //  관리자가 "옛날/이상한 사진"으로 인지 → 전체판을 원본으로 주고, 변동 크롭은 variantImage로 별도 제공.
     const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
