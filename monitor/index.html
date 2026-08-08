@@ -1211,6 +1211,8 @@
   var RV_PER=5;
   function rvNk(s){ return String(s||'').replace(/\s/g,''); }
   function rvMin(t){ var m=String(t).match(/(\d{1,2}):(\d{2})/); return m?Number(m[1])*60+Number(m[2]):0; }
+  // 자유 입력 티오프 정규화: "13:07"/"1307"/"13시07" → "13:07". 빈값/이상값은 ''.
+  function rvNormTime(v){ v=String(v||'').trim(); if(!v)return ''; var m=v.match(/(\d{1,2}):(\d{2})/); if(m){ var h=Math.min(29,Number(m[1])); return (h<10?'0'+h:''+h)+':'+m[2]; } var d=v.replace(/\D/g,''); if(d.length===3)return '0'+d[0]+':'+d.slice(1); if(d.length===4)return d.slice(0,2)+':'+d.slice(2); return ''; }
   function rvOff(r){ return !!r.duty; }
   function rvReviewUrl(part){ var u=apiUrl('/api/board-review'); return u+(u.indexOf('?')>=0?'&':'?')+'part='+part; }
   function rvInit(b){
@@ -1263,7 +1265,8 @@
     var bdg=r.moveTo?'<span class="rv-bd spare" style="color:var(--info);cursor:default">→ '+r.moveTo+'부</span>':(rvOff(r)?'<span class="rv-bd off">'+esc(r.duty)+'</span>':(r.status==='work'?'<span class="rv-bd work" data-act="status">근무</span>':'<span class="rv-bd spare" data-act="status">스페어</span>'));
     var nameHtml=rvHi(r.name,q)+(r.isMember?'<span class="mine" title="우리 회원"></span>':'')+(r.misread?'<span class="mis" title="'+esc(r.misread)+' 오독 의심">!</span>':'');
     var dutySel='<select class="e-duty">'+['','휴무','휴가','병가'].map(function(d){return '<option '+(r.duty===d?'selected':'')+'>'+(d||'—')+'</option>';}).join('')+'</select>';
-    var teeSel='<select class="e-tee"><option value="">시간 선택</option>'+rvDayTimes().map(function(t){return '<option value="'+t+'"'+(r.tee===t?' selected':'')+'>'+t+'</option>';}).join('')+'</select>';
+    var _dlid='rvtee-'+r._id;
+    var teeSel='<input class="e-tee" list="'+_dlid+'" value="'+esc(r.tee||'')+'" placeholder="예 13:07 · 목록에 없는 시간도 직접 입력" inputmode="numeric" autocomplete="off"><datalist id="'+_dlid+'">'+rvDayTimes().map(function(t){return '<option value="'+t+'"></option>';}).join('')+'</datalist>';
     var moveBtns=['1','2','3'].map(function(p){ var sel=(r.moveTo||brPart); var cur=sel===p; var dis=!cur&&(p==='3'||brPart==='3'||rvPresHas(r.name,p)); return '<button data-mp="'+p+'" class="'+(cur?'on':'')+'"'+(dis?' disabled':'')+'>'+p+'부</button>'; }).join('');
     return '<div class="'+cls+'" data-pos="'+r.pos+'">'+
       '<div class="rv-hd" data-act="toggle"><span class="rv-pos">'+r.pos+'</span><span class="rv-nm">'+nameHtml+'</span>'+teetag+bdg+'<svg class="rv-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>'+
@@ -1312,7 +1315,7 @@
     var dv=card.querySelector('.e-duty').value; r.duty=(dv==='—')?'':dv;
     var mp=card.querySelector('.e-move button.on'); mp=mp?mp.getAttribute('data-mp'):brPart; r.moveTo=(mp===brPart)?null:mp;
     var st=card.querySelector('.e-status button.on').getAttribute('data-s');
-    if(st==='work'&&!rvOff(r)&&!r.moveTo){ var _tee=card.querySelector('.e-tee').value; var _crs=card.querySelector('.e-course button.on').getAttribute('data-c')||'OUT'; rvPromote(pos); r.tee=_tee; r.course=_crs; }
+    if(st==='work'&&!rvOff(r)&&!r.moveTo){ var _tee=rvNormTime(card.querySelector('.e-tee').value); var _crs=card.querySelector('.e-course button.on').getAttribute('data-c')||'OUT'; rvPromote(pos); r.tee=_tee; r.course=_crs; }
     else if(st==='spare'){ rvSetSpare(pos); }
     if(rvOff(r)||r.moveTo){ r.tee=''; r.course=''; }
     delete rvEditing[pos]; rvPaint();
