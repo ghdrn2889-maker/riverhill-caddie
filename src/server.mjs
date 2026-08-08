@@ -254,6 +254,13 @@ app.post('/api/journal/kind', (req, res) => {
   const day = journal.setDayKind(date, kind, uid);
   res.json({ ok: true, day });
 });
+// 그날의 한 줄 메모·기분(mood) 저장 — 근무 상태는 안 건드리고 memo/mood만 병합(비파괴적).
+app.post('/api/journal/note', (req, res) => {
+  const { date, memo, mood } = req.body || {};
+  const uid = req.user?.id || 1;
+  const day = journal.setDayNote(date, { memo, mood }, uid);
+  res.json({ ok: true, day });
+});
 // 일일 근무 일지 기록 삭제(캘린더에서 잘못 넣은 날 제거) — 정산 부(部) 보정도 함께 클리어.
 app.post('/api/journal/remove', (req, res) => {
   const { date } = req.body || {};

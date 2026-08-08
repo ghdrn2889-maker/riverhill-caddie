@@ -31,6 +31,8 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
       cutoffName: info.cutoffName || prev.cutoffName || '',
       rounds: {}, twoRounds: false, updatedAt: Date.now(),
     };
+    if (prev.memo != null) j[dateISO].memo = prev.memo;   // ★그날 메모·기분은 자동 판독이 덮지 않게 보존
+    if (prev.mood != null) j[dateISO].mood = prev.mood;
     saveUserJSON(userId, FILE, j);
     return;
   }
@@ -71,7 +73,23 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
     twoRounds: workCount >= 2,
     updatedAt: Date.now(),
   };
+  if (prev.memo != null) j[dateISO].memo = prev.memo;   // ★그날 메모·기분은 자동 판독이 덮지 않게 보존
+  if (prev.mood != null) j[dateISO].mood = prev.mood;
   saveUserJSON(userId, FILE, j);
+}
+
+// ★그날의 '한 줄 메모'·'기분(mood)' 보정 — 근무 상태(kind/status)는 건드리지 않고 memo/mood만 병합.
+//  기록이 없던 날에 메모만 남기면 memo/mood만 있는 날로 생성(kind 없음 → 배지 없음, '이 달의 기록'엔 표시).
+export function setDayNote(dateISO, patch = {}, userId = 1) {
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  const j = loadUserJSON(userId, FILE, {});
+  const prev = j[dateISO] || { date: dateISO };
+  const next = { ...prev, date: dateISO, updatedAt: Date.now() };
+  if ('memo' in patch) { const m = String(patch.memo || '').trim().slice(0, 60); if (m) next.memo = m; else delete next.memo; }
+  if ('mood' in patch) { const md = String(patch.mood || '').trim(); if (md) next.mood = md; else delete next.mood; }
+  j[dateISO] = next;
+  saveUserJSON(userId, FILE, j);
+  return next;
 }
 
 // ★수동 보정 — 사용자가 일지에서 그날 분류를 직접 지정(근무/스페어/휴무/휴가/순번 제외).
