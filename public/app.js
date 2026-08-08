@@ -47,7 +47,7 @@ function showView(name) {
   if (name !== curView && from >= 0 && to >= 0) {
     const el = $('view-' + name);
     void el.offsetWidth;                       // 리플로우 → 애니메이션 재생 보장
-    if ((name === 'worklog' || name === 'settle') && !_boxFxDone.has(name)) {
+    if ((name === 'worklog') && !_boxFxDone.has(name)) {
       _boxFxDone.add(name);
       boxFx(el);                               // 최초 진입 1회: 카드 박스들이 순서대로 부드럽게 올라옴
     } else {
@@ -1598,25 +1598,31 @@ function initWorklogButtons() {
   $('wlReport').onclick = () => window.open(`/api/worklog/report.html?year=${wlYear}&month=${wlMonth}`, '_blank');
 }
 
-/* ── 정산 (수익·팁·지출·수익계산서) ── */
 let lgYear = null, lgMonth = null, lgData = null, lgProfile = { name: '', workplace: '리버힐CC' };
-let lgOpenDate = null;    // 펼쳐진 날짜 단락
-let lgExpForm = null;     // 지출 입력 폼 { id?, date, category, amount, vendor, method, photoData?, scanned?, _scanned? }
-let lgPage = -1;          // 7일 페이지네이션(오름차순). -1 = 첫 표시 → 가장 최근 페이지로 스냅
-let lgFilter = 'all';     // 날짜별 정산 필터: 'all'(그 달 전체 날짜) | 'rec'(근무·지출 있는 날만)
-let lgDocPeriod = 'month'; // 문서 대상: 'month' | 'year'
-let lgDocCtx = null;      // 미리보기/문서 컨텍스트
-let lgDayList = [];       // 이 달 날짜 목록(근무 or 지출) — 최신순
+let lgOpenDate = null;    // 펼쳐진 날짜(ISO)
+let lgExpForm = null;     // 지출 폼 { date, id?, category, amount, vendor, method, photoData?, scanned?, _scanned?, freeDate? }
+let lgFilter = 'all';     // all|work|exp
+let lgPage = 0;
+let lgDocPeriod = 'month';
+let lgDocCtx = null;
+let lgGoal = 0;
+let lgCountUpNext = false;
 const lgTipDirty = new Set();
 const LG_PAGE = 7;
 const wonKo = (n) => `${(Number(n) || 0).toLocaleString('ko-KR')}원`;
+const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR');
 const manKo = (n) => { const v = Number(n) || 0; return v >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만` : v.toLocaleString('ko-KR'); };
 const lgFEES = () => (lgData && lgData.fees) || { 1: 140000, 2: 140000, 3: 150000 };
+const LG_HOLE = { 1: 70000, 2: 70000, 3: 80000 };
+const lgFeeHole = (p, st, F) => (st === 'front' ? (LG_HOLE[p] || 0) : ((F || lgFEES())[p] || 0));
+const lgDayRev = (d, F) => d.parts.reduce((s, p) => s + lgFeeHole(p, d.hole && d.hole[p], F), 0);
 const lgDow = (iso) => WD[new Date(iso + 'T00:00:00').getDay()];
-const lgMD = (iso) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
-const lgTang = (parts) => parts.length >= 3 ? '54(1·2·3부)' : (parts.length ? parts.map((p) => p + '부').join('·') : '근무없음');
-const lgExpSumOf = (d) => d.expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-const lgNetOf = (d) => (Number(d.revenue) || 0) + (Number(d.tip) || 0) - lgExpSumOf(d);
+const lgDayNum = (iso) => Number(iso.slice(8, 10));
+const lgReduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const lgPartLabel = (parts) => (parts.length >= 3 ? '54' : parts.join('·') + '부');
+const lgWorkByDate = (date) => (lgData && lgData.rows || []).find((r) => r.date === date) || null;
+const lgExpsByDate = (date) => (lgData && lgData.expenses || []).filter((e) => e.date === date);
+const lgExpSumDate = (date) => lgExpsByDate(date).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
 async function loadLedger() {
   const now = new Date();
@@ -1625,278 +1631,473 @@ async function loadLedger() {
     const r = await (await fetch(`/api/ledger?year=${lgYear}&month=${lgMonth}`)).json();
     lgData = r.summary; lgProfile = r.profile || { name: '', workplace: '리버힐CC' };
   } catch { $('lgMLabel').textContent = '불러오기 실패'; return; }
+  lgGoal = Number(lgData.goal) || 0;
+  lgCountUpNext = true;
   renderLedger();
 }
 async function lgFlushTips() {
   if (!lgTipDirty.size) return;
   const dates = [...lgTipDirty]; lgTipDirty.clear();
-  await Promise.all(dates.map((dt) => { const d = lgDayList.find((x) => x.date === dt); return postJSON('/api/ledger/tip', { date: dt, amount: d ? d.tip : 0 }); }));
+  await Promise.all(dates.map((dt) => { const d = lgWorkByDate(dt); return postJSON('/api/ledger/tip', { date: dt, amount: d ? d.tip : 0 }); }));
 }
 async function lgReload() { await lgFlushTips(); await loadLedger(); }
 
-// 근무 rows + 지출을 날짜별로 합침
-function lgBuildDays() {
-  const map = new Map();
-  (lgData.rows || []).forEach((r) => map.set(r.date, { date: r.date, parts: r.parts.slice(), revenue: r.revenue, tip: r.tip || 0, worked: true, expenses: [] }));
-  (lgData.expenses || []).forEach((e) => {
-    let d = map.get(e.date);
-    if (!d) { d = { date: e.date, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] }; map.set(e.date, d); }
-    d.expenses.push(e);
-  });
-  // '전체' 필터: 근무 안 한 날에도 지출을 기록할 수 있도록 그 달의 모든 날짜(오늘까지)를 빈 칸으로 채움.
-  if (lgFilter === 'all') {
-    const now = new Date();
-    const isCur = lgYear === now.getFullYear() && lgMonth === now.getMonth() + 1;
-    const last = new Date(lgYear, lgMonth, 0).getDate();
-    const cap = isCur ? Math.min(last, now.getDate()) : last;
-    for (let day = 1; day <= cap; day++) {
-      const iso = `${lgYear}-${String(lgMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (!map.has(iso)) map.set(iso, { date: iso, parts: [], revenue: 0, tip: 0, worked: false, expenses: [] });
-    }
-  }
-  return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+// 앰비언트 히어로 시간대(자동)
+function lgHeroClass() { const h = new Date().getHours(); if (h < 6) return 't-night'; if (h < 11) return 't-dawn'; if (h < 17) return 't-day'; if (h < 20) return 't-dusk'; return 't-night'; }
+const lgIncome = () => (lgData.rows || []).reduce((s, r) => s + (Number(r.revenue) || 0) + (Number(r.tip) || 0), 0);
+const lgExpTotal = () => (lgData.expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+// 순수입 카운트업(진입 1회)
+function lgCountNet(el, to) {
+  if (lgReduce || to <= 0) { el.textContent = fmtN(to); return; }
+  const dur = 1150; let t0 = null; el.classList.remove('pop');
+  function step(ts) { if (t0 === null) t0 = ts; const p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmtN(to * e); if (p < 1) requestAnimationFrame(step); else { el.textContent = fmtN(to); void el.offsetWidth; el.classList.add('pop'); } }
+  el.textContent = '0'; requestAnimationFrame(step);
 }
 
 function renderLedger() {
   if (!lgData) return;
-  lgDayList = lgBuildDays();
-  const now = new Date(), realY = now.getFullYear(), realM = now.getMonth() + 1;
+  $('lgHero').className = 'hero ' + lgHeroClass();
   $('lgMLabel').textContent = `${lgYear}년 ${lgMonth}월`;
-  $('lgMLabel').onclick = () => openMonthJump({ y: lgYear, m: lgMonth }, (y, m) => { lgFlushTips().then(() => { lgYear = y; lgMonth = m; lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); }); });
-  const isNow = lgYear === realY && lgMonth === realM;
-  $('lgMSub').textContent = isNow ? '이번 달' : '지난 기록';
-  $('lgThisMo').hidden = isNow;
-  $('lgNext').disabled = (lgYear > realY) || (lgYear === realY && lgMonth >= realM);
-  refreshLgTotals();
+  const nm = (typeof boardOwnerName === 'function' ? boardOwnerName() : '') || (lgProfile && lgProfile.name) || '';
+  $('lgHlab').textContent = nm ? `${nm}님의 수입` : '이 달 수입';
+  refreshLgHero();
   renderLgList();
   updateDocDesc();
+  const root = $('s2Root'); root.classList.remove('pgin'); void root.offsetWidth; root.classList.add('pgin'); setTimeout(() => root.classList.remove('pgin'), 1000);
 }
 
-function refreshLgTotals() {
-  const workRev = lgDayList.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
-  const tipSum = lgDayList.reduce((s, d) => s + (Number(d.tip) || 0), 0);
-  const expSum = lgDayList.reduce((s, d) => s + lgExpSumOf(d), 0);
-  $('lgNet').textContent = wonKo(workRev + tipSum - expSum);
-  $('lgInc').textContent = wonKo(workRev + tipSum);
-  $('lgExpSum').textContent = wonKo(expSum);
-  $('lgWorkRev').textContent = manKo(workRev);
-  $('lgTipSum').textContent = manKo(tipSum);
-  $('lgExp').textContent = manKo(expSum);
-  const F = lgFEES(), byPart = { 1: { days: 0, amt: 0 }, 2: { days: 0, amt: 0 }, 3: { days: 0, amt: 0 } };
-  lgDayList.forEach((d) => d.parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amt += F[p]; } }));
-  $('lgParts').innerHTML = ['3', '2', '1'].filter((p) => byPart[p].days).map((p) => `<span class="lg-pill">${p}부 ${byPart[p].days}일 · ${manKo(byPart[p].amt)}</span>`).join('')
-    || '<span class="lg-pill none">이 달 확정 근무가 아직 없어요</span>';
-  const pend = lgData.pendingDays || 0;
-  $('lgPend').hidden = !pend;
-  if (pend) $('lgPend').innerHTML = `확인 대기 ${pend}일 (예상 ${manKo(lgData.pendingRevenue || 0)}) — 근무 기록에서 '예'로 확정하면 합산돼요.`;
+function refreshLgHero() {
+  const inc = lgIncome(), incEl = $('lgInc');
+  const first = lgCountUpNext; lgCountUpNext = false;
+  if (first) lgCountNet(incEl, inc); else incEl.textContent = fmtN(inc);
+  // 목표
+  $('lgGoalNum').textContent = lgGoal > 0 ? fmtN(lgGoal) + '원' : '설정';
+  const gfill = $('lgGfill'), pct = lgGoal > 0 ? Math.min(100, inc / lgGoal * 100) : 0;
+  if (first) { gfill.style.transition = 'none'; gfill.style.width = '0%'; void gfill.offsetWidth; gfill.style.transition = ''; }
+  gfill.style.width = pct + '%';
+  if (first) { const t = $('lgHero').querySelector('.gtrack'); t.classList.remove('shim'); void t.offsetWidth; t.classList.add('shim'); }
+  const grow = $('lgGrow').children;
+  if (lgGoal > 0) {
+    const rem = Math.max(0, lgGoal - inc), daysLeft = lgData.daysLeft || 0, per = daysLeft > 0 ? Math.ceil(rem / daysLeft) : 0;
+    if (rem <= 0) { grow[0].innerHTML = '목표 달성 <b class="num">+' + fmtN(inc - lgGoal) + '</b>'; grow[1].textContent = daysLeft > 0 ? daysLeft + '일 남음' : ''; }
+    else { grow[0].innerHTML = '목표까지 <b class="num">' + fmtN(rem) + '</b>'; grow[1].innerHTML = daysLeft > 0 ? (daysLeft + '일 남음 · 하루 <b class="num">' + manKo(per) + '</b>') : '이번 달 마감'; }
+  } else { grow[0].innerHTML = '목표를 정해보세요'; grow[1].textContent = ''; }
 }
 
-function lgBrkText(d) { return `${lgTang(d.parts)} 캐디피 ${manKo(d.revenue)} · 팁 ${manKo(d.tip)} · 지출 ${manKo(lgExpSumOf(d))}`; }
+// ── 목표 수위 시트(딥오션·빛점·목표 세우면 그 달 잠금) ──
+let lgwWorkGoal = 0;      // 원, 작업 중 목표
+let lgwLocked = false;    // 그 달 목표 확정 여부
+let lgwOpenState = false;
+let lgwFishes = [], lgwRAF = null, lgwLast = 0, lgwTsec = 0, lgwGW = 380, lgwGH = 300;
+let lgwCheerTimer = null, lgwCheerIdx = 0;
+
+const lgwCurrent = () => Math.max(0, lgIncome());       // 원, 지금까지 순수입
+const lgwPctVal = () => { const g = lgwWorkGoal || 1; return Math.max(0, Math.min(100, Math.round(lgwCurrent() / g * 100))); };
+const lgwLevel = () => { const g = lgwWorkGoal || 1; return Math.max(3, Math.min(100, lgwCurrent() / g * 100)); };
+const lgwRemainMan = () => Math.max(0, Math.round((lgwWorkGoal - lgwCurrent()) / 10000));
+function lgwFill(level) { $('lgwWater').style.transform = 'translateY(' + (100 - level).toFixed(2) + '%)'; }
+function lgwEmpty() { const w = $('lgwWater'); w.classList.remove('drop'); w.style.transition = 'none'; w.style.transform = 'translateY(100%)'; void w.offsetWidth; w.style.transition = ''; }
+
+const LGW_CHEERS = {
+  low:  ['천천히 가도 괜찮아요. 시작이 반이에요.', '한 마리씩, 이 바다를 채워가요.', '오늘 하루도 한 걸음, 그거면 충분해요.'],
+  mid:  ['벌써 <b>절반</b>이 눈앞이에요.', '이 리듬이면 무리 없이 닿아요.', '물고기가 제법 모였어요.', '꾸준함이 제일 큰 무기예요.'],
+  high: ['이제 <b>조금만</b> 더 채우면 돼요.', '거의 다 왔어요. 마무리까지 힘내요.', '바다가 반짝임으로 가득해요.'],
+  done: ['목표를 <b>가득</b> 채웠어요. 멋져요.', '이번 달, 해냈어요.']
+};
+function lgwPool() { const p = lgwPctVal(); return p >= 100 ? LGW_CHEERS.done : p >= 75 ? LGW_CHEERS.high : p >= 40 ? LGW_CHEERS.mid : LGW_CHEERS.low; }
+function lgwShowCheer(html) { const c = $('lgwCheer'); c.classList.add('fade'); setTimeout(() => { c.innerHTML = html; c.classList.remove('fade'); }, 500); }
+function lgwStartCheer() { lgwStopCheer(); const pool = lgwPool(); lgwCheerIdx = 0; $('lgwCheer').innerHTML = pool[0]; if (lgReduce) return; lgwCheerTimer = setInterval(() => { const pl = lgwPool(); lgwCheerIdx = (lgwCheerIdx + 1) % pl.length; lgwShowCheer(pl[lgwCheerIdx]); }, 4600); }
+function lgwStopCheer() { if (lgwCheerTimer) { clearInterval(lgwCheerTimer); lgwCheerTimer = null; } }
+function lgwCountPct() { const node = $('lgwPct'), to = lgwPctVal(); if (lgReduce) { node.textContent = to; return; } let t0 = null; function s(ts) { if (t0 === null) t0 = ts; const pr = Math.min(1, (ts - t0) / 900), e = 1 - Math.pow(1 - pr, 3); node.textContent = Math.round(to * e); if (pr < 1) requestAnimationFrame(s); } node.textContent = '0'; requestAnimationFrame(s); }
+
+// 빛점(물 채운 %에 따라 구간별로 마릿수)
+function lgwCount(p) { if (p >= 90) return 26; if (p >= 70) return 18; if (p >= 50) return 12; if (p >= 30) return 8; if (p >= 15) return 5; return 3; }
+function lgwMeasure() { const r = $('lgwGlass').getBoundingClientRect(); if (r.width) lgwGW = r.width; if (r.height) lgwGH = r.height; }
+function lgwBand() { const lv = lgwLevel(); let t = lgwGH * (1 - lv / 100) + 16, b = lgwGH - 14; if (b < t + 10) b = t + 10; return { t, b }; }
+function lgwAddFish() {
+  const bb = lgwBand(), size = 3.5 + Math.random() * 4;
+  const f = { vx: (0.5 + Math.random() * 0.9) * 15 * (Math.random() < 0.5 ? -1 : 1), x: Math.random() * lgwGW, y0: bb.t + Math.random() * (bb.b - bb.t), bobAmp: 3 + Math.random() * 6, bobSpd: 0.4 + Math.random() * 0.7, phase: Math.random() * 6.28 };
+  const d = document.createElement('div'); d.className = 'lgwfish';
+  d.style.width = size.toFixed(1) + 'px'; d.style.height = size.toFixed(1) + 'px';
+  d.style.setProperty('--tw', (2.2 + Math.random() * 2.2).toFixed(2) + 's');
+  d.style.transform = 'translate(' + f.x.toFixed(1) + 'px,' + f.y0.toFixed(1) + 'px)';
+  d.innerHTML = '<i></i>'; $('lgwFish').appendChild(d); f.el = d; lgwFishes.push(f);
+  requestAnimationFrame(() => d.classList.add('in'));
+}
+function lgwRemoveFish() { const f = lgwFishes.pop(); if (!f) return; f.el.classList.remove('in'); setTimeout(() => { if (f.el.parentNode) f.el.parentNode.removeChild(f.el); }, 900); }
+function lgwAdjustFish() { const target = lgwCount(lgwPctVal()); while (lgwFishes.length < target) lgwAddFish(); while (lgwFishes.length > target) lgwRemoveFish(); const bb = lgwBand(); lgwFishes.forEach((f) => { if (f.y0 < bb.t) f.y0 = bb.t + Math.random() * 10; if (f.y0 > bb.b) f.y0 = bb.b - Math.random() * 10; }); }
+function lgwFishLoop(ts) {
+  if (!lgwOpenState) { lgwRAF = null; return; }
+  if (!lgwLast) lgwLast = ts; const dt = Math.min(0.05, (ts - lgwLast) / 1000); lgwLast = ts; lgwTsec += dt;
+  for (let i = 0; i < lgwFishes.length; i++) { const f = lgwFishes[i]; f.x += f.vx * dt; if (f.x < -36) f.x = lgwGW + 36; else if (f.x > lgwGW + 36) f.x = -36; const y = f.y0 + Math.sin(lgwTsec * f.bobSpd + f.phase) * f.bobAmp; f.el.style.transform = 'translate(' + f.x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'; }
+  lgwRAF = requestAnimationFrame(lgwFishLoop);
+}
+function lgwStartFish() { lgwMeasure(); lgwAdjustFish(); if (!lgReduce && !lgwRAF) { lgwLast = 0; lgwRAF = requestAnimationFrame(lgwFishLoop); } }
+function lgwStopFish() { if (lgwRAF) { cancelAnimationFrame(lgwRAF); lgwRAF = null; } lgwFishes.forEach((f) => f.el.classList.remove('in')); setTimeout(() => { $('lgwFish').innerHTML = ''; lgwFishes = []; }, 400); }
+
+function lgwApplyLock() {
+  const set = $('lgwSet');
+  if (lgwLocked) {
+    $('lgwInput').readOnly = true; $('lgwInput').tabIndex = -1; $('lgwInput').blur();
+    set.classList.add('locked');
+    $('lgwLab').textContent = '이 달 목표 · 확정';
+    $('lgwTail').innerHTML = ' · <b>다음 달까지 고정</b>';
+    $('lgwSave').textContent = '확인';
+  } else {
+    $('lgwInput').readOnly = false; $('lgwInput').tabIndex = 0;
+    set.classList.remove('locked');
+    $('lgwLab').textContent = '이 달 목표';
+    $('lgwTail').textContent = ' · 숫자를 눌러 고쳐요';
+    $('lgwSave').textContent = '이 목표를 세운다';
+  }
+}
+function lgwLiveUpdate() {
+  $('lgwRem').textContent = lgwRemainMan();
+  $('lgwPct').textContent = lgwPctVal();
+  if (lgwOpenState) { lgwFill(lgwLevel()); lgwAdjustFish(); }
+}
+function lgwOpen() {
+  if (!lgData) return;
+  lgwOpenState = true;
+  lgwLocked = lgGoal > 0;
+  lgwWorkGoal = lgGoal > 0 ? lgGoal : Math.max(5000000, Math.ceil((lgwCurrent() || 0) / 1000000) * 1000000) || 5000000;
+  $('lgwInput').value = Math.round(lgwWorkGoal / 10000);
+  lgwApplyLock();
+  $('lgwRem').textContent = lgwRemainMan();
+  $('lgwDays').textContent = lgData.daysLeft || 0;
+  const bg = $('lgGoalSheet'), sh = $('lgwSheet');
+  bg.classList.remove('fast'); bg.classList.add('on');
+  lgwEmpty();
+  requestAnimationFrame(() => requestAnimationFrame(() => {   // 팝업과 물이 동시에 올라옴
+    sh.classList.add('up'); lgwFill(lgwLevel()); lgwCountPct(); lgwStartCheer();
+  }));
+  setTimeout(lgwStartFish, 340);                               // 물 차오른 뒤 빛점 등장
+}
+function lgwClose() {
+  lgwOpenState = false; lgwStopCheer(); lgwStopFish();
+  const bg = $('lgGoalSheet'), sh = $('lgwSheet');
+  bg.classList.add('fast'); sh.classList.remove('up'); bg.classList.remove('on');
+  // 물은 담긴 채 시트와 함께 내려감 → 화면 밖으로 사라진 뒤 조용히 비움(팍 사라지는 현상 방지)
+  setTimeout(() => { lgwEmpty(); }, 380);
+}
+async function lgwSave() {
+  if (!lgwLocked) {
+    const man = parseInt(($('lgwInput').value || '').replace(/[^\d]/g, ''), 10) || 0;
+    const amount = Math.max(0, man * 10000);
+    lgGoal = amount; lgwWorkGoal = amount || lgwWorkGoal;
+    if (amount > 0) lgwLocked = true;
+    lgwApplyLock(); refreshLgHero();
+    try { await postJSON('/api/ledger/goal', { year: lgYear, month: lgMonth, amount }); } catch {}
+  }
+  lgwClose();
+}
+
+// ── 평면 내역(날짜별 1행) ──
+// 그 달의 모든 날(이번 달은 오늘까지)을 한 행씩 — 근무한 날은 부·순수입, 아닌 날은 '기록 없음'.
+function lgBuildEntries() {
+  const workMap = new Map((lgData.rows || []).map((r) => [r.date, r]));
+  const expMap = {}; (lgData.expenses || []).forEach((e) => { (expMap[e.date] = expMap[e.date] || []).push(e); });
+  const now = new Date();
+  const isCur = Number(lgYear) === now.getFullYear() && Number(lgMonth) === (now.getMonth() + 1);
+  const lastDay = new Date(lgYear, lgMonth, 0).getDate();
+  const cap = isCur ? Math.min(lastDay, now.getDate()) : lastDay;
+  const arr = [];
+  for (let day = 1; day <= cap; day++) {
+    const iso = `${lgYear}-${String(lgMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const w = workMap.get(iso), exps = expMap[iso] || [];
+    arr.push({ date: iso, worked: !!w, parts: w ? w.parts.slice() : [], revenue: w ? w.revenue : 0, tip: w ? (w.tip || 0) : 0, hole: w ? (w.hole || null) : null, holed: w ? w.holed : false, expSum: exps.reduce((s, e) => s + (Number(e.amount) || 0), 0), expN: exps.length });
+  }
+  return arr;
+}
+
+function lgRowHTML(d) {
+  const open = d.date === lgOpenDate;
+  const panel = `<div class="dexp" id="dexp-${d.date}"${open ? '' : ' hidden'}>${open ? lgPanelHTML(d.date) : ''}</div>`;
+  if (d.worked) {
+    const cut = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - lgDayRev(d, lgFEES());
+    return `<div class="row" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
+      <div class="rt"><div class="a">${lgPartLabel(d.parts)}<span class="hltag"${cut > 0 ? '' : ' hidden'}> · 홀정산</span></div></div>
+      <div class="amt num${cut > 0 ? ' holed' : ''}">+${fmtN(d.revenue)}</div>
+      <svg class="rcar" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>${panel}`;
+  }
+  return `<div class="row" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
+    <div class="rt"><div class="a" style="color:var(--mut);font-weight:650">기록 없음</div></div>
+    <div class="amt num" aria-hidden="true" style="opacity:0">·</div>
+    <svg class="rcar" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>${panel}`;
+}
 
 function renderLgList() {
-  const pages = Math.max(1, Math.ceil(lgDayList.length / LG_PAGE));
-  if (lgPage < 0) lgPage = pages - 1;        // 첫 표시 → 가장 최근(마지막) 페이지
-  if (lgPage > pages - 1) lgPage = pages - 1;
-  const shown = lgDayList.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
-  $('lgList').innerHTML = shown.length ? shown.map(lgAccHTML).join('') : '<div class="lg-listempty">이 달 근무·지출 기록이 없어요.</div>';
-  shown.forEach((d) => { if (d._saved) delete d._saved; });
-  const first = shown[0], last = shown[shown.length - 1];
-  const range = first ? `${lgMD(first.date)}(${lgDow(first.date)}) ~ ${lgMD(last.date)}(${lgDow(last.date)})` : '기록 없음';
-  $('lgPager').innerHTML = `<button data-pg="prev" ${lgPage <= 0 ? 'disabled' : ''}>‹ 이전 7일</button>
-    <div class="pinfo">${lgPage + 1} / ${pages}<span>${range}</span></div>
-    <button data-pg="next" ${lgPage >= pages - 1 ? 'disabled' : ''}>다음 7일 ›</button>`;
-  bindLg();
+  const entries = lgBuildEntries();
+  const pages = Math.max(1, Math.ceil(entries.length / LG_PAGE));
+  if (lgPage > pages - 1) lgPage = pages - 1; if (lgPage < 0) lgPage = 0;
+  const shown = entries.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
+  $('lgList').innerHTML = shown.length ? shown.map(lgRowHTML).join('') : '<div class="lg-empty" style="padding:26px 0;text-align:center;color:#9aa49c;font-size:12.5px;">이 달 기록이 없어요.</div>';
+  const wN = (lgData.rows || []).length, xN = (lgData.expenses || []).length;
+  $('lgListCount').textContent = `근무 ${wN}일 · 지출 ${xN}건`;
+  $('lgPager').innerHTML = `<button data-pg="prev" ${lgPage <= 0 ? 'disabled' : ''}>‹ 이전 7일</button><div class="pinfo">${lgPage + 1} / ${pages}</div><button data-pg="next" ${lgPage >= pages - 1 ? 'disabled' : ''}>다음 7일 ›</button>`;
+  bindLgList();
 }
 
-function lgAccHTML(d) {
-  const open = d.date === lgOpenDate;
-  const empty = !d.worked && !d.expenses.length;
-  const net = empty ? '기록 없음' : '순수입 ' + wonKo(lgNetOf(d));
-  const brk = empty ? '' : lgBrkText(d);
-  return `<div class="lg-acc${open ? ' open' : ''}${d._saved ? ' saved' : ''}${empty ? ' noday' : ''}" id="lgAcc-${d.date}">
-    <div class="lg-ahead" data-tog="${d.date}">
-      <div class="lg-cal"><span class="md">${lgMD(d.date)}</span><span class="dw">${lgDow(d.date)}</span></div>
-      <div class="lg-amid"><div class="lg-anet" id="lgNetR-${d.date}">${net}</div>
-        <div class="lg-abrk" id="lgBrk-${d.date}">${brk}</div></div>
-      <div class="lg-chev"><span class="lg-hint">${open ? '닫기' : (empty ? '지출 추가' : '수정')}</span><span class="lg-car">▾</span></div>
-    </div>${open ? lgBodyHTML(d) : ''}</div>`;
-}
-
-function lgBodyHTML(d) {
-  const F = lgFEES();
-  let head;
-  if (d.worked) {
-    const chips = ['1', '2', '3'].map((p) => `<span class="lg-pchip${d.parts.includes(p) ? ' on' : ''}" data-part="${d.date}|${p}">${p}부</span>`).join('');
-    const calc = d.parts.length ? d.parts.map((p) => `${p}부 ${manKo(F[p])}`).join(' + ') + ` = <b>${manKo(d.revenue)}</b>` : '부를 하나 이상 선택하세요';
-    head = `<div class="lg-asub">근무 · 캐디피 <span class="dim">(고정단가 · 자동합산)</span></div>
-      <div class="lg-arow"><span class="lbl">부 조합</span>${chips}<span class="lg-val" id="lgRevR-${d.date}">${wonKo(d.revenue)}</span>
-        <div class="lg-calc">${calc} <span style="color:#9aa49c;">· 1·2부 14만 / 3부 15만 고정</span></div></div>
-      <div class="lg-asub">팁 <span class="dim">(만원 단위 · 입력 즉시 반영)</span></div>
-      <div class="lg-arow"><span class="lbl">받은 팁</span>
-        <span class="lg-tipin"><input id="lgTipI-${d.date}" inputmode="decimal" placeholder="0" value="${d.tip ? d.tip / 10000 : ''}"><span class="u">만원</span></span></div>`;
-  } else {
-    head = `<div class="lg-daynote">이 날은 근무 확정이 없어요 — 지출만 기록됩니다. (근무는 '근무 기록'에서 확정)</div>`;
-  }
-  const exps = d.expenses.length ? d.expenses.map((e) => lgExpRow(e, d.date)).join('') : '<div class="lg-empty">이 날 지출이 아직 없어요.</div>';
-  const showForm = lgExpForm && lgExpForm.date === d.date;
-  const msg = showForm && lgExpForm._scanned ? `<div class="lg-scanmsg">사진 자동 스캔 완료 · 로컬 판독(크레딧 0) — 이 날짜(${lgMD(d.date)})로 자동 기록. 값이 틀리면 고치세요.</div>` : '';
-  const addBtns = showForm ? '' : `<div class="lg-expadd">
-      <label class="lg-scan" id="lgScanLbl-${d.date}"><svg class="lg-ico"><use href="#ic-cam"/></svg> 사진 자료 자동 스캔<input type="file" accept="image/*" id="lgScanIn-${d.date}" hidden></label>
-      <button class="lg-manual" data-manual="${d.date}">＋ 사진 없이 직접 입력 <small>(스캔 대신 수동)</small></button>
-    </div>`;
-  return `<div class="lg-abody">
-    ${head}
-    <div class="lg-asub">지출 · 영수증</div>
-    ${exps}${msg}${addBtns}${showForm ? lgFormHTML(d) : ''}
-    <div class="lg-savebar"><button class="lg-savebtn" data-save="${d.date}">저장하고 닫기</button>
-      <div class="lg-savehint">저장하면 이 칸이 접히고 위 합계에 바로 반영돼요.</div></div>
+// ── 이 날 정산 패널 ──
+function lgPanelHTML(date) {
+  const w = lgWorkByDate(date);
+  let cutTxt = '';
+  if (w) { const cut = w.parts.reduce((s, p) => s + lgFEES()[p], 0) - lgDayRev({ parts: w.parts, hole: w.hole }, lgFEES()); cutTxt = cut > 0 ? '· ' + fmtN(cut) + '원 감액' : ''; }
+  const workBlock = w ? `
+    <div class="dsub">캐디피 · 홀정산</div><div id="hollo-${date}">${lgHoleHTML(date)}</div>
+    <div id="tipwrap-${date}">${lgTipHTML(date)}</div>` : '';
+  const exps = lgExpsByDate(date);
+  const expList = exps.length ? `<div class="dexps">${exps.map((e) => lgExpRow(e)).join('')}</div>` : '';
+  const showForm = lgExpForm && lgExpForm.date === date;
+  const stage = showForm ? '' : lgStageHTML(date);
+  const btns = showForm ? '' : `<div class="xbtns2" id="xbtns-${date}"><button class="v5 xscan2" data-day="${date}"><span class="badge"><svg viewBox="0 0 24 24"><use href="#ic-cam"/></svg></span><span class="lb5">영수증·가격표 스캔</span></button><button class="v5 xmanual2" data-day="${date}"><span class="plus">＋</span><span class="lb5" style="color:#8b948d">직접 입력</span></button></div>`;
+  return `<div class="dexp-in">
+    <div class="dexp-h">이 날 정산 <span class="cut" id="cut-${date}">${cutTxt}</span></div>
+    ${workBlock}
+    <div class="dsub x">지출 · 영수증</div>${expList}${stage}${btns}<div id="xform-${date}">${showForm ? lgFormHTML() : ''}</div>
   </div>`;
 }
 
-function lgExpRow(e, date) {
+function lgHoleHTML(date) {
+  const w = lgWorkByDate(date); if (!w || !w.parts.length) return '';
+  const F = lgFEES(), sel = (lgSelPart[date] = lgSelPart[date] || w.parts[0]);
+  const single = w.parts.length < 2;
+  const chips = w.parts.map((p) => { const holed = w.hole && w.hole[p] === 'front'; return `<button class="pchip${p === sel ? ' on' : ''}${holed ? ' holed' : ''}" data-hchip="${date}|${p}">${p}부 <b>${manKo(lgFeeHole(p, w.hole && w.hole[p], F))}</b></button>`; }).join('');
+  const cur = (w.hole && w.hole[sel]) || 'full', holed = cur === 'front';
+  const OPTS = [['full', '정상'], ['front', '전반 중단'], ['back', '후반 이후']];
+  const segs = OPTS.map((o) => `<button class="pz-o${cur === o[0] ? ' on' : ''}" data-hset="${date}|${sel}|${o[0]}" data-v="${o[0]}">${o[1]}</button>`).join('');
+  return `${single ? '' : '<div class="pchips">' + chips + '</div>'}<div class="pstate"><div class="pstate-h">${sel}부 캐디피 <b class="${holed ? 'holed' : ''}">${fmtN(lgFeeHole(sel, w.hole && w.hole[sel], F))}원</b></div><div class="pz-seg">${segs}</div><div class="pnote">우천·천재지변 중단 시만 · <b>전반</b>=반값, <b>후반</b>=전액</div></div>`;
+}
+const lgSelPart = {};
+// 팁 · 퀵 칩(없음/1·2·3·5만)으로 누르면 아래 입력칸에 반영. 입력칸은 항상 보이고 기본 0원, 직접 수정 가능.
+function lgTipHTML(date) {
+  const w = lgWorkByDate(date); if (!w) return '';
+  const won = w.tip ? Math.max(0, Math.round(w.tip)) : 0;
+  const man = won / 10000;
+  const presets = [0, 1, 2, 3, 5];
+  const chips = presets.map((v) => `<button class="tchip${man === v ? ' on' : ''}" data-tip="${date}|${v}">${v === 0 ? '없음' : v + '만'}</button>`).join('');
+  return `<div class="dsub">팁 <span class="dim">· 그 날 받은 팁</span></div>
+    <div class="tchips">${chips}</div>
+    <div class="tcustom show"><input inputmode="numeric" placeholder="0" id="lgTipI-${date}" value="${won ? fmtN(won) : ''}"><span class="u">원</span></div>`;
+}
+function lgRerenderTip(date) { const el = document.getElementById('tipwrap-' + date); if (el) { el.innerHTML = lgTipHTML(date); bindLgList(); } }
+
+function lgExpRow(e) {
   const sub = [e.vendor, e.method].filter(Boolean).join(' · ');
-  const photo = e.photo ? `<img class="ephoto" src="/api/ledger/photo/${e.photo}?t=${e.at || 0}" alt="영수증">` : '';
-  return `<div class="lg-exp"><span class="ec">${esc(e.category)}</span>
-    <div class="einfo"><div class="et">${wonKo(e.amount)}</div>${sub ? `<div class="es">${esc(sub)}</div>` : ''}</div>
-    ${photo}
-    <button class="edit-e" data-ee="${date}|${e.id}" style="font-size:11px;background:none;border:0;color:#5a8;cursor:pointer;">수정</button>
-    <button class="edel" data-del="${e.id}">✕</button></div>`;
+  const photo = e.photo ? `<img class="ephoto" src="/api/ledger/photo/${e.photo}?t=${e.at || 0}" alt="영수증" data-lb="/api/ledger/photo/${e.photo}?t=${e.at || 0}">` : '';
+  return `<div class="dxrow"><span class="dxcat">${esc(e.category)}</span><div class="dxinfo"><b>−${fmtN(e.amount)}원</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>${photo}<button class="edel" data-eedit="${e.id}">수정</button><button class="edel" data-edel="${e.id}">✕</button></div>`;
 }
 
-function lgFormHTML(d) {
-  const f = lgExpForm;
-  const cats = ['주유', '톨비', '식대', '주차', '기타'].map((c) => `<span class="cat${f.category === c ? ' on' : ''}" data-cat="${c}">${c}</span>`).join('');
-  const methods = ['', '카드', '현금영수증', '현금', '세금계산서', '간이영수증'].map((m) => `<option value="${m}"${f.method === m ? ' selected' : ''}>${m || '결제수단'}</option>`).join('');
-  return `<div class="lg-eform">
-    <div class="eh">${f._scanned ? '스캔 결과 — 확인 후 추가' : (f.id ? '지출 수정' : '지출 직접 입력')}</div>
-    <div class="cats">${cats}</div>
-    <div class="r"><input class="amt" id="lgeAmt" inputmode="numeric" placeholder="금액" value="${f.amount || ''}"><span style="font-size:11px;color:#9aa49c;">원</span>
-      <input class="vd" id="lgeVendor" placeholder="사용처(선택)" value="${esc(f.vendor || '')}"></div>
-    <div class="r"><select id="lgeMethod" style="flex:1;">${methods}</select></div>
-    ${(f.photoData || f.photo) ? `<div style="font-size:11px;color:#2c6b45;">사진 첨부됨 · ${lgMD(d.date)}(${lgDow(d.date)})로 기록</div>` : ''}
-    <div class="foot"><button class="cx" data-efcx>취소</button><button class="ok" data-efok="${d.date}">${f.id ? '저장' : '추가'}</button></div>
-  </div>`;
+// 스캔 무대
+const SF_SL = ['<span class="ok">idle</span> · <span class="dim">await capture()</span>', 'const <span class="k">receipt</span> = <span class="v">null</span>', '{ <span class="k">amount</span>: <span class="v">?</span>, <span class="k">vendor</span>: <span class="v">?</span> }', 'await <span class="dim">ocr.ready(</span><span class="v">img</span><span class="dim">)</span>', 'if (<span class="k">total</span> == <span class="v">null</span>) <span class="dim">retry</span>', 'parse <span class="dim">₩</span> ▸ <span class="k">line_items</span>[]', '<span class="dim">for</span> (<span class="k">row</span> <span class="dim">of</span> lines) <span class="dim">detect()</span>', 'regex <span class="dim">/₩?[0-9,]+/</span> → <span class="v">match</span>', '<span class="k">category</span> = <span class="dim">classify(</span><span class="v">text</span><span class="dim">)</span>', 'tokens <span class="ok">✓</span> · <span class="dim">confidence</span> <span class="v">0.9</span>', '<span class="dim">map</span> vendor → <span class="k">store_id</span>', 'scan <span class="dim">ready</span> · <span class="k">tap</span> ▸ 촬영'];
+const SF_SR = ['<span class="dim">buffer receipt.stream…</span>', '0x1F <span class="dim">·</span> <span class="v">OCR</span> <span class="dim">warm</span> <span class="ok">✓</span>', '{ <span class="k">tax</span>: <span class="v">?</span>, <span class="k">date</span>: <span class="v">?</span> }', 'normalize(<span class="dim">amount</span>) → <span class="v">₩</span>', '<span class="k">total</span> = <span class="dim">sum(</span><span class="v">items</span><span class="dim">)</span>', 'validate(<span class="dim">date</span>) <span class="ok">ok</span>', 'queue.<span class="k">flush</span>() <span class="ok">ok</span>', '<span class="dim">infer</span> method → <span class="v">card</span>', 'decode <span class="k">bytes</span>[<span class="v">1024</span>]', 'trim <span class="dim">whitespace</span> · <span class="ok">✓</span>', '<span class="dim">standby</span> · <span class="k">await</span> <span class="v">input</span>', 'model <span class="dim">loaded</span> <span class="ok">✓</span> ₩ <span class="v">--</span>'];
+const sfLi = (a) => [...a, ...a].map((s) => '<li>' + s + '</li>').join('');
+function lgStageHTML(date) { return `<div class="sf-stage" id="sfStage-${date}"><div class="sf-stream sL"><ul>${sfLi(SF_SL)}</ul></div><div class="sf-stream sR"><ul>${sfLi(SF_SR)}</ul></div><div class="sf-rc"><div class="sl"></div><svg viewBox="0 0 40 48"><use href="#sf-rcpt"/></svg></div><div class="sf-term" id="sfTerm-${date}"></div></div>`; }
+function sfStart(stage, term) {
+  stage.classList.add('scan');
+  const T = [{ t: '$ scan receipt.jpg', c: '' }, { t: '▸ OCR 분석…', c: 'p' }, { t: '▸ 항목 추출 중…', c: 'dim' }, { t: '▸ 금액·사용처 파싱…', c: 'dim' }];
+  const VIS = 4; let li = 0, ci = 0, lines = [], stop = false;
+  (function tick() {
+    if (stop) return; const cur = T[li]; if (!cur) return;
+    if (ci <= cur.t.length) { let h = lines.slice(-(VIS - 1)).map((o) => '<div class="sf-ln ' + (o.c || '') + '">' + o.t + '</div>').join(''); h += '<div class="sf-ln ' + (cur.c || '') + '">' + cur.t.slice(0, ci) + '<span class="sf-cur"></span></div>'; term.innerHTML = h; ci++; setTimeout(tick, 32); return; }
+    lines.push(cur); li++; ci = 0; if (li < T.length) setTimeout(tick, 150);
+  })();
+  return { stop() { stop = true; } };
 }
-
-function lgPatchDay(date) {
-  const d = lgDayList.find((x) => x.date === date); if (!d) return;
-  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  set('lgNetR-' + date, '순수입 ' + wonKo(lgNetOf(d)));
-  set('lgBrk-' + date, lgBrkText(d));
-  set('lgRevR-' + date, wonKo(d.revenue));
+function sfFinish(stage, term, ok) {
+  return new Promise((resolve) => {
+    const msg = ok ? 'SCAN SUCCESS!' : 'SCAN FAILED';
+    term.innerHTML = '<div class="sf-succ' + (ok ? '' : ' fail') + '"><span class="s"></span><span class="sf-cur"></span></div>';
+    const sp = term.querySelector('.s'); let k = 0;
+    (function ty() { if (k <= msg.length) { sp.textContent = msg.slice(0, k); k++; setTimeout(ty, 62); } else setTimeout(() => { stage.classList.remove('scan'); resolve(); }, 880); })();
+  });
 }
-function lgCommitTip(date) {
-  const el = document.getElementById('lgTipI-' + date), d = lgDayList.find((x) => x.date === date);
-  if (el && d) { d.tip = Math.max(0, Math.round((parseFloat(String(el.value).replace(/[^\d.]/g, '')) || 0) * 10000)); lgTipDirty.add(date); }
-}
-function lgSyncForm() {
-  if (!lgExpForm) return;
-  const a = document.getElementById('lgeAmt'), v = document.getElementById('lgeVendor'), m = document.getElementById('lgeMethod');
-  if (a) lgExpForm.amount = a.value; if (v) lgExpForm.vendor = v.value; if (m) lgExpForm.method = m.value;
-}
+const sfWait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function lgScan(inp) {
   if (!inp.files || !inp.files[0]) return;
-  const date = inp.id.replace('lgScanIn-', '');
-  const lbl = document.getElementById('lgScanLbl-' + date);
-  if (lbl) { lbl.classList.add('busy'); lbl.innerHTML = '<svg class="lg-ico"><use href="#ic-cam"/></svg> 스캔 중…'; }
+  const date = inp.id.replace('lgScanIn-', ''); const file = inp.files[0]; inp.value = '';
+  const stage = document.getElementById('sfStage-' + date), term = document.getElementById('sfTerm-' + date);
+  const ctrl = (stage && term) ? sfStart(stage, term) : null;
+  const t0 = performance.now(); let failed = false;
   try {
-    const image = await compressImage(inp.files[0], 1400, 0.75);
+    const image = await compressImage(file, 1400, 0.75);
     const r = await postJSON('/api/ledger/scan', { image });
     if (r.ok && r.parsed) lgExpForm = { date, category: r.parsed.category || '기타', amount: r.parsed.amount || '', vendor: r.parsed.vendor || '', method: r.parsed.method || '', photoData: image, scanned: true, _scanned: true };
-    else lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '', photoData: image };
-  } catch { lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '' }; }
-  inp.value = '';
-  renderLgList();
+    else { failed = true; lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '', photoData: image }; }
+  } catch { failed = true; lgExpForm = { date, category: '기타', amount: '', vendor: '', method: '' }; }
+  if (ctrl) { ctrl.stop(); const spent = performance.now() - t0; if (spent < 1100) await sfWait(1100 - spent); if (stage && term) await sfFinish(stage, term, !failed); }
+  lgRefreshPanel(date);
 }
 
-async function lgSaveExpense(date) {
+// 지출 폼
+const LG_CATS = ['주유', '톨비', '식대', '주차', '기타'], LG_METHODS = ['', '카드', '현금영수증', '현금', '세금계산서', '간이영수증'];
+function lgFormHTML() {
+  const f = lgExpForm;
+  const cats = LG_CATS.map((c) => `<button class="xcat${f.category === c ? ' on' : ''}" data-xcat="${c}">${c}</button>`).join('');
+  const meths = LG_METHODS.map((m) => `<option value="${m}"${f.method === m ? ' selected' : ''}>${m || '결제수단'}</option>`).join('');
+  const dateRow = f.freeDate ? `<div class="xr"><input type="date" id="lgeDate" value="${f.date}" style="flex:1;"></div>` : '';
+  return `<div class="xform"><div class="eh">${f._scanned ? '스캔 결과 — 확인 후 추가' : (f.id ? '지출 수정' : '지출 직접 입력')}</div>
+    ${dateRow}<div class="xcats" id="lgeCats">${cats}</div>
+    <div class="xr"><input class="amt2" id="lgeAmt" inputmode="numeric" placeholder="금액" value="${f.amount || ''}"><span class="won">원</span><input class="vd" id="lgeVendor" placeholder="사용처(선택)" value="${esc(f.vendor || '')}"></div>
+    <div class="xr"><select id="lgeMethod">${meths}</select></div>
+    <div class="xfoot"><button class="cx" id="lgeCancel">취소</button><button class="ok" id="lgeOk">${f.id ? '저장' : '추가'}</button></div></div>`;
+}
+function lgSyncForm() {
+  if (!lgExpForm) return;
+  const a = document.getElementById('lgeAmt'), v = document.getElementById('lgeVendor'), m = document.getElementById('lgeMethod'), d = document.getElementById('lgeDate');
+  if (a) lgExpForm.amount = a.value; if (v) lgExpForm.vendor = v.value; if (m) lgExpForm.method = m.value; if (d && d.value) lgExpForm.date = d.value;
+}
+async function lgSaveExpense() {
   lgSyncForm();
   const amt = Math.max(0, Number(String(lgExpForm.amount).replace(/[^\d]/g, '')) || 0);
   if (!amt) { alert('금액을 입력하세요.'); return; }
+  const date = lgExpForm.date;
   const body = { date, category: lgExpForm.category || '기타', amount: amt, vendor: lgExpForm.vendor || '', method: lgExpForm.method || '', scanned: !!lgExpForm.scanned };
   let id = lgExpForm.id;
   if (id) await postJSON('/api/ledger/expense/' + id, body);
   else { const r = await postJSON('/api/ledger/expense', body); id = r.expense && r.expense.id; }
   if (id && lgExpForm.photoData) await postJSON('/api/ledger/expense/' + id + '/photo', { image: lgExpForm.photoData });
-  lgExpForm = null;
-  lgReload();
+  lgExpForm = null; lgOpenDate = date; await lgReload();
 }
 
-function bindLg() {
-  // 단락 열고 닫기
-  document.querySelectorAll('#lgList [data-tog]').forEach((h) => h.onclick = async () => {
-    const date = h.dataset.tog;
-    if (lgOpenDate && lgOpenDate !== date) lgCommitTip(lgOpenDate);
-    lgOpenDate = lgOpenDate === date ? null : date; lgExpForm = null;
-    renderLgList(); refreshLgTotals(); await lgFlushTips();
+// 패널만 다시 그림(리스트 전체 재렌더 없이)
+function lgRefreshPanel(date) {
+  const el = document.getElementById('dexp-' + date); if (!el) return;
+  el.innerHTML = lgPanelHTML(date); bindLgList();
+}
+
+function lgToggleDate(date) {
+  if (lgOpenDate && lgOpenDate !== date) { lgCommitTip(lgOpenDate); }
+  lgOpenDate = lgOpenDate === date ? null : date; lgExpForm = null;
+  lgFlushTips(); renderLgList();
+}
+function lgCommitTip(date) {
+  const el = document.getElementById('lgTipI-' + date), d = lgWorkByDate(date);
+  if (el && d) { d.tip = Math.max(0, Math.round(parseFloat(String(el.value).replace(/[^\d]/g, '')) || 0)); lgTipDirty.add(date); }
+}
+
+function lgApplyHole(date, part, state) {
+  const d = lgWorkByDate(date); if (!d) return;
+  d.hole = d.hole || {};
+  if (state === 'front' || state === 'back') d.hole[part] = state; else delete d.hole[part];
+  if (!Object.keys(d.hole).length) d.hole = null;
+  d.revenue = lgDayRev(d, lgFEES()); d.holed = !!(d.hole && d.parts.some((p) => d.hole[p] === 'front'));
+  postJSON('/api/ledger/holesettle', { date, part, state: state || '' });
+  document.getElementById('hollo-' + date).innerHTML = lgHoleHTML(date);
+  const cutEl = document.getElementById('cut-' + date); if (cutEl) { const c = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - d.revenue; cutEl.textContent = c > 0 ? '· ' + fmtN(c) + '원 감액' : ''; }
+  lgUpdateRow(date); refreshLgHero(); bindLgList();
+}
+function lgUpdateRow(date) {
+  const row = document.querySelector('.row[data-day="' + date + '"]'); const d = lgWorkByDate(date); if (!row || !d) return;
+  const amt = row.querySelector('.amt'); const cut = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - d.revenue;
+  amt.textContent = '+' + fmtN(d.revenue); amt.classList.toggle('holed', cut > 0);
+  const tag = row.querySelector('.hltag'); if (tag) tag.hidden = !(cut > 0);
+}
+
+function bindLgList() {
+  const list = $('lgList');
+  // 행 헤더 클릭(패널 토글). 패널(.dexp)은 .row의 형제라 여기 안 걸림.
+  list.querySelectorAll('.row[data-day]').forEach((r) => { r.onclick = () => lgToggleDate(r.dataset.day); });
+  // 홀정산 부칩
+  list.querySelectorAll('[data-hchip]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const [date, p] = b.dataset.hchip.split('|'); lgSelPart[date] = p; document.getElementById('hollo-' + date).innerHTML = lgHoleHTML(date); bindLgList(); });
+  list.querySelectorAll('[data-hset]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const [date, p, v] = b.dataset.hset.split('|'); lgApplyHole(date, p, v === 'full' ? '' : v); });
+  // 팁 · 퀵 칩(누르면 아래 입력칸에 그대로 반영)
+  list.querySelectorAll('[data-tip]').forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    const [date, v] = b.dataset.tip.split('|');
+    const d = lgWorkByDate(date); if (d) { d.tip = Number(v) * 10000; lgTipDirty.add(date); }
+    lgRerenderTip(date); refreshLgHero();
   });
-  // 부 조합 토글(낙관적 반영 후 저장)
-  document.querySelectorAll('#lgList [data-part]').forEach((c) => c.onclick = () => {
-    const [date, p] = c.dataset.part.split('|'), d = lgDayList.find((x) => x.date === date); if (!d) return;
-    const set = new Set(d.parts); set.has(p) ? set.delete(p) : set.add(p);
-    if (set.size === 0) return;
-    d.parts = [...set].sort();
-    const F = lgFEES(); d.revenue = d.parts.reduce((s, q) => s + F[q], 0);
-    renderLgList(); refreshLgTotals();
-    postJSON('/api/ledger/dayparts', { date, parts: d.parts });
-  });
-  // 팁 실시간 반영(포커스 유지)
-  const tipEl = lgOpenDate && document.getElementById('lgTipI-' + lgOpenDate);
-  if (tipEl) {
-    tipEl.oninput = () => {
-      const d = lgDayList.find((x) => x.date === lgOpenDate); if (!d) return;
-      d.tip = Math.max(0, Math.round((parseFloat(String(tipEl.value).replace(/[^\d.]/g, '')) || 0) * 10000));
-      lgTipDirty.add(lgOpenDate); lgPatchDay(lgOpenDate); refreshLgTotals();
-    };
-    tipEl.onblur = () => { lgCommitTip(lgOpenDate); lgFlushTips(); };
-  }
-  // 지출 스캔 / 직접입력
-  document.querySelectorAll('#lgList [id^="lgScanIn-"]').forEach((inp) => inp.onchange = () => lgScan(inp));
-  document.querySelectorAll('#lgList [data-manual]').forEach((b) => b.onclick = () => { lgExpForm = { date: b.dataset.manual, category: '기타', amount: '', vendor: '', method: '' }; renderLgList(); });
-  document.querySelectorAll('#lgList [data-cat]').forEach((c) => c.onclick = () => { lgSyncForm(); lgExpForm.category = c.dataset.cat; renderLgList(); });
-  document.querySelectorAll('#lgList [data-efcx]').forEach((b) => b.onclick = () => { lgExpForm = null; renderLgList(); });
-  document.querySelectorAll('#lgList [data-efok]').forEach((b) => b.onclick = () => lgSaveExpense(b.dataset.efok));
-  document.querySelectorAll('#lgList [data-ee]').forEach((b) => b.onclick = () => {
-    const [date, id] = b.dataset.ee.split('|'), d = lgDayList.find((x) => x.date === date), e = d && d.expenses.find((x) => String(x.id) === id);
-    if (e) { lgExpForm = { id: e.id, date, category: e.category, amount: e.amount, vendor: e.vendor || '', method: e.method || '' }; renderLgList(); }
-  });
-  document.querySelectorAll('#lgList [data-del]').forEach((b) => b.onclick = async () => { if (!confirm('이 지출을 삭제할까요?')) return; await fetch('/api/ledger/expense/' + b.dataset.del, { method: 'DELETE' }); lgReload(); });
-  // 저장하고 닫기
-  document.querySelectorAll('#lgList [data-save]').forEach((b) => b.onclick = async () => {
-    lgCommitTip(b.dataset.save); await lgFlushTips();
-    const d = lgDayList.find((x) => x.date === b.dataset.save); if (d) d._saved = true;
-    lgOpenDate = null; lgExpForm = null; renderLgList(); refreshLgTotals();
-  });
+  // 팁 · 직접 입력(원 단위, 기본 0)
+  list.querySelectorAll('[id^="lgTipI-"]').forEach((inp) => { inp.onclick = (e) => e.stopPropagation(); inp.oninput = () => { const date = inp.id.replace('lgTipI-', ''), d = lgWorkByDate(date); if (!d) return; d.tip = Math.max(0, Math.round(parseFloat(String(inp.value).replace(/[^\d]/g, '')) || 0)); lgTipDirty.add(date); refreshLgHero(); }; inp.onblur = () => { lgCommitTip(inp.id.replace('lgTipI-', '')); lgFlushTips(); }; });
+  // 스캔 / 직접입력
+  list.querySelectorAll('[id^="lgScanIn-"]').forEach((inp) => inp.onchange = () => lgScan(inp));
+  list.querySelectorAll('.xscan2').forEach((b) => b.onclick = (e) => { e.stopPropagation(); lgTriggerScan(b.dataset.day); });
+  list.querySelectorAll('.xmanual2').forEach((b) => b.onclick = (e) => { e.stopPropagation(); lgExpForm = { date: b.dataset.day, category: '', amount: '', vendor: '', method: '' }; lgRefreshPanel(b.dataset.day); });
+  list.querySelectorAll('[data-xcat]').forEach((c) => c.onclick = (e) => { e.stopPropagation(); lgSyncForm(); lgExpForm.category = c.dataset.xcat; document.getElementById('lgeCats').querySelectorAll('.xcat').forEach((x) => x.classList.toggle('on', x === c)); });
+  list.querySelectorAll('#lgeCancel').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const date = lgExpForm.date; lgExpForm = null; lgRefreshPanel(date); });
+  list.querySelectorAll('#lgeOk').forEach((b) => b.onclick = (e) => { e.stopPropagation(); lgSaveExpense(); });
+  list.querySelectorAll('#lgeAmt').forEach((a) => a.oninput = () => { const n = a.value.replace(/[^0-9]/g, ''); a.value = n ? Number(n).toLocaleString('ko-KR') : ''; });
+  list.querySelectorAll('[data-eedit]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.eedit, all = lgData.expenses || [], ex = all.find((x) => String(x.id) === id); if (ex) { lgExpForm = { id: ex.id, date: ex.date, category: ex.category, amount: ex.amount, vendor: ex.vendor || '', method: ex.method || '' }; lgRefreshPanel(ex.date); } });
+  list.querySelectorAll('[data-edel]').forEach((b) => b.onclick = async (e) => { e.stopPropagation(); if (!confirm('이 지출을 삭제할까요?')) return; await fetch('/api/ledger/expense/' + b.dataset.edel, { method: 'DELETE' }); await lgReload(); });
+  list.querySelectorAll('[data-lb]').forEach((img) => img.onclick = (e) => { e.stopPropagation(); $('lgLbImg').src = img.dataset.lb; $('lgLb').classList.add('on'); });
   // 페이지네이션
-  $('lgPager').querySelectorAll('[data-pg]').forEach((b) => b.onclick = async () => {
-    if (b.disabled) return;
-    if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips();
-    lgPage += b.dataset.pg === 'next' ? 1 : -1; lgOpenDate = null; lgExpForm = null;
-    renderLgList();
-  });
-  // 필터(전체 날짜 / 근무·지출일만)
-  $('lgFilter').querySelectorAll('[data-flt]').forEach((b) => {
-    b.classList.toggle('on', b.dataset.flt === lgFilter);
-    b.onclick = async () => {
-      if (lgFilter === b.dataset.flt) return;
-      if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips();
-      lgFilter = b.dataset.flt; lgOpenDate = null; lgExpForm = null; lgPage = -1;
-      lgDayList = lgBuildDays(); renderLgList();
-    };
-  });
+  $('lgPager').querySelectorAll('[data-pg]').forEach((b) => b.onclick = async () => { if (b.disabled) return; if (lgOpenDate) lgCommitTip(lgOpenDate); await lgFlushTips(); lgPage += b.dataset.pg === 'next' ? 1 : -1; lgOpenDate = null; lgExpForm = null; renderLgList(); });
 }
 
-/* ── 수익계산서 문서 ── */
-function lgDocOpts() { return { rev: $('lgORev').checked, tip: $('lgOTip').checked, exp: $('lgOExp').checked }; }
+// 숨은 파일 입력을 만들어 카메라/갤러리 열기 → lgScan
+function lgTriggerScan(date) {
+  let inp = document.getElementById('lgScanIn-' + date);
+  if (!inp) { inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.id = 'lgScanIn-' + date; inp.hidden = true; inp.onchange = () => lgScan(inp); document.body.appendChild(inp); }
+  inp.click();
+}
+
+function initLedgerButtons() {
+  // 바텀시트·라이트박스는 body 직속으로 옮겨 position:fixed가 뷰 스크롤/transform에 안 갇히게(오프스크린 방지).
+  ['lgGoalSheet', 'lgAnalysisSheet', 'lgLb'].forEach((id) => { const el = $(id); if (el && el.parentElement !== document.body) document.body.appendChild(el); });
+  // 월 이동(히어로 라벨 → 월 점프)
+  $('lgMoBtn').onclick = () => openMonthJump({ y: lgYear, m: lgMonth }, (y, m) => { lgFlushTips().then(() => { lgYear = y; lgMonth = m; lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); }); });
+  // 목표 시트(수위·딥오션)
+  $('lgGoalBtn').onclick = lgwOpen;
+  $('lgwClose').onclick = lgwClose;
+  $('lgwSave').onclick = lgwSave;
+  $('lgwScrim').onclick = lgwClose;
+  $('lgwInput').oninput = () => { if (lgwLocked) return; const v = $('lgwInput').value.replace(/[^\d]/g, ''); $('lgwInput').value = v; lgwWorkGoal = Math.max(0, (Number(v) || 0) * 10000); lgwLiveUpdate(); };
+  // 분석 시트
+  const as = $('lgAnalysisSheet');
+  $('lgAnalysisRow').onclick = () => { lgRenderAnalysis(); as.classList.add('on'); setTimeout(() => as.querySelectorAll('.track i').forEach((i) => i.style.width = i.dataset.w), 90); };
+  $('lgAnaClose').onclick = () => { as.classList.remove('on'); as.querySelectorAll('.track i').forEach((i) => i.style.width = '0'); };
+  as.onclick = (e) => { if (e.target === as) { as.classList.remove('on'); as.querySelectorAll('.track i').forEach((i) => i.style.width = '0'); } };
+  // 라이트박스
+  $('lgLb').onclick = () => $('lgLb').classList.remove('on');
+  // 정산서
+  $('lgDocSeg').querySelectorAll('button').forEach((b) => b.onclick = () => { lgDocPeriod = b.dataset.per; $('lgDocSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); updateDocDesc(); });
+  $('lgDocOpts').querySelectorAll('.optbtn').forEach((b) => b.onclick = () => { b.classList.toggle('on'); updateDocDesc(); });
+  $('lgPdf').onclick = (e) => { e.preventDefault(); lgOpenDoc('pdf'); };
+  $('lgWord').onclick = (e) => { e.preventDefault(); lgOpenDoc('word'); };
+  $('lgMPrint').onclick = lgPrintDoc;
+  $('lgMClose').onclick = () => { $('lgModal').hidden = true; };
+  $('lgModal').onclick = (e) => { if (e.target.id === 'lgModal') $('lgModal').hidden = true; };
+}
+
+function lgRenderAnalysis() {
+  const S = lgData;
+  const nm = (typeof boardOwnerName === 'function' ? boardOwnerName() : '') || (lgProfile && lgProfile.name) || '';
+  $('lgAnaMast').textContent = `${nm ? nm + ' ' : ''}캐디 월 결산`;
+  $('lgAnaTitle').textContent = `${lgYear}. ${lgMonth}`;
+  $('lgAnaSub').textContent = `근무 ${S.workedDays || 0}일 · 부별 · 지출 · 세무 소명`;
+  // 부별 수익(+팁)
+  const parts = ['1', '2', '3'].filter((p) => S.byPart && S.byPart[p] && S.byPart[p].days).map((p) => ({ k: p + '부', v: S.byPart[p].amount }));
+  if (S.tipTotal > 0) parts.push({ k: '팁', v: S.tipTotal });
+  const pmax = Math.max(1, ...parts.map((x) => x.v));
+  $('lgAnaParts').innerHTML = parts.length ? parts.map((x) => lgAItem(x.k, x.v, pmax, false)).join('') : lgAEmpty('근무 없음');
+  const cats = Object.entries(S.expByCat || {}).sort((a, b) => b[1] - a[1]);
+  const cmax = Math.max(1, ...cats.map((c) => c[1]));
+  $('lgAnaExp').innerHTML = cats.length ? cats.map(([c, a]) => lgAItem(c, a, cmax, true)).join('') : lgAEmpty('지출 없음');
+  // 히어로(순이익) · 듀오(수입/지출) · 합계
+  $('lgAnaNet').textContent = fmtN(S.netProfit);
+  $('lgAnaDInc').textContent = fmtN(S.revenueTotal);
+  $('lgAnaDExp').textContent = '−' + fmtN(S.expTotal);
+  $('lgAnaTInc').textContent = wonKo(S.revenueTotal);
+  $('lgAnaTExp').textContent = '−' + wonKo(S.expTotal);
+  $('lgAnaTNet').textContent = wonKo(S.netProfit);
+}
+// 분석 항목 한 줄: 점선 리더(이름 ···· 금액) + 아래 막대(수치 강조)
+function lgAItem(k, v, mx, isExp) {
+  return `<div class="aitem"><div class="arow"><span class="k">${esc(String(k))}</span><span class="dots"></span><span class="v">${wonKo(v)}</span></div><div class="track${isExp ? ' exp' : ''}"><i data-w="${Math.round(v / mx * 100)}%"></i></div></div>`;
+}
+function lgAEmpty(t) { return `<div style="color:#8a8270;font-size:12px;font-style:italic;">${t}</div>`; }
+
+function lgDocOpts() { const on = (o) => $('lgDocOpts').querySelector('[data-opt="' + o + '"]').classList.contains('on'); return { rev: on('rev'), tip: on('tip'), exp: on('exp') }; }
 function updateDocDesc() {
   const o = lgDocOpts();
-  let name = o.rev && o.exp ? '수입·지출 정산서(순이익 포함)' : o.rev ? '수입 정산서' : o.exp ? '지출 정산서' : '(항목을 하나 이상 선택)';
-  const bits = []; if (o.rev) bits.push('부별 수익' + (o.tip ? '+팁' : '')); if (o.exp) bits.push('지출 내역');
-  $('lgDocDesc').textContent = name + (bits.length ? ' — ' + bits.join(' · ') : '');
-  $('lgDocScope').textContent = lgDocPeriod === 'year' ? `${lgYear}년 전체(월별 요약)` : `${lgYear}년 ${lgMonth}월`;
+  $('lgDocTitle').textContent = lgDocPeriod === 'year' ? '올해 정산서 (연 단위)' : '이 달 정산서';
+  const name = o.rev && o.exp ? '수입·지출 · 순이익 포함' : o.rev ? '수입만 (부별 수익' + (o.tip ? '+팁)' : ')') : o.exp ? '지출만' : '항목을 하나 이상 선택';
+  $('lgDocDesc').textContent = name;
 }
-
+/* ── 수익계산서 문서 ── */
 // 문서 본문(head/style 제외) — 미리보기·PDF·Word 공용
 function lgReportInner(o, S, opts) {
   const rows = (S.rows || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -2069,19 +2270,6 @@ async function lgSavePdf() {
   holder.remove();   // ★공유(share) 시트가 뜨기 '전에' 반드시 제거 — 뒤에 컨테이너가 비치지 않게
   if (blob) await lgDeliver(blob, name, 'application/pdf');
   else lgPrintDoc();
-}
-
-function initLedgerButtons() {
-  $('lgPrev').onclick = async () => { await lgFlushTips(); lgMonth--; if (lgMonth < 1) { lgMonth = 12; lgYear--; } lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
-  $('lgNext').onclick = async () => { if ($('lgNext').disabled) return; await lgFlushTips(); lgMonth++; if (lgMonth > 12) { lgMonth = 1; lgYear++; } lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
-  $('lgJump').onclick = async () => { await lgFlushTips(); const n = new Date(); lgYear = n.getFullYear(); lgMonth = n.getMonth() + 1; lgOpenDate = null; lgExpForm = null; lgPage = -1; loadLedger(); };
-  $('lgSeg').querySelectorAll('button').forEach((b) => b.onclick = () => { lgDocPeriod = b.dataset.per; $('lgSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); updateDocDesc(); });
-  ['lgORev', 'lgOTip', 'lgOExp'].forEach((id) => $(id).addEventListener('change', updateDocDesc));
-  $('lgPdf').onclick = () => lgOpenDoc('pdf');
-  $('lgWord').onclick = () => lgOpenDoc('word');
-  $('lgMPrint').onclick = lgPrintDoc;
-  $('lgMClose').onclick = () => { $('lgModal').hidden = true; };
-  $('lgModal').onclick = (e) => { if (e.target.id === 'lgModal') $('lgModal').hidden = true; };
 }
 
 /* ── 카트 점검 ── */
