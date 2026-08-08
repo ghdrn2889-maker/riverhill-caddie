@@ -332,15 +332,21 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   const tc = Number(verdict.teamCount);
   const myp = Number(next.myPosition);
   if (!removed && !offVerdict && Number.isFinite(tc) && tc > 0 && myp > 0) {
-    next.cutLine = tc; // 팀 수는 가장 권위 있는 실시간 확정선 → 티오프표 스냅샷보다 우선
-    const nowWork = myp <= tc;
+    // ★'○○까지 근무' 명시 확정선(cutoffAnnounced)이 팀수보다 크면 그 사람 콕 집은 커트라인이 우선.
+    //  팀수(N팀)는 순번단위와 어긋날 수 있어(예: 팀수 23인데 확정선 34번·티오프표도 34번까지 18:31),
+    //  그대로 쓰면 확정 근무자(연승준 pos34)를 스페어로 잘못 내리고 티오프를 지운다. 큰 쪽을 실효 확정선으로.
+    const annCut = (verdict.cutoffAnnounced && Number(verdict.cutoffPosition) > 0) ? Number(verdict.cutoffPosition) : 0;
+    const effCut = Math.max(tc, annCut);
+    const cutTxt = effCut > tc ? `확정선 ${effCut}번` : `${tc}팀`;
+    next.cutLine = effCut; // 실효 확정선 → 티오프표 스냅샷보다 우선
+    const nowWork = myp <= effCut;
     const newStatus = nowWork ? (next.teeTime ? 'assigned' : 'work') : 'spare';
     if (newStatus !== next.status) {
       const reversal = (isWait(next.status) && isWork(newStatus)) || (isWork(next.status) && isWait(newStatus));
       changes.push({ field: 'teamcount', from: next.status, to: newStatus, reversal,
         msg: nowWork
-          ? `현재 ${cur.part || '3부'} ${tc}팀 — 순번 ${myp}번 근무 거의 확정(준비 시작)`
-          : `현재 ${cur.part || '3부'} ${tc}팀 — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - tc - 1)}명)` });
+          ? `현재 ${cur.part || '3부'} ${cutTxt} — 순번 ${myp}번 근무 거의 확정(준비 시작)`
+          : `현재 ${cur.part || '3부'} ${cutTxt} — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - effCut - 1)}명)` });
       next.status = newStatus;
       if (!nowWork) { next.teeTime = ''; next.course = ''; } // 스페어로 내려가면 임시 티오프 해제
     }
