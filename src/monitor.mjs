@@ -438,7 +438,7 @@ app.get('/api/board-review', gate, (req, res) => {
     }
     const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
     flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
-    reflectCrossPartSwaps(part, rows);   // 크로스파트 대바 반영(예: 3부 연승준 자리 → (연승준)박선하)
+    reflectCrossPartSwaps(part, rows, memberSet);   // 대바 셀을 실제 배치 캐디 이름으로 단순화(rawName 보존)
     // ★원본 이미지: '전체 배치표'(article 본문) 우선. latestImage는 3부만 잘린 당추 변동 크롭이라
     //  관리자가 "옛날/이상한 사진"으로 인지 → 전체판을 원본으로 주고, 변동 크롭은 variantImage로 별도 제공.
     const baseImg = (lb.article && lb.article.images && lb.article.images[0]) || '';
