@@ -11,7 +11,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './ana
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
-import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -1168,12 +1168,12 @@ function reconcileCrossPartConsistency(dateLabel) {
         const tp = loadToday(m.id, other);
         if (!tp || !tp.status) continue;
         if (!['spare', 'waiting', 'near'].includes(String(tp.status))) continue;   // 스페어만(근무 보호)
-        const locked = tp._adminLock && dayKey(tp.date) === dayKey(tp._adminLock.dk) && tp._adminLock.fields && (tp._adminLock.fields.status || tp._adminLock.fields.myPosition);
-        if (locked) continue;                                        // 관리자 확정 보존
         const tpISO = worklog.labelToISO(tp.date);
         if (wantISO && tpISO && tpISO !== wantISO) continue;         // 같은 날만
+        // ★_adminLock이 걸린 스페어도 정리한다 — 크로스파트 대바는 '그 사람이 부를 옮겼다'는 authoritative 신호라
+        //  옛 확정선/순번 잠금보다 우선한다(안 그러면 잠긴 스테일 스페어가 영구 중복으로 남음). 새 상태는 잠금 해제.
         if (other === '1' || other === '2') clearTodayPart(m.id, other);
-        else saveToday({ ...tp, status: 'unknown', myPosition: 0, teeTime: '', course: '', _swappedOut: true, updatedAt: Date.now() }, m.id, other);
+        else { const { _adminLock, ...rest } = tp; saveToday({ ...rest, status: 'unknown', myPosition: 0, teeTime: '', course: '', _swappedOut: true, updatedAt: Date.now() }, m.id, other); }
         console.log(`🔁 [대바 정합] ${m.board_name}: ${[...inParts].join('·')}부 대바 점유 → ${other}부 스페어 잔재 정리`);
       }
     }
