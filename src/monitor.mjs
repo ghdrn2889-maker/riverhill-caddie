@@ -365,6 +365,12 @@ function flagMisreads(rows) {
 app.get('/api/board-review', gate, (req, res) => {
   try {
     const part = String(req.query.part || '3');
+    // ★티오프 '칸 전체' 시각 목록 — teeTimes(칸 전체 스캔) ∪ teeGrid 시각. 검수 드롭다운이 모든 시간대를 제공하게.
+    const _mn = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : 0; };
+    const buildDayTimes = (teeTimes, grid) => [...new Set([
+      ...(Array.isArray(teeTimes) ? teeTimes : []).map((t) => (String(t).match(/\d{1,2}:\d{2}/) || [''])[0]),
+      ...(Array.isArray(grid) ? grid : []).map((g) => (String(g && g.time).match(/\d{1,2}:\d{2}/) || [''])[0]),
+    ].filter(Boolean))].sort((a, b) => _mn(a) - _mn(b));
     // ★1·2부 — 메인 파이프라인이 저장한 board 순번표(board-parts-store)에서 3부와 동일한 검수 뷰 구성.
     if (part !== '3') {
       const bp = loadBoardPartsStore();
@@ -388,6 +394,7 @@ app.get('/api/board-review', gate, (req, res) => {
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
         syncSig: `${bp.at || ''}|${(pd._adminCorrected && pd._adminCorrected.at) || ''}`,   // 신선도(store 기준)
         uncertain: pd.uncertain || '', teamCount: Number(pd.teamCount) || 0, cutLine, cutoffName: pd.cutoffName || '', rows, interns,
+        dayTimes: buildDayTimes(pd.teeTimes, grid),
       } });
     }
     const lb = loadLastBoard();
@@ -421,6 +428,7 @@ app.get('/api/board-review', gate, (req, res) => {
       syncSig: `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`,
       at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
       cutLine, cutoffName: v.cutoffName || '', rows, interns,
+      dayTimes: buildDayTimes(v.teeTimes, grid),
     } });
   } catch (e) { console.error('board-review 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });

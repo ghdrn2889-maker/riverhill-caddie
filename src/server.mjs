@@ -729,6 +729,14 @@ app.post('/api/ledger/dayparts', (req, res) => {
   const { date, parts } = req.body || {};
   res.json({ ok: true, day: ledger.setDayParts(date, parts, req.user?.id || 1) });
 });
+app.post('/api/ledger/holesettle', (req, res) => {
+  const { date, part, state } = req.body || {};
+  res.json({ ok: true, day: ledger.setHoleSettle(date, part, state, req.user?.id || 1) });
+});
+app.post('/api/ledger/goal', (req, res) => {
+  const { year, month, amount } = req.body || {};
+  res.json({ ok: true, goal: ledger.setGoal(year, month, amount, req.user?.id || 1) });
+});
 app.post('/api/ledger/expense', (req, res) => {
   res.json({ ok: true, expense: ledger.addExpense(req.body || {}, req.user?.id || 1) });
 });
@@ -1162,8 +1170,15 @@ function backfillFromLastBoard(userId, member) {
 //  3부로 오독해 정본(lastboard)·3부 회원을 오염시킨다. 제목의 명시 부를 감지해 3부 코드에 진입시키지 않고,
 //  '그 부'만 판독→모니터(board-parts) 저장 + (MINOR_PART_PUSH 켜지면)그 부 회원 처리. 3부 경로 완전 불변.
 function detectDeclaredBoardPart(full) {
-  const m = String(full?.subject || '').match(/([123])\s*부\s*(?:배치표|번호표|시간표)/);
-  return m ? m[1] : null;   // '1'|'2'|'3'|null(전체/불명확 → 기존 3부 경로)
+  const s = String(full?.subject || '');
+  const m = s.match(/([123])\s*부\s*(?:배치표|번호표|시간표)/);
+  if (m) return m[1];       // '1'|'2'|'3' 명시 배치표
+  // ★1·2부 '수정/변동' 글: 부와 '배치표' 사이에 다른 말(수정 등)이 껴서 위 정규식이 놓치던 케이스.
+  //  제목에 '1부'/'2부'가 있고(3부 언급은 없음) 배치·변동 키워드가 함께면 그 부로 라우팅
+  //  (예: "2부 수정 배치표", "2부 대바 반영", "2부 커트 변동"). 3부 언급 있으면 기존 3부 경로 유지(불변).
+  const pm = s.match(/([12])\s*부/);
+  if (pm && !/3\s*부/.test(s) && /(배치|번호표|시간표|수정|변동|추가|대바|대기\s*바꿈|커트|컷|마감|재배치|순번|스페어)/.test(s)) return pm[1];
+  return null;              // 전체/불명확 → 기존 3부 경로
 }
 
 // ★시스템 전체 관련성 — '회원#1 3부'가 아니라 '어느 부·어느 회원에게든 일정 영향'이 있으면 true.
@@ -1191,6 +1206,7 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
     try {
       const partData = {
         roster: vp.part3Roster.slice(), teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
+        teeTimes: Array.isArray(vp.teeTimes) ? vp.teeTimes : [],   // ★칸 전체 티오프 시각(검수 드롭다운용)
         teamCount: Number(vp.teamCount) || 0, internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
         internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
         cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
@@ -1419,6 +1435,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
             subject: full.subject || '', image: (full.images && full.images[0]) || '', url: full.url || '' }, full, p, {
             roster: vp.part3Roster.slice(),
             teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
+            teeTimes: Array.isArray(vp.teeTimes) ? vp.teeTimes : [],   // ★칸 전체 티오프 시각(검수 드롭다운용)
             teamCount: Number(vp.teamCount) || 0,
             internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
             internCount: Number(vp.internCount) || 0,

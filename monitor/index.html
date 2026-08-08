@@ -1241,7 +1241,8 @@
     arr.forEach(function(r,idx){ r.pos=idx+1; });
     rvRows=arr;
   }
-  function rvDayTimes(){ var s={}; rvRows.forEach(function(r){ if(r.tee&&!r.moveTo)s[r.tee]=1; }); return Object.keys(s).sort(function(a,b){return rvMin(a)-rvMin(b);}); }
+  // ★배치표 티오프 '칸 전체' 시각(서버 dayTimes) ∪ 현재 행에 찍힌 시각 — 자동감지가 놓친 슬롯도 수동 지정 가능.
+  function rvDayTimes(){ var s={}; rvRows.forEach(function(r){ if(r.tee&&!r.moveTo)s[r.tee]=1; }); ((rvBoard&&rvBoard.dayTimes)||[]).forEach(function(t){ if(t)s[t]=1; }); return Object.keys(s).sort(function(a,b){return rvMin(a)-rvMin(b);}); }
   function rvConf(){ var m={}; rvRows.forEach(function(r){ if(r.status==='work'&&!rvOff(r)&&!r.moveTo&&r.tee){ var k=r.tee+'|'+(r.course||'OUT'); (m[k]=m[k]||[]).push(r);} }); return Object.keys(m).filter(function(k){return m[k].length>1;}).map(function(k){var p=k.split('|');return {tee:p[0],course:p[1],rows:m[k]};}).sort(function(a,b){return rvMin(a.tee)-rvMin(b.tee);}); }
   function rvConfPos(){ var s={}; rvConf().forEach(function(c){c.rows.forEach(function(r){s[r.pos]=1;});}); return s; }
   function rvPresHas(name,p){ var s=rvPresence[rvNk(name)]; return !!(s&&s.indexOf(p)>=0); }
@@ -1271,7 +1272,7 @@
         '<div class="rv-fr"><div class="rv-fl"><label>이름</label><input class="e-name" value="'+esc(r.name)+'"></div><div class="rv-fl" style="flex:.9"><label>근태</label>'+dutySel+'</div></div>'+
         '<div class="rv-fr"><div class="rv-fl"><label>상태 (앞/뒤 함께 확정)</label><div class="rv-seg st e-status"><button data-s="work" class="'+(r.status==='work'?'on':'')+'">근무</button><button data-s="spare" class="'+(r.status==='spare'?'on spare':'')+'">스페어</button></div></div>'+
           '<div class="rv-fl"><label>부 이동</label><div class="rv-seg mv e-move">'+moveBtns+'</div></div></div>'+
-        '<div class="rv-tb'+(work?' show':'')+'"><div class="rv-fr"><div class="rv-fl"><label>티오프 시간</label>'+teeSel+'</div><div class="rv-fl"><label>코스</label><div class="rv-seg e-course"><button data-c="OUT" class="'+(r.course!=='IN'?'on':'')+'">OUT</button><button data-c="IN" class="'+(r.course==='IN'?'on IN':'')+'">IN</button></div></div></div><div class="rv-hint">그날 있는 티오프 시간만 떠요. 이미 찬 자리를 고르면 상단에 중복 경고.</div></div>'+
+        '<div class="rv-tb'+(work?' show':'')+'"><div class="rv-fr"><div class="rv-fl"><label>티오프 시간</label>'+teeSel+'</div><div class="rv-fl"><label>코스</label><div class="rv-seg e-course"><button data-c="OUT" class="'+(r.course!=='IN'?'on':'')+'">OUT</button><button data-c="IN" class="'+(r.course==='IN'?'on IN':'')+'">IN</button></div></div></div><div class="rv-hint">배치표 티오프 칸 전체 시간이 떠요. 자동으로 못 잡은 자리도 여기서 지정할 수 있어요. 이미 찬 자리를 고르면 상단에 중복 경고.</div></div>'+
         ((rvOff(r)||r.moveTo)?'':'<div style="margin-top:2px"><button data-act="swap" type="button" style="width:100%;font:inherit;font-weight:700;font-size:13px;border:1px dashed var(--acc);background:transparent;color:var(--acc);border-radius:10px;padding:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>대바 · 다른 부 캐디와 자리 맞바꿈</button></div>')+
         '<div class="rv-eb"><button class="rv-cancel" data-act="cancel">되돌리기</button><button class="rv-done" data-act="done">이 사람 적용</button></div>'+
       '</div></div>';

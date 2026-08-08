@@ -1531,6 +1531,7 @@ export function interpretForMember(article, shared, member, today = null) {
     addedTees: shared.addedTees,
     teamCount: shared.teamCount,
     teeGrid: shared.teeGrid,
+    teeTimes: shared.teeTimes,             // ★티오프 칸 전체 시각(프레임보호로 teeGrid가 얼어도 신선한 전 시각 보존 → 검수 드롭다운)
     part3Roster: shared.part3Roster,
     crewDuty: shared.crewDuty,             // ★조배치표 근태칸 맵 — 휴무 게이트·54/찾근 판단에 필수(누락 시 게이트 무력화)
     guaranteedWork: shared.guaranteedWork, // ★명단 셀 태그 무조건근무(54/찾근) — 회원 경로에도 반영

@@ -25,7 +25,8 @@ function trimArticle(a) {
   };
 }
 
-const localDayStr = (ts) => { const d = new Date(Number(ts) || 0); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+// ★KST(Asia/Seoul) 달력일 — 서버 로컬시간이 KST가 아니어도 자정경계에서 오판하지 않게.
+const localDayStr = (ts) => new Date(Number(ts) || 0).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
 // 부별 순번표 저장(upsert).
 //  ★핵심 불변식: '같은 날'이면 이번 판독에 담긴 그 부만 덮고 형제 부(예: 1부)는 절대 지우지 않는다.
@@ -37,11 +38,10 @@ const localDayStr = (ts) => { const d = new Date(Number(ts) || 0); return `${d.g
 export function setBoardPart(articleId, meta, article, part, data) {
   const id = String(articleId || '');
   let s = loadBoardPartsStore();
-  const incomingDay = String(meta.dateLabel || '');
-  const storeDay = String((s && s.dateLabel) || '');
-  const labelSaysNewDay = !!(incomingDay && storeDay && incomingDay !== storeDay);
+  // ★리셋은 '확실히 다른 달력일(KST)'일 때만. 판독 날짜라벨(OCR)은 오독이 잦아 폐기 트리거로 쓰지 않는다 —
+  //  같은 날 2부 '수정 배치표'가 라벨/제목을 조금 다르게 읽어도 형제 부(1부)를 절대 지우지 않게.
   const atSaysNewDay = !!(s && s.at && localDayStr(s.at) !== localDayStr(Date.now()));
-  if (!s || !s.parts || labelSaysNewDay || atSaysNewDay) {
+  if (!s || !s.parts || atSaysNewDay) {
     // 저장소 없음 또는 확실히 새 날 → 새로 시작(옛 부 데이터 폐기가 맞음).
     s = { articleId: id, at: meta.at || Date.now(), dateLabel: meta.dateLabel || '', subject: meta.subject || '',
       image: meta.image || '', url: meta.url || '', article: trimArticle(article), parts: {} };

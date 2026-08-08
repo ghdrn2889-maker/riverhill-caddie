@@ -160,10 +160,12 @@ const PART_PROMPT = (
   + 'For every row read BOTH the printed 순번 number and the name as a pair. Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Skip a row only if it has no name. '
   + 'IGNORE any text that is NOT a numbered 순번 row — notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
+  + 'Read this tee table from the very TOP row to the very BOTTOM row — do NOT stop early; rows newly added at the BOTTOM (spares just given a tee time) matter most. '
   + 'cut = the highest team number in the tee table (커트라인). '
+  + 'ALSO give "times": EVERY printed 시간(HH:MM) in that 시간 column, top to bottom, in order, INCLUDING rows whose OUT and IN team numbers are both blank (an empty slot still counts as a time on the board). '
   + 'ALSO give "rosterCols": for EACH vertical roster column, its horizontal span as {x0,x1} fractions (0=left edge, 1=right edge OF THIS IMAGE), left-to-right, EXCLUDING the tee table. Each span should cover the 순번 number AND the name of that column. '
   + 'Output ONLY strict JSON, no prose. "roster" is a best-effort flat list in 순번 order (fallback): '
-  + '{"rosterCols":[{"x0":0.02,"x1":0.20},{"x0":0.24,"x1":0.42}],"roster":[{"pos":1,"name":"차은경(54)"},...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"cut":N}'
+  + '{"rosterCols":[{"x0":0.02,"x1":0.20},{"x0":0.24,"x1":0.42}],"roster":[{"pos":1,"name":"차은경(54)"},...],"tee":[{"pos":n,"time":"HH:MM","course":"OUT|IN"}],"times":["06:30","06:37",...],"cut":N}'
 );
 
 // 평평한 명단(문자열 또는 {pos,name} 배열) → 순번 위치정렬 배열(index=pos-1, 빈 자리 ''). pos 없으면 순서대로.
@@ -251,8 +253,13 @@ export async function readPartWithClaude(imagePath) {
     const tee = (Array.isArray(j.tee) ? j.tee : [])
       .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: /IN/i.test(String(t.course)) ? 'IN' : 'OUT' }))
       .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
+    // ★티오프 칸 전체 시각(팀번호 유무 무관) — 검수에서 모든 시간대를 고를 수 있게. tee 시각도 합쳐 누락 방지.
+    const times = [...new Set([
+      ...(Array.isArray(j.times) ? j.times : []).map((t) => (String(t).match(/\d{1,2}:\d{2}/) || [''])[0]),
+      ...tee.map((t) => t.time),
+    ].filter(Boolean))].sort((a, b) => (Number(a.split(':')[0]) * 60 + Number(a.split(':')[1])) - (Number(b.split(':')[0]) * 60 + Number(b.split(':')[1])));
     const cut = Number(j.cut) || tee.reduce((mx, t) => Math.max(mx, t.pos), 0);
-    return (roster.filter(Boolean).length || tee.length) ? { roster, tee, cut, rosterCols } : null;
+    return (roster.filter(Boolean).length || tee.length) ? { roster, tee, times, cut, rosterCols } : null;
   } catch { return null; }
 }
 

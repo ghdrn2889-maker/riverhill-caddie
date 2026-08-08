@@ -14,6 +14,9 @@ const FILE = 'ledger.json';
 // 캐디피 단가 — 고정값(로직에 박음, 설정에서 변경 불가). 1·2부 14만, 3부 15만.
 //   조합은 자동 합산: 1·3부 = 14+15 = 29만, 54(1·2·3부) = 14+14+15 = 43만.
 const FEES = { 1: 140000, 2: 140000, 3: 150000 };
+// 홀정산(경기 중단) 캐디피 — 전반 중단/후반 미시작: 1·2부 7만, 3부 8만. 후반 진입 이후는 정상가(기록용).
+const HOLE_FEES = { 1: 70000, 2: 70000, 3: 80000 };
+const HOLE_STATES = ['front', 'back']; // front=전반 중단(감액) · back=후반 이후(정상가·기록용)
 const DEFAULT_PART = '3'; // 부를 알 수 없을 때 가정하는 기본부(3부 스페어).
 const EXP_CATS = ['주유', '톨비', '식대', '주차', '기타'];
 const EXP_METHODS = ['카드', '현금영수증', '현금', '세금계산서', '간이영수증', ''];
@@ -22,6 +25,8 @@ function load(userId = 1) {
   const d = loadUserJSON(userId, FILE, null) || {};
   d.tips = d.tips || {};        // { 'YYYY-MM-DD': 금액 }
   d.dayParts = d.dayParts || {}; // { 'YYYY-MM-DD': ['2','3'] }  수동 부 보정
+  d.holeSettle = d.holeSettle || {}; // { 'YYYY-MM-DD': { '2':'front', '3':'back' } } 홀정산(부별)
+  d.goals = d.goals || {};       // { 'YYYY-MM': 금액 } 월별 수입 목표(선택)
   d.expenses = d.expenses || []; // [{ id, date, category, amount, method, vendor, memo, photo, scanned }]
   return d;
 }
@@ -44,7 +49,10 @@ function partsForDay(day, d) {
   return [DEFAULT_PART];
 }
 function feeOf(part) { return FEES[part] || 0; }
-function dayRevenue(parts) { return parts.reduce((sum, p) => sum + feeOf(p), 0); } // 부 조합 자동 합산(1·3부=29만 등)
+// 홀정산 반영 단가 — 'front'(전반 중단)만 감액, 'back'(후반 이후)·미지정은 정상가.
+function feeOfHole(part, state) { return state === 'front' ? (HOLE_FEES[part] || 0) : (FEES[part] || 0); }
+// 그날 수익 — hole = { part: 'front'|'back' }(해당 날짜의 홀정산 맵). 부별 감액을 반영해 합산.
+function dayRevenue(parts, hole) { return parts.reduce((sum, p) => sum + feeOfHole(p, hole && hole[p]), 0); }
 
 // 한 날짜의 '유효 부 조합' — 수동보정(dayParts) → 일일 근무 일지 rounds → 근거 없으면 null.
 //  일지 표시와 정산 수익이 같은 값을 쓰도록 하는 단일 소스(partsForDay와 동일 우선순위).
@@ -81,11 +89,15 @@ export function summary({ year, month } = {}, userId = 1) {
   let workRevenue = 0;
   const rows = worked.map((day) => {
     const parts = partsForDay(day, d);
-    const rev = dayRevenue(parts);
-    parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amount += feeOf(p); } });
+    const hole = d.holeSettle[day.date] || null;
+    const rev = dayRevenue(parts, hole);
+    // 부별 요약도 홀정산 감액을 반영해 합산 → 부별 합계와 근무 수입 소계가 항상 일치.
+    parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amount += feeOfHole(p, hole && hole[p]); } });
     workRevenue += rev;
     const tip = Math.max(0, Number(d.tips[day.date]) || 0);
-    return { date: day.date, parts, tang: parts.length >= 3 ? '54' : parts.join('/'), revenue: rev, tip };
+    // holed: 감액(front)이 하나라도 있는 날 표시용. holeParts: 부별 상태 맵(정산서·UI 뱃지).
+    const holed = !!(hole && parts.some((p) => hole[p] === 'front'));
+    return { date: day.date, parts, tang: parts.length >= 3 ? '54' : parts.join('/'), revenue: rev, tip, hole: hole || null, holed };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const pendingRevenue = 0;
@@ -95,16 +107,41 @@ export function summary({ year, month } = {}, userId = 1) {
   const expByCat = {};
   for (const e of expenses) { const c = EXP_CATS.includes(e.category) ? e.category : '기타'; expByCat[c] = (expByCat[c] || 0) + (Math.max(0, Number(e.amount) || 0)); }
 
+  // 월 목표(선택) — 월 보기일 때만. 목표 대비 = 수입(캐디피+팁) 기준. 남은 일수는 이번 달일 때만.
+  const revenueTotal = workRevenue + tipTotal;
+  let goal = 0, goalRemaining = 0, daysLeft = 0, perDay = 0;
+  if (month) {
+    const ym = `${year}-${String(month).padStart(2, '0')}`;
+    goal = Math.max(0, Number(d.goals[ym]) || 0);
+    const now = new Date();
+    const isCur = Number(year) === now.getFullYear() && Number(month) === (now.getMonth() + 1);
+    if (isCur) daysLeft = Math.max(0, new Date(year, month, 0).getDate() - now.getDate());
+    if (goal > 0) { goalRemaining = Math.max(0, goal - revenueTotal); perDay = daysLeft > 0 ? Math.ceil(goalRemaining / daysLeft) : 0; }
+  }
+
   return {
     fees: FEES,
     byPart, partKo: PART_KO,
     workedDays: worked.length, pendingDays: pending.length,
     workRevenue, pendingRevenue,
-    tipTotal, revenueTotal: workRevenue + tipTotal,
+    tipTotal, revenueTotal,
     expTotal, expByCat,
-    netProfit: workRevenue + tipTotal - expTotal,
+    netProfit: revenueTotal - expTotal,
+    goal, goalRemaining, daysLeft, perDay,
     rows, expenses,
   };
+}
+
+// ── 월 목표 저장 ──
+export function setGoal(year, month, amount, userId = 1) {
+  const y = Number(year), m = Number(month);
+  if (!y || !m || m < 1 || m > 12) return null;
+  const ym = `${y}-${String(m).padStart(2, '0')}`;
+  const d = load(userId);
+  const n = Math.max(0, Math.round(Number(amount) || 0));
+  if (n > 0) d.goals[ym] = n; else delete d.goals[ym];
+  save(userId, d);
+  return { ym, goal: d.goals[ym] || 0 };
 }
 
 // ── 팁 ─────────────────────────────────────────
@@ -126,6 +163,23 @@ export function setDayParts(dateISO, parts, userId = 1) {
   save(userId, d);
   return { date: dateISO, parts: d.dayParts[dateISO] || null };
 }
+
+// ── 홀정산(경기 중단) — 날짜·부별 상태 저장 ──
+//  state: 'front'(전반 중단·감액) | 'back'(후반 이후·정상가·기록용) | null/''(해제).
+export function setHoleSettle(dateISO, part, state, userId = 1) {
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  const p = String(part);
+  if (!['1', '2', '3'].includes(p)) return null;
+  const d = load(userId);
+  const st = HOLE_STATES.includes(state) ? state : null;
+  const day = d.holeSettle[dateISO] || {};
+  if (st) day[p] = st; else delete day[p];
+  if (Object.keys(day).length) d.holeSettle[dateISO] = day; else delete d.holeSettle[dateISO];
+  save(userId, d);
+  return { date: dateISO, hole: d.holeSettle[dateISO] || null };
+}
+// 한 날짜의 홀정산 맵({ part: state }) — UI 초기 렌더용.
+export function holeSettleFor(dateISO, userId = 1) { return load(userId).holeSettle[dateISO] || null; }
 
 // ── 지출(영수증) CRUD ──────────────────────────
 function newId(d) {
@@ -228,7 +282,7 @@ export function incomeReportHTML(opts = {}, userId = 1) {
     const tangKo = (parts) => parts.length >= 3 ? '54(1·2·3부)' : parts.map((p) => `${p}부`).join('·');
     const dayCols = showTip ? 5 : 4;
     const dayRows = dayRowsAsc.map((r, i) => `<tr>
-      <td>${i + 1}</td><td>${esc(r.date)}(${dow(r.date)})</td><td>${tangKo(r.parts)}</td>
+      <td>${i + 1}</td><td>${esc(r.date)}(${dow(r.date)})</td><td>${tangKo(r.parts)}${r.holed ? ' <span class="hole">홀정산</span>' : ''}</td>
       <td class="num strong">${won(r.revenue)}</td>${showTip ? `<td class="num">${r.tip ? won(r.tip) : '-'}</td>` : ''}</tr>`).join('')
       || `<tr><td colspan="${dayCols}" class="mid">확정된 근무가 없습니다.</td></tr>`;
     // 부별 요약.
@@ -296,6 +350,7 @@ export function incomeReportHTML(opts = {}, userId = 1) {
 
   const noteBits = [];
   if (showRev) noteBits.push('수입은 확정 근무일 × 부별 캐디피(1·2부 14만원, 3부 15만원) 자동 합산입니다.');
+  if (showRev && st.rows.some((r) => r.holed)) noteBits.push("'홀정산' 표시일은 경기 중단(전반)으로 캐디피가 감액된 날입니다(1·2부 7만원, 3부 8만원).");
   if (showExp) noteBits.push('지출은 업무를 위한 실제 경비이며, 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서입니다. 본 문서는 이를 정리·집계한 소명자료로, 신고 방식(장부작성 여부)에 따라 공제 범위가 다르므로 세무사 상담을 권장합니다.');
 
   const mso = opts.forWord ? `<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->` : '';
@@ -316,6 +371,7 @@ export function incomeReportHTML(opts = {}, userId = 1) {
   table.log th{background:#0b5d34;color:#fff;font-weight:700;font-size:12px;}
   table.log td.num{text-align:right;font-variant-numeric:tabular-nums;} table.log td.strong{font-weight:700;}
   table.log td.mid{text-align:center;color:#999;}
+  table.log .hole{display:inline-block;font-size:10.5px;font-weight:700;color:#8a5a12;background:#f6ecd6;border-radius:4px;padding:1px 5px;margin-left:2px;}
   table.log tfoot td{background:#eef2f0;font-weight:700;}
   table.log tfoot tr.tot td{background:#0b5d34;color:#fff;font-size:13.5px;}
   .net{width:60%;border-collapse:collapse;margin:10px 0 6px;font-size:13.5px;}

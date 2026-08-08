@@ -425,6 +425,12 @@ function verdictFromPart(article, member, pd, allParts, offList = []) {
   const teeGrid = (pd.tee || [])
     .map((t) => ({ pos: Number(t.pos), time: String(t.time || ''), course: String(t.course || '').toUpperCase() }))
     .filter((t) => t.pos > 0 && /^\d{1,2}:\d{2}$/.test(t.time));
+  // ★티오프 칸 전체 시각(팀번호 유무 무관) — 검수에서 모든 시간대를 고를 수 있게.
+  const _tmin = (t) => Number(t.split(':')[0]) * 60 + Number(t.split(':')[1]);
+  const teeTimes = [...new Set([
+    ...(Array.isArray(pd.times) ? pd.times : []).map((t) => (String(t).match(/\d{1,2}:\d{2}/) || [''])[0]),
+    ...teeGrid.map((t) => t.time),
+  ].filter(Boolean))].sort((a, b) => _tmin(a) - _tmin(b));
   const gridMax = teeGrid.reduce((mx, t) => Math.max(mx, t.pos), 0);
   const cutPos = Number(pd.cut) || 0;
   const cut = cutPos || gridMax || 0;
@@ -450,6 +456,7 @@ function verdictFromPart(article, member, pd, allParts, offList = []) {
     part, category: '배치표', relevant: true, rosterReliable: true,
     part3Roster: roster,
     teeGrid,
+    teeTimes,
     teamCount: cut || null,
     cutoffPosition: cutPos || null,
     cutoffName: cutPos ? parseCell(roster[cutPos - 1] || '').name : '',
@@ -521,7 +528,7 @@ export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
     if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue;
     const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList);
     out[String(p)] = {
-      roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teamCount: Number(v.teamCount) || 0,
+      roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teeTimes: v.teeTimes || [], teamCount: Number(v.teamCount) || 0,
       internTees: v.internTees, internCount: v.internCount,
       cutoffPosition: v.cutoffPosition, cutoffName: v.cutoffName,
       crewDuty: v.crewDuty, rosterReliable: true, uncertain: '',
@@ -541,5 +548,5 @@ export async function readSinglePartByClaude(imageOrUrl, { cut = 0 } = {}) {
   const r = await readPartWithClaude(big);
   try { fs.unlinkSync(big); } catch { /* noop */ }
   if (!r) return null;
-  return { roster: snapRoster(r.roster), tee: r.tee, cut: cut || r.cut || 0 };
+  return { roster: snapRoster(r.roster), tee: r.tee, times: r.times || [], cut: cut || r.cut || 0 };
 }
