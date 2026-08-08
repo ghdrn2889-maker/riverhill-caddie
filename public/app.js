@@ -56,7 +56,7 @@ function showView(name) {
   }
   curView = name;
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-  if (name === 'worklog') { loadJournal(); loadWorklog(); }
+  if (name === 'worklog') { loadJournal(); }
   if (name === 'cart') loadCartCheck();
   if (name === 'settle') { lgPage = -1; loadLedger(); }
   if (name === 'news') markAllRead();
@@ -1221,12 +1221,63 @@ function jDayBadge(d) {
 }
 // 하루 → 편집기 초기 상태.
 function jDayToEdit(d) {
-  if (!d) return { kind: 'work', parts: ['3'] };
-  if (d.excluded) return { kind: 'removed', parts: [] };
-  if (d.kind === 'off') return { kind: d.offType === 'sick' ? 'sick' : d.offType === 'vacation' ? 'vacation' : 'off', parts: [] };
-  if (d.kind === 'spare') return { kind: 'spare', parts: [] };
-  if (d.kind === 'work') return { kind: 'work', parts: ((d.effParts && d.effParts.length) ? d.effParts : ['3']).slice() };
-  return { kind: 'work', parts: ['3'] };
+  const base = (!d) ? { kind: 'work', parts: ['3'] }
+    : d.excluded ? { kind: 'removed', parts: [] }
+    : d.kind === 'off' ? { kind: d.offType === 'sick' ? 'sick' : d.offType === 'vacation' ? 'vacation' : 'off', parts: [] }
+    : d.kind === 'spare' ? { kind: 'spare', parts: [] }
+    : d.kind === 'work' ? { kind: 'work', parts: ((d.effParts && d.effParts.length) ? d.effParts : ['3']).slice() }
+    : { kind: 'work', parts: ['3'] };
+  base.memo = (d && d.memo) || '';
+  base.mood = (d && d.mood) || '';
+  return base;
+}
+
+// ── ★그날의 기분(표정) — SVG 얼굴 5종. 위치 고정 + 눈 깜빡임·입 움직임(index.html CSS) ──
+const JMOODS = [
+  { k: 'great', l: '뿌듯', c: '#e8952e', t: '#fdeccb' },
+  { k: 'good', l: '좋아', c: '#6fae4a', t: '#e6f2d6' },
+  { k: 'ok', l: '그냥', c: '#9aa1a8', t: '#eef0f2' },
+  { k: 'tired', l: '힘듦', c: '#5f92cf', t: '#dce9fa' },
+  { k: 'hard', l: '지침', c: '#c07d7d', t: '#f6e3e3' },
+];
+function jMoodOf(k) { return JMOODS.find((m) => m.k === k) || null; }
+function jFaceSVG(k, size, delay) {
+  const m = jMoodOf(k); if (!m) return ''; const ink = '#4d4436'; let eyes; let mouth; let extra = '';
+  if (k === 'great') { eyes = `<circle class="meye" cx="13.5" cy="17" r="1.9" fill="${ink}"/><circle class="meye" cx="26.5" cy="17" r="1.9" fill="${ink}"/>`; mouth = `<path class="mmouth" d="M11.5 22.5 Q20 32 28.5 22.5" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; }
+  else if (k === 'good') { eyes = `<circle class="meye" cx="13.5" cy="17.5" r="1.8" fill="${ink}"/><circle class="meye" cx="26.5" cy="17.5" r="1.8" fill="${ink}"/>`; mouth = `<path class="mmouth" d="M13.5 24.5 Q20 29.5 26.5 24.5" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; }
+  else if (k === 'ok') { eyes = `<circle class="meye" cx="13.5" cy="18" r="1.8" fill="${ink}"/><circle class="meye" cx="26.5" cy="18" r="1.8" fill="${ink}"/>`; mouth = `<path class="mmouth" d="M14 26 H26" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; }
+  else if (k === 'tired') { eyes = `<circle class="meye" cx="13.5" cy="18" r="1.8" fill="${ink}"/><circle class="meye" cx="26.5" cy="18" r="1.8" fill="${ink}"/>`; mouth = `<path class="mmouth" d="M13.5 28 Q20 23.5 26.5 28" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; }
+  else { eyes = `<path d="M11 17.5 H16" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M24 17.5 H29" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; mouth = `<path class="mmouth" d="M13 27.5 Q16.5 24.5 20 27.5 Q23.5 30.5 27 27.5" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`; extra = '<ellipse class="mdrop" cx="30.6" cy="17.5" rx="1.6" ry="2.3" fill="#7fb0e0"/>'; }
+  const st = 'display:block' + (delay ? `;--d:${delay}s` : '');
+  return `<svg class="mface mface-${k}" viewBox="0 0 40 40" width="${size}" height="${size}" style="${st}"><circle cx="20" cy="20" r="18.5" fill="${m.t}" stroke="${m.c}" stroke-width="1.5"/>${eyes}${mouth}${extra}</svg>`;
+}
+const JMOOD_COL = { great: '#e8952e', good: '#6fae4a', ok: '#9aa1a8', tired: '#5f92cf', hard: '#c07d7d' };
+
+// ── '이 달의 기록' — 그달 memo/mood 있는 날을 최신순 타임라인으로(접기/모두보기) ──
+let jRecExpanded = false; const J_REC_N = 5; const JWDF = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+function renderJournalRecords() {
+  const box = $('jRecs'); if (!box) return;
+  const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
+  const all = jCache.days.filter((d) => d.date.startsWith(pre) && (d.memo || d.mood)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  if ($('jRecCnt')) $('jRecCnt').textContent = all.length;
+  if ($('jRecAff')) $('jRecAff').textContent = all.length ? `한 줄씩, ${jViewM}월의 ${all.length}일을 남겼어요` : '그날의 기분과 한 줄, 여기에 쌓여요';
+  if (!all.length) { box.innerHTML = '<div class="jrec-empty"><div class="t">아직 이 달의 기록이 없어요</div><div class="s">달력의 날짜를 눌러 그날의 기분과 한 줄을 남기면<br>여기에 차곡차곡 쌓여요.</div></div>'; return; }
+  const overflow = all.length > J_REC_N;
+  const shown = (overflow && !jRecExpanded) ? all.slice(0, J_REC_N) : all;
+  const entries = shown.map((d, i) => {
+    const dow = new Date(`${d.date}T00:00:00`).getDay(); const day = Number(d.date.slice(8, 10));
+    const b = jDayBadge(d);
+    const node = d.mood ? `<span class="fw">${jFaceSVG(d.mood, 34, (i % 6) * 0.45)}</span>` : `<span class="dot" style="background:#0b5d34"></span>`;
+    const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
+    const memo = d.memo ? `<div class="jrec-m"><span class="q">“</span>${esc(d.memo)}<span class="q">”</span></div>` : '';
+    return `<div class="jrec${i === shown.length - 1 ? ' last' : ''}" data-d="${d.date}"><div class="jrec-node">${node}</div><div class="jrec-body"><div class="jrec-top"><span class="jrec-d num">${day}일</span><span class="jrec-w">${JWDF[dow]}</span>${bd}</div>${memo}</div></div>`;
+  }).join('');
+  const chev = (up) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="${up ? 'm18 15-6-6-6 6' : 'm6 9 6 6 6-6'}"/></svg>`;
+  const more = overflow ? `<button class="jrec-more" id="jRecMore">${jRecExpanded ? `접기 ${chev(true)}` : `이 달 기록 ${all.length}개 모두 보기 ${chev(false)}`}</button>` : '';
+  const note = (!overflow || jRecExpanded) ? '<div class="jrec-note">기록은 사라지지 않고 남아, 언젠가 이 계절을 다시 꺼내볼 수 있어요.</div>' : '';
+  box.innerHTML = entries + more + note;
+  box.querySelectorAll('.jrec[data-d]').forEach((r) => { r.onclick = () => openDayEditor(r.dataset.d); });
+  const mb = $('jRecMore'); if (mb) mb.onclick = () => { jRecExpanded = !jRecExpanded; renderJournalRecords(); };
 }
 
 // ── ★연/월 점프 피커 ── 제목을 탭하면 연도(‹ ›)와 월(1~12)을 바로 골라 이동. 일지·정산 공용.
@@ -1297,9 +1348,11 @@ async function renderJournalCal() {
   for (let i = 0; i < first; i++) h += '<div class="jcell empty"></div>';
   for (let d = 1; d <= ndays; d++) {
     const key = `${pre}-${String(d).padStart(2, '0')}`;
-    const b = jDayBadge(jMap[key]);
+    const dd = jMap[key];
+    const b = jDayBadge(dd);
     const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
-    h += `<div class="jcell${jMap[key] ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}"><span class="jcn">${d}</span>${bd}</div>`;
+    const dot = (dd && (dd.mood || dd.memo)) ? `<span class="jc-memodot" style="background:${dd.mood ? (JMOOD_COL[dd.mood] || '#0b5d34') : '#0b5d34'}"></span>` : '';
+    h += `<div class="jcell${dd ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}">${dot}<span class="jcn">${d}</span>${bd}</div>`;
   }
   const cal = $('jCal');
   cal.innerHTML = h;
@@ -1318,13 +1371,14 @@ async function renderJournalCal() {
 
   if (jSelDate && jSelDate.startsWith(pre)) drawDayEditor();
   else { jSelDate = null; if ($('jEditor')) $('jEditor').hidden = true; if ($('jHint')) $('jHint').hidden = false; }
+  renderJournalRecords();   // ★'이 달의 기록'(기분·메모 타임라인) 갱신
 }
 
 let jSlideDir = 0;   // 다음 렌더에서 달력에 적용할 슬라이드 방향(+1 다음달 / -1 이전달)
 function jMonthShift(delta) {
   jViewM += delta;
   if (jViewM < 1) { jViewM = 12; jViewY--; } else if (jViewM > 12) { jViewM = 1; jViewY++; }
-  jSelDate = null; jEdit = null; jSlideDir = delta > 0 ? 1 : -1;
+  jSelDate = null; jEdit = null; jSlideDir = delta > 0 ? 1 : -1; jRecExpanded = false;
   renderJournalCal();
 }
 
@@ -1345,23 +1399,33 @@ function drawDayEditor() {
   const res = jEdit.kind === 'del' ? '이 날 기록을 지웁니다'
     : isWork ? `${jCombo(jEdit.parts) || '부 선택'} · 캐디피 정산 자동 반영`
     : ({ spare: '스페어', off: '휴무', vacation: '휴가', sick: '병가', removed: '순번 제외' })[jEdit.kind];
+  const showMood = jEdit.kind !== 'del' && jEdit.kind !== 'removed';
+  const pen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   ed.innerHTML = `<div class="jed-h">${mdL} <b>· 이 날 기록</b></div>
     <div class="jkinds">${KINDS.map(([k, lab, c]) => `<button class="jkbtn ${c}${jEdit.kind === k ? ' on' : ''}" data-k="${k}">${lab}</button>`).join('')}${exists ? `<button class="jkbtn jdel${jEdit.kind === 'del' ? ' on' : ''}" data-k="del">지우기</button>` : ''}</div>
     ${isWork ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts.includes(p) ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">그날 뛴 부를 다 누르세요 · 여러 개 = 복수 근무(2·3부·54)</div></div>` : ''}
+    ${showMood ? `<div class="jmood"><div class="jmood-l">${pen}오늘의 기분과 한 줄</div><div class="jmoods">${JMOODS.map((m) => `<button class="jmoodbtn${jEdit.mood === m.k ? ' on' : ''}" data-m="${m.k}"><span class="fw">${jFaceSVG(m.k, 36)}</span><em>${m.l}</em></button>`).join('')}</div><div class="jmemo-ip"><input id="jMemoIn" maxlength="60" placeholder="그날의 순간을 한 줄로…" value="${esc(jEdit.memo || '')}"><span class="jmemo-cnt" id="jMemoCnt"></span></div></div>` : ''}
     <div class="jed-res${isWork && !jEdit.parts.length ? ' muted' : ''}">→ ${res}</div>
     <button class="jed-save">${exists ? '저장' : '추가'}</button>`;
   ed.hidden = false; if ($('jHint')) $('jHint').hidden = true;
-  ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jEdit.kind = b.dataset.k; if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3']; drawDayEditor(); }; });
-  ed.querySelectorAll('.jpchip[data-p]').forEach((b) => { b.onclick = () => { const p = b.dataset.p, i = jEdit.parts.indexOf(p); if (i >= 0) jEdit.parts.splice(i, 1); else jEdit.parts.push(p); if (!jEdit.parts.length) jEdit.parts = [p]; drawDayEditor(); }; });
+  ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.kind = b.dataset.k; if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3']; drawDayEditor(); }; });
+  ed.querySelectorAll('.jpchip[data-p]').forEach((b) => { b.onclick = () => { jSyncMemo(); const p = b.dataset.p, i = jEdit.parts.indexOf(p); if (i >= 0) jEdit.parts.splice(i, 1); else jEdit.parts.push(p); if (!jEdit.parts.length) jEdit.parts = [p]; drawDayEditor(); }; });
+  ed.querySelectorAll('.jmoodbtn[data-m]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.mood = (jEdit.mood === b.dataset.m ? '' : b.dataset.m); drawDayEditor(); }; });
+  const mi = $('jMemoIn'); if (mi) { const cnt = $('jMemoCnt'); const upd = () => { jEdit.memo = mi.value; if (cnt) cnt.textContent = `${mi.value.length}/60`; }; mi.oninput = upd; upd(); }
   ed.querySelector('.jed-save').onclick = () => saveDayEditor();
 }
+function jSyncMemo() { const mi = $('jMemoIn'); if (mi && jEdit) jEdit.memo = mi.value; }
 
 async function saveDayEditor() {
   const date = jSelDate, e = jEdit; if (!date || !e) return;
+  jSyncMemo();
   try {
     if (e.kind === 'del') { await postJSON('/api/journal/remove', { date }); }
-    else if (e.kind === 'work') { await postJSON('/api/journal/kind', { date, kind: 'work' }); await postJSON('/api/ledger/dayparts', { date, parts: e.parts.slice().sort() }); }
-    else { await postJSON('/api/journal/kind', { date, kind: e.kind }); await postJSON('/api/ledger/dayparts', { date, parts: [] }); }
+    else {
+      if (e.kind === 'work') { await postJSON('/api/journal/kind', { date, kind: 'work' }); await postJSON('/api/ledger/dayparts', { date, parts: e.parts.slice().sort() }); }
+      else { await postJSON('/api/journal/kind', { date, kind: e.kind }); await postJSON('/api/ledger/dayparts', { date, parts: [] }); }
+      if (e.kind !== 'removed') await postJSON('/api/journal/note', { date, memo: e.memo || '', mood: e.mood || '' });   // ★그날 기분·메모(비파괴적)
+    }
   } catch { /* noop */ }
   jSelDate = null; jEdit = null;
   await loadJournal(jViewY);
@@ -1381,6 +1445,7 @@ function wlDayKm(d, roundKm) {
 }
 
 async function loadWorklog() {
+  if (!$('wlMLabel')) return;   // ★세무·차량 기록 섹션 제거됨 — 죽은 코드 방어(요소 없으면 no-op)
   const now = new Date();
   if (wlYear == null) { wlYear = now.getFullYear(); wlMonth = now.getMonth() + 1; }
   if (wlCache.year !== wlYear) {
@@ -1584,6 +1649,7 @@ function compressImage(file, maxSide = 1280, quality = 0.7) {
   });
 }
 function initWorklogButtons() {
+  if (!$('wlSave')) return;   // ★세무·차량 기록 섹션 제거됨 — 버튼 없으면 바인딩 건너뜀(init 중단 방지)
   $('wlSave').onclick = async () => { await postJSON('/api/worklog/settings', { homeGolfKmOneway: Number($('wlKm').value) || 0, driverName: $('wlName').value.trim(), carNo: $('wlCar').value.trim() }); reloadWorklog(); };
   // 월 이동 (연 경계 넘으면 자동으로 연도도 이동 → 필요 시 재요청)
   $('wlPrev').onclick = () => { wlMonth--; if (wlMonth < 1) { wlMonth = 12; wlYear--; } wlOpenDate = null; loadWorklog(); };
