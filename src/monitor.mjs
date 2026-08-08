@@ -842,7 +842,7 @@ app.post('/api/upload-board', gate, async (req, res) => {
   } catch (e) { console.error('upload-board 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get('/', gate, (req, res) => res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')));
+app.get('/', gate, (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')); });
 
 app.listen(PORT, HOST, () => {
   console.log(`📊 모니터링 사이트 실행: http://localhost:${PORT}`

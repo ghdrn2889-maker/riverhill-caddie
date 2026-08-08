@@ -1312,6 +1312,13 @@
     var n=rvChanged(); var sv=$('rvSave'); if(sv){ sv.disabled=(n===0&&!Object.keys(rvEditing).length); sv.classList.toggle('blocked',cs.length>0&&n>0); } var pd=$('rvPd'); if(pd) pd.textContent=n?('· '+n+'명'+(cs.length?' · 중복'+cs.length:'')):'';
     brDirty = n>0 || Object.keys(rvEditing).length>0;
   }
+  // ★저장 버튼 상태만 가볍게 갱신(전체 리렌더 없이 — 입력 포커스 유지). 이름 실시간 반영에 사용.
+  function rvSaveState(){
+    var n=rvChanged(), cs=rvConf();
+    var sv=$('rvSave'); if(sv){ sv.disabled=(n===0&&!Object.keys(rvEditing).length); sv.classList.toggle('blocked',cs.length>0&&n>0); }
+    var pd=$('rvPd'); if(pd) pd.textContent=n?('· '+n+'명'+(cs.length?' · 중복'+cs.length:'')):'';
+    brDirty = n>0 || Object.keys(rvEditing).length>0;
+  }
 
   function rvListClick(e){
     var segBtn=e.target.closest('.rv-seg button');
@@ -1358,6 +1365,8 @@
     var s=$('rvSearch'); if(s) s.addEventListener('input',function(){ rvSearch=s.value; rvPage=0; var clr=$('rvClr'); if(clr)clr.classList.toggle('show',!!rvSearch); rvPaint(); });
     var clr=$('rvClr'); if(clr) clr.addEventListener('click',function(){ rvSearch=''; if(s)s.value=''; clr.classList.remove('show'); rvPage=0; rvPaint(); if(s)s.focus(); });
     var list=$('rvList'); if(list) list.addEventListener('click',rvListClick);
+    // ★이름 입력을 실시간으로 r.name에 반영 — '이 사람 적용'을 안 눌러도 저장 payload에 항상 실린다(이름 저장 안 되던 근본 수정).
+    if(list) list.addEventListener('input',function(e){ var t=e.target; if(!t||!t.classList||!t.classList.contains('e-name'))return; var card=t.closest('.rv-card'); if(!card)return; var pos=Number(card.getAttribute('data-pos')); var r=rvRows.find(function(x){return x.pos===pos;}); if(!r)return; r.name=t.value.trim(); rvSaveState(); card.classList.toggle('dirty',!!rvDirtyMap()[r._id]); });
     var pager=$('rvPager'); if(pager) pager.addEventListener('click',function(e){ var b2=e.target.closest('[data-pg]'); if(!b2||b2.disabled)return; rvPage+=Number(b2.getAttribute('data-pg')); rvPaint(); });
     var warn=$('rvWarn'); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); });
     var sv=$('rvSave'); if(sv) sv.addEventListener('click',rvSaveCorrect);
