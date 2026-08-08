@@ -1688,14 +1688,17 @@ function refreshLgHero() {
 // ── 목표 수위 시트(딥오션·빛점·목표 세우면 그 달 잠금) ──
 let lgwWorkGoal = 0;      // 원, 작업 중 목표
 let lgwLocked = false;    // 그 달 목표 확정 여부
+let lgwPastLock = false;  // 지난 달(마감) → 목표 설정 불가
 let lgwOpenState = false;
 let lgwFishes = [], lgwRAF = null, lgwLast = 0, lgwTsec = 0, lgwGW = 380, lgwGH = 300;
 let lgwCheerTimer = null, lgwCheerIdx = 0;
 
 const lgwCurrent = () => Math.max(0, lgIncome());       // 원, 지금까지 순수입
-const lgwPctVal = () => { const g = lgwWorkGoal || 1; return Math.max(0, Math.min(100, Math.round(lgwCurrent() / g * 100))); };
-const lgwLevel = () => { const g = lgwWorkGoal || 1; return Math.max(3, Math.min(100, lgwCurrent() / g * 100)); };
-const lgwRemainMan = () => Math.max(0, Math.round((lgwWorkGoal - lgwCurrent()) / 10000));
+const lgwPctVal = () => { if (lgwWorkGoal <= 0) return 0; return Math.max(0, Math.min(100, Math.round(lgwCurrent() / lgwWorkGoal * 100))); };
+const lgwLevel = () => { if (lgwWorkGoal <= 0) return 3; return Math.max(3, Math.min(100, lgwCurrent() / lgwWorkGoal * 100)); };
+const lgwRemainMan = () => (lgwWorkGoal <= 0 ? 0 : Math.max(0, Math.round((lgwWorkGoal - lgwCurrent()) / 10000)));
+// 지난 달(마감된 달)인지 — 현재 연·월보다 이전이면 목표 설정 불가
+const lgIsPastMonth = () => { const n = new Date(); return lgYear < n.getFullYear() || (lgYear === n.getFullYear() && lgMonth < n.getMonth() + 1); };
 function lgwFill(level) { $('lgwWater').style.transform = 'translateY(' + (100 - level).toFixed(2) + '%)'; }
 function lgwEmpty() { const w = $('lgwWater'); w.classList.remove('drop'); w.style.transition = 'none'; w.style.transform = 'translateY(100%)'; void w.offsetWidth; w.style.transition = ''; }
 
@@ -1741,8 +1744,13 @@ function lgwApplyLock() {
   if (lgwLocked) {
     $('lgwInput').readOnly = true; $('lgwInput').tabIndex = -1; $('lgwInput').blur();
     set.classList.add('locked');
-    $('lgwLab').textContent = '이 달 목표 · 확정';
-    $('lgwTail').innerHTML = ' · <b>다음 달까지 고정</b>';
+    if (lgwPastLock) {
+      $('lgwLab').textContent = lgGoal > 0 ? '지난 달 목표' : '지난 달 · 목표 미설정';
+      $('lgwTail').innerHTML = ' · <b>지난 달은 설정할 수 없어요</b>';
+    } else {
+      $('lgwLab').textContent = '이 달 목표 · 확정';
+      $('lgwTail').innerHTML = ' · <b>다음 달까지 고정</b>';
+    }
     $('lgwSave').textContent = '확인';
   } else {
     $('lgwInput').readOnly = false; $('lgwInput').tabIndex = 0;
@@ -1760,9 +1768,11 @@ function lgwLiveUpdate() {
 function lgwOpen() {
   if (!lgData) return;
   lgwOpenState = true;
-  lgwLocked = lgGoal > 0;
-  lgwWorkGoal = lgGoal > 0 ? lgGoal : Math.max(5000000, Math.ceil((lgwCurrent() || 0) / 1000000) * 1000000) || 5000000;
-  $('lgwInput').value = Math.round(lgwWorkGoal / 10000);
+  lgwPastLock = lgIsPastMonth();
+  lgwLocked = lgGoal > 0 || lgwPastLock;
+  if (lgwPastLock && lgGoal <= 0) lgwWorkGoal = 0;               // 지난 달·목표 미설정
+  else lgwWorkGoal = lgGoal > 0 ? lgGoal : Math.max(5000000, Math.ceil((lgwCurrent() || 0) / 1000000) * 1000000) || 5000000;
+  $('lgwInput').value = lgwWorkGoal > 0 ? Math.round(lgwWorkGoal / 10000) : '';
   lgwApplyLock();
   $('lgwRem').textContent = lgwRemainMan();
   $('lgwDays').textContent = lgData.daysLeft || 0;
@@ -1814,11 +1824,19 @@ function lgBuildEntries() {
 function lgRowHTML(d) {
   const open = d.date === lgOpenDate;
   const panel = `<div class="dexp" id="dexp-${d.date}"${open ? '' : ' hidden'}>${open ? lgPanelHTML(d.date) : ''}</div>`;
+  const hasExp = d.expN > 0;
+  const xptag = hasExp ? `<span class="xptag"> · 지출 ${d.expN}건</span>` : '';
   if (d.worked) {
     const cut = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - lgDayRev(d, lgFEES());
-    return `<div class="row" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
-      <div class="rt"><div class="a">${lgPartLabel(d.parts)}<span class="hltag"${cut > 0 ? '' : ' hidden'}> · 홀정산</span></div></div>
+    return `<div class="row${hasExp ? ' hasexp' : ''}" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
+      <div class="rt"><div class="a">${lgPartLabel(d.parts)}<span class="hltag"${cut > 0 ? '' : ' hidden'}> · 홀정산</span>${xptag}</div></div>
       <div class="amt num${cut > 0 ? ' holed' : ''}">+${fmtN(d.revenue)}</div>
+      <svg class="rcar" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>${panel}`;
+  }
+  if (hasExp) {   // 근무는 없지만 지출이 등록된 날 — '기록 없음' 대신 지출로 표시
+    return `<div class="row hasexp" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
+      <div class="rt"><div class="a">지출<span class="xptag"> ${d.expN}건</span></div></div>
+      <div class="amt num e">−${fmtN(d.expSum)}</div>
       <svg class="rcar" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div>${panel}`;
   }
   return `<div class="row" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
