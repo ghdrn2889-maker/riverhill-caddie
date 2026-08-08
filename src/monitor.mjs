@@ -42,7 +42,7 @@ function gate(req, res, next) {
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 app.get('/api/stats', gate, (req, res) => {
-  try { res.json({ ok: true, ...computeStats() }); }
+  try { const st = computeStats(); if (st && st.latestBoard) reflectPartsRows(st.latestBoard.parts); res.json({ ok: true, ...st }); }
   catch (e) { console.error('stats 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 // ── 칠판(dayboard) 대조 — 시각순 이벤트로 스스로 굴린 그날의 배치표 + 검증이슈(낡음 탐지). 읽기 전용. ──
@@ -70,7 +70,7 @@ app.get('/api/watchdog', gate, (req, res) => {
 });
 // 판독검증 1·2·3부 탭 데이터 — 모니터가 직접 부별 판독(board별 1회 캐시). 앱 무관·읽기 전용.
 app.get('/api/board-parts', gate, async (req, res) => {
-  try { res.json({ ok: true, board: await computeBoardParts() }); }
+  try { const board = await computeBoardParts(); if (board) reflectPartsRows(board.parts); res.json({ ok: true, board }); }
   catch (e) { console.error('board-parts 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 // ── 회원 대시보드 대조 — 각 회원 앱에 지금 뜨는 화면을 재현 + 최근 알림 대조(읽기 전용). ──
@@ -384,19 +384,34 @@ function buildCrossPartSwaps(rosters) {
   });
   return swaps;
 }
+// 한 이름이 '다른 부'의 대바 대상(sub)이면 '(sub)owner'로 치환할 새 이름을 돌려준다(아니면 null).
+function _crossSwapFor(name, part, swaps) {
+  if (!name || /\(/.test(String(name))) return null;          // 빈칸·이미 태그(대바 표기) 있으면 skip
+  const bn = _swapBare(name);
+  const sw = swaps.find((s) => s.sub === bn && s.part !== part
+    && !swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner));   // 부내 상호(양방향) 맞바꿈은 크로스파트 아님 → 제외
+  return sw ? `(${bn})${sw.owner}` : null;
+}
 function reflectCrossPartSwaps(part, rows) {
   try {
-    const rosters = collectPartRosters();
-    const swaps = buildCrossPartSwaps(rosters);
+    const swaps = buildCrossPartSwaps(collectPartRosters());
     if (!swaps.length) return;
-    for (const r of rows) {
-      if (!r.name || /\(/.test(r.name)) continue;             // 빈칸·이미 태그(대바 표기) 있으면 skip
-      const bn = _swapBare(r.name);
-      const sw = swaps.find((s) => s.sub === bn && s.part !== part
-        && !swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner));   // 부내 상호(양방향) 맞바꿈은 크로스파트 아님 → 제외
-      if (sw) { r.name = `(${bn})${sw.owner}`; r.swapReflected = true; }
-    }
+    for (const r of rows) { const nn = _crossSwapFor(r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
   } catch { /* noop — 반영 실패해도 원본 rows 그대로 */ }
+}
+// 판독검증(대시보드 latestBoard·/api/board-parts)의 parts 구조에도 동일 반영 — 각 부 .rows[*].name/.roster[].
+//  ★검수 탭뿐 아니라 사용자가 실제로 보는 '판독검증' 배치표에서도 (연승준)박선하 가 보이게 하는 핵심.
+function reflectPartsRows(parts) {
+  try {
+    if (!parts || typeof parts !== 'object') return;
+    const swaps = buildCrossPartSwaps(collectPartRosters());
+    if (!swaps.length) return;
+    for (const part of Object.keys(parts)) {
+      const pd = parts[part]; if (!pd) continue;
+      if (Array.isArray(pd.rows)) for (const r of pd.rows) { const nn = _crossSwapFor(r && r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
+      if (Array.isArray(pd.roster)) pd.roster = pd.roster.map((c) => _crossSwapFor(c, part, swaps) || c);
+    }
+  } catch { /* noop — 반영 실패해도 원본 parts 그대로 */ }
 }
 app.get('/api/board-review', gate, (req, res) => {
   try {
