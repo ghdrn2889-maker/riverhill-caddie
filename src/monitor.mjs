@@ -16,6 +16,7 @@ import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge
 import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
+import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 
@@ -103,12 +104,15 @@ app.get('/api/user-dash', gate, (req, res) => {
   try {
     const lastMap = lastPushByUid();
     const todayISO = todayISOkst();
+    const minorPartOn = minorPartActive();   // 앱과 동일 게이트(1·2부 노출)
     const users = [];
     for (const m of activeMembers()) {
       const prof = getProfile(m.id) || {};
       const commuteMin = Number(prof.commute_min ?? m.commute_min) || 0;
       const bname = String(prof.board_name || m.board_name || '');
-      const st = loadToday(m.id) || {};
+      // ★대표부·라운드를 앱 /api/today와 '같은 공용 로직'으로 해석 — 모니터가 회원 실제 화면을 그대로 재현.
+      const { base, primaryPart, tISO } = resolvePrimary({ uid: m.id, minorPartOn, todayISO });
+      const st = base || loadToday(m.id) || {};
       const status = st.status || 'unknown';
       const isWork = ['assigned', 'work', 'your_turn'].includes(status);
       const isSpare = ['spare', 'waiting', 'near'].includes(status);
@@ -131,26 +135,10 @@ app.get('/api/user-dash', gate, (req, res) => {
       const myPos = rosterPos || Number(st.myPosition) || 0;
       const cut = Number(st.cutLine) || 0;
       const ahead = (cut && myPos > cut) ? Math.max(0, myPos - cut - 1) : Math.max(0, myPos - 1);
-      // ── 다중 라운드(같은 날 1·2·3부 조합) — 앱 /api/today 와 동일 규칙으로 모아 통합 카드로 재현. ──
-      //  3부 today.json 을 베이스로, 같은 날짜의 1·2부 근무(티오프 확정분)를 얹는다. 유령 방지: 낡음·티오프미정 제외.
-      const baseISO = (() => { try { return worklog.labelToISO(st.date); } catch { return null; } })();
-      const rounds = [];
-      for (const pp of ['1', '2', '3']) {
-        const tp = pp === '3' ? st : (loadToday(m.id, pp) || null);
-        if (!tp || !tp.status) continue;
-        const isW = ['assigned', 'work', 'your_turn'].includes(tp.status);
-        const isSp = ['spare', 'waiting', 'near'].includes(tp.status) && Number(tp.myPosition) > 0;
-        if (!isW && !isSp) continue;
-        let ppISO = null; try { ppISO = worklog.labelToISO(tp.date); } catch { /* 무해 */ }
-        if (ppISO && ppISO < todayISO) continue;                 // 낡음 제외
-        if (pp !== '3' && isW && !tp.teeTime) continue;          // 비3부 근무는 티오프 확정분만(유령 카드 방지)
-        if (baseISO && ppISO && ppISO !== baseISO) continue;     // 베이스(3부)와 다른 날짜 제외
-        rounds.push({
-          part: pp, work: isW, teeTime: tp.teeTime || '', course: tp.course || '',
-          myPos: Number(tp.myPosition) || 0, assign: tp.assign || '',
-          commute: (isW && tp.teeTime) ? commuteInfo(tp.teeTime, commuteMin) : null,
-        });
-      }
+      // ── 다중 라운드(같은 날 1·2·3부 조합) — 앱 /api/today와 '같은 공용 함수'로 조립(화면 갈라짐 0). ──
+      //  근무+스페어 모두 rounds에 담겨 내려간다 → 프론트가 전부 카드로 그려 '2부 근무 + 3부 스페어' 불일치가 보임.
+      const rounds = buildMemberRounds({ uid: m.id, primaryPart, base: st, minorPartOn, tISO, todayISO, commuteMin })
+        .map((r) => ({ ...r, work: r.kind === 'work', myPos: r.myPosition || 0 }));   // 하위 요약 로직 호환 별칭
       const workRounds = rounds.filter((r) => r.work).sort((a, b) => String(a.teeTime).localeCompare(String(b.teeTime)) || Number(a.part) - Number(b.part));
       const workParts = workRounds.map((r) => r.part);
       const combo = workParts.length >= 2;         // 하루 두 부 이상 근무 = 통합 카드
@@ -189,6 +177,7 @@ app.get('/api/user-dash', gate, (req, res) => {
       users.push({
         id: m.id, name: bname || `#${m.id}`, part: combo ? comboLabel : (soloWork ? `${soloChul ? '1부(조출)' : `${soloWork.part}부`}` : (st.part || `${m.part || 3}부`)),
         combo, comboRounds: combo ? workRounds : null,
+        rounds, primaryPart,   // ★전 라운드(근무+스페어) — 프론트가 모두 카드로 그려 부별 불일치 가시화
         status, kind, badge, heroTitle,
         date: st.date || '', dayW, stale, empty: !st.date && !st.status,
         myPos: heroPos, cut, ahead, teamCount: Number(st.teamCount) || 0,

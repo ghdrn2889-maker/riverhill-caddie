@@ -254,6 +254,7 @@
   .br-msg.ok{ color:var(--good); } .br-msg.err{ color:var(--bad); }
   .ud-round{ margin-top:8px; padding:8px 9px; background:var(--panel2); border:1px solid var(--bord); border-left:3px solid var(--good); border-radius:8px; }
   .ud-round + .ud-round{ margin-top:6px; }
+  .ud-round-sp{ border-left-color:var(--tx3); opacity:.85; }   /* 스페어 라운드 — 근무(초록)와 구분 */
   .ud-round-h{ font-size:12.5px; color:var(--tx2); }
   .ud-round-h b{ color:var(--tx); font-variant-numeric:tabular-nums; }
   .ud-round .ud-tl{ margin-top:6px; }
@@ -1072,19 +1073,26 @@
 
   // ── 회원 대시보드 대조 ──
   function udBadge(b){ return '<span class="ud-badge ud-b-'+esc(b.c||'unk')+'">'+esc(b.t)+'</span>'; }
+  // 한 라운드(근무/스페어) 블록 — 앱과 동일하게 부별로 그린다. 스페어도 카드로 보여 '2부 근무 + 3부 스페어' 불일치 가시화.
+  function udRoundBlock(r){
+    var partL = esc(r.part)+'부';
+    if(r.work){
+      var c=r.commute||{};
+      return '<div class="ud-round"><div class="ud-round-h"><b>'+partL+'</b> 근무 · 티오프 <b>'+esc(r.teeTime||'—')+'</b>'+(r.course?' ('+esc(String(r.course).toUpperCase())+'코스)':'')+(r.myPos?' · 순번 <b>'+r.myPos+'</b>번':'')+'</div>'+
+        (r.teeTime?'<div class="ud-tl">'+
+          '<div class="ud-leg"><div class="l">집 출발</div><div class="v">'+esc(c.leave||'—')+'</div></div>'+
+          '<div class="ud-leg"><div class="l">도착</div><div class="v">'+esc(c.arrive||'—')+'</div></div>'+
+          '<div class="ud-leg"><div class="l">백대기</div><div class="v">'+esc(c.standby||'—')+'</div></div>'+
+        '</div>':'')+'</div>';
+    }
+    return '<div class="ud-round ud-round-sp"><div class="ud-round-h"><b>'+partL+'</b> 스페어'+(r.myPos?' · 순번 <b>'+r.myPos+'</b>번':'')+(r.cutLine?' · 확정선 '+r.cutLine+'번':'')+'</div></div>';
+  }
   function udCard(u){
     var warn = (u.match.s==='bad') || (u.subCount===0);
     var body='';
-    if(u.combo && u.comboRounds && u.comboRounds.length){
-      body = u.comboRounds.map(function(r){
-        var c=r.commute||{};
-        return '<div class="ud-round"><div class="ud-round-h"><b>'+esc(r.part)+'부</b> 티오프 <b>'+esc(r.teeTime||'—')+'</b>'+(r.course?' ('+esc(String(r.course).toUpperCase())+'코스)':'')+(r.myPos?' · 순번 <b>'+r.myPos+'</b>번':'')+'</div>'+
-          '<div class="ud-tl">'+
-            '<div class="ud-leg"><div class="l">집 출발</div><div class="v">'+esc(c.leave||'—')+'</div></div>'+
-            '<div class="ud-leg"><div class="l">도착</div><div class="v">'+esc(c.arrive||'—')+'</div></div>'+
-            '<div class="ud-leg"><div class="l">백대기</div><div class="v">'+esc(c.standby||'—')+'</div></div>'+
-          '</div></div>';
-      }).join('');
+    if(u.rounds && u.rounds.length>=2){
+      // 여러 라운드(근무+스페어 포함) — 전부 부별 블록으로. combo(2근무)뿐 아니라 근무+스페어 불일치도 그대로 표시.
+      body = u.rounds.map(udRoundBlock).join('');
     } else if(u.kind==='work' && u.commute){
       var c=u.commute;
       body = '<div class="ud-body">티오프 <b>'+esc(u.teeTime)+'</b>'+(u.course?' ('+esc(String(u.course).toUpperCase())+'코스)':'')+(u.myPos?' · 순번 <b>'+u.myPos+'</b>번':'')+'</div>'+

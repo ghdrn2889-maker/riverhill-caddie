@@ -27,6 +27,7 @@ import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
+import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
@@ -503,36 +504,13 @@ app.get('/api/today', (req, res) => {
     if (Number.isFinite(asId) && activeMembers().some((m) => m.id === asId)) uid = asId;
   }
   const nowISO = todayISOKST();
-  let t = loadToday(uid);            // 3부(홈 베이스) 우선
-  let primaryPart = '3';
-  const t3ISO = t ? worklog.labelToISO(t.date) : null;
-  const t3Usable = t && !(t3ISO && t3ISO < nowISO);   // 3부가 있고 낡지 않음(휴무·스페어·근무 전부 포함)
-  // ★1·2부 판독은 아직 섀도(불안정) — MINOR_PART_PUSH가 켜져 신뢰 수준이 되기 전엔 대시보드에서 완전히 숨긴다.
-  //  (50명짜리 '2부' 오라벨로 유령 순번이 히어로를 납치하던 문제 차단. 코드는 그대로, 켜면 부활.)
-  const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase());
-  // ★순수 '1부만/2부만' 날: 3부 슬롯이 비었거나 낡았으면 1·2부에서 대표 라운드를 골라 히어로로 쓴다.
-  //  (3부가 멀쩡하면 이 블록은 건너뜀 → 기존 3부 동작 100% 보존. 섀도 단계엔 아예 건너뜀.)
-  if (!t3Usable && minorPartOn) {
-    const cands = [];
-    for (const pp of ['1', '2']) {
-      const s = loadToday(uid, pp);
-      if (!s) continue;
-      const iso = worklog.labelToISO(s.date);
-      if (iso && iso < nowISO) continue;                 // 과거(낡음) 제외
-      const work = ['assigned', 'work', 'your_turn'].includes(s.status);
-      const spare = ['spare', 'waiting', 'near'].includes(s.status) && Number(s.myPosition) > 0;
-      if (!work && !spare) continue;
-      cands.push({ part: pp, s, work });
-    }
-    if (cands.length) {
-      cands.sort((a, b) => (a.work ? 0 : 1) - (b.work ? 0 : 1) || Number(a.part) - Number(b.part)); // 근무 먼저, 그다음 1→2
-      t = cands[0].s; primaryPart = cands[0].part;
-    }
-  }
+  // ★대표부(홈 베이스)·라운드 해석은 공용 모듈(rounds.mjs)로 — 모니터 user-dash와 '같은 로직'을 써 화면이 갈라지지 않게.
+  //  (1·2부 섀도 게이트·순수 1/2부날 대표선정 규칙 전부 resolvePrimary 안에 있음. 앱 출력 100% 동일.)
+  const minorPartOn = minorPartActive();
+  const { base: t, primaryPart, tISO } = resolvePrimary({ uid, minorPartOn, todayISO: nowISO });
   if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
 
   // ── 낡은 상태 가드 ── (대표가 3부일 때만; 1·2부 대표는 위에서 이미 낡음 제외)
-  const tISO = worklog.labelToISO(t.date);
   if (primaryPart === '3' && tISO && tISO < nowISO) {
     return res.json({
       ok: true, empty: true, stale: true, staleDate: t.date,
@@ -551,43 +529,8 @@ app.get('/api/today', (req, res) => {
   let dayOffset = 0;
   if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(nowISO)) / 86400000);
 
-  // ── 다중 라운드(조출·2탕·세 탕) — 같은 날 1·2·3부 활성 라운드를 배열로 내려보냄(카드 스택·조합 요약용). ──
-  //  ★근무 라운드는 항상, 스페어(대기)는 순번이 있을 때만 카드로. 다른 날짜 슬롯은 제외.
-  const rounds = [];
-  // ★대표(3부)가 '휴무/휴가/순번제외'로 확정된 날은 그날 근무를 안 하는 날 → 1·2부 유령 라운드(특히 잘못 잡힌
-  //  2부 스페어)를 절대 붙이지 않는다. 붙이면 pickFocus가 비대표 라운드를 히어로로 올려 '휴무'가 '스페어'로 납치됨.
-  const primaryOff = t.status === 'off';
-  for (const pp of ['1', '2', '3']) {
-    const tp = (pp === primaryPart) ? t : loadToday(uid, pp);
-    // ★섀도 단계: 1·2부는 대시보드 라운드에서 제외(유령 카드 방지) — 단, 1부 '조출'(배치표 명시 태그·고신뢰)은 예외.
-    const isChulgn = pp === '1' && tp && tp.assign === 'chulgn' && ['assigned', 'work', 'your_turn'].includes(tp.status);
-    if (pp !== '3' && !minorPartOn && !isChulgn) continue;
-    if (pp !== primaryPart && primaryOff && !isChulgn) continue;   // ★휴무 = 휴무: 다른 부 유령 라운드 억제(조출은 실제 근무라 예외)
-    if (!tp) continue;
-    const isWork = ['assigned', 'work', 'your_turn'].includes(tp.status);
-    const isSpare = ['spare', 'waiting', 'near'].includes(tp.status);
-    const hasPos = Number(tp.myPosition) > 0;
-    if (!isWork && !(isSpare && hasPos)) continue;
-    // ★비대표부(1·2부) 근무는 '티오프 확정'된 것만 대시보드에 띄운다. 티오프 미정 근무는 섀도 단계 판독
-    //  오검출(예: 2부 명단 오독으로 생긴 '근무 티오프 미정' 유령 카드) 소지가 커 카드로 노출하지 않음.
-    //  (조출은 명시 태그라 티오프 미정이어도 노출 — 근무 자체는 확정.)
-    if (pp !== primaryPart && isWork && !tp.teeTime && !isChulgn) continue;
-    const tpISO = worklog.labelToISO(tp.date);
-    const sameDay = !tpISO || tpISO === tISO || (!tISO && tpISO >= todayISOKST());
-    if (!sameDay) continue;
-    rounds.push({
-      part: pp, kind: isWork ? 'work' : 'spare', status: tp.status,
-      teeTime: tp.teeTime || '', course: tp.course || '', myPosition: tp.myPosition || null,
-      cutLine: tp.cutLine || null, cutoffName: tp.cutoffName || null,
-      assign: pp === '1' ? (tp.assign || null) : null,   // 1부 배정유형(조출/1,3/54/only1) → 대시보드 배지
-      commute: (isWork && tp.teeTime) ? commuteInfo(tp.teeTime, prof.commute_min) : null,
-      // ★부별 동일 수준: 각 라운드가 리치 보드(근무 게이지·스페어 순번리스트)를 자체적으로 그릴 수 있게
-      //  해당 부의 명단·티오프표를 함께 실어 보냄(프론트가 focus 라운드를 대표부처럼 렌더).
-      roster3: Array.isArray(tp.roster3) ? tp.roster3 : null,
-      teeGrid: Array.isArray(tp.teeGrid) ? tp.teeGrid : null,
-      date: tp.date || t.date,
-    });
-  }
+  // ── 다중 라운드(조출·2탕·세 탕) — 같은 날 1·2·3부 활성 라운드. 공용 모듈로 조립(모니터와 동일 로직). ──
+  const rounds = buildMemberRounds({ uid, primaryPart, base: t, minorPartOn, tISO, todayISO: nowISO, commuteMin: prof.commute_min });
   const workParts = rounds.filter((r) => r.kind === 'work').map((r) => r.part);
   const roundsSummary = { workParts, tang: workParts.length, holes: workParts.length * 18 };
   // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
