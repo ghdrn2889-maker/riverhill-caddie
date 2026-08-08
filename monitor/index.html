@@ -226,6 +226,7 @@
   #page-review .rv-eb button{ font:inherit; font-size:13.5px; font-weight:800; padding:10px 0; border-radius:10px; cursor:pointer; border:1px solid var(--bord2); }
   #page-review .rv-done{ flex:2; background:var(--acc); color:#fff; border-color:var(--acc); }
   #page-review .rv-cancel{ flex:1; background:var(--panel2); color:var(--tx2); }
+  #page-review .rv-delrow{ flex:1; background:transparent; color:var(--bad); border-color:color-mix(in srgb,var(--bad) 45%,transparent); }
   #page-review .rv-savebar{ position:sticky; bottom:0; z-index:5; background:color-mix(in srgb,var(--panel) 92%,transparent); backdrop-filter:blur(8px); border-top:1px solid var(--bord); margin:12px -4px 0; padding:11px 4px calc(6px + env(safe-area-inset-bottom)); display:flex; gap:8px; align-items:center; }
   #page-review .rv-notify{ display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--tx2); white-space:nowrap; }
   #page-review .rv-notify input{ width:15px; height:15px; accent-color:var(--acc); }
@@ -1216,6 +1217,7 @@
   var boardReviewBusy=false, brDirty=false, brSig='';
   var rvBoard=null, rvRows=[], rvOrig=[], rvInterns=[], rvSyncSig='';
   var rvEditing={}, rvSearch='', rvPage=0, rvPresence={};
+  var rvDeleted=[], rvNewId=1;   // 삭제된 원본 순번(_id) 추적(dirty 감지용) · 추가 행 고유 _id 카운터
   var RV_PER=5;
   function rvNk(s){ return String(s||'').replace(/\s/g,''); }
   function rvMin(t){ var m=String(t).match(/(\d{1,2}):(\d{2})/); return m?Number(m[1])*60+Number(m[2]):0; }
@@ -1227,10 +1229,12 @@
     rvBoard=b; rvSyncSig=String(b.syncSig||''); rvInterns=(b.interns||[]).slice();
     var cut=Number(b.cutLine)||0;
     rvRows=(b.rows||[]).map(function(r){ return { _id:Number(r.pos), pos:Number(r.pos), name:r.name||'', tee:r.tee||'', course:r.course||(r.tee?'OUT':''), duty:r.duty||'', isMember:!!r.isMember, misread:r.misread||'', moveTo:null, status:(!r.duty&&cut>0&&Number(r.pos)<=cut)?'work':'spare' }; });
-    rvOrig=JSON.parse(JSON.stringify(rvRows)); rvEditing={};
+    rvOrig=JSON.parse(JSON.stringify(rvRows)); rvEditing={}; rvDeleted=[];
   }
   function rvDirtyMap(){ var d={}; rvRows.forEach(function(r){ var o=rvOrig.find(function(x){return x._id===r._id;}); if(!o){d[r._id]=1;return;} if(o.name!==r.name||o.tee!==r.tee||o.course!==r.course||o.duty!==r.duty||o.status!==r.status||o.pos!==r.pos||r.moveTo){d[r._id]=1;} }); return d; }
-  function rvChanged(){ return Object.keys(rvDirtyMap()).length; }
+  function rvChanged(){ return Object.keys(rvDirtyMap()).length + rvDeleted.length; }   // ★삭제도 변경으로 카운트(순수 삭제만 해도 저장 활성)
+  function rvRenumber(){ var arr=rvRows.slice().sort(function(a,b){return a.pos-b.pos;}); arr.forEach(function(r,i){ r.pos=i+1; }); rvRows=arr; }
+  function rvAddRow(){ var mx=rvRows.reduce(function(m,r){return Math.max(m,r.pos);},0); rvRows.push({ _id:1000000+(rvNewId++), pos:mx+1, name:'', tee:'', course:'', duty:'', isMember:false, misread:'', moveTo:null, status:'spare' }); rvRenumber(); rvSearch=''; var sb=$('rvSearch'); if(sb)sb.value=''; rvPage=Math.floor((rvRows.length-1)/RV_PER); rvEditing[rvRows.length]=1; rvPaint(); var c=document.querySelector('.rv-card[data-pos="'+rvRows.length+'"]'); if(c)c.scrollIntoView({block:'center',behavior:'smooth'}); }
   function rvActive(){ return rvRows.filter(function(r){return !r.moveTo;}); }
   function rvCutPos(){ var c=0; rvRows.forEach(function(r){ if(r.status==='work'&&!rvOff(r)&&!r.moveTo&&r.pos>c)c=r.pos; }); return c; }
   function rvCutName(){ var c=rvCutPos(),r=rvRows.find(function(x){return x.pos===c;}); return r?r.name:''; }
@@ -1285,7 +1289,7 @@
           '<div class="rv-fl"><label>부 이동</label><div class="rv-seg mv e-move">'+moveBtns+'</div></div></div>'+
         '<div class="rv-tb'+(work?' show':'')+'"><div class="rv-fr"><div class="rv-fl"><label>티오프 시간</label>'+teeSel+'</div><div class="rv-fl"><label>코스</label><div class="rv-seg e-course"><button data-c="OUT" class="'+(r.course!=='IN'?'on':'')+'">OUT</button><button data-c="IN" class="'+(r.course==='IN'?'on IN':'')+'">IN</button></div></div></div><div class="rv-hint">배치표 티오프 칸 전체 시간이 떠요. 자동으로 못 잡은 자리도 여기서 지정할 수 있어요. 이미 찬 자리를 고르면 상단에 중복 경고.</div></div>'+
         ((rvOff(r)||r.moveTo)?'':'<div style="margin-top:2px"><button data-act="swap" type="button" style="width:100%;font:inherit;font-weight:700;font-size:13px;border:1px dashed var(--acc);background:transparent;color:var(--acc);border-radius:10px;padding:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>대바 · 다른 부 캐디와 자리 맞바꿈</button></div>')+
-        '<div class="rv-eb"><button class="rv-cancel" data-act="cancel">되돌리기</button><button class="rv-done" data-act="done">이 사람 적용</button></div>'+
+        '<div class="rv-eb"><button class="rv-cancel" data-act="cancel">되돌리기</button><button class="rv-delrow" data-act="delrow" title="이 캐디를 배치표에서 삭제">삭제</button><button class="rv-done" data-act="done">이 사람 적용</button></div>'+
       '</div></div>';
   }
 
@@ -1316,6 +1320,7 @@
     else if(act==='swap'){ e.stopPropagation(); rvSwapOpen(pos); }
     else if(act==='done'){ rvCommit(pos,card); }
     else if(act==='cancel'){ var r3=rvRows.find(function(x){return x.pos===pos;}); if(r3){ var o=rvOrig.find(function(x){return x._id===r3._id;}); if(o){ r3.name=o.name;r3.tee=o.tee;r3.course=o.course;r3.duty=o.duty;r3.status=o.status; } r3.moveTo=null; } delete rvEditing[pos]; rvPaint(); }
+    else if(act==='delrow'){ e.stopPropagation(); var di=rvRows.findIndex(function(x){return x.pos===pos;}); if(di<0)return; var drow=rvRows[di]; if(rvOrig.some(function(o){return o._id===drow._id;})) rvDeleted.push(drow._id); rvRows.splice(di,1); delete rvEditing[pos]; rvRenumber(); rvPaint(); rvToast((drow.name||'행')+' 삭제 (저장 시 반영)'); }
   }
   function rvCommit(pos,card){
     var r=rvRows.find(function(x){return x.pos===pos;});
@@ -1342,6 +1347,7 @@
       '<div class="rv-list" id="rvList"></div>'+
       '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
       '<button class="rv-reord" id="rvReord" type="button" style="width:100%;margin-top:11px;font:inherit;font-weight:800;font-size:14px;border:1.5px solid var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--panel));color:var(--acc);border-radius:12px;padding:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M4 9h16M4 15h16"/><path d="m8 5-4 4 4 4M16 11l4 4-4 4"/></svg>순서 바꾸기 · 드래그로 끼워넣기</button>'+
+      '<button class="rv-addrow" id="rvAddRow" type="button" style="width:100%;margin-top:8px;font:inherit;font-weight:700;font-size:13.5px;border:1px dashed var(--bord2);background:var(--panel2);color:var(--tx2);border-radius:11px;padding:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 5v14M5 12h14"/></svg>캐디 추가 · 판독이 놓친 사람 직접 넣기</button>'+
       '<div class="rv-savebar"><label class="rv-notify"><input type="checkbox" id="rvNotify"> 알림</label><button class="rv-save" id="rvSave">저장 · 전원 반영 <span class="pd" id="rvPd"></span></button></div>'+
       '<button class="rv-adhoc" id="rvAdhoc" type="button" style="width:100%;margin-top:8px;font:inherit;font-weight:700;font-size:13px;border:1px solid var(--bord2);background:var(--panel2);color:var(--tx2);border-radius:11px;padding:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>이미 수정한 배치표 · 정정 알림 보내기</button>'+
       '<div class="rv-msg" id="rvMsg"></div>'+
@@ -1354,6 +1360,7 @@
     var warn=$('rvWarn'); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); });
     var sv=$('rvSave'); if(sv) sv.addEventListener('click',rvSaveCorrect);
     var rord=$('rvReord'); if(rord) rord.addEventListener('click',rvReorderOpen);
+    var aadd=$('rvAddRow'); if(aadd) aadd.addEventListener('click',rvAddRow);
     var adh=$('rvAdhoc'); if(adh) adh.addEventListener('click',rvAdhocNotify);
     var iadd=$('rvIAdd'); if(iadd) iadd.addEventListener('click',function(){ var box=$('rvInterns'); if(box)box.insertAdjacentHTML('beforeend',rvInternRow(null)); brDirty=true; });
     var ints=$('rvInterns'); if(ints) ints.addEventListener('click',function(e){ if(e.target.classList.contains('br-idel')){ var row=e.target.closest('.br-intern'); if(row)row.remove(); brDirty=true; } });
