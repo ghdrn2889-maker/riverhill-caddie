@@ -38,3 +38,18 @@ export function crossSwapFor(name, part, swaps) {
     && !swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner));
   return sw ? `(${bn})${sw.owner}` : null;
 }
+
+// ★대바 셀을 '실제 배치된 캐디 이름'만으로 단순화(모니터 표시용 — 검수 편집 편의). store 원본은 안 바꾼다.
+//  ㆍ'X(Y)'(괄호 안 Y=실제 점유자, 진짜 스왑일 때만): 박선하(연승준) → 연승준
+//  ㆍ다른 부 스왑 sub인 맨이름(그 자리를 owner가 넘겨받음): 3부 연승준 → 박선하
+//  바뀔 게 없으면 원본 문자열 그대로.
+export function actualCaddieName(cell, part, swaps) {
+  const s = String(cell || '');
+  const m = s.match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
+  if (m && m[1] !== m[2] && swaps.some((sw) => sw.owner === m[1] && sw.sub === m[2])) return m[2];   // 박선하(연승준) → 연승준
+  const bn = swapBare(s);
+  const sw = swaps.find((s2) => s2.sub === bn && s2.part !== String(part)
+    && !swaps.some((o) => o.part === s2.part && o.owner === s2.sub && o.sub === s2.owner));
+  if (sw) return sw.owner;                                        // 3부 연승준 → 박선하
+  return s;
+}

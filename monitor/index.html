@@ -1228,11 +1228,13 @@
   function rvInit(b){
     rvBoard=b; rvSyncSig=String(b.syncSig||''); rvInterns=(b.interns||[]).slice();
     var cut=Number(b.cutLine)||0;
-    rvRows=(b.rows||[]).map(function(r){ return { _id:Number(r.pos), pos:Number(r.pos), name:r.name||'', tee:r.tee||'', course:r.course||(r.tee?'OUT':''), duty:r.duty||'', isMember:!!r.isMember, misread:r.misread||'', moveTo:null, status:(!r.duty&&cut>0&&Number(r.pos)<=cut)?'work':'spare' }; });
+    rvRows=(b.rows||[]).map(function(r){ return { _id:Number(r.pos), pos:Number(r.pos), name:r.name||'', rawName:r.rawName||'', tee:r.tee||'', course:r.course||(r.tee?'OUT':''), duty:r.duty||'', isMember:!!r.isMember, misread:r.misread||'', moveTo:null, status:(!r.duty&&cut>0&&Number(r.pos)<=cut)?'work':'spare' }; });
     rvOrig=JSON.parse(JSON.stringify(rvRows)); rvEditing={}; rvDeleted=[];
   }
   function rvDirtyMap(){ var d={}; rvRows.forEach(function(r){ var o=rvOrig.find(function(x){return x._id===r._id;}); if(!o){d[r._id]=1;return;} if(o.name!==r.name||o.tee!==r.tee||o.course!==r.course||o.duty!==r.duty||o.status!==r.status||o.pos!==r.pos||r.moveTo){d[r._id]=1;} }); return d; }
   function rvChanged(){ return Object.keys(rvDirtyMap()).length + rvDeleted.length; }   // ★삭제도 변경으로 카운트(순수 삭제만 해도 저장 활성)
+  // ★대바 단순화 이름을 안 고쳤으면 store 원본(대바 표기)을 되돌려 저장 — 표시만 단순화, store 오염 방지.
+  function rvSaveName(r){ if(r.rawName && r.rawName!==r.name){ var o=rvOrig.find(function(x){return x._id===r._id;}); if(o && o.name===r.name) return r.rawName; } return r.name; }
   function rvRenumber(){ var arr=rvRows.slice().sort(function(a,b){return a.pos-b.pos;}); arr.forEach(function(r,i){ r.pos=i+1; }); rvRows=arr; }
   function rvAddRow(){ var mx=rvRows.reduce(function(m,r){return Math.max(m,r.pos);},0); rvRows.push({ _id:1000000+(rvNewId++), pos:mx+1, name:'', tee:'', course:'', duty:'', isMember:false, misread:'', moveTo:null, status:'spare' }); rvRenumber(); rvSearch=''; var sb=$('rvSearch'); if(sb)sb.value=''; rvPage=Math.floor((rvRows.length-1)/RV_PER); rvEditing[rvRows.length]=1; rvPaint(); var c=document.querySelector('.rv-card[data-pos="'+rvRows.length+'"]'); if(c)c.scrollIntoView({block:'center',behavior:'smooth'}); }
   function rvActive(){ return rvRows.filter(function(r){return !r.moveTo;}); }
@@ -1387,7 +1389,7 @@
       var _wk=keep.filter(function(r){return r.status==='work'&&!rvOff(r);});
       var _rest=keep.filter(function(r){return !(r.status==='work'&&!rvOff(r));});
       var ordered=_wk.concat(_rest);
-      var srcRows=ordered.map(function(r,i){ var w=(r.status==='work'&&!rvOff(r)); return { pos:i+1, name:r.name, tee:w?r.tee:'', course:w?(r.course||'OUT'):'', duty:r.duty }; });
+      var srcRows=ordered.map(function(r,i){ var w=(r.status==='work'&&!rvOff(r)); return { pos:i+1, name:rvSaveName(r), tee:w?r.tee:'', course:w?(r.course||'OUT'):'', duty:r.duty }; });
       var workCount=_wk.length;
       var interns=[]; Array.prototype.forEach.call(document.querySelectorAll('#rvInterns .br-intern'),function(row){ var t=row.querySelector('.itime').value.trim(); if(t)interns.push({time:t,course:row.querySelector('.icrs').value}); });
       var notify=($('rvNotify')||{}).checked;

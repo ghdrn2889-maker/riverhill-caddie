@@ -17,7 +17,7 @@ import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
-import { collectPartRosters, buildCrossPartSwaps, crossSwapFor } from './crossparts.mjs';
+import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 
@@ -352,19 +352,24 @@ function flagMisreads(rows) {
   }
   return rows;
 }
-// ── 크로스파트 대바(자리 맞바꿈) 반영 — 스왑 판정은 공용 crossparts.mjs(server 정합과 동일 로직). ──
-//  어떤 부의 셀이 'X(Y)'(Y=실제 다른 캐디)면 Y가 대바로 그 자리에 옴 → Y가 원래 있던 다른 부의 'Y' 자리를
-//  '(Y)X'로 바꿔 '검수·판독검증' 표시에 반영(예: 2부 '박선하(연승준)' → 3부 연승준 자리 '(연승준)박선하').
-//  3부 순번·티오프·커트는 불변(자리 '이름'만 치환). 읽는 시점 계산이라 lastboard 원본은 안 건드림.
-function reflectCrossPartSwaps(part, rows) {
+// ── 크로스파트 대바 표시 — '실제 배치된 캐디 이름'만으로 단순화(검수 편집 편의). 스왑 판정은 공용 crossparts.mjs. ──
+//  예) 2부 '박선하(연승준)' → '연승준'(괄호 안 실제 점유자), 3부 '연승준' 자리 → '박선하'(그 자리를 넘겨받은 owner).
+//  ★store 원본은 안 바꾼다(대바 표기 보존 → reconcile 스왑 판정 유지). 바뀐 행엔 rawName(원본)을 남겨,
+//   검수 저장 때 이름을 안 고쳤으면 프런트가 rawName을 되돌려 보내 store가 단순화 이름으로 오염되지 않게 한다.
+function reflectCrossPartSwaps(part, rows, memberSet) {
   try {
     const swaps = buildCrossPartSwaps(collectPartRosters());
     if (!swaps.length) return;
-    for (const r of rows) { const nn = crossSwapFor(r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
-  } catch { /* noop — 반영 실패해도 원본 rows 그대로 */ }
+    for (const r of rows) {
+      const disp = actualCaddieName(r.name, part, swaps);
+      if (disp !== r.name) {
+        r.rawName = r.name; r.name = disp; r.swapSimplified = true;
+        if (memberSet) r.isMember = memberSet.has(nkey(disp));   // 단순화된 실제 이름 기준으로 회원 여부 재판정
+      }
+    }
+  } catch { /* noop — 실패해도 원본 rows 그대로 */ }
 }
-// 판독검증(대시보드 latestBoard·/api/board-parts)의 parts 구조에도 동일 반영 — 각 부 .rows[*].name/.roster[].
-//  ★검수 탭뿐 아니라 사용자가 실제로 보는 '판독검증' 배치표에서도 (연승준)박선하 가 보이게 하는 핵심.
+// 판독검증(대시보드 latestBoard·/api/board-parts)의 parts 구조에도 동일 단순화(읽기 전용 표시).
 function reflectPartsRows(parts) {
   try {
     if (!parts || typeof parts !== 'object') return;
@@ -372,10 +377,10 @@ function reflectPartsRows(parts) {
     if (!swaps.length) return;
     for (const part of Object.keys(parts)) {
       const pd = parts[part]; if (!pd) continue;
-      if (Array.isArray(pd.rows)) for (const r of pd.rows) { const nn = crossSwapFor(r && r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
-      if (Array.isArray(pd.roster)) pd.roster = pd.roster.map((c) => crossSwapFor(c, part, swaps) || c);
+      if (Array.isArray(pd.rows)) for (const r of pd.rows) { const disp = actualCaddieName(r && r.name, part, swaps); if (r && disp !== r.name) { r.rawName = r.name; r.name = disp; r.swapSimplified = true; } }
+      if (Array.isArray(pd.roster)) pd.roster = pd.roster.map((c) => actualCaddieName(c, part, swaps));
     }
-  } catch { /* noop — 반영 실패해도 원본 parts 그대로 */ }
+  } catch { /* noop — 실패해도 원본 parts 그대로 */ }
 }
 app.get('/api/board-review', gate, (req, res) => {
   try {
@@ -404,7 +409,7 @@ app.get('/api/board-review', gate, (req, res) => {
       }
       const interns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
       flagMisreads(rows);   // 쌍둥이 이름 오독 표시(1·2부)
-      reflectCrossPartSwaps(part, rows);   // 크로스파트 대바 반영(예: 3부 연승준 자리 → (연승준)박선하)
+      reflectCrossPartSwaps(part, rows, memberSet);   // 대바 셀을 실제 배치 캐디 이름으로 단순화(rawName 보존)
       return res.json({ ok: true, part, board: {
         articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
