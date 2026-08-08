@@ -1255,13 +1255,35 @@ const JMOOD_COL = { great: '#e8952e', good: '#6fae4a', ok: '#9aa1a8', tired: '#5
 
 // ── '이 달의 기록' — 그달 memo/mood 있는 날을 최신순 타임라인으로(접기/모두보기) ──
 let jRecExpanded = false; const J_REC_N = 5; const JWDF = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+function jTodayISO() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; }
+// compose 바: 오늘 이미 남겼으면 '이어 손보기', 아니면 '한 줄 남기기'
+function jWireWriteBar() {
+  const btn = $('jRecWrite'); if (!btn) return;
+  const iso = jTodayISO();
+  const has = jMap[iso] && (jMap[iso].memo || jMap[iso].mood);
+  const t = $('jRecWriteT'), s = $('jRecWriteS');
+  if (t) t.textContent = has ? '오늘 기록 이어서 손보기' : '오늘 하루, 한 줄 남기기';
+  if (s) s.textContent = has ? '오늘의 기분과 한 줄을 다시 열어요' : '기분을 고르고 그날의 순간을 적어요';
+  btn.onclick = jWriteToday;
+}
+// 오늘 날짜 편집기를 바로 열기(다른 달을 보고 있으면 이번 달로 이동) — 토글 없이 항상 열고 스크롤.
+async function jWriteToday() {
+  const n = new Date(), y = n.getFullYear(), m = n.getMonth() + 1;
+  const iso = jTodayISO();
+  jViewY = y; jViewM = m;
+  if (jCache.year !== y) await loadJournal(y);
+  jSelDate = iso; jEdit = jDayToEdit(jMap[iso]);
+  await renderJournalCal();
+  if ($('jEditor')) $('jEditor').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 function renderJournalRecords() {
   const box = $('jRecs'); if (!box) return;
+  jWireWriteBar();   // ★'오늘 하루, 한 줄 남기기' compose 바 — 처음 쓰는 사람 진입점
   const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
   const all = jCache.days.filter((d) => d.date.startsWith(pre) && (d.memo || d.mood)).sort((a, b) => String(b.date).localeCompare(String(a.date)));
   if ($('jRecCnt')) $('jRecCnt').textContent = all.length;
   if ($('jRecAff')) $('jRecAff').textContent = all.length ? `한 줄씩, ${jViewM}월의 ${all.length}일을 남겼어요` : '그날의 기분과 한 줄, 여기에 쌓여요';
-  if (!all.length) { box.innerHTML = '<div class="jrec-empty"><div class="t">아직 이 달의 기록이 없어요</div><div class="s">달력의 날짜를 눌러 그날의 기분과 한 줄을 남기면<br>여기에 차곡차곡 쌓여요.</div></div>'; return; }
+  if (!all.length) { box.innerHTML = '<div class="jrec-empty"><div class="t">아직 이 달의 기록이 없어요</div><div class="s">위 <b>‘오늘 하루, 한 줄 남기기’</b>를 누르거나<br>달력의 날짜를 눌러 그날을 남겨보세요.</div></div>'; return; }
   const overflow = all.length > J_REC_N;
   const shown = (overflow && !jRecExpanded) ? all.slice(0, J_REC_N) : all;
   const entries = shown.map((d, i) => {
