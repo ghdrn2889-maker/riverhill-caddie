@@ -392,7 +392,8 @@ function reflectCrossPartSwaps(part, rows) {
     for (const r of rows) {
       if (!r.name || /\(/.test(r.name)) continue;             // 빈칸·이미 태그(대바 표기) 있으면 skip
       const bn = _swapBare(r.name);
-      const sw = swaps.find((s) => s.sub === bn && s.part !== part);   // Y가 다른 부로 대바돼 나감
+      const sw = swaps.find((s) => s.sub === bn && s.part !== part
+        && !swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner));   // 부내 상호(양방향) 맞바꿈은 크로스파트 아님 → 제외
       if (sw) { r.name = `(${bn})${sw.owner}`; r.swapReflected = true; }
     }
   } catch { /* noop — 반영 실패해도 원본 rows 그대로 */ }
