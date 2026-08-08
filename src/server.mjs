@@ -1193,6 +1193,42 @@ function systemRelevant(full) {
   return false;
 }
 
+// ★크로스파트 대바 정리 — 이 부(part)에 'X(Y)' 대바로 '들어온' 회원 Y는 다른 부 자리를 넘긴 것이므로,
+//  Y의 다른 부 '스페어' 잔재(옛 배치표에서 온 상태)를 정리해 대시보드가 '중복 근무'로 뜨는 걸 막는다.
+//  예) 2부 "박선하(연승준)" → 연승준은 2부 근무(대바로 들어옴) + 박선하는 3부 스페어로 감 → 연승준의 3부 스페어 제거.
+//  안전장치: ①스페어(spare/waiting/near)만 정리 — 근무/assigned은 진짜 두 탕일 수 있어 절대 안 건드림.
+//           ②부내 상호 맞바꿈(A(B)&B(A))은 크로스파트 아님 → 제외. ③같은 날짜만. ④활성 회원만.
+//  3부(today.json)는 '스테일 표시' 보존 위해 삭제 못 하므로(today.clearTodayPart는 1·2부 전용) status='unknown'으로
+//   낮춰 라운드에서 빠지게 한다. off로 두면 primaryOff 로직이 2부 근무 카드까지 지워버려서 안 됨(unknown이라야 안전).
+function reconcileCrossPartDaba(roster, part, dateLabel) {
+  try {
+    if (!Array.isArray(roster) || !roster.length) return;
+    const swaps = [];
+    for (const cell of roster) {
+      const mm = String(cell || '').match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
+      if (mm && mm[1] !== mm[2]) swaps.push({ owner: mm[1], sub: mm[2] });
+    }
+    const subs = new Set(swaps.filter((s) => !swaps.some((o) => o.owner === s.sub && o.sub === s.owner)).map((s) => s.sub));
+    if (!subs.size) return;
+    const wantISO = worklog.labelToISO(dateLabel || '');
+    for (const m of activeMembers()) {
+      const nm = String(m.board_name || '').replace(/\s/g, '');
+      if (!subs.has(nm)) continue;
+      for (const other of ['1', '2', '3']) {
+        if (other === String(part)) continue;
+        const tp = loadToday(m.id, other);
+        if (!tp || !tp.status) continue;
+        if (!['spare', 'waiting', 'near'].includes(String(tp.status))) continue;   // 스페어만(근무 보호)
+        const tpISO = worklog.labelToISO(tp.date);
+        if (wantISO && tpISO && tpISO !== wantISO) continue;                        // 같은 날만
+        if (other === '1' || other === '2') clearTodayPart(m.id, other);
+        else saveToday({ ...tp, status: 'unknown', myPosition: 0, teeTime: '', course: '', _swappedOutTo: String(part), updatedAt: Date.now() }, m.id, other);
+        console.log(`🔁 [대바 정리] ${m.board_name}: ${part}부 대바 점유 → ${other}부 스페어 잔재 정리(중복 근무 방지)`);
+      }
+    }
+  } catch (e) { console.error('[대바 정리 오류]', e.message); }
+}
+
 async function handleStandalonePartBoard(full, part, opts = {}) {
   const primary = envMember();
   const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
@@ -1232,6 +1268,7 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
         const moutP = interpretForMember(full, vp, memberP, loadToday(m.id, part));
         await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart: null });
       }
+      reconcileCrossPartDaba(vp.part3Roster, part, vp.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리
     } catch (e) { console.error(`[단독 ${part}부 회원 처리 오류]`, e.message); }
   }
   try { appendJSONL('part-detect.jsonl', { at: Date.now(), kind: 'standalone_board', part, minorPartOn,
@@ -1462,6 +1499,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
+      reconcileCrossPartDaba(vp.part3Roster, p, vp.dateLabel || out.rawVerdict?.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 

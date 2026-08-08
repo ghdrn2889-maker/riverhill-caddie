@@ -462,10 +462,12 @@ export function computeStats(now = Date.now()) {
   const week = now - 7 * DAY, month = now - 30 * DAY;
   const days30 = lastDays(30, now), days14 = lastDays(14, now), days7 = lastDays(7, now);
 
-  // 회원(users) + 프로필
+  // 회원(users) + 프로필 — ★test/tester(체험·데모 계정)는 회원 집계·가입·접속·DAU에서 전부 제외.
+  //  activeMembers·listMembersForAdmin은 이미 제외하지만 대시보드 KPI는 raw users를 세서 테스터가 잡히던 문제 수정.
   const users = all(`SELECT u.id, u.naver_id, u.google_id, u.created_at, u.last_login, u.last_seen, u.left_at, u.role, u.status,
                             p.board_name, p.part
-                     FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY u.id`) || [];
+                     FROM users u LEFT JOIN profiles p ON p.user_id = u.id
+                     WHERE u.role != 'test' AND u.role != 'tester' ORDER BY u.id`) || [];
   const active = users.filter((u) => u.status === 'active');
   const pending = users.filter((u) => u.status === 'pending');
   const disabled = users.filter((u) => u.status === 'disabled');
