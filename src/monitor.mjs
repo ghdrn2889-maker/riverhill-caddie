@@ -17,6 +17,7 @@ import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
+import { collectPartRosters, buildCrossPartSwaps, crossSwapFor } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 
@@ -351,41 +352,15 @@ function flagMisreads(rows) {
   }
   return rows;
 }
-// ── 크로스파트 대바(자리 맞바꿈) 자동 반영 ──
-//  어떤 부의 셀이 'X(Y)'(Y=실제 다른 캐디 이름)면, Y가 대바로 그 자리에 온 것 → Y가 원래 있던 다른 부의
-//  'Y' 자리를 '(Y)X'로 바꿔 검수에 보여준다(예: 2부 '박선하(연승준)' → 3부 연승준 자리 '(연승준)박선하').
-//  3부 순번·티오프·커트는 불변(스페어 자리 '이름'만 치환). 읽는 시점 계산이라 lastboard 원본은 안 건드림.
-const _swapBare = (cell) => String(cell || '').replace(/\s*\([^)]*\)\s*/g, '').replace(/\s/g, '').trim();
-const _SWAP_TAGWORDS = new Set(['조출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어']);
-function collectPartRosters() {
-  const out = {};
-  try { const bp = loadBoardPartsStore(); if (bp && bp.parts) for (const p of ['1', '2']) { const d = bp.parts[p]; if (d && Array.isArray(d.roster)) out[p] = d.roster.slice(); } } catch { /* noop */ }
-  try { const lb = loadLastBoard(); const v = lb && lb.rawVerdict ? effectivePart3Verdict(lb) : null; if (v && Array.isArray(v.part3Roster)) out['3'] = v.part3Roster.slice(); } catch { /* noop */ }
-  return out;
-}
-function buildCrossPartSwaps(rosters) {
-  const known = new Set();
-  for (const p of Object.keys(rosters)) for (const c of rosters[p]) { const n = _swapBare(c); if (/^[가-힣]{2,4}$/.test(n)) known.add(n); }
-  const swaps = [];
-  for (const p of Object.keys(rosters)) rosters[p].forEach((c) => {
-    const m = String(c || '').match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
-    if (m && m[1] !== m[2] && known.has(m[2]) && !_SWAP_TAGWORDS.has(m[2])) swaps.push({ owner: m[1], sub: m[2], part: p });
-  });
-  return swaps;
-}
-// 한 이름이 '다른 부'의 대바 대상(sub)이면 '(sub)owner'로 치환할 새 이름을 돌려준다(아니면 null).
-function _crossSwapFor(name, part, swaps) {
-  if (!name || /\(/.test(String(name))) return null;          // 빈칸·이미 태그(대바 표기) 있으면 skip
-  const bn = _swapBare(name);
-  const sw = swaps.find((s) => s.sub === bn && s.part !== part
-    && !swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner));   // 부내 상호(양방향) 맞바꿈은 크로스파트 아님 → 제외
-  return sw ? `(${bn})${sw.owner}` : null;
-}
+// ── 크로스파트 대바(자리 맞바꿈) 반영 — 스왑 판정은 공용 crossparts.mjs(server 정합과 동일 로직). ──
+//  어떤 부의 셀이 'X(Y)'(Y=실제 다른 캐디)면 Y가 대바로 그 자리에 옴 → Y가 원래 있던 다른 부의 'Y' 자리를
+//  '(Y)X'로 바꿔 '검수·판독검증' 표시에 반영(예: 2부 '박선하(연승준)' → 3부 연승준 자리 '(연승준)박선하').
+//  3부 순번·티오프·커트는 불변(자리 '이름'만 치환). 읽는 시점 계산이라 lastboard 원본은 안 건드림.
 function reflectCrossPartSwaps(part, rows) {
   try {
     const swaps = buildCrossPartSwaps(collectPartRosters());
     if (!swaps.length) return;
-    for (const r of rows) { const nn = _crossSwapFor(r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
+    for (const r of rows) { const nn = crossSwapFor(r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
   } catch { /* noop — 반영 실패해도 원본 rows 그대로 */ }
 }
 // 판독검증(대시보드 latestBoard·/api/board-parts)의 parts 구조에도 동일 반영 — 각 부 .rows[*].name/.roster[].
@@ -397,8 +372,8 @@ function reflectPartsRows(parts) {
     if (!swaps.length) return;
     for (const part of Object.keys(parts)) {
       const pd = parts[part]; if (!pd) continue;
-      if (Array.isArray(pd.rows)) for (const r of pd.rows) { const nn = _crossSwapFor(r && r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
-      if (Array.isArray(pd.roster)) pd.roster = pd.roster.map((c) => _crossSwapFor(c, part, swaps) || c);
+      if (Array.isArray(pd.rows)) for (const r of pd.rows) { const nn = crossSwapFor(r && r.name, part, swaps); if (nn) { r.name = nn; r.swapReflected = true; } }
+      if (Array.isArray(pd.roster)) pd.roster = pd.roster.map((c) => crossSwapFor(c, part, swaps) || c);
     }
   } catch { /* noop — 반영 실패해도 원본 parts 그대로 */ }
 }

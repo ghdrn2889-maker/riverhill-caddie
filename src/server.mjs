@@ -11,7 +11,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './ana
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
-import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart } from './today.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -28,6 +28,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
+import { collectPartRosters, buildCrossPartSwaps } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
@@ -1136,40 +1137,47 @@ function systemRelevant(full) {
   return false;
 }
 
-// ★크로스파트 대바 정리 — 이 부(part)에 'X(Y)' 대바로 '들어온' 회원 Y는 다른 부 자리를 넘긴 것이므로,
-//  Y의 다른 부 '스페어' 잔재(옛 배치표에서 온 상태)를 정리해 대시보드가 '중복 근무'로 뜨는 걸 막는다.
-//  예) 2부 "박선하(연승준)" → 연승준은 2부 근무(대바로 들어옴) + 박선하는 3부 스페어로 감 → 연승준의 3부 스페어 제거.
-//  안전장치: ①스페어(spare/waiting/near)만 정리 — 근무/assigned은 진짜 두 탕일 수 있어 절대 안 건드림.
+// ★크로스파트 대바 정합(범용) — 배치표(어느 부든) 처리가 끝날 때 전 부의 canonical 명단(store)을 모아 스왑을
+//  판정하고, 대바로 '다른 부에 들어간' 회원(sub)이 원래 부에 남긴 '스테일 스페어'를 정리한다. 모니터 표시
+//  (reflectCrossPartSwaps)와 '같은 스왑 판정'(crossparts.mjs)을 써 표시-상태가 갈라지지 않게 한다.
+//  예) 2부 "박선하(연승준)" → 연승준은 2부 근무(대바로 들어옴) → 연승준의 3부 스페어 잔재 제거(중복 근무 방지).
+//  ★단독 2부 배치표(3부 재판독 없음)에서도 3부 잔재를 정리하려고 '현재 부 로스터'가 아닌 '전 부 store'를 읽는다.
+//  안전장치: ①스페어(spare/waiting/near)만 정리 — 근무/assigned은 진짜 두 부 근무일 수 있어 절대 불변.
 //           ②부내 상호 맞바꿈(A(B)&B(A))은 크로스파트 아님 → 제외. ③같은 날짜만. ④활성 회원만.
-//  3부(today.json)는 '스테일 표시' 보존 위해 삭제 못 하므로(today.clearTodayPart는 1·2부 전용) status='unknown'으로
-//   낮춰 라운드에서 빠지게 한다. off로 두면 primaryOff 로직이 2부 근무 카드까지 지워버려서 안 됨(unknown이라야 안전).
-function reconcileCrossPartDaba(roster, part, dateLabel) {
+//  3부(today.json)는 삭제 불가(clearTodayPart는 1·2부 전용) → status='unknown' 강등(off는 primaryOff가 2부
+//   근무 카드까지 지워버려 안 됨). _adminLock 필드는 안 건드림(관리자 교정 보존).
+function reconcileCrossPartConsistency(dateLabel) {
   try {
-    if (!Array.isArray(roster) || !roster.length) return;
-    const swaps = [];
-    for (const cell of roster) {
-      const mm = String(cell || '').match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
-      if (mm && mm[1] !== mm[2]) swaps.push({ owner: mm[1], sub: mm[2] });
+    const swaps = buildCrossPartSwaps(collectPartRosters());
+    if (!swaps.length) return;
+    // 대바로 어느 부엔가 '들어간'(sub) 이름 → 그 이름이 들어간 부(inParts). 부내 상호맞바꿈은 제외.
+    const inByName = {};
+    for (const s of swaps) {
+      if (swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner)) continue;   // 부내 상호맞바꿈
+      (inByName[s.sub] ||= new Set()).add(String(s.part));
     }
-    const subs = new Set(swaps.filter((s) => !swaps.some((o) => o.owner === s.sub && o.sub === s.owner)).map((s) => s.sub));
-    if (!subs.size) return;
+    const subs = Object.keys(inByName);
+    if (!subs.length) return;
     const wantISO = worklog.labelToISO(dateLabel || '');
     for (const m of activeMembers()) {
       const nm = String(m.board_name || '').replace(/\s/g, '');
-      if (!subs.has(nm)) continue;
+      const inParts = inByName[nm];
+      if (!inParts) continue;                                        // 이 회원이 어느 부 대바 점유자(sub)가 아님
       for (const other of ['1', '2', '3']) {
-        if (other === String(part)) continue;
+        if (inParts.has(other)) continue;                            // 대바로 들어간 부 자체는 건드리지 않음
         const tp = loadToday(m.id, other);
         if (!tp || !tp.status) continue;
         if (!['spare', 'waiting', 'near'].includes(String(tp.status))) continue;   // 스페어만(근무 보호)
+        const locked = tp._adminLock && dayKey(tp.date) === dayKey(tp._adminLock.dk) && tp._adminLock.fields && (tp._adminLock.fields.status || tp._adminLock.fields.myPosition);
+        if (locked) continue;                                        // 관리자 확정 보존
         const tpISO = worklog.labelToISO(tp.date);
-        if (wantISO && tpISO && tpISO !== wantISO) continue;                        // 같은 날만
+        if (wantISO && tpISO && tpISO !== wantISO) continue;         // 같은 날만
         if (other === '1' || other === '2') clearTodayPart(m.id, other);
-        else saveToday({ ...tp, status: 'unknown', myPosition: 0, teeTime: '', course: '', _swappedOutTo: String(part), updatedAt: Date.now() }, m.id, other);
-        console.log(`🔁 [대바 정리] ${m.board_name}: ${part}부 대바 점유 → ${other}부 스페어 잔재 정리(중복 근무 방지)`);
+        else saveToday({ ...tp, status: 'unknown', myPosition: 0, teeTime: '', course: '', _swappedOut: true, updatedAt: Date.now() }, m.id, other);
+        console.log(`🔁 [대바 정합] ${m.board_name}: ${[...inParts].join('·')}부 대바 점유 → ${other}부 스페어 잔재 정리`);
       }
     }
-  } catch (e) { console.error('[대바 정리 오류]', e.message); }
+  } catch (e) { console.error('[대바 정합 오류]', e.message); }
 }
 
 async function handleStandalonePartBoard(full, part, opts = {}) {
@@ -1211,7 +1219,7 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
         const moutP = interpretForMember(full, vp, memberP, loadToday(m.id, part));
         await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart: null });
       }
-      reconcileCrossPartDaba(vp.part3Roster, part, vp.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리
+      reconcileCrossPartConsistency(vp.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리(전 부 store 기준)
     } catch (e) { console.error(`[단독 ${part}부 회원 처리 오류]`, e.message); }
   }
   try { appendJSONL('part-detect.jsonl', { at: Date.now(), kind: 'standalone_board', part, minorPartOn,
@@ -1442,7 +1450,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
           await processForMemberPart(m.id, memberP, moutP, full, { ...opts, crewDuty, crossPart });
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
-      reconcileCrossPartDaba(vp.part3Roster, p, vp.dateLabel || out.rawVerdict?.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리
+      reconcileCrossPartConsistency(vp.dateLabel || out.rawVerdict?.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리(전 부 store 기준)
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 
