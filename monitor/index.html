@@ -1309,7 +1309,7 @@
     var page=rows.slice(rvPage*RV_PER,(rvPage+1)*RV_PER);
     var list=$('rvList'); if(list) list.innerHTML= page.length? page.map(function(r){return rvCard(r,q,cp);}).join('') : '<div class="muted" style="padding:20px;text-align:center">검색 결과가 없어요</div>';
     var cc=$('rvCut'); if(cc){ var cpos=rvCutPos(); cc.textContent= cpos?('확정선 '+cpos+'번 · '+rvCutName()+'까지'):'확정선 미정'; }
-    var n=rvChanged(); var sv=$('rvSave'); if(sv){ sv.disabled=n===0; sv.classList.toggle('blocked',cs.length>0&&n>0); } var pd=$('rvPd'); if(pd) pd.textContent=n?('· '+n+'명'+(cs.length?' · 중복'+cs.length:'')):'';
+    var n=rvChanged(); var sv=$('rvSave'); if(sv){ sv.disabled=(n===0&&!Object.keys(rvEditing).length); sv.classList.toggle('blocked',cs.length>0&&n>0); } var pd=$('rvPd'); if(pd) pd.textContent=n?('· '+n+'명'+(cs.length?' · 중복'+cs.length:'')):'';
     brDirty = n>0 || Object.keys(rvEditing).length>0;
   }
 
@@ -1324,7 +1324,7 @@
     else if(act==='cancel'){ var r3=rvRows.find(function(x){return x.pos===pos;}); if(r3){ var o=rvOrig.find(function(x){return x._id===r3._id;}); if(o){ r3.name=o.name;r3.tee=o.tee;r3.course=o.course;r3.duty=o.duty;r3.status=o.status; } r3.moveTo=null; } delete rvEditing[pos]; rvPaint(); }
     else if(act==='delrow'){ e.stopPropagation(); var di=rvRows.findIndex(function(x){return x.pos===pos;}); if(di<0)return; var drow=rvRows[di]; if(rvOrig.some(function(o){return o._id===drow._id;})) rvDeleted.push(drow._id); rvRows.splice(di,1); delete rvEditing[pos]; rvRenumber(); rvPaint(); rvToast((drow.name||'행')+' 삭제 (저장 시 반영)'); }
   }
-  function rvCommit(pos,card){
+  function rvCommit(pos,card,noPaint){
     var r=rvRows.find(function(x){return x.pos===pos;});
     r.name=card.querySelector('.e-name').value.trim();
     var dv=card.querySelector('.e-duty').value; r.duty=(dv==='—')?'':dv;
@@ -1333,7 +1333,7 @@
     if(st==='work'&&!rvOff(r)&&!r.moveTo){ var _tee=rvNormTime(card.querySelector('.e-tee').value); var _crs=card.querySelector('.e-course button.on').getAttribute('data-c')||'OUT'; rvPromote(pos); r.tee=_tee; r.course=_crs; }
     else if(st==='spare'){ rvSetSpare(pos); }
     if(rvOff(r)||r.moveTo){ r.tee=''; r.course=''; }
-    delete rvEditing[pos]; rvPaint();
+    delete rvEditing[pos]; if(!noPaint) rvPaint();
     if(r.moveTo) rvToast(r.name+' → '+r.moveTo+'부 이동 (저장 시 반영)');
   }
 
@@ -1374,7 +1374,11 @@
     return await r.json();
   }
   async function rvSaveCorrect(){
-    var n=rvChanged(); if(!n)return;
+    // ★열려 있는 편집 카드를 먼저 반영 — '이 사람 적용'을 안 누르고 저장해도 이름·상태 편집이 반영되게(이름 바꿔도 저장 안 되던 버그 수정)
+    var openPos=Object.keys(rvEditing).map(Number);
+    openPos.forEach(function(p){ var c=document.querySelector('.rv-card[data-pos="'+p+'"]'); if(c) rvCommit(p,c,true); });
+    if(openPos.length) rvPaint();
+    var n=rvChanged(); if(!n){ rvToast('바뀐 내용이 없어요'); return; }
     var cs=rvConf();
     if(cs.length){ rvBlock('티오프 <b>중복 '+cs.length+'건</b>이 남아 저장할 수 없어요.', cs.map(function(c){return '· <b>'+c.tee+' '+c.course+'</b> — '+c.rows.map(function(r){return esc(r.name);}).join(', ');}).join('<br>')+'<br><br>같은 시간·코스엔 한 명만 들어갈 수 있어요. 중복을 정리한 뒤 저장하세요.'); return; }
     var save=$('rvSave'), msg=$('rvMsg'); save.disabled=true; msg.className='rv-msg'; msg.textContent='저장 전 최신 배치표 확인…';
