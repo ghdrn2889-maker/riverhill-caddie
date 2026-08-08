@@ -28,7 +28,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
-import { collectPartRosters, buildCrossPartSwaps } from './crossparts.mjs';
+import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
@@ -1148,13 +1148,18 @@ function systemRelevant(full) {
 //   근무 카드까지 지워버려 안 됨). _adminLock 필드는 안 건드림(관리자 교정 보존).
 function reconcileCrossPartConsistency(dateLabel) {
   try {
-    const swaps = buildCrossPartSwaps(collectPartRosters());
+    const rosters = collectPartRosters();
+    const swaps = buildCrossPartSwaps(rosters);
     if (!swaps.length) return;
-    // 대바로 어느 부엔가 '들어간'(sub) 이름 → 그 이름이 들어간 부(inParts). 부내 상호맞바꿈은 제외.
-    const inByName = {};
+    // 각 부에 실제 존재하는 '맨이름' 집합 — owner가 그 부로 실제 갔는지 확인용.
+    const inRoster = {};
+    for (const p of ['1', '2', '3']) inRoster[p] = new Set((rosters[p] || []).map((c) => swapBare(c)).filter(Boolean));
+    // 대바로 어느 부엔가 '들어간'(sub) 이름 → 그 이름이 들어간 부(inParts) + 그 대바의 owner들. 부내 상호맞바꿈은 제외.
+    const inByName = {}; const ownersBySub = {};
     for (const s of swaps) {
       if (swaps.some((o) => o.part === s.part && o.owner === s.sub && o.sub === s.owner)) continue;   // 부내 상호맞바꿈
       (inByName[s.sub] ||= new Set()).add(String(s.part));
+      (ownersBySub[s.sub] ||= new Set()).add(s.owner);
     }
     const subs = Object.keys(inByName);
     if (!subs.length) return;
@@ -1163,8 +1168,12 @@ function reconcileCrossPartConsistency(dateLabel) {
       const nm = String(m.board_name || '').replace(/\s/g, '');
       const inParts = inByName[nm];
       if (!inParts) continue;                                        // 이 회원이 어느 부 대바 점유자(sub)가 아님
+      const owners = ownersBySub[nm];
       for (const other of ['1', '2', '3']) {
         if (inParts.has(other)) continue;                            // 대바로 들어간 부 자체는 건드리지 않음
+        // ★owner가 그 부에 실제로 있을 때만 정리 — owner가 sub의 그 부 자리를 넘겨받아야 sub의 스페어가 스테일.
+        //  owner가 그 부에 없으면(예: 박선하가 3부로 안 가고 2부에 있음) sub(연승준)의 3부는 정상 두 부 근무 → 보존.
+        if (!(owners && [...owners].some((ow) => inRoster[other].has(swapBare(ow))))) continue;
         const tp = loadToday(m.id, other);
         if (!tp || !tp.status) continue;
         if (!['spare', 'waiting', 'near'].includes(String(tp.status))) continue;   // 스페어만(근무 보호)
