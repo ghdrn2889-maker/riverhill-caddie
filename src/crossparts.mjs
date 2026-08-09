@@ -18,14 +18,24 @@ export function collectPartRosters() {
   return out;
 }
 
+// 셀에서 owner(맨이름)와 sub(대바 점유자) 추출. sub = 여러 괄호 중 '한글 이름'인 괄호(마지막).
+//  ★"조하빈(54)(정진영)"처럼 근무태그(54)가 이름·대바 괄호 사이에 껴도 정진영을 sub로 잡는다(첫 괄호만 보던 버그 수정).
+export function cellOwnerSub(cell) {
+  const s = String(cell || '');
+  const om = s.match(/^([가-힣]{2,4})/); if (!om) return { owner: '', sub: '' };
+  const owner = om[1]; let sub = '';
+  for (const g of s.matchAll(/\(([^)]*)\)/g)) { const p = g[1].trim(); if (/^[가-힣]{2,4}$/.test(p) && p !== owner && !SWAP_TAGWORDS.has(p)) sub = p; }
+  return { owner, sub };
+}
+
 // 로스터들에서 크로스파트 스왑 목록 — 'X(Y)'이고 Y가 실존 캐디(다른 셀에 맨이름 존재)면 {owner:X, sub:Y, part}.
 export function buildCrossPartSwaps(rosters) {
   const known = new Set();
   for (const p of Object.keys(rosters)) for (const c of rosters[p]) { const n = swapBare(c); if (/^[가-힣]{2,4}$/.test(n)) known.add(n); }
   const swaps = [];
   for (const p of Object.keys(rosters)) rosters[p].forEach((c) => {
-    const m = String(c || '').match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
-    if (m && m[1] !== m[2] && known.has(m[2]) && !SWAP_TAGWORDS.has(m[2])) swaps.push({ owner: m[1], sub: m[2], part: p });
+    const { owner, sub } = cellOwnerSub(c);
+    if (owner && sub && owner !== sub && known.has(sub)) swaps.push({ owner, sub, part: p });
   });
   return swaps;
 }
@@ -47,7 +57,7 @@ export function crossSwapFor(name, part, swaps) {
 //    고쳐도(저장 눌러도) 재조회 때 다시 역치환돼 되돌아오던 버그의 원인. 저장값을 그대로 표시(편집 가능).
 export function actualCaddieName(cell, part, swaps) {
   const s = String(cell || '');
-  const m = s.match(/^([가-힣]{2,4})\s*\(([가-힣]{2,4})\)/);
-  if (m && m[1] !== m[2] && swaps.some((sw) => sw.owner === m[1] && sw.sub === m[2])) return m[2];   // 박선하(연승준) → 연승준
+  const { owner, sub } = cellOwnerSub(s);
+  if (sub && swaps.some((sw) => sw.owner === owner && sw.sub === sub)) return sub;   // 박선하(연승준)·조하빈(54)(정진영) → 점유자
   return s;
 }

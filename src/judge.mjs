@@ -1162,7 +1162,12 @@ function normRosterName(raw) {
   const base = m[1].trim(), inner = m[2].trim(), tail = m[3].trim();
   const dutyTag = inner.replace(/\s/g, '');   // "54"·"1,3"·"2,3"·"찾근" 등 근무구분 태그
   // "최수원(1,3)연승준" — 괄호 뒤에 이름이 더 있으면 그게 실제 점유자(괄호 속은 부/근무 태그).
-  if (tail && /[가-힣]/.test(tail)) return { name: tail, cross: /^[\d,\s.]+$/.test(inner), duty: /^[\d,\s.]+$/.test(inner) ? dutyTag : '' };
+  //  ★꼬리가 또 괄호면("조하빈(54)(정진영)") 그 속 이름이 실제 점유자 — 근무태그(54)가 이름·대바 괄호 사이에
+  //    끼어 점유자가 통째로 유실되던 버그 수정.
+  let tailName = tail;
+  const tpm = tail.match(/^\(\s*([^)]*?)\s*\)/);
+  if (tpm) tailName = tpm[1].trim();
+  if (tailName && /[가-힣]/.test(tailName) && !/^[\d,\s.]+$/.test(tailName)) return { name: tailName, cross: /^[\d,\s.]+$/.test(inner), duty: /^[\d,\s.]+$/.test(inner) ? dutyTag : '' };
   if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true, duty: dutyTag };  // "표승완(54)" 부/근무 구분
   // 근무구분 키워드(찾근·조출 등)는 '순번 교환'이 아니라 태그 → 본명(base) 유지. (없으면 "우겸조(찾근)"이 이름 "찾근"으로 깨짐)
   if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, cross: false, duty: dutyTag };
