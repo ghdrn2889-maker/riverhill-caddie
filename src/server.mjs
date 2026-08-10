@@ -1064,18 +1064,42 @@ async function rememberBoard(full, out) {
     const newRoster = (v.part3Roster || []).filter(Boolean).length;
     const prevGrid = (prev.rawVerdict?.teeGrid || []).length;
     const newGrid = (v.teeGrid || []).length;
-    const weak = newRoster < prevRoster || newGrid < prevGrid || !nd;   // 줄어듦 또는 날짜 소실 = 약한 판독
-    if (!newDay && weak) {
-      // ★구조(순번·커트)는 정본 유지하되 '원본 배치표'로 띄울 최신 3부 이미지는 갱신 —
-      //  당추가 그려진 변동본 이미지가 옛 기본 이미지에 가려지지 않게(검수·판독의 원본 이미지 신선도).
-      if (newImg && String(prev.latestImageId || prev.id) !== String(full.id)) {
-        prev.latestImage = newImg; prev.latestImageId = String(full.id); prev.latestImageAt = Date.now();
-        saveJSON('lastboard.json', prev);
-        console.log(`·  lastboard 구조 유지 + 최신 3부 이미지 갱신(#${full.id}) — 정본 #${prev.id}`);
+    const shrank = newRoster < prevRoster || newGrid < prevGrid;       // 명단·티오프가 줄어듦 = 약한 재크롭
+    // ★카톡 자동캡처 배치표는 '날짜 헤더'가 크롭 밖이라 dateLabel이 비어 non-authoritative가 된다.
+    //  그러나 명단·티오프가 완전(신뢰·비축소)한 '같은 날 라이브 배치표'는 정본 구조를 갱신해야 한다 —
+    //  안 그러면 오후 당추 성장분이 아침 카페 정본에 얼어붙어 '읽고도 안 올라감'(프리즈). prev 날짜를 상속해 authoritative 유지.
+    const datelessLiveBoard = !newDay && !nd && !shrank
+      && v.rosterReliable === true
+      && Array.isArray(v.part3Roster) && v.part3Roster.length >= 9
+      && (Number(v.teamCount) > 0 || Number(v.cutoffPosition) > 0);
+    if (datelessLiveBoard) {
+      v.dateLabel = pd;   // 같은 날 → 정본 날짜 상속(이제 authoritative) → 아래 정상 저장 경로로 구조 반영
+      // ★관리자 교정 보존 — 오늘 검수로 고친 '같은 크기' 배치표의 카톡 재캡처면, 자동 오독이 교정 이름을
+      //  되돌리지 않게 교정 이름·근태·표식을 유지한다. (명단수가 늘어난 성장분은 새 판독 채택 —
+      //   당추 중간삽입은 순번이 밀리므로 위치기반 복사가 오염을 낳음 → 동일 명단수일 때만 보존.)
+      const pv = prev.rawVerdict;
+      if (pv && pv._adminCorrected && prevRoster === newRoster && Array.isArray(pv.part3Roster) && pv.part3Roster.length) {
+        v.part3Roster = pv.part3Roster.slice();
+        if (pv.crewDuty) v.crewDuty = pv.crewDuty;
+        v._adminCorrected = pv._adminCorrected;
+        console.log(`·  lastboard 갱신 — 카톡 라이브(#${full.id}) 구조 반영 + 관리자 교정 이름 보존(동일 명단수 ${newRoster})`);
       } else {
-        console.log(`·  lastboard 유지 — 약한 변동 판독(#${full.id})이 정본 배치표(#${prev.id})를 덮지 않음`);
+        console.log(`·  lastboard 갱신 — 카톡 라이브 배치표(#${full.id}) 날짜 상속(${pd}) → 정본 구조 반영(명단 ${newRoster}·티 ${newGrid}·컷 ${v.cutoffPosition || v.teamCount})`);
       }
-      return;
+    } else {
+      const weak = shrank || !nd;   // 줄어듦 또는 (불완전한데)날짜 소실 = 약한 판독
+      if (!newDay && weak) {
+        // ★구조(순번·커트)는 정본 유지하되 '원본 배치표'로 띄울 최신 3부 이미지는 갱신 —
+        //  당추가 그려진 변동본 이미지가 옛 기본 이미지에 가려지지 않게(검수·판독의 원본 이미지 신선도).
+        if (newImg && String(prev.latestImageId || prev.id) !== String(full.id)) {
+          prev.latestImage = newImg; prev.latestImageId = String(full.id); prev.latestImageAt = Date.now();
+          saveJSON('lastboard.json', prev);
+          console.log(`·  lastboard 구조 유지 + 최신 3부 이미지 갱신(#${full.id}) — 정본 #${prev.id}`);
+        } else {
+          console.log(`·  lastboard 유지 — 약한 변동 판독(#${full.id})이 정본 배치표(#${prev.id})를 덮지 않음`);
+        }
+        return;
+      }
     }
   }
   boardWatch = { id: String(full.id), fp: await imgFingerprint(full), dateLabel: v.dateLabel || '', at: Date.now() };
