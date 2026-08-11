@@ -22,12 +22,12 @@
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
            /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡혀 하단 탭이 바닥에 안 붙고 떠 보임 → 동적 뷰포트 높이로 고정. */
            height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
-    .top { background:linear-gradient(120deg,#12bf94,#0c9c73); color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
+    .top { background:linear-gradient(125deg,#14a081,#0a7657); color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
-    /* 앱 로고 — 실제 앱 아이콘(민트 Cm)을 흰 라운드 배지에 넣어 민트 배너 위에서 도드라지게 */
-    .cmlogo { display:inline-flex; padding:2px; border-radius:11px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.10); }
-    .cmlogo img { width:32px; height:32px; display:block; border-radius:9px; }
+    /* 앱 로고 — 아이콘 안의 Cm 마크만 흰색으로 배너 위에 직접(사각 배경 없이) */
+    .cmlogo { display:inline-flex; align-items:center; }
+    .cmlogo svg { width:33px; height:33px; display:block; }
     .date { font-size:10px; opacity:.72; }
     main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
            overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
@@ -1922,7 +1922,7 @@
     <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
     <header class="top reveal" style="--i:0">
       <div class="toprow">
-        <span class="cmlogo"><img src="icon-192.png" alt="CADDIE 총무"></span>
+        <span class="cmlogo"><svg viewBox="0 0 100 100" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="CADDIE 총무"><path d="M75 21 A35 35 0 1 0 75 79" stroke-width="13"></path><path d="M36 71 L36 53 Q36 45 44 45 Q52 45 52 53 L52 71 M52 53 Q52 45 60 45 Q68 45 68 53 L68 71" stroke-width="8"></path></svg></span>
         <div class="topright">
           <span class="date" id="date">—</span>
           <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
