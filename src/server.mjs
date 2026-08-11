@@ -749,8 +749,13 @@ app.get('/api/cartcheck', (req, res) => {
   const t = loadToday(uid);
   const tISO = t && worklog.labelToISO(t.date);
   const isWorkToday = !!(t && tISO === date && ['assigned', 'work', 'your_turn'].includes(t.status));
-  res.json({ ok: true, date, items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid),
+  res.json({ ok: true, date, today: todayISOKST(), items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid),
     work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
+});
+// 지난 반납 기록 찾기 — 유예기간 내 기록 있는 날 목록(최신순, 완료여부·카트#·사진수). 프런트에서 날짜 검색으로 좁힘.
+app.get('/api/cartcheck/records', (req, res) => {
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, today: todayISOKST(), records: cartcheck.returnRecords(uid, isoDaysAgo(ROUNDCHECK_RETAIN_DAYS - 1)) });
 });
 // 지난 카트 점검 기록 목록(최근 2주치) — 날짜를 넘겨보며 열람.
 app.get('/api/cartcheck/history', (req, res) => {
@@ -794,6 +799,18 @@ app.post('/api/cartcheck/check', (req, res) => {
   const { date, key, done } = req.body || {};
   if (!date || !key) return res.status(400).json({ error: 'date, key 필요' });
   res.json({ ok: true, day: cartcheck.toggleCheck(date, key, !!done, req.user?.id || 1) });
+});
+// 경기팀 반납 4종 토글(배터리·태블릿·무전기·유도키) — 사진 없이 탭 체크.
+app.post('/api/cartcheck/return', (req, res) => {
+  const { date, key, done } = req.body || {};
+  if (!date || !key) return res.status(400).json({ error: 'date, key 필요' });
+  res.json({ ok: true, day: cartcheck.toggleReturn(date, key, !!done, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/stamp', (req, res) => {
+  const { date, stamped } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  const day = cartcheck.setStamp(date, !!stamped, req.user?.id || 1);
+  res.json({ ok: !day?.stampError, day });
 });
 app.post('/api/cartcheck/photo', (req, res) => {
   const { date, leg, image } = req.body || {};
@@ -2097,8 +2114,8 @@ async function checkCartReminders() {
 setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
 
 // ── 라운드 점검(카트·클럽) 사진 자동 정리 — 블랙박스식 롤링 삭제 ──────────
-//  기본 30일 보관 후 그 이전 날의 사진+기록을 통째 삭제(용량·프라이버시). ★근무기록(세무)은 별개라 영향 없음.
-const ROUNDCHECK_RETAIN_DAYS = Number(process.env.ROUNDCHECK_RETAIN_DAYS ?? 30);
+//  기본 45일 보관 후 그 이전 날의 사진+기록을 통째 삭제(용량·프라이버시·분쟁 대비창). ★근무기록(세무)은 별개라 영향 없음.
+const ROUNDCHECK_RETAIN_DAYS = Number(process.env.ROUNDCHECK_RETAIN_DAYS ?? 45);
 function isoDaysAgo(n) {
   const [y, m, d] = todayISOKST().split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d)); dt.setUTCDate(dt.getUTCDate() - n);

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>리버힐 캐디 일정</title>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#104d31" />
-  <link rel="apple-touch-icon" href="/icon-192.png?v=3" />
+  <meta name="theme-color" content="#3aa08a" />
+  <link rel="apple-touch-icon" href="/icon-192.png?v=4" />
   <!-- iOS PWA: 홈 화면에 추가 시 앱처럼(주소창 없이) 실행 + 상태바 스타일 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1232,6 +1232,185 @@
     .rc-day.today { border-color:#9cc7b0; }
     .rc-day.sel { border-color:#1d6740; background:#eef7f0; box-shadow:0 0 0 1px #1d6740 inset; }
     .rc-day.fut { opacity:.32; cursor:default; }
+    /* 지난 기록 찾기 — 오늘 헤더 + 트리거 + 검색 시트 */
+    .rc-findbar { display:flex; flex-direction:column; gap:10px; }
+    .rc-todayh { display:flex; align-items:center; gap:9px; }
+    .rc-todayh .d { font-size:19px; font-weight:850; color:#20242e; }
+    .rc-todayh .tag { font-size:10.5px; font-weight:850; color:var(--a); background:var(--as); border-radius:8px; padding:5px 10px; }
+    .rc-todayh .rc-backtoday { margin-left:auto; font-size:11px; font-weight:850; color:var(--a); background:var(--as); border:1px solid #bfe8dc; border-radius:8px; padding:6px 12px; cursor:pointer; }
+    .rc-findrow { display:flex; align-items:center; gap:9px; width:100%; padding:12px 14px; border:1.5px solid #e6e8f0; border-radius:13px; background:#fbfbfe; color:#3a4050; font-size:13px; font-weight:800; cursor:pointer; }
+    .rc-findrow svg { width:17px; height:17px; color:var(--a); flex:none; }
+    .rc-findrow .ch { margin-left:auto; color:#b8bdcb; font-weight:700; }
+    .rc-findsheet { position:fixed; inset:0; z-index:1300; display:none; align-items:flex-end; justify-content:center; background:rgba(16,20,34,.42); }
+    .rc-findsheet.on { display:flex; }
+    .rc-fs-card { width:100%; max-width:600px; background:#fff; border-radius:20px 20px 0 0; padding:16px 15px calc(18px + env(safe-area-inset-bottom,0)); max-height:78vh; display:flex; flex-direction:column; animation:rcSheetUp .26s cubic-bezier(.2,.8,.3,1); }
+    @keyframes rcSheetUp { from{ transform:translateY(30px); opacity:.4 } to{ transform:translateY(0); opacity:1 } }
+    .rc-fs-head { display:flex; align-items:center; margin-bottom:12px; }
+    .rc-fs-head span { font-size:15px; font-weight:850; color:#20242e; }
+    .rc-fs-head button { margin-left:auto; border:0; background:transparent; font-size:19px; color:var(--mut); cursor:pointer; line-height:1; padding:2px 4px; }
+    .rc-fs-search { display:flex; align-items:center; gap:8px; border:1.5px solid #d9dcea; border-radius:12px; padding:11px 12px; margin-bottom:11px; }
+    .rc-fs-search svg { width:17px; height:17px; color:var(--mut); flex:none; }
+    .rc-fs-search input { border:0; outline:0; width:100%; font-size:14px; font-weight:700; background:transparent; color:#20242e; }
+    .rc-fs-list { display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+    .rc-rec { display:flex; align-items:center; gap:11px; padding:12px; border:1px solid #ebedf4; border-radius:13px; background:#fff; cursor:pointer; text-align:left; width:100%; }
+    .rc-rec .dt { font-size:14px; font-weight:850; color:#20242e; min-width:78px; }
+    .rc-rec .dt small { font-weight:800; color:var(--mut); margin-left:3px; font-size:11px; }
+    .rc-rec .dt small.sun { color:#e2564b; } .rc-rec .dt small.sat { color:#3f74d6; }
+    .rc-rec .meta { font-size:11px; color:var(--mut); font-weight:700; }
+    .rc-rec .bdg { margin-left:auto; font-size:10.5px; font-weight:850; padding:4px 9px; border-radius:20px; white-space:nowrap; }
+    .rc-rec .bdg.ok { color:#0a8f5f; background:var(--oks); } .rc-rec .bdg.no { color:#b4460b; background:var(--warns); }
+    .rc-rec .rch { color:#c4c9d6; width:16px; height:16px; flex:none; }
+    .rc-fs-empty { text-align:center; color:var(--mut); font-size:12px; font-weight:700; padding:26px 0; }
+
+    /* ===== 라운드 점검 재편 v2 (핀테크 인디고 · rc2- 스코프) ===== */
+    #view-cart { --a:#12bf94; --as:#e4f7f1; --ai:#0a9e77; --mut:#8b91a3; --ln:#edeef3;
+      --ok:#11b981; --oks:#e7f8f0; --warn:#e8971a; --warns:#fdf3e2; --dg:#ef4757; --dgs:#fdebed;
+      --bfr:#c98a2b; --aft:#2f74c9;
+      background:#f3f4f8; }
+    /* 날짜 스트립을 초록→핀테크 인디고로(옛 배포 톤 제거) */
+    #view-cart .rc2-datebar { margin-top:12px; }
+    #view-cart .rc-bartitle { color:var(--mut); font-weight:800; }
+    #view-cart .rc-todaybtn { color:var(--a); background:var(--as); border:1px solid #bfe8dc; font-weight:800; }
+    #view-cart .rc-day { border:1px solid #e4e6ee; background:#fff; }
+    #view-cart .rc-day .dn { color:#2b3140; } #view-cart .rc-day .dm { color:var(--a); }
+    #view-cart .rc-day.sun .dn { color:var(--dg); } #view-cart .rc-day.sat .dn { color:var(--aft); }
+    #view-cart .rc-day.today { border-color:#b9c0f0; }
+    #view-cart .rc-day.sel { border-color:var(--a); background:var(--as); box-shadow:0 0 0 1px var(--a) inset; }
+    .rc2-hero { display:flex; align-items:center; gap:15px; background:#fff; border:1px solid #e9ebf2; border-radius:18px; padding:16px 17px; box-shadow:0 4px 18px rgba(23,30,60,.05); }
+    .rc2-ring { flex:none; width:62px; height:62px; position:relative; }
+    .rc2-ring svg { transform:rotate(-90deg); }
+    .rc2-ring .rc2-rc { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .rc2-ring .rc2-rc b { font-size:17px; font-weight:850; line-height:1; color:#171a23; }
+    .rc2-ring .rc2-rc b i { font-style:normal; font-size:10px; color:#a7adbd; }
+    .rc2-ring .rc2-rc span { font-size:8px; color:var(--mut); font-weight:800; margin-top:2px; }
+    #rcRingArc { transition:stroke-dashoffset .6s cubic-bezier(.22,1,.36,1); }
+    .rc2-ring .rc2-rc b { transition:transform .18s; }
+    .rc2-ring.rcbump .rc2-rc b { animation:rcRingBump .42s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes rcRingBump { 0%{transform:scale(1)} 45%{transform:scale(1.24)} 100%{transform:scale(1)} }
+    @media (prefers-reduced-motion:reduce){ #rcRingArc{transition:none} .rc2-ring.rcbump .rc2-rc b{animation:none} }
+    .rc2-hero .rc2-ht { font-size:16px; font-weight:850; letter-spacing:-.02em; color:#171a23; }
+    .rc2-hero .rc2-hs { font-size:11.5px; color:var(--mut); margin-top:4px; line-height:1.45; }
+    .rc2-sect { font-size:11px; color:var(--mut); font-weight:850; margin:18px 3px 9px; display:flex; justify-content:space-between; }
+    .rc2-sect .rc2-c { color:var(--a); }
+    .rc2-subj { display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #e9ebf2; border-radius:15px; box-shadow:0 3px 14px rgba(23,30,60,.05); padding:14px; margin-bottom:10px; cursor:pointer; }
+    .rc2-subj .rc2-si { flex:none; width:44px; height:44px; border-radius:12px; background:var(--as); display:flex; align-items:center; justify-content:center; }
+    .rc2-subj .rc2-si svg { width:22px; height:22px; color:var(--a); }
+    .rc2-subj .rc2-sc { flex:1; min-width:0; }
+    .rc2-subj .rc2-st { font-size:14px; font-weight:850; color:#171a23; display:flex; align-items:center; gap:7px; }
+    .rc2-badge { font-size:9.5px; font-weight:850; padding:3px 8px; border-radius:999px; }
+    .rc2-badge.ok { background:var(--oks); color:#0a8f5f; } .rc2-badge.need { background:var(--warns); color:#b9770f; }
+    .rc2-subj .rc2-ss { font-size:11px; color:var(--mut); margin-top:4px; display:flex; gap:11px; }
+    .rc2-subj .rc2-ss em { font-style:normal; font-weight:850; }
+    .rc2-subj .rc2-ss .b em { color:var(--bfr); } .rc2-subj .rc2-ss .a em { color:var(--aft); }
+    .rc2-subj .rc2-go { flex:none; white-space:nowrap; display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:850; color:#fff; background:linear-gradient(135deg,var(--a),var(--ai)); padding:11px 14px; border-radius:13px; box-shadow:0 5px 14px rgba(18,191,148,.32); transition:transform .08s, filter .15s; }
+    .rc2-subj .rc2-go:active { transform:translateY(1px); filter:brightness(1.06); }
+    .rc2-subj .rc2-go svg { width:16px; height:16px; }
+    .rc2-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .rc2-op { background:#fff; border:1.5px solid #e9ebf2; border-radius:14px; box-shadow:0 3px 14px rgba(23,30,60,.05); padding:12px; display:flex; gap:10px; align-items:center; cursor:pointer; }
+    .rc2-op .rc2-oi { flex:none; width:54px; height:54px; border-radius:15px; background:#f0f1f6; display:flex; align-items:center; justify-content:center; }
+    .rc2-op .rc2-oi svg { width:33px; height:33px; color:#a7adbd; }
+    .rc2-op .rc2-oi .rccharge { opacity:0; }
+    .rc2-op.on .rc2-oi .rccharge { opacity:1; }
+    .rc2-op.rcpop .rc2-oi .rccharge { transform-box:fill-box; transform-origin:center; animation:rcChargePop .34s cubic-bezier(.34,1.56,.64,1) both; }
+    @keyframes rcChargePop { 0%{opacity:0; transform:scale(.2) rotate(-10deg)} 55%{opacity:1; transform:scale(1.25) rotate(3deg)} 100%{opacity:1; transform:scale(1) rotate(0)} }
+    @media (prefers-reduced-motion:reduce){ .rc2-op.rcpop .rc2-oi .rccharge{ animation:none } }
+    .rc2-op.on { border-color:#cfeee0; } .rc2-op.on .rc2-oi { background:var(--oks); } .rc2-op.on .rc2-oi svg { color:var(--ok); }
+    .rc2-op .rc2-on { font-size:12px; font-weight:850; color:#171a23; word-break:keep-all; } .rc2-op .rc2-os { font-size:9.5px; font-weight:800; margin-top:2px; color:var(--mut); } .rc2-op.on .rc2-os { color:#0a8f5f; }
+    .rc2-op .rc2-ck { margin-left:auto; flex:none; width:22px; height:22px; border-radius:50%; border:2px solid #d6d9e4; display:flex; align-items:center; justify-content:center; }
+    .rc2-op.on .rc2-ck { background:var(--ok); border-color:var(--ok); } .rc2-op .rc2-ck svg { width:12px; height:12px; color:#fff; opacity:0; } .rc2-op.on .rc2-ck svg { opacity:1; }
+    .rc2-nudge { display:flex; gap:9px; align-items:center; background:var(--as); border-radius:13px; padding:11px 13px; margin-top:12px; }
+    .rc2-nudge svg { flex:none; width:17px; height:17px; color:var(--a); } .rc2-nudge .t { font-size:11px; color:#0d8a66; line-height:1.5; } .rc2-nudge .t b { color:var(--ai); }
+    /* 완료 도장 찍기 버튼 + 미완료 안내 + 도장 오버레이 */
+    .rc2-stampbtn { width:100%; margin:16px 0 4px; padding:16px; border:0; border-radius:16px; background:linear-gradient(135deg,#128a4f,#0b6d3c); color:#fff; font-size:15px; font-weight:850; letter-spacing:.3px; box-shadow:0 6px 18px rgba(12,120,70,.26); cursor:pointer; transition:filter .15s, transform .08s; }
+    .rc2-stampbtn:active { transform:translateY(1px); filter:brightness(.97); }
+    .rc2-stampbtn.incomplete { background:linear-gradient(135deg,#e6a417,#d07d06); box-shadow:0 6px 18px rgba(200,130,10,.24); }
+    .rc2-miss { display:none; margin:8px 4px 0; font-size:11.5px; color:#b4460b; line-height:1.65; }
+    .rc2-miss.on { display:block; }
+    .rc2-miss b { color:#8f3708; font-weight:850; }
+    .rc2-stampov { position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px;
+      background:rgba(248,250,252,.34); -webkit-backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); }
+    .rc2-stampov.on { display:flex; }
+    .rc2-stamp { width:210px; height:210px; color:#cf2f2b; opacity:.94; transform:rotate(-9deg); filter:drop-shadow(0 6px 14px rgba(180,30,25,.22)); }
+    .rc2-stampov.slam .rc2-stamp { animation:rcStampSlam .5s cubic-bezier(.2,1.5,.4,1) both; }
+    @keyframes rcStampSlam { 0%{opacity:0; transform:rotate(-9deg) scale(2.7)} 55%{opacity:1; transform:rotate(-9deg) scale(.9)} 74%{transform:rotate(-9deg) scale(1.07)} 100%{opacity:1; transform:rotate(-9deg) scale(1)} }
+    .rc2-stampcap { font-size:13px; font-weight:850; color:#2b6b46; margin-top:-4px; text-align:center; }
+    .rc2-editbtn { padding:12px 26px; border:1.5px solid #c9d2cd; border-radius:14px; background:#fff; color:#2f4a3b; font-size:13.5px; font-weight:800; display:inline-flex; align-items:center; gap:7px; cursor:pointer; box-shadow:0 3px 12px rgba(23,40,30,.08); }
+    .rc2-editbtn svg { width:16px; height:16px; }
+    nav.nav { position:relative; z-index:300; }
+    @media (prefers-reduced-motion:reduce) { .rc2-stampov.slam .rc2-stamp { animation:none; } }
+
+    /* 지난기록 소지품 점검(선택) 접이식 */
+    .rc2-legacy { margin-top:14px; }
+    .rc2-legacy > summary { list-style:none; cursor:pointer; font-size:11.5px; font-weight:800; color:var(--mut); padding:10px 2px; display:flex; align-items:center; gap:6px; }
+    .rc2-legacy > summary::-webkit-details-marker { display:none; }
+    .rc2-legacy > summary svg { width:13px; height:13px; transition:transform .2s; } .rc2-legacy[open] > summary svg { transform:rotate(90deg); }
+
+    /* 갤러리/비교 오버레이 */
+    #rcGallery { position:fixed; inset:0; background:#0e1017; display:none; flex-direction:column; z-index:1200; }
+    #rcGallery.on { display:flex; }
+    .rc2-gtop { flex:none; display:flex; align-items:center; gap:10px; padding:14px 14px 9px; color:#fff; }
+    .rc2-gtop .bk { background:rgba(255,255,255,.12); border:0; color:#fff; width:34px; height:34px; border-radius:11px; font-size:19px; cursor:pointer; }
+    .rc2-gtop .tt { flex:1; min-width:0; font-size:15px; font-weight:850; } .rc2-gtop .tt small { display:block; font-size:11px; opacity:.6; font-weight:600; margin-top:2px; }
+    .rc2-gtop .tog { flex:none; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:11px; font-weight:800; padding:8px 11px; border-radius:11px; cursor:pointer; }
+    .rc2-gtop .tog svg { width:13px; height:13px; transition:transform .2s; } #rcGallery.mini .rc2-gtop .tog svg { transform:rotate(180deg); }
+    .rc2-gtop .tog .x::after { content:'접기'; } #rcGallery.mini .rc2-gtop .tog .x::after { content:'목록'; }
+    .rc2-rails { flex:none; padding:0 12px 6px; overflow:hidden; transition:max-height .25s, opacity .2s; max-height:260px; }
+    #rcGallery.mini .rc2-rails { max-height:0; opacity:0; padding-bottom:0; pointer-events:none; }
+    .rc2-rail { margin-bottom:6px; }
+    .rc2-rail .rl { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:800; margin:0 2px 4px; }
+    .rc2-rail.b .rl { color:#e8c07a; } .rc2-rail.a .rl { color:#93b8f2; }
+    .rc2-rail .rl i { width:7px; height:7px; border-radius:2px; } .rc2-rail.b .rl i { background:var(--bfr); } .rc2-rail.a .rl i { background:var(--aft); }
+    .rc2-rail .rl .n { margin-left:auto; opacity:.6; font-weight:700; }
+    .rc2-strip { display:flex; gap:7px; overflow-x:auto; padding:1px 0; scrollbar-width:none; } .rc2-strip::-webkit-scrollbar { display:none; }
+    .rc2-add { flex:none; width:46px; height:46px; border-radius:11px; border:1.6px dashed rgba(255,255,255,.32); background:rgba(255,255,255,.05); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#c3c8da; cursor:pointer; }
+    .rc2-add svg { width:16px; height:16px; } .rc2-add span { font-size:8px; font-weight:800; }
+    .rc2-th { flex:none; width:46px; height:46px; border-radius:11px; overflow:hidden; position:relative; cursor:pointer; background:#05060a; border:2px solid transparent; }
+    .rc2-th img { width:100%; height:100%; object-fit:cover; display:block; }
+    .rc2-rail.b .rc2-th.sel { border-color:var(--bfr); } .rc2-rail.a .rc2-th.sel { border-color:var(--aft); }
+    .rc2-th .ix { position:absolute; left:3px; bottom:3px; font-size:8px; font-weight:800; color:#fff; background:rgba(8,10,20,.6); padding:1px 5px; border-radius:5px; }
+    .rc2-th .del { position:absolute; right:2px; top:2px; width:20px; height:20px; border-radius:50%; background:var(--dg); border:1.5px solid #fff; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:3; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+    .rc2-th .del svg { width:13px; height:13px; }
+    #rcGallery.viewonly .rc2-add, #rcGallery.viewonly .rc2-th .del { display:none; }
+    .rc2-rail .noshot { display:flex; align-items:center; height:46px; padding:0 12px; color:#6b7186; font-size:11px; font-weight:700; }
+    .rc2-stage { flex:1; display:flex; flex-direction:column; gap:6px; min-height:0; padding:0 10px 8px; }
+    .rc2-pane { flex:1; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border-top:3px solid var(--bfr); }
+    .rc2-pane.a { border-top-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
+    .rc2-pane .trk { position:absolute; inset:0; display:flex; transition:transform .28s cubic-bezier(.22,.61,.36,1); }
+    .rc2-pane.drag .trk { transition:none; }
+    .rc2-pane .sl { flex:none; width:100%; height:100%; position:relative; overflow:hidden; }
+    .rc2-pane .zm { position:absolute; inset:0; transform-origin:50% 50%; will-change:transform; }
+    .rc2-pane .zm img { width:100%; height:100%; object-fit:contain; display:block; pointer-events:none; }
+    .rc2-pane .lb { position:absolute; left:10px; top:10px; z-index:3; font-size:11px; font-weight:800; color:#fff; padding:5px 10px; border-radius:8px; display:flex; align-items:center; gap:7px; }
+    .rc2-pane.b .lb { background:rgba(160,110,30,.55); } .rc2-pane.a .lb { background:rgba(30,90,175,.55); }
+    .rc2-pane .lb .m { opacity:.85; font-weight:700; }
+    .rc2-pane .np { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#6b7186; text-align:center; }
+    .rc2-pane .np svg { width:28px; height:28px; opacity:.7; } .rc2-pane .np span { font-size:12px; font-weight:800; } .rc2-pane .np small { font-size:10px; opacity:.7; }
+    .rc2-pane:not(.empty) .np { display:none; } .rc2-pane.empty .trk, .rc2-pane.empty .ctl, .rc2-pane.empty .dts { display:none; }
+    .rc2-pane .dts { position:absolute; left:0; right:0; bottom:9px; z-index:3; display:flex; gap:5px; justify-content:center; pointer-events:none; }
+    .rc2-pane .dts i { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.35); } .rc2-pane .dts i.on { background:#fff; width:16px; border-radius:3px; }
+    .rc2-pane .ctl { position:absolute; right:9px; bottom:9px; z-index:4; display:flex; align-items:center; gap:1px; background:rgba(10,13,25,.55); border-radius:12px; padding:3px; }
+    .rc2-pane .ctl button { width:33px; height:33px; border:0; background:transparent; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:9px; }
+    .rc2-pane .ctl button:active { background:rgba(255,255,255,.16); } .rc2-pane .ctl button svg { width:17px; height:17px; }
+    .rc2-pane .ctl .lv { min-width:38px; text-align:center; font-size:11px; font-weight:800; color:#dfe3f0; }
+    .rc2-pane .ctl .sep { width:1px; height:20px; background:rgba(255,255,255,.18); margin:0 2px; }
+    .rc2-pane .ctl .tr svg { color:#ff8a95; }
+    #rcGallery.viewonly .rc2-pane .ctl .tr, #rcGallery.viewonly .rc2-pane .ctl .sep { display:none; }
+    .rc2-gfoot { flex:none; padding:8px 18px calc(14px + env(safe-area-inset-bottom,0)); text-align:center; color:#8b90a6; font-size:11px; } .rc2-gfoot b { color:#fff; }
+    /* 소스 선택 시트 + 삭제 팝업 */
+    .rc2-sheet { position:fixed; inset:0; background:rgba(10,13,25,.5); display:none; align-items:flex-end; justify-content:center; z-index:1300; } .rc2-sheet.on { display:flex; }
+    .rc2-sc2 { width:100%; max-width:600px; background:#fff; border-radius:24px 24px 0 0; padding:18px 16px calc(16px + env(safe-area-inset-bottom,0)); }
+    .rc2-sc2 .st { text-align:center; font-size:13px; font-weight:800; color:var(--mut); padding:4px 0 14px; }
+    .rc2-sc2 .opt { display:flex; align-items:center; gap:13px; width:100%; background:#f4f5f9; border:0; border-radius:15px; padding:15px; font-size:15px; font-weight:800; color:#171a23; cursor:pointer; margin-bottom:9px; text-align:left; }
+    .rc2-sc2 .opt .i { flex:none; width:40px; height:40px; border-radius:11px; background:var(--as); display:flex; align-items:center; justify-content:center; } .rc2-sc2 .opt .i svg { width:20px; height:20px; color:var(--a); }
+    .rc2-sc2 .opt small { display:block; font-size:10.5px; color:var(--mut); font-weight:600; margin-top:2px; }
+    .rc2-sc2 .cancel { width:100%; background:none; border:0; color:var(--mut); font-size:14px; font-weight:800; padding:13px; cursor:pointer; }
+    .rc2-confirm { position:fixed; inset:0; background:rgba(10,13,25,.5); display:none; align-items:center; justify-content:center; z-index:1400; padding:22px; } .rc2-confirm.on { display:flex; }
+    .rc2-dlg { width:100%; max-width:330px; background:#fff; border-radius:20px; padding:22px 20px 16px; text-align:center; box-shadow:0 20px 60px rgba(10,13,25,.4); }
+    .rc2-dlg .wi { width:52px; height:52px; border-radius:50%; background:var(--dgs); display:flex; align-items:center; justify-content:center; margin:2px auto 13px; } .rc2-dlg .wi svg { width:26px; height:26px; color:var(--dg); }
+    .rc2-dlg .wt { font-size:16px; font-weight:850; color:#171a23; } .rc2-dlg .wm { font-size:12px; color:#474d5c; line-height:1.55; margin:7px 0 18px; } .rc2-dlg .wm b { color:var(--dg); }
+    .rc2-dlg .bt { display:flex; gap:9px; } .rc2-dlg .bt button { flex:1; border:0; border-radius:13px; padding:14px; font-size:14px; font-weight:800; cursor:pointer; }
+    .rc2-dlg .bt .d { background:var(--dg); color:#fff; } .rc2-dlg .bt .c { background:#f0f1f6; color:#474d5c; }
+    /* 이 앱은 라이트 전용(다른 컴포넌트도 다크 오버라이드 없음) — rc2도 라이트로 통일해 샘플(핀테크 라이트)과 일치 */
     /* 사진 확대 보기(라이트박스) */
     .cc-lb { position:fixed; inset:0; z-index:9999; background:rgba(8,14,10,.93); display:flex; align-items:center; justify-content:center; }
     .cc-lb[hidden] { display:none; }
@@ -1970,65 +2149,78 @@
 
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
-      <div class="sect"><span>라운드 점검</span></div>
+      <section class="rc2-hero">
+        <div class="rc2-ring" id="rcRing"><svg width="62" height="62"><circle cx="31" cy="31" r="26" fill="none" stroke="#eef0f6" stroke-width="7"></circle><circle id="rcRingArc" cx="31" cy="31" r="26" fill="none" stroke="#12bf94" stroke-width="7" stroke-linecap="round" stroke-dasharray="163.4" stroke-dashoffset="163.4"></circle></svg><div class="rc2-rc"><b id="rcRingN">0<i>/6</i></b><span>완료</span></div></div>
+        <div><div class="rc2-ht" id="rcHt">반납 점검</div><div class="rc2-hs" id="rcHs">불러오는 중…</div></div>
+      </section>
 
-      <!-- 상단 날짜 선택바 (최근 N일 롤링) -->
-      <div class="rc-datebar">
-        <div class="rc-bartop">
-          <span class="rc-bartitle" id="rcBarTitle">최근 30일</span>
-          <button id="rcToday" class="rc-todaybtn">오늘</button>
+      <!-- 오늘 헤더 + 지난 기록 찾기 -->
+      <div class="rc-findbar rc2-datebar">
+        <div class="rc-todayh">
+          <span class="d" id="rcSelDate">오늘</span>
+          <span class="tag" id="rcSelTag">오늘 · 반납 점검</span>
+          <button class="rc-backtoday" id="rcBackToday" type="button" hidden>오늘로</button>
         </div>
-        <div id="rcDayStrip" class="rc-daystrip" aria-label="날짜 선택"></div>
+        <button class="rc-findrow" id="rcFindOpen" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+          <span>지난 반납 기록 찾기</span><span class="ch">›</span>
+        </button>
       </div>
 
-      <section class="hero">
-        <div id="ccHead" class="wl-sum">불러오는 중…</div>
-        <div id="ccSub" class="wl-sub"></div>
+      <!-- 지난 반납 기록 찾기 시트 -->
+      <div class="rc-findsheet" id="rcFindSheet">
+        <div class="rc-fs-card">
+          <div class="rc-fs-head"><span>지난 반납 기록</span><button id="rcFindClose" type="button" aria-label="닫기">✕</button></div>
+          <div class="rc-fs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg><input id="rcFindInput" type="text" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)"></div>
+          <div class="rc-fs-list" id="rcFindList"></div>
+        </div>
+      </div>
 
-        <div class="cc-step first">
-          <div class="cc-step-h">① 라운드 전 · 카트 상태</div>
+      <div class="rc2-sect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
+      <div class="rc2-subj" id="rcCardCart">
+        <div class="rc2-sc"><div class="rc2-st">카트 상태 <span class="rc2-badge" id="rcBdCart"></span></div>
+          <div class="rc2-ss"><span class="b">라운드 전 <em id="rcCcb">0</em></span><span class="a">라운드 후 <em id="rcCca">0</em></span></div></div>
+        <div class="rc2-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="3" y="5" width="8" height="14" rx="1.6"></rect><rect x="13" y="5" width="8" height="14" rx="1.6"></rect></svg>라운드 전·후 비교</div>
+      </div>
+      <div class="rc2-subj" id="rcCardClub">
+        <div class="rc2-sc"><div class="rc2-st">클럽 상태 <span class="rc2-badge" id="rcBdClub"></span></div>
+          <div class="rc2-ss"><span class="b">라운드 전 <em id="rcLcb">0</em></span><span class="a">라운드 후 <em id="rcLca">0</em></span></div></div>
+        <div class="rc2-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="3" y="5" width="8" height="14" rx="1.6"></rect><rect x="13" y="5" width="8" height="14" rx="1.6"></rect></svg>라운드 전·후 비교</div>
+      </div>
+
+      <div class="rc2-sect">장비 반납 확인<span class="rc2-c">탭 체크</span></div>
+      <div class="rc2-grid" id="rcReturnGrid"></div>
+      <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
+
+      <button id="rcStampBtn" class="rc2-stampbtn" type="button">완료 도장 찍기</button>
+      <div class="rc2-miss" id="rcMiss"></div>
+
+      <!-- 완료 도장 오버레이(전체 확인 완료 시) -->
+      <div class="rc2-stampov" id="rcStampOverlay">
+        <svg class="rc2-stamp" viewBox="0 0 100 100" fill="none" aria-label="반납 완료 도장">
+          <defs><path id="rcArcTop" d="M23,50 A27,27 0 0 1 77,50"></path><path id="rcArcBot" d="M22.5,50 A27.5,27.5 0 0 0 77.5,50"></path></defs>
+          <circle cx="50" cy="50" r="46.5" stroke="currentColor" stroke-width="3"></circle>
+          <circle cx="50" cy="50" r="40.5" stroke="currentColor" stroke-width="1.2"></circle>
+          <text font-size="11.5" font-weight="800" letter-spacing="3" fill="currentColor" text-anchor="middle"><textPath href="#rcArcTop" xlink:href="#rcArcTop" startOffset="50%">반 납 완 료</textPath></text>
+          <path d="M39.5 39 L45.5 45.5 L57 31" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+          <text x="50" y="63" font-size="13" font-weight="850" letter-spacing="0.5" fill="currentColor" text-anchor="middle" id="rcStampDate">8월 11일</text>
+          <text x="50" y="72.5" font-size="7" font-weight="700" letter-spacing="2" fill="currentColor" text-anchor="middle" id="rcStampYear">2026</text>
+        </svg>
+        <div class="rc2-stampcap">반납 완료 · 오늘도 수고하셨습니다</div>
+        <button id="rcEditBtn" class="rc2-editbtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>수정하기</button>
+      </div>
+
+      <details class="rc2-legacy">
+        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>카트 소지품 점검 · 카트번호 (선택)</summary>
+        <section class="hero" style="margin-top:6px;">
           <div class="wl-row"><span>카트번호</span><input id="ccCart" type="text" style="width:90px;" placeholder="예: 12" aria-label="카트번호"><button id="ccCartSave" class="wl-btn wl-no">저장</button></div>
-          <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="ccIntakeLbl">사진 올리기 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccIntake" type="file" accept="image/*" multiple hidden></label>
-            <div id="ccIntakeThumbs" class="cc-thumbs"></div>
+          <div class="cc-step">
+            <div class="cc-step-h">고객 소지품 훑기 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">항목 편집</button></div>
+            <div id="ccList"></div>
           </div>
-        </div>
-
-        <div class="cc-step">
-          <div class="cc-step-h">② 반납 전 · 종료 점검 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">항목 편집</button></div>
-          <div id="ccList"></div>
-          <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="ccExitLbl">'비운 카트' 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="ccExit" type="file" accept="image/*" multiple hidden></label>
-            <div id="ccExitThumbs" class="cc-thumbs"></div>
-          </div>
-        </div>
-
-        <div class="wl-note">카트가 매일 바뀌어도 <b>카트 상태 사진</b>이 있으면 "원래 있던 물건"과 구분되고, <b>빈 카트 사진</b>은 반납 시점의 증거가 됩니다.</div>
-      </section>
-
-      <!-- 클럽 점검 (라운드 전/후 사진 비교) -->
-      <section class="hero" style="margin-top:14px;">
-        <div class="wl-sum">클럽 점검</div>
-        <div class="wl-sub">라운드 전·후를 각각 찍어두면 클럽 개수·파손을 비교·증명할 수 있어요.</div>
-
-        <div class="cc-step first">
-          <div class="cc-step-h">① 라운드 전 · 클럽 상태</div>
-          <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="clPreLbl">라운드 전 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPre" type="file" accept="image/*" multiple hidden></label>
-            <div id="clPreThumbs" class="cc-thumbs"></div>
-          </div>
-        </div>
-
-        <div class="cc-step">
-          <div class="cc-step-h">② 라운드 후 · 클럽 상태</div>
-          <div class="wl-row" style="align-items:flex-start;">
-            <label class="cc-photo" id="clPostLbl">라운드 후 사진 <small style="font-weight:600;opacity:.7;">여러 장</small><input id="clPost" type="file" accept="image/*" multiple hidden></label>
-            <div id="clPostThumbs" class="cc-thumbs"></div>
-          </div>
-        </div>
-
-        <div class="wl-note">라운드 <b>전/후 사진을 나란히 비교</b>하면 클럽 개수·헤드커버·파손 여부를 명확히 확인할 수 있어요.</div>
-      </section>
+          <div class="wl-note">카트 안 고객 소지품을 빠뜨리지 않도록 하는 <b>개인 체크리스트</b>예요(경기팀 반납 확인과 별개).</div>
+        </section>
+      </details>
     </section>
   </main>
 
@@ -2048,6 +2240,44 @@
     <button class="cc-lb-nav next" id="ccLbNext" aria-label="다음 사진">›</button>
     <div class="cc-lb-count" id="ccLbCount"></div>
   </div>
+
+  <!-- 라운드 점검: 전·후 사진 갤러리/비교 -->
+  <div id="rcGallery" role="dialog" aria-modal="true" aria-label="전후 사진 비교">
+    <div class="rc2-gtop"><button class="bk" id="rcGvBack" aria-label="닫기">‹</button><div class="tt" id="rcGvTitle">카트 상태<small id="rcGvSub"></small></div><button class="tog" id="rcGvTog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"></path></svg><span class="x"></span></button></div>
+    <div class="rc2-rails">
+      <div class="rc2-rail b" id="rcRailB"><div class="rl"><i></i>라운드 전<span class="n" id="rcRnB">0장</span></div><div class="rc2-strip" id="rcStripB"></div></div>
+      <div class="rc2-rail a" id="rcRailA"><div class="rl"><i></i>라운드 후<span class="n" id="rcRnA">0장</span></div><div class="rc2-strip" id="rcStripA"></div></div>
+    </div>
+    <div class="rc2-stage">
+      <div class="rc2-pane b" id="rcPaneTop">
+        <span class="lb">라운드 전 <span class="m" id="rcMetaTop"></span></span>
+        <div class="trk" id="rcTrkTop"></div><div class="dts" id="rcDotsTop"></div>
+        <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 전'에서 올려주세요</small></div>
+        <div class="ctl"><button data-z="top" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="top" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
+      </div>
+      <div class="rc2-pane a" id="rcPaneBot">
+        <span class="lb">라운드 후 <span class="m" id="rcMetaBot"></span></span>
+        <div class="trk" id="rcTrkBot"></div><div class="dts" id="rcDotsBot"></div>
+        <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 후'에서 올려주세요</small></div>
+        <div class="ctl"><button data-z="bot" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="bot" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
+      </div>
+    </div>
+    <div class="rc2-gfoot" id="rcGvFoot"><b>두 손가락으로 확대</b> · 좌우로 넘기면 다음/이전 사진</div>
+  </div>
+  <div class="rc2-sheet" id="rcChooser"><div class="rc2-sc2">
+    <div class="st" id="rcChTitle">사진 추가</div>
+    <button class="opt" id="rcPickCam"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span><div>카메라로 촬영<small>지금 바로 찍기</small></div></button>
+    <button class="opt" id="rcPickAlb"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></span><div>앨범에서 선택<small>여러 장 한 번에</small></div></button>
+    <button class="cancel" id="rcChCancel">취소</button>
+  </div></div>
+  <div class="rc2-confirm" id="rcConfirm"><div class="rc2-dlg">
+    <div class="wi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"></path></svg></div>
+    <div class="wt" id="rcDelTitle">사진 삭제</div>
+    <div class="wm">이 사진을 <b>삭제</b>하면 되돌릴 수 없어요. 정말 삭제할까요?</div>
+    <div class="bt"><button class="d" id="rcDelYes">삭제</button><button class="c" id="rcDelNo">취소</button></div>
+  </div></div>
+  <input id="rcCamIn" type="file" accept="image/*" capture="environment" hidden>
+  <input id="rcAlbIn" type="file" accept="image/*" multiple hidden>
 
   <!-- 정산: 문서 미리보기 모달 -->
   <div class="lg-modal" id="lgModal" hidden>

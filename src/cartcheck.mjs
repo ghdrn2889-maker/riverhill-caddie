@@ -23,8 +23,34 @@ export const DEFAULT_ITEMS = [
   { key: 'cooler', label: '쿨러·아이스박스' },
   { key: 'golfbag', label: '골프백 주머니(고객 확인 요청)' },
 ];
-export const PHOTO_LEGS = ['intake', 'exit', 'club_pre', 'club_post']; // 카트 시작/빈카트 · 클럽 라운드전/후
+export const PHOTO_LEGS = ['intake', 'exit', 'club_pre', 'club_post']; // 카트 라운드전/후 · 클럽 라운드전/후
 const SETTINGS_KEY = '__settings'; // 날짜 키와 안 겹치는 예약 키
+
+// 경기팀 반납 확인(고정 4종) — 사진 없이 탭 체크. 카트 청소·상태는 카트 사진(intake/exit)이 증거.
+//  key = 저장 식별자(체크 시각이 여기 묶임). 편집 불가(경기팀 필수 항목).
+export const OPS_RETURN_ITEMS = [
+  { key: 'battery',  label: '카트 배터리 충전' },
+  { key: 'tablet',   label: '태블릿 충전' },
+  { key: 'radio',    label: '무전기 충전' },
+  { key: 'guidekey', label: '유도키 전용칸 반납' },
+];
+const OPS_KEYS = new Set(OPS_RETURN_ITEMS.map((i) => i.key));
+
+// 반납 완료 판정(경기팀 공유·캐디 대시보드 링 공용):
+//  6칸 = 카트(전·후 사진 있음) + 클럽(전·후 사진 있음) + 반납체크 4종.
+function legCount(photos, leg) { const c = photos && photos[leg]; return Array.isArray(c) ? c.length : (c ? 1 : 0); }
+export function computeReturn(rec) {
+  const p = (rec && rec.photos) || {};
+  const cart = { before: legCount(p, 'intake'), after: legCount(p, 'exit') };
+  cart.done = cart.before > 0 && cart.after > 0;
+  const club = { before: legCount(p, 'club_pre'), after: legCount(p, 'club_post') };
+  club.done = club.before > 0 && club.after > 0;
+  const or = (rec && rec.opsReturn) || {};
+  const checks = OPS_RETURN_ITEMS.map((i) => ({ key: i.key, label: i.label, done: !!or[i.key], at: or[i.key] || null }));
+  const doneCount = (cart.done ? 1 : 0) + (club.done ? 1 : 0) + checks.filter((c) => c.done).length;
+  const total = 2 + OPS_RETURN_ITEMS.length; // 6
+  return { cart, club, checks, doneCount, total, allDone: doneCount === total };
+}
 
 function loadAll(userId = 1) { return loadUserJSON(userId, FILE, {}); }
 function saveAll(userId, d) { saveUserJSON(userId, FILE, d); }
@@ -80,17 +106,19 @@ export function recommendItems(userId = 1) {
 
 function blank(dateISO) {
   return { date: dateISO, cartNo: '', photos: {}, checklist: {}, checklistDoneAt: null,
-    remindedAt: null, updatedAt: null };
+    opsReturn: {}, returnDoneAt: null, stampedAt: null, remindedAt: null, updatedAt: null };
 }
 
-// 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률도 같이 계산(현재 항목 기준).
+// 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률 + 반납 완료 판정(6칸)도 같이 계산.
 export function getDay(dateISO, userId = 1) {
   if (!isISO(dateISO)) return null;
   const d = loadAll(userId);
   const rec = d[dateISO] || blank(dateISO);
   const items = getItems(userId);
-  const checked = items.filter((i) => rec.checklist[i.key]).length;
-  return { ...rec, progress: { checked, total: items.length, done: items.length > 0 && checked === items.length } };
+  const checked = items.filter((i) => (rec.checklist || {})[i.key]).length;
+  return { ...rec, opsReturn: rec.opsReturn || {},
+    progress: { checked, total: items.length, done: items.length > 0 && checked === items.length },
+    returnStatus: computeReturn(rec) };
 }
 
 function mutate(dateISO, fn, userId = 1) {
@@ -99,6 +127,9 @@ function mutate(dateISO, fn, userId = 1) {
   const rec = d[dateISO] || blank(dateISO);
   fn(rec);
   rec.updatedAt = Date.now();
+  const st = computeReturn(rec);                                  // 반납 완료 시각(경기팀 '반납 완료' 표시)
+  rec.returnDoneAt = st.allDone ? (rec.returnDoneAt || Date.now()) : null;
+  if (!st.allDone) rec.stampedAt = null;                          // 완료 미달로 떨어지면 '완료 도장' 자동 해제
   d[dateISO] = rec;
   saveAll(userId, d);
   return getDay(dateISO, userId);
@@ -120,8 +151,35 @@ export function toggleCheck(dateISO, key, done, userId = 1) {
   }, userId);
 }
 
+// 경기팀 반납 4종 토글(배터리·태블릿·무전기·유도키). done이면 완료시각 기록(=증거 타임스탬프).
+export function toggleReturn(dateISO, key, done, userId = 1) {
+  if (!OPS_KEYS.has(key)) return getDay(dateISO, userId);
+  return mutate(dateISO, (r) => {
+    r.opsReturn = { ...(r.opsReturn || {}) };
+    if (done) r.opsReturn[key] = r.opsReturn[key] || Date.now(); else delete r.opsReturn[key];
+  }, userId);
+}
+
+// '완료 도장' 찍기/해제 — 6칸 완료(allDone)일 때만 도장이 찍힌다. 미완료면 stampError로 되돌려준다(프런트가 미완료 안내).
+//  수정하기(stamped=false)는 언제든 도장 해제(다시 편집 가능). getDay가 stampedAt를 그대로 내려준다.
+export function setStamp(dateISO, stamped, userId = 1) {
+  if (!isISO(dateISO)) return null;
+  const d = loadAll(userId);
+  const rec = d[dateISO] || blank(dateISO);
+  if (stamped) {
+    if (!computeReturn(rec).allDone) return { ...getDay(dateISO, userId), stampError: 'incomplete' };
+    rec.stampedAt = rec.stampedAt || Date.now();
+  } else {
+    rec.stampedAt = null;
+  }
+  rec.updatedAt = Date.now();
+  d[dateISO] = rec;
+  saveAll(userId, d);
+  return getDay(dateISO, userId);
+}
+
 let photoSeq = 0;
-// intake(카트 상태)·exit(빈 카트) 모두 여러 장 누적(배열). 갤러리에서 여러 장 올릴 수 있다.
+// intake(카트 전)·exit(카트 후)·club_pre(클럽 전)·club_post(클럽 후) 모두 여러 장 누적(배열).
 export function savePhoto(dateISO, leg, dataUrl, userId = 1) {
   if (!isISO(dateISO) || !PHOTO_LEGS.includes(leg)) return null;
   const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
@@ -179,6 +237,19 @@ export function recentDays(userId = 1, n = 14, todayISO = null) {
     return { date, cartNo: rec.cartNo || '', nPhoto, checked, total: items.length,
       done: items.length > 0 && checked === items.length };
   });
+}
+
+// 지난 반납 기록 '검색/찾기'용 — 유예기간 내 '실제 기록이 있는 날'만 최신순으로. 6칸 완료여부·도장·카트#·사진수 포함.
+//  분쟁 등으로 특정 날짜를 빠르게 찾을 때 리스트로 보여주고 날짜 검색으로 좁힌다.
+export function returnRecords(userId = 1, sinceISO) {
+  const d = loadAll(userId);
+  return Object.keys(d).filter((k) => isISO(k) && (!sinceISO || k >= sinceISO)).sort().reverse().map((date) => {
+    const rec = d[date] || {};
+    const photos = rec.photos || {};
+    const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);
+    const st = computeReturn(rec);
+    return { date, cartNo: rec.cartNo || '', nPhoto, allDone: st.allDone, doneCount: st.doneCount, total: st.total, stamped: !!rec.stampedAt };
+  }).filter((r) => r.nPhoto > 0 || r.cartNo || r.doneCount > 0);   // 빈 날 제외(실제 기록만)
 }
 
 // 블랙박스식 롤링 삭제: cutoffISO보다 오래된 날(카트·클럽 점검)의 사진 파일 + 기록을 통째로 삭제.
