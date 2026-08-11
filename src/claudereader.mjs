@@ -237,6 +237,35 @@ export async function readColumnRoster(imagePath) {
   } catch { return null; }
 }
 
+// ── 대바(대체자) 전용 'verbatim 명단' 판독 ────────────────────────────
+//  홀리스틱/부 프롬프트는 명단+티오프+커트를 한 번에 처리하느라 마젠타 '주인(태그)대체자' 셀의 두 번째 이름을
+//  정규화로 버린다(실증 8/11: 무거운 프롬프트=대체자 누락, '명단만' 물으면 20/20·대바 5건 100% 판독).
+//  그래서 명단만 얇게 다시 읽어 대체자를 회복한다. 반환: [{pos,name}] (대체자 포함 원문). 실패/캡초과=null.
+const VERBATIM_ROSTER_PROMPT = (
+  'Read the local image with the Read tool. It is a Korean golf caddie assignment board (배치표) section. '
+  + 'Look ONLY at the [순번 이름] roster column(s) on the LEFT (there may be two columns side by side — read the left column fully top to bottom, then the right column). Ignore the tee-time table and any crew grid on the right. '
+  + '★Some roster cells are MAGENTA and contain TWO names side by side: the ORIGINAL caddie with a tag such as 차은경(1,3), followed IMMEDIATELY by a SECOND black name — the 대바(substitute) — so the cell reads e.g. 차은경(1,3)구경은. Other cells show a substitute in PARENTHESES, e.g. 남재권(정민철). '
+  + 'For EVERY numbered 순번 row, transcribe the cell EXACTLY as printed, keeping BOTH names whenever a cell has two. Preserve tags (54)/(1,3)/(조출)/(찾근) exactly. NEVER normalize a two-name cell down to one name, and never drop the substitute. '
+  + 'Output STRICT JSON only, no prose: {"roster":[{"pos":1,"name":"우겸조(54)"},{"pos":4,"name":"차은경(1,3)구경은"},{"pos":15,"name":"남재권(정민철)"}, ... every numbered row ...]}'
+);
+export async function readRosterVerbatim(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 대바 verbatim 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${VERBATIM_ROSTER_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 대바 verbatim 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const items = (Array.isArray(j.roster) ? j.roster : [])
+      .map((r) => ({ pos: Number(r?.pos) || 0, name: String(r?.name || '').trim() }))
+      .filter((r) => r.pos > 0 && r.name);
+    return items.length ? items : null;
+  } catch { return null; }
+}
+
 export async function readPartWithClaude(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 캡(${DAILY_CAP}) 도달 — 부 판독 스킵`); return null; }

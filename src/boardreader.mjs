@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic, readRosterVerbatim } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 
@@ -52,6 +52,43 @@ const _bareNameOf = (cell) => {
   const m = s.match(/^(.+?)\(([^)]+)\)\s*$/);
   return (m ? m[1] : s).trim();
 };
+// 셀에서 주인(맨앞 이름)과 대체자(대바) 추출 — crossparts.cellOwnerSub와 동일 규칙(순환 import 회피용 복제).
+//  "차은경(1,3)구경은"→{owner:차은경,sub:구경은}, "남재권(정민철)"→{owner:남재권,sub:정민철}, "우겸조(54)"→{sub:''}.
+const _SUB_TAGWORDS = new Set(['조출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어', '정출', '선발', '당번', '프리', '벌당', '배치', '콜', '정근', '휴무', '휴가', '병가', '연차', '월차', '격리', '마감', '대리', '주임', '마샬']);
+function _ownerSubOf(cell) {
+  const s = String(cell || '');
+  const om = s.match(/^([가-힣]{2,4})/); if (!om) return { owner: '', sub: '' };
+  const owner = om[1]; let sub = '';
+  for (const g of s.matchAll(/\(([^)]*)\)/g)) { const p = g[1].trim(); if (/^[가-힣]{2,4}$/.test(p) && p !== owner && !_SUB_TAGWORDS.has(p)) sub = p; }
+  if (!sub) { const tail = s.slice(owner.length).replace(/\([^)]*\)/g, '').trim(); const bm = tail.match(/([가-힣]{2,4})\s*$/); if (bm && bm[1] !== owner && !_SUB_TAGWORDS.has(bm[1])) sub = bm[1]; }
+  return { owner, sub };
+}
+
+// ★대바 복구 — 검증된 '명단 전용' 재판독으로 마젠타 '주인(태그)대체자'/'주인(대체자)' 셀을 순번별로 덧씌운다.
+//  홀리스틱/부 프롬프트가 무거워 대체자를 정규화로 버리므로(실증 8/11), 명단만 얇게 다시 읽어 '주인이 일치하는
+//  자리'에만 오버레이한다 → 구조(순번·주인)는 절대 안 바꾸고 대바만 추가(안전). 캡 초과·실패면 원본 그대로.
+async function recoverSubstitutes(imagePath, names) {
+  try {
+    if (!imagePath || claudeBudgetLeft() <= 0) return names;
+    const vb = await readRosterVerbatim(imagePath);
+    if (!vb || !vb.length) return names;
+    const out = names.slice();
+    let n = 0;
+    for (const it of vb) {
+      const pos = Number(it.pos) || 0; if (pos < 1 || pos > out.length) continue;
+      const vbRaw = String(it.name || '').trim();
+      const hol = String(out[pos - 1] || '').trim();
+      if (!hol) continue;                                    // 홀리스틱이 안 읽은 자리는 안 건드림(구조 보존)
+      const { owner, sub } = _ownerSubOf(vbRaw);
+      if (!sub) continue;                                    // verbatim에도 대체자 없으면 스킵
+      const holOwner = (hol.match(/^([가-힣]{2,4})/) || [])[1] || '';
+      if (owner && holOwner && owner === holOwner && vbRaw !== hol) { out[pos - 1] = vbRaw; n += 1; }
+    }
+    if (n) console.log(`[boardreader] 대바 복구: ${n}건 오버레이(명단 전용 재판독)`);
+    return out;
+  } catch (e) { console.error('[boardreader] 대바 복구 오류:', e.message); return names; }
+}
+
 function snapRoster(roster) {
   // ★중복 생성 방지 — 이미 명단에 '정본명 그대로' 있는 이름으로는 스냅하지 않는다.
   //  (예: 남재권이 정본 누락이라 편집거리2로 '최재영'에 스냅되려 하지만, 최재영이 이미 다른 순번에 있으면
@@ -227,6 +264,8 @@ async function readPartsOnce(img, sorted, cuts) {
                 }
               }
             } catch (e) { console.error('[boardreader] 3부 명단 열분할 보완 오류:', e.message); }
+            // ★대바 복구 — 무거운 홀리스틱이 버린 마젠타 '주인(태그)대체자' 셀을 명단전용 재판독으로 순번별 오버레이.
+            names = await recoverSubstitutes(holImg, names);
             // 사니티: 컷 대비 명단 심각부족이면 채택 안 함(폴백). 인턴 여유(_rosterFloor) 재사용.
             if (filled >= _rosterFloor(cut || filled)) {
               try { fs.unlinkSync(cropPath); } catch { /* noop */ }
@@ -248,8 +287,7 @@ async function readPartsOnce(img, sorted, cuts) {
       // ★열 경계 — part 판독의 rosterCols가 있으면 쓰고, 없으면(들쭉날쭉) 전용 호출로 확실히 잡는다.
       let rcols = (r && Array.isArray(r.rosterCols) && r.rosterCols.length) ? r.rosterCols : null;
       if (!rcols) { try { rcols = await getRosterColumns(cropPath); } catch { /* noop */ } }
-      try { fs.unlinkSync(cropPath); } catch { /* noop */ }
-      if (!r) continue;
+      if (!r) { try { fs.unlinkSync(cropPath); } catch { /* noop */ } continue; }
       const cut = Number(cuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰), 없으면 per-part cut
       // ★열분할: 판독한 열 경계로 각 열을 단일 크롭 재판독 → 더 완전하면 채택(2부 다열 하단 누락·밀림 해결).
       let roster = r.roster;
@@ -262,6 +300,9 @@ async function readPartsOnce(img, sorted, cuts) {
           roster = colRoster;
         }
       }
+      // ★대바 복구 — 부 프롬프트가 버린 마젠타 '주인(태그)대체자' 셀을 명단전용 재판독으로 순번별 오버레이.
+      roster = await recoverSubstitutes(cropPath, roster);
+      try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       parts[String(b.part)] = { roster: snapRoster(roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }
