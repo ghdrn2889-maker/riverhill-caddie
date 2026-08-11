@@ -158,7 +158,7 @@ const PART_PROMPT = (
   + '(e.g. the first column holds 순번 1-25, then a SECOND column to its right continues 26-50). '
   + '★Treat each vertical column as its OWN independent list. Read column by column, left to right. '
   + 'Within EACH column, read every row from the very top to the very BOTTOM — the last 1-2 rows of a column are easy to miss, do NOT stop early. '
-  + 'For every row read BOTH the printed 순번 number and the name as a pair. Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Skip a row only if it has no name. '
+  + 'For every row read BOTH the printed 순번 number and the name as a pair. Preserve parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). If a cell ALSO shows a SUBSTITUTE caddie (대바) — a Korean personal name inside parentheses ("박선하(연승준)") or bare right after a tag ("차은경(1,3)구경은") — transcribe the WHOLE cell VERBATIM keeping BOTH names, never drop either; only 54/1,3/2,3/조출/찾근 are tags, a Korean name is a substitute. Skip a row only if it has no name. '
   + 'IGNORE any text that is NOT a numbered 순번 row — notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'Read this tee table from the very TOP row to the very BOTTOM row — do NOT stop early; rows newly added at the BOTTOM (spares just given a tee time) matter most. '
@@ -187,6 +187,7 @@ const COLUMN_PROMPT = (
   'Read the given local image with the Read tool. It is a SINGLE vertical [순번 이름] roster column from a Korean golf caddie board (배치표). '
   + 'List EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
   + 'For each row give the printed 순번 as "pos" and the name, preserving tags exactly like (54)/(1,3)/(조출)/(찾근). '
+  + 'If a cell ALSO shows a SUBSTITUTE caddie (대바) — a Korean name inside parentheses ("박선하(연승준)") or bare right after a tag ("차은경(1,3)구경은") — transcribe the WHOLE cell VERBATIM keeping BOTH names (never drop either); only 54/1,3/2,3/조출/찾근 are tags, a Korean name is a substitute. '
   + 'Skip a row only if it has no name. Ignore any text without a printed 순번 (notices, legends). '
   + 'Output ONLY strict JSON: {"roster":[{"pos":1,"name":"차은경(54)"},...]}'
 );
