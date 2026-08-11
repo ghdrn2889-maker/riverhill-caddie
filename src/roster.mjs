@@ -104,11 +104,10 @@ export function officialNearCandidates(name) {
   const s = String(name || '').trim();
   if (s.length < 3) return [];
   const db = load();
-  if (db[s]?.official) return [];                       // 이미 정본 → 건드리지 않음
-  const off = Object.keys(db).filter((k) => db[k]?.official);
-  const h1 = off.filter((c) => hamming1(s, c));
-  if (h1.length) return h1;                             // 같은길이 1글자차 우선
-  return off.filter((c) => editDist(s, c) <= 2);        // 없으면 편집거리≤2
+  // ★정본이거나 '이미 확정된 실존 캐디'면 손대지 않음 — 곽호완처럼 정확히 읽힌 실명이 딴사람으로 치환되던 오탐 차단.
+  if (db[s]?.official || (db[s]?.n || 0) >= CONFIRM_MIN) return [];
+  // ★같은길이 1글자차(시각유사 오독: 련↔현·원↔임) 정본만. 편집거리2(곽호완↔전호성)는 딴사람이라 제외.
+  return Object.keys(db).filter((k) => db[k]?.official && hamming1(s, k));
 }
 
 // 순번 위치배열(빈칸 '' 유지) 보정 + 학습. 보정된 배열 반환.
