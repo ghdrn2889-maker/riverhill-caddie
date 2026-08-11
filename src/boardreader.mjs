@@ -112,6 +112,20 @@ function snapRoster(roster) {
 // 이름처럼 보이는가(2~4 한글, 괄호태그 허용) — 열분할에서 티오프 열 오검출을 거른다.
 const _looksName = (nm) => /^[가-힣]{2,4}$/.test(String(nm || '').replace(/\([^)]*\).*/, '').replace(/\s/g, ''));
 
+// ★열분할 채택 가드 — 열분할 결과(cand)가 기존 판독(base)과 '같은 순서'인지(겹치는 자리 접두 일치율).
+//  한 행 밀림/드롭으로 어긋났거나, 옆 부를 흡수해 이름이 통째로 다르면 낮은 일치율 → 채택 거부(유령 방지).
+//  base의 채워진 앞자리들을 cand 같은 index와 대조. 표본이 적으면(<3) 신뢰 못해 거부.
+function _prefixAgrees(cand, base) {
+  let checked = 0, matched = 0;
+  const n = Math.min((cand || []).length, (base || []).length);
+  for (let i = 0; i < n; i++) {
+    const b = _bare(base[i]); if (!b) continue;
+    checked += 1;
+    if (_bare(cand[i]) === b) matched += 1;
+  }
+  return checked >= 3 && (matched / checked) >= 0.85;
+}
+
 // ★열분할 판독 — 밀집 다열 명단은 열별로 따로 크롭해 '단일열'로 읽어야 하단·정렬이 정확(2부 50명).
 //  rosterCols(크롭 fraction) → 원본 fraction 역매핑 → 각 열 단일 크롭 판독 → 열 순서로 이어붙여 위치정렬.
 async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
@@ -122,9 +136,13 @@ async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
     .map((rc) => ({ x0: Math.max(0, cropX0 + rc.x0 * cw - 0.008), x1: cropX0 + rc.x1 * cw }))
     .filter((c) => c.x1 > c.x0)
     .sort((a, b) => a.x0 - b.x0);
-  for (const c of cols) c.x1 = Math.min(1, Math.max(c.x1 + 0.02, c.x0 + 0.075));   // 최소 폭 + 오른쪽 여유
+  // ★최소 폭 보장하되 오른쪽 확장을 '부 경계(cropX1)'로 클램프 — 넓힘이 부 경계를 넘어 옆 부 명단을 흡수해
+  //  유령 스페어를 만들던 근본 버그 차단(실측: 부1 crop 0~0.240인데 열이 0.283=2부 침범 → 41명 과대판독).
+  for (const c of cols) c.x1 = Math.min(cropX1, Math.max(c.x1 + 0.02, c.x0 + 0.075));   // 최소 폭 + 부경계 클램프
   // 넓힌 오른쪽이 '다음 열'을 물면 그 열 첫 이름을 중복 판독 → 다음 열 시작 직전까지로 제한(마지막 열은 여유 유지).
   for (let i = 0; i < cols.length - 1; i++) cols[i].x1 = Math.min(cols[i].x1, cols[i + 1].x0 - 0.003);
+  const _cols2 = cols.filter((c) => c.x1 - c.x0 >= 0.02);   // 클램프로 뭉개진(부경계 밖에서 시작한) 헛열 제거
+  cols.length = 0; cols.push(..._cols2);
   console.log(`[boardreader] 부${part} 열크롭(crop ${cropX0.toFixed(3)}~${cropX1.toFixed(3)}): ${cols.map((c) => `${c.x0.toFixed(3)}~${c.x1.toFixed(3)}`).join(' | ')}`);
   // ★열 병렬(Promise.all) — 열은 서로 독립이라 동시 판독으로 속도↑. Promise.all이 열 순서(정렬됨)를 보존해 위치정렬 유지.
   //  (부 3개는 순차 유지 — 무거운 부 판독 동시 발사는 429/명단 빈값 위험. 열 단위는 가벼워 병렬 안전.)
@@ -257,7 +275,9 @@ async function readPartsOnce(img, sorted, cuts) {
                 const rc = await getRosterColumns(holImg);
                 if (rc && rc.length) {
                   const colR = await readColumnsAssemble(img, rc, b.x0, x1, 0.98, b.part);
-                  if (colR && colR.length > filled && colR.length <= 60 && _bare(colR[0]) === _bare(names[0] || '')) {
+                  // ★채택 가드 강화 — 첫 이름만이 아니라 겹치는 앞자리가 홀리스틱과 '접두 일치'할 때만 채택
+                  //  (밀림/옆부 침범 판독 배제). 유실이 진짜면 앞자리는 그대로라 접두 일치하며 뒤만 늘어난다.
+                  if (colR && colR.length > filled && colR.length <= 60 && _prefixAgrees(colR, names)) {
                     console.log(`[boardreader] 3부 명단 열분할 보완: ${filled}→${colR.length}명(뒤 스페어 복구)`);
                     names = colR.slice(); filled = names.filter(Boolean).length;
                   }
@@ -295,7 +315,8 @@ async function readPartsOnce(img, sorted, cuts) {
       if (rcols && rcols.length && Number.isFinite(cx0) && Number.isFinite(cx1) && cx1 > cx0) {
         const colRoster = await readColumnsAssemble(img, rcols, cx0, cx1, cy1, b.part);
         const base = r.roster.filter(Boolean).length;
-        if (colRoster && colRoster.length >= base && colRoster.length <= 60) {
+        // ★접두 일치 가드 — 단일판독과 앞자리가 어긋나면(밀림·옆부 침범) 채택 거부(유령/과대판독 방지).
+        if (colRoster && colRoster.length >= base && colRoster.length <= 60 && _prefixAgrees(colRoster, r.roster)) {
           console.log(`[boardreader] 부${b.part} 열분할 채택: ${colRoster.length}명(${rcols.length}열, 단일 대비 +${colRoster.length - base})`);
           roster = colRoster;
         }
