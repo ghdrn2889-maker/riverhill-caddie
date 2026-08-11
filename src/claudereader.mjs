@@ -30,7 +30,7 @@ export function claudeBudgetLeft() { return Math.max(0, DAILY_CAP - callsToday()
 const HOLISTIC_P3_PROMPT = (
   'Read the local image with the Read tool. It is the 3부(Part 3) section of a Korean golf caddie assignment board (배치표).\n'
   + 'LAYOUT:\n'
-  + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(찾근).\n'
+  + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(찾근). A cell may ALSO carry a SUBSTITUTE caddie (대바): a Korean PERSONAL NAME appearing either inside parentheses (e.g. "박선하(연승준)") or as a BARE name right after a tag bracket (e.g. "차은경(1,3)구경은"). In that case transcribe the WHOLE cell VERBATIM — keep BOTH the original caddie AND the substitute exactly as written; NEVER drop either one. Only 54/1,3/2,3/조출/찾근 inside parentheses are tags; a Korean name is a substitute and MUST be kept.\n'
   + '- Right: a tee-time grid with three columns [OUT | time | IN]. Each row shows a tee time (e.g. 16:32). The OUT cell and/or the IN cell of a row may contain a 순번 number. That number identifies which caddie (by their 순번) tees off at that time on that course. A blank/yellow cell means no one on that course/row.\n'
   + 'TASK: Match 순번 -> name (from roster) and 순번 -> tee time+course (from the grid).\n'
   + '★★CRITICAL — scan the tee grid ALL THE WAY DOWN to its LAST time row. Do NOT stop early.\n'
@@ -90,6 +90,7 @@ const READ_PROMPT = (
   'Read the given local image with the Read tool. It is one section of a Korean golf caddie assignment board (배치표). '
   + 'The left side has [순번 이름] roster column(s) (one or two side by side). '
   + 'List ALL caddies strictly in 순번(number) order as a JSON array, preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). '
+  + 'If a cell ALSO has a SUBSTITUTE caddie name (대바) — a Korean personal name inside parentheses ("박선하(연승준)") or bare right after a tag ("차은경(1,3)구경은") — transcribe the WHOLE cell VERBATIM keeping BOTH names, never drop either; only 54/1,3/2,3/조출/찾근 are tags, a Korean name is a substitute. '
   + 'Skip truly empty rows. Output ONLY strict JSON, no prose: {"roster":["name1","name2",...]}'
 );
 

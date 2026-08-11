@@ -24,14 +24,26 @@ export function cellOwnerSub(cell) {
   const s = String(cell || '');
   const om = s.match(/^([가-힣]{2,4})/); if (!om) return { owner: '', sub: '' };
   const owner = om[1]; let sub = '';
+  // (a) 괄호 안 한글이름 = 대체자: "박선하(연승준)"·"조하빈(54)(정진영)"
   for (const g of s.matchAll(/\(([^)]*)\)/g)) { const p = g[1].trim(); if (/^[가-힣]{2,4}$/.test(p) && p !== owner && !SWAP_TAGWORDS.has(p)) sub = p; }
+  // (b) 태그 괄호 뒤 '맨이름' 대체자: "차은경(1,3)구경은"·"강민순(1,3)김민찬" → 괄호 다 지운 꼬리의 한글이름
+  if (!sub) {
+    const tail = s.slice(owner.length).replace(/\([^)]*\)/g, '').trim();
+    const bm = tail.match(/([가-힣]{2,4})\s*$/);
+    if (bm && bm[1] !== owner && !SWAP_TAGWORDS.has(bm[1])) sub = bm[1];
+  }
   return { owner, sub };
 }
 
 // 로스터들에서 크로스파트 스왑 목록 — 'X(Y)'이고 Y가 실존 캐디(다른 셀에 맨이름 존재)면 {owner:X, sub:Y, part}.
 export function buildCrossPartSwaps(rosters) {
   const known = new Set();
-  for (const p of Object.keys(rosters)) for (const c of rosters[p]) { const n = swapBare(c); if (/^[가-힣]{2,4}$/.test(n)) known.add(n); }
+  for (const p of Object.keys(rosters)) for (const c of rosters[p]) {
+    const { owner, sub } = cellOwnerSub(c);            // 대바 셀의 owner·sub도 실존 캐디로 등록
+    if (owner) known.add(owner);
+    if (sub) known.add(sub);
+    const n = swapBare(c); if (/^[가-힣]{2,4}$/.test(n)) known.add(n);   // 순수 맨이름(대바 아닌 셀)
+  }
   const swaps = [];
   for (const p of Object.keys(rosters)) rosters[p].forEach((c) => {
     const { owner, sub } = cellOwnerSub(c);
