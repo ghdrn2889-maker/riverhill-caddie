@@ -1289,7 +1289,7 @@ function renderJournalRecords() {
   const entries = shown.map((d, i) => {
     const dow = new Date(`${d.date}T00:00:00`).getDay(); const day = Number(d.date.slice(8, 10));
     const b = jDayBadge(d);
-    const node = d.mood ? `<span class="fw">${jFaceSVG(d.mood, 34, (i % 6) * 0.45)}</span>` : `<span class="dot" style="background:#0b5d34"></span>`;
+    const node = d.mood ? `<span class="fw">${jFaceSVG(d.mood, 34, (i % 6) * 0.45)}</span>` : `<span class="dot" style="background:#0c8f6a"></span>`;
     const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
     const memo = d.memo ? `<div class="jrec-m"><span class="q">“</span>${esc(d.memo)}<span class="q">”</span></div>` : '';
     return `<div class="jrec${i === shown.length - 1 ? ' last' : ''}" data-d="${d.date}"><div class="jrec-node">${node}</div><div class="jrec-body"><div class="jrec-top"><span class="jrec-d num">${day}일</span><span class="jrec-w">${JWDF[dow]}</span>${bd}</div>${memo}</div></div>`;
@@ -1314,7 +1314,7 @@ function injectJumpStyle() {
     + '.mj-ystep:disabled{opacity:.3;cursor:default}'
     + '.mj-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
     + '.mj-m{font-family:inherit;padding:12px 0;border-radius:10px;border:1px solid #e3ebe3;background:#fff;color:#3a453d;font-weight:700;font-size:14px;cursor:pointer;font-variant-numeric:tabular-nums}'
-    + '.mj-m.on{background:#0b5d34;border-color:#0b5d34;color:#fff}'
+    + '.mj-m.on{background:#0c8f6a;border-color:#0c8f6a;color:#fff}'
     + '.mj-m:disabled{opacity:.32;cursor:default}'
     + '#jTitle{cursor:pointer}#jTitle::after{content:" ▾";font-size:11px;opacity:.5}'
     + '.wl-mlabel{cursor:pointer}.wl-mlabel b::after{content:" ▾";font-size:10px;opacity:.75}';
@@ -1373,7 +1373,7 @@ async function renderJournalCal() {
     const dd = jMap[key];
     const b = jDayBadge(dd);
     const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
-    const dot = (dd && (dd.mood || dd.memo)) ? `<span class="jc-memodot" style="background:${dd.mood ? (JMOOD_COL[dd.mood] || '#0b5d34') : '#0b5d34'}"></span>` : '';
+    const dot = (dd && (dd.mood || dd.memo)) ? `<span class="jc-memodot" style="background:${dd.mood ? (JMOOD_COL[dd.mood] || '#0c8f6a') : '#0c8f6a'}"></span>` : '';
     h += `<div class="jcell${dd ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}">${dot}<span class="jcn">${d}</span>${bd}</div>`;
   }
   const cal = $('jCal');
@@ -2268,17 +2268,17 @@ function lgReportInner(o, S, opts) {
 
 const LG_WORD_CSS = `body{font-family:-apple-system,"Malgun Gothic",sans-serif;color:#1a201d;margin:0;padding:24px;background:#fff;font-size:12.5px;}
 h1{font-size:21px;margin:0 0 3px;} .sub{color:#666;font-size:12px;margin-bottom:16px;}
-h2{font-size:15px;border-top:2px solid #0b5d34;padding-top:11px;margin:20px 0 8px;} h3{font-size:12.5px;color:#0b5d34;margin:13px 0 6px;}
+h2{font-size:15px;border-top:2px solid #0c8f6a;padding-top:11px;margin:20px 0 8px;} h3{font-size:12.5px;color:#0c8f6a;margin:13px 0 6px;}
 table{width:100%;border-collapse:collapse;margin-bottom:8px;}
 table.meta td{border:1px solid #ccc;padding:6px 9px;font-size:12px;} table.meta .k{background:#f4f6f5;font-weight:700;width:84px;}
 table.log{font-size:12px;} table.log.half{width:64%;}
-table.log th,table.log td{border:1px solid #bbb;padding:5px 8px;text-align:left;} table.log th{background:#0b5d34;color:#fff;font-size:11.5px;}
+table.log th,table.log td{border:1px solid #bbb;padding:5px 8px;text-align:left;} table.log th{background:#0c8f6a;color:#fff;font-size:11.5px;}
 td.num{text-align:right;} td.st{font-weight:700;} td.mid{text-align:center;color:#999;}
-table.log tfoot td{background:#eef2f0;font-weight:700;} table.log tfoot tr.tot td{background:#0b5d34;color:#fff;font-size:13px;}
-table.net{width:64%;} table.net td{border:1px solid #bbb;padding:8px 10px;font-size:13px;} table.net td.num{text-align:right;font-weight:700;} table.net tr.tot td{background:#0b5d34;color:#fff;font-size:14px;}
+table.log tfoot td{background:#eef2f0;font-weight:700;} table.log tfoot tr.tot td{background:#0c8f6a;color:#fff;font-size:13px;}
+table.net{width:64%;} table.net td{border:1px solid #bbb;padding:8px 10px;font-size:13px;} table.net td.num{text-align:right;font-weight:700;} table.net tr.tot td{background:#0c8f6a;color:#fff;font-size:14px;}
 .note{font-size:10.5px;color:#777;margin-top:14px;line-height:1.65;}
 .pb-before{page-break-before:always;break-before:page;}
-.bar{position:sticky;top:0;background:#0b5d34;padding:10px;text-align:center;margin:-24px -24px 18px;} .bar button{font-size:14px;font-weight:700;padding:9px 18px;border:0;border-radius:8px;background:#fff;color:#0b5d34;}
+.bar{position:sticky;top:0;background:#0c8f6a;padding:10px;text-align:center;margin:-24px -24px 18px;} .bar button{font-size:14px;font-weight:700;padding:9px 18px;border:0;border-radius:8px;background:#fff;color:#0c8f6a;}
 @media print{.bar{display:none;}}`;
 
 function lgFullDoc(forWord) {
