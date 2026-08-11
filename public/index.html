@@ -1263,7 +1263,7 @@
     .rc-fs-empty { text-align:center; color:var(--mut); font-size:12px; font-weight:700; padding:26px 0; }
 
     /* ===== 라운드 점검 재편 v2 (핀테크 인디고 · rc2- 스코프) ===== */
-    #view-cart { --a:#12bf94; --as:#e4f7f1; --ai:#0a9e77; --mut:#8b91a3; --ln:#edeef3;
+    #view-cart { --a:#12bf94; --as:#eef3f1; --ai:#0a9e77; --mut:#8b91a3; --ln:#edeef3;
       --ok:#11b981; --oks:#e7f8f0; --warn:#e8971a; --warns:#fdf3e2; --dg:#ef4757; --dgs:#fdebed;
       --bfr:#c98a2b; --aft:#2f74c9;
       background:#f3f4f8; }
@@ -1302,8 +1302,8 @@
     .rc2-subj .rc2-ss { font-size:11px; color:var(--mut); margin-top:4px; display:flex; gap:11px; }
     .rc2-subj .rc2-ss em { font-style:normal; font-weight:850; }
     .rc2-subj .rc2-ss .b em { color:var(--bfr); } .rc2-subj .rc2-ss .a em { color:var(--aft); }
-    .rc2-subj .rc2-go { flex:none; white-space:nowrap; display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:850; color:#fff; background:linear-gradient(135deg,var(--a),var(--ai)); padding:11px 14px; border-radius:13px; box-shadow:0 5px 14px rgba(18,191,148,.32); transition:transform .08s, filter .15s; }
-    .rc2-subj .rc2-go:active { transform:translateY(1px); filter:brightness(1.06); }
+    .rc2-subj .rc2-go { flex:none; white-space:nowrap; display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:850; color:var(--a); background:#fff; border:1.5px solid #bfe8dc; padding:10px 13px; border-radius:12px; box-shadow:0 2px 8px rgba(23,40,30,.05); transition:transform .08s, background .15s; }
+    .rc2-subj .rc2-go:active { transform:translateY(1px); background:var(--as); }
     .rc2-subj .rc2-go svg { width:16px; height:16px; }
     .rc2-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
     .rc2-op { background:#fff; border:1.5px solid #e9ebf2; border-radius:14px; box-shadow:0 3px 14px rgba(23,30,60,.05); padding:12px; display:flex; gap:10px; align-items:center; cursor:pointer; }
@@ -1319,7 +1319,7 @@
     .rc2-op .rc2-ck { margin-left:auto; flex:none; width:22px; height:22px; border-radius:50%; border:2px solid #d6d9e4; display:flex; align-items:center; justify-content:center; }
     .rc2-op.on .rc2-ck { background:var(--ok); border-color:var(--ok); } .rc2-op .rc2-ck svg { width:12px; height:12px; color:#fff; opacity:0; } .rc2-op.on .rc2-ck svg { opacity:1; }
     .rc2-nudge { display:flex; gap:9px; align-items:center; background:var(--as); border-radius:13px; padding:11px 13px; margin-top:12px; }
-    .rc2-nudge svg { flex:none; width:17px; height:17px; color:var(--a); } .rc2-nudge .t { font-size:11px; color:#0d8a66; line-height:1.5; } .rc2-nudge .t b { color:var(--ai); }
+    .rc2-nudge svg { flex:none; width:17px; height:17px; color:var(--a); } .rc2-nudge .t { font-size:11px; color:#5a6660; line-height:1.5; } .rc2-nudge .t b { color:var(--ai); }
     /* 완료 도장 찍기 버튼 + 미완료 안내 + 도장 오버레이 */
     .rc2-stampbtn { width:100%; margin:16px 0 4px; padding:16px; border:0; border-radius:16px; background:linear-gradient(135deg,#128a4f,#0b6d3c); color:#fff; font-size:15px; font-weight:850; letter-spacing:.3px; box-shadow:0 6px 18px rgba(12,120,70,.26); cursor:pointer; transition:filter .15s, transform .08s; }
     .rc2-stampbtn:active { transform:translateY(1px); filter:brightness(.97); }
@@ -1334,7 +1334,9 @@
     .rc2-stampov.slam .rc2-stamp { animation:rcStampSlam .5s cubic-bezier(.2,1.5,.4,1) both; }
     @keyframes rcStampSlam { 0%{opacity:0; transform:rotate(-9deg) scale(2.7)} 55%{opacity:1; transform:rotate(-9deg) scale(.9)} 74%{transform:rotate(-9deg) scale(1.07)} 100%{opacity:1; transform:rotate(-9deg) scale(1)} }
     .rc2-stampcap { font-size:13px; font-weight:850; color:#2b6b46; margin-top:-4px; text-align:center; }
-    .rc2-editbtn { padding:12px 26px; border:1.5px solid #c9d2cd; border-radius:14px; background:#fff; color:#2f4a3b; font-size:13.5px; font-weight:800; display:inline-flex; align-items:center; gap:7px; cursor:pointer; box-shadow:0 3px 12px rgba(23,40,30,.08); }
+    .rc2-stampacts { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    .rc2-editbtn { padding:12px 22px; border:1.5px solid #c9d2cd; border-radius:14px; background:#fff; color:#2f4a3b; font-size:13.5px; font-weight:800; display:inline-flex; align-items:center; gap:7px; cursor:pointer; box-shadow:0 3px 12px rgba(23,40,30,.08); }
+    .rc2-editbtn.ghost { background:transparent; box-shadow:none; color:#5a6660; }
     .rc2-editbtn svg { width:16px; height:16px; }
     nav.nav { position:relative; z-index:300; }
     @media (prefers-reduced-motion:reduce) { .rc2-stampov.slam .rc2-stamp { animation:none; } }
@@ -2207,7 +2209,10 @@
           <text x="50" y="72.5" font-size="7" font-weight="700" letter-spacing="2" fill="currentColor" text-anchor="middle" id="rcStampYear">2026</text>
         </svg>
         <div class="rc2-stampcap">반납 완료 · 오늘도 수고하셨습니다</div>
-        <button id="rcEditBtn" class="rc2-editbtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>수정하기</button>
+        <div class="rc2-stampacts">
+          <button id="rcStampFind" class="rc2-editbtn ghost" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>다른 날짜</button>
+          <button id="rcEditBtn" class="rc2-editbtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>수정하기</button>
+        </div>
       </div>
 
       <details class="rc2-legacy">

@@ -2506,6 +2506,9 @@ function rcSyncStamp(st) {
     try { const r = await postJSON('/api/cartcheck/stamp', { date: ccDate, stamped: false }); if (r && r.day) ccDay = r.day; } catch { /* noop */ }
     ov.classList.remove('on', 'slam'); rcRenderDash();
   };
+  // ★도장 상태에서도 다른 날짜로 이동 — 파인더 시트(z-1300)가 오버레이(z-100) 위로 열린다(도장 후 날짜 못 바꾸던 문제 해결).
+  const sf = $('rcStampFind');
+  if (sf) sf.onclick = () => rcOpenFind();
 }
 // 상단 날짜 선택바 — 유예기간(최근 N일)만 롤링으로 보여주고, 누르면 그날 점검을 연다.
 //  (사진이 30일 뒤 자동 삭제되므로 그 이전 날은 열람 대상이 아니라 표시하지 않음)
