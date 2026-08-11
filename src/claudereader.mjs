@@ -59,13 +59,20 @@ const HOLISTIC_GAP_NUDGE = (positions) => (
   + 'Return the FULL tees list including any you recover.'
 );
 
+// 재판독 넛지 — 한 시각에 3명↑/같은코스 중복(사다리 밀림)을 콕 집어 순번↔시각↔코스 재대응 지시.
+const HOLISTIC_SLIP_NUDGE = (times) => (
+  '\n\n★RETRY: your previous read placed THREE OR MORE caddies at the same tee time, or TWO on the same course at one time — impossible: each time row has AT MOST one OUT number and one IN number. '
+  + `Conflicting times: [${times.join(', ')}]. Re-read the [OUT|time|IN] grid CAREFULLY row by row, matching each 순번 to its EXACT printed time and course; do NOT shift numbers between adjacent time rows. Return the FULL corrected tees list.`
+);
+
 // 로컬 이미지(전체판 또는 3부 크롭) → { teamCount, roster:[{pos,name,spare}], tees:[{pos,time,course}] } 또는 null.
 export async function readPart3Holistic(imagePath, opts = {}) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 홀리스틱 스킵`); return null; }
   const prompt = HOLISTIC_P3_PROMPT
     + (opts.tailRetry ? HOLISTIC_TAIL_NUDGE : '')
-    + (Array.isArray(opts.gapPositions) && opts.gapPositions.length ? HOLISTIC_GAP_NUDGE(opts.gapPositions) : '');
+    + (Array.isArray(opts.gapPositions) && opts.gapPositions.length ? HOLISTIC_GAP_NUDGE(opts.gapPositions) : '')
+    + (Array.isArray(opts.conflictTimes) && opts.conflictTimes.length ? HOLISTIC_SLIP_NUDGE(opts.conflictTimes) : '');
   let out;
   try { out = await runClaude(`${prompt}\nImage path: ${imagePath}`); }
   catch (e) { console.error('[claude] 홀리스틱 호출 오류:', e.message); return null; }

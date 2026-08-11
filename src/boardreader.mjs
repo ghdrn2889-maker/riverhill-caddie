@@ -112,6 +112,22 @@ function snapRoster(roster) {
 // 이름처럼 보이는가(2~4 한글, 괄호태그 허용) — 열분할에서 티오프 열 오검출을 거른다.
 const _looksName = (nm) => /^[가-힣]{2,4}$/.test(String(nm || '').replace(/\([^)]*\).*/, '').replace(/\s/g, ''));
 
+// ★티오프 충돌 시각 — 한 시각에 3명↑ 또는 같은 코스(OUT/IN) 중복 = 순번↔시각 사다리 밀림. 충돌 시각 문자열 배열.
+//  (boardReadFault의 티오프 규칙과 동일. 밀림 자가교정 트리거·해소판정 공용.)
+function _teeConflicts(tees) {
+  const byTime = {};
+  for (const t of (tees || [])) {
+    const m = String((t && t.time) || '').match(/\d{1,2}:\d{2}/); if (!m) continue;
+    (byTime[m[0]] = byTime[m[0]] || []).push(String((t && t.course) || '').toUpperCase());
+  }
+  const bad = [];
+  for (const tm in byTime) {
+    const arr = byTime[tm];
+    if (arr.length > 2 || arr.filter((c) => /IN/.test(c)).length > 1 || arr.filter((c) => /OUT/.test(c)).length > 1) bad.push(tm);
+  }
+  return bad;
+}
+
 // ★열분할 채택 가드 — 열분할 결과(cand)가 기존 판독(base)과 '같은 순서'인지(겹치는 자리 접두 일치율).
 //  한 행 밀림/드롭으로 어긋났거나, 옆 부를 흡수해 이름이 통째로 다르면 낮은 일치율 → 채택 거부(유령 방지).
 //  base의 채워진 앞자리들을 cand 같은 index와 대조. 표본이 적으면(<3) 신뢰 못해 거부.
@@ -267,6 +283,26 @@ async function readPartsOnce(img, sorted, cuts) {
                     console.log(`[boardreader] 집중 재판독: ${rec}개 복구, 잔여 티없음 ${still.join(',') || '없음'}(원본이 진짜 빈 자리)`);
                   }
                 } catch (e) { console.error('[boardreader] 집중 재판독 오류:', e.message); }
+              }
+            }
+            // ★티오프 사다리 밀림 자가교정 — 한 시각 3명↑/코스중복(순번↔시각 어긋남)이면 티오프만 재판독하되
+            //  '충돌이 완전히 해소되고 티 수가 줄지 않을 때만' 채택 → 절대 나빠지지 않음(안 되면 원본 유지).
+            //  이게 해소하면 boardReadFault도 안 울려 전체 재시도(비쌈)를 아낀다. 코스 뒤바뀜(있는 티 IN↔OUT)까지 커버.
+            if (claudeBudgetLeft() > 0) {
+              const conf = _teeConflicts(h.tees);
+              if (conf.length) {
+                console.log(`[boardreader] 3부 티오프 밀림 감지(${conf.join(',')}) → 티오프 재판독`);
+                try {
+                  const h3 = await readPart3Holistic(holImg, { conflictTimes: conf });
+                  const h3t = (h3 && Array.isArray(h3.tees)) ? h3.tees : [];
+                  if (h3t.length && !_teeConflicts(h3t).length && h3t.length >= (h.tees || []).length) {
+                    h = { ...h, tees: h3t.slice().sort((a, z) => (Number(a.pos) || 0) - (Number(z.pos) || 0)) };
+                    gridMax = h.tees.reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
+                    console.log(`[boardreader] 티오프 재판독 채택(충돌 해소, ${h.tees.length}개)`);
+                  } else {
+                    console.log('[boardreader] 티오프 재판독 미채택(충돌 잔존/티 감소 — 원본 유지)');
+                  }
+                } catch (e) { console.error('[boardreader] 티오프 재판독 오류:', e.message); }
               }
             }
             // ★명단 완전성 보완 — 홀리스틱이 순번명단 '2번째 서브컬럼(뒤 스페어)'을 통째 놓치는 경우가 있다
