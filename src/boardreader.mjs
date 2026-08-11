@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic, readRosterVerbatim } from './claudereader.mjs';
-import { snapStrong, snapName, confirmedCaddies } from './roster.mjs';
+import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -185,20 +185,22 @@ async function readOffByColumns(img) {
   // ★조 병렬(Promise.all) — 조는 서로 독립이라 동시 판독으로 속도 회복(조 열분할이 더한 지연 상쇄).
   const perJo = await Promise.all(cols2.map(async (c, k) => {
     const colPath = path.join(TMP, `crewcol_${Date.now()}_${k}.png`);
-    const found = [];
+    const off = []; const crew = [];
     try {
       // ★lmargin 0.01 — 조 왼쪽 이름 첫 글자 잘림 방지(jo4 실측: 천→변·전→변 좌측 잘림). 오른쪽은 카트열까지라 여유 충분.
       await runPy({ image: img, crop_only: colPath, slice: { x0: c.x0, x1: c.x1, y1: cy1, lmargin: 0.01, margin: 0 }, scale: 8 }, 30000);
       const rows = await readCrewColumn(colPath);
       try { fs.unlinkSync(colPath); } catch { /* noop */ }
       for (const r of (rows || [])) {
+        if (!r.name) continue;
+        crew.push({ name: r.name, duty: String(r.duty || '') });            // 전원(근무·근태) 수집 — 애매이름 티브레이크용
         const m = OFF_REASON_RE.exec(String(r.duty || ''));
-        if (r.name && m) found.push({ name: r.name, reason: m[0] });
+        if (m) off.push({ name: r.name, reason: m[0] });
       }
     } catch (e) { console.error(`[boardreader] 조${k} 근태 오류:`, e.message); }
-    return found;
+    return { off, crew };
   }));
-  return perJo.flat();
+  return { off: perJo.flatMap((x) => x.off), crew: perJo.flatMap((x) => x.crew) };
 }
 
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
@@ -391,6 +393,33 @@ export function reconcileCrossPart(parts, known) {
   return parts;
 }
 
+// 조편성 근무칸이 '근무'인가(근태 아님) — 애매이름 티브레이크의 '오늘 근무자' 판정.
+const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|찾근|정출|선발|당번|배치|마감|대리|주임|마샬|프리|콜|정근/;
+
+// ★애매 오독 티브레이크 — 스냅이 '유일하지 않다'며 포기한 순번 이름을, '오늘 근무자'에 유일하게 있는
+//  정본 근접후보로 확정(이수련↔이수현/이승현/박수현). 안전: 평범한 2~4한글 셀만·정본 아님·후보 근무자 유일·중복금지.
+//  대바/태그 복합 셀·이미 정본 이름은 절대 안 건드림(officialNearCandidates가 정본이면 [] 반환).
+function disambiguateByWorking(parts, workingSet) {
+  if (!workingSet || !workingSet.size) return;
+  for (const p of Object.keys(parts)) {
+    const roster = parts[p].roster || [];
+    const present = new Set(roster.map(_bare).filter(Boolean));
+    for (let i = 0; i < roster.length; i++) {
+      const cell = String(roster[i] || ''); if (!cell) continue;
+      const bare = _bare(cell); if (!/^[가-힣]{2,4}$/.test(bare)) continue;   // 평범한 단일이름 셀만
+      const cands = officialNearCandidates(bare);
+      if (cands.length < 2) continue;                                        // 애매(2개↑)한 것만 — 유일이면 스냅이 이미 처리
+      const hit = cands.filter((c) => workingSet.has(c) && !present.has(c));
+      if (hit.length === 1) {
+        const tag = _tag(cell);
+        const repl = tag ? `${hit[0]}(${tag})` : hit[0];
+        console.log(`[boardreader] 애매이름 티브레이크: ${p}부 순번${i + 1} '${cell}'→'${repl}'(근무자 유일)`);
+        roster[i] = repl; present.add(hit[0]);
+      }
+    }
+  }
+}
+
 // ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. 경계 흔들림 대비 검증+재시도(최대 3회). ──
 //  반환 { boundaries, parts: { '1': {roster,tee,cut}, ... }, _claudeCalls }
 export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies(), summaryCuts = {}, maxTries = 3 } = {}) {
@@ -433,17 +462,24 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   let offList = [];
   if (claudeBudgetLeft() > 0) {
     try {
-      let raw = await readOffByColumns(img);              // 조 열분할(이름 안정)
-      if (raw == null) {                                   // 조 경계 실패 → 통짜 크루 크롭 폴백
+      let raw = await readOffByColumns(img);              // {off, crew} — 조 열분할(이름 안정)
+      if (raw == null) {                                   // 조 경계 실패 → 통짜 크루 크롭 폴백(근태만)
         const offPath = path.join(TMP, `off_${Date.now()}.png`);
         await runPy({ image: img, crop_only: offPath, slice: { x0: 0.64, x1: 1.0, y1: 0.92, lmargin: 0 }, scale: 6 }, 45000);
-        raw = await readOffList(offPath);
+        raw = { off: (await readOffList(offPath)) || [], crew: [] };
         try { fs.unlinkSync(offPath); } catch { /* noop */ }
       }
-      if (Array.isArray(raw)) {
-        offList = raw.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
-        console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
+      const offRaw = Array.isArray(raw) ? raw : (raw.off || []);   // 배열형(옛) 호환
+      offList = offRaw.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
+      console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
+      // ★오늘 근무자 집합 → 애매 오독 티브레이크(이수련↔이수현 등). 근무태그만(근태·빈칸 제외), 정본 스냅 후 수집.
+      const workingSet = new Set();
+      for (const cr of ((raw && raw.crew) || [])) {
+        const duty = String(cr.duty || '');
+        if (OFF_REASON_RE.test(duty) || !_WORK_DUTY_RE.test(duty)) continue;
+        const nm = snapOfficial(cr.name); if (nm) workingSet.add(nm);
       }
+      if (workingSet.size) disambiguateByWorking(best, workingSet);
     } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
   }
   return { boundaries: bestBounds, parts: best, offList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };

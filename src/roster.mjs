@@ -97,6 +97,20 @@ export function snapStrong(name) {
   return near.length === 1 ? near[0] : s;               // 유일 후보만 교정
 }
 
+// ★애매 오독의 '정본 근접후보' — 같은길이 1글자차 정본들(없으면 편집거리≤2 정본). 이미 정본이면 [].
+//  스냅이 '유일하지 않다'며 포기한 케이스를, 상위 맥락(오늘 근무자)으로 티브레이크할 때 후보군 제공.
+//  ★정본(관리자 확정 83명)만 후보로 — 신규/오독을 실존 정본으로만 좁혀 안전.
+export function officialNearCandidates(name) {
+  const s = String(name || '').trim();
+  if (s.length < 3) return [];
+  const db = load();
+  if (db[s]?.official) return [];                       // 이미 정본 → 건드리지 않음
+  const off = Object.keys(db).filter((k) => db[k]?.official);
+  const h1 = off.filter((c) => hamming1(s, c));
+  if (h1.length) return h1;                             // 같은길이 1글자차 우선
+  return off.filter((c) => editDist(s, c) <= 2);        // 없으면 편집거리≤2
+}
+
 // 순번 위치배열(빈칸 '' 유지) 보정 + 학습. 보정된 배열 반환.
 export function correctAndLearn(names) {
   const db = load();
