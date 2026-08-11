@@ -22,9 +22,11 @@
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
            /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡혀 하단 탭이 바닥에 안 붙고 떠 보임 → 동적 뷰포트 높이로 고정. */
            height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
-    .top { background:#104d31; color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
+    .top { background:linear-gradient(120deg,#12bf94,#0c9c73); color:#fff; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
+    /* 앱 로고 cm — 흰 라운드 배지에 민트 글자(민트 배너 위에서 로고처럼 도드라짐) */
+    .cmlogo { display:inline-flex; align-items:center; justify-content:center; min-width:34px; height:34px; padding:0 10px; border-radius:10px; background:#fff; color:#0c9c73; font-size:18px; font-weight:900; letter-spacing:-.04em; line-height:1; }
     .date { font-size:10px; opacity:.72; }
     main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
            overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
@@ -1919,7 +1921,7 @@
     <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
     <header class="top reveal" style="--i:0">
       <div class="toprow">
-        <span class="brand">RIVERHILL CADDIE</span>
+        <span class="cmlogo" aria-label="CADDIE 총무">cm</span>
         <div class="topright">
           <span class="date" id="date">—</span>
           <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>

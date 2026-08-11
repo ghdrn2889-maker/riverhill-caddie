@@ -2457,10 +2457,9 @@ function rcRenderDash() {
 // 미완료 항목 목록(사진 전·후 + 반납 4종) — 미완료 안내에 콕 집어 보여준다.
 function rcMissingList(st) {
   const m = [];
-  if (!st.cart || st.cart.before === 0) m.push('카트 라운드 전 사진');
-  if (!st.cart || st.cart.after === 0) m.push('카트 라운드 후 사진');
-  if (!st.club || st.club.before === 0) m.push('클럽 라운드 전 사진');
-  if (!st.club || st.club.after === 0) m.push('클럽 라운드 후 사진');
+  // ★완료판정 6칸 모델과 일치 — 카트/클럽 사진은 각 1칸(전·후 둘 다 있어야 done). 전/후로 쪼개면 최대 8이 돼 링(6)과 어긋남.
+  if (!st.cart || !st.cart.done) m.push('카트 전·후 사진');
+  if (!st.club || !st.club.done) m.push('클럽 전·후 사진');
   for (const c of (st.checks || [])) if (!c.done) m.push(c.label);
   return m;
 }
