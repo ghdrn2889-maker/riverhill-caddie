@@ -854,6 +854,12 @@ app.listen(PORT, HOST, () => {
 startWatchdog({
   notify: async (report, signals) => {
     const body = `${report.rootCause || ''}\n제안: ${report.proposedFix || ''}`.slice(0, 300);
+    // ★시스템 진단은 기본적으로 push하지 않는다 — 관리자 개인폰(캐디앱)에 운영 알림이 섞여 사용자 경험을 해침.
+    //  진단서는 watchdog-reports.jsonl + 모니터 사이트(/api/watchdog)에서 검토. push 원하면 WATCHDOG_PUSH=1.
+    if (process.env.WATCHDOG_PUSH !== '1') {
+      console.log(`[감시] 시스템 진단(${report.severity}) 기록됨 — push 억제(모니터 사이트에서 확인): ${(report.rootCause || '').slice(0, 120)}`);
+      return;
+    }
     for (const id of adminUserIds()) {
       try { await broadcast({ title: `시스템 진단(${report.severity}) — 확인 필요`, body, url: '/', level: 'high', bypassQuiet: true }, id); }
       catch (e) { console.error('[감시] 관리자 알림 실패:', e.message); }
