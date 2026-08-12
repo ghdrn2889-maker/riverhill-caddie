@@ -1208,7 +1208,8 @@ function boardRounds() {
     const myPos = myPosOf(roster, b.s.myPosition);
     const myTee = myPos && teeMap[myPos] ? teeMap[myPos] : null;
     return { part: b.part, status: b.status, roster, teeMap, cut: Number(b.s.cutLine) || 0,
-      myPos, tee: myTee && myTee.time ? myTee.time : '', course: myTee && myTee.course ? myTee.course : '' };
+      myPos, tee: myTee && myTee.time ? myTee.time : '', course: myTee && myTee.course ? myTee.course : '',
+      offType: b.s.offType || '', offReason: b.s.offReason || '' };   // 병가·휴가·순번제외 구분(홈 대시보드와 일치)
   });
 }
 // 진입 시 기본 활성 부 = focus 라운드(보통 저녁 3부, 아침엔 1·2부)와 같은 부.
@@ -1221,11 +1222,18 @@ function boardFocusIdx() {
   const i = fp ? rounds.findIndex((r) => r.part === fp) : -1;
   return i >= 0 ? i : 0;
 }
+// off 세분 — 병가/휴가/순번제외/휴무. 홈 대시보드(renderToday)의 판별과 일치.
+function boardOffLabel(r) {
+  if (r.offType === 'sick') return { badge: '병가', line: '몸조리 잘 하세요' };
+  if (r.offType === 'vacation') return { badge: '휴가', line: '오늘은 휴가예요' };
+  if (r.offReason === 'removed') return { badge: '배치 없음', line: '최신 배치표에서 순번이 빠졌어요' };
+  return { badge: '휴무', line: '오늘은 푹 쉬어요' };
+}
 function boardHeroFor(r) {
   if (r.status === 'work' && r.tee) return { big: r.tee, word: false, cond: (r.course ? `${r.course} 코스` : '근무') };
   if (r.status === 'work') return { big: '근무', word: true, cond: '티오프가 매칭되면 알려드려요' };
   if (r.status === 'spare') return { big: '스페어', word: true, cond: r.myPos ? `내 순번 ${r.myPos}번 · 대기` : '대기 중' };
-  if (r.status === 'off') return { big: '휴무', word: true, cond: '오늘은 푹 쉬어요' };
+  if (r.status === 'off') { const o = boardOffLabel(r); return { big: o.badge, word: true, cond: o.line }; }
   return { big: '미배치', word: true, cond: '배치되면 바로 알려드려요' };
 }
 // 스페어 지표 — 확정선(cut) 밖 대기 기준. { rank: 몇 번째 스페어, ahead: 내 앞 대기 인원 } 또는 null.
@@ -1250,7 +1258,7 @@ function boardHeroCore(r) {
     return boardStateHero('스페어', '대기 순번을 확인하는 중이에요', 'spare');
   }
   if (r.status === 'work') return boardStateHero('근무 예정', '티오프가 매칭되면 알려드려요', 'work');
-  if (r.status === 'off') return boardStateHero('휴무', '오늘은 푹 쉬어요', 'off');
+  if (r.status === 'off') { const o = boardOffLabel(r); return boardStateHero(o.badge, o.line, 'off'); }
   return boardStateHero('미배치', '배치되면 바로 알려드려요', 'none');
 }
 function renderFullBoard() {
