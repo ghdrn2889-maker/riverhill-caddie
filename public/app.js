@@ -2596,6 +2596,7 @@ let ccEditMode = false;
 let ccDay = null;                         // 마지막 로드한 하루 기록(photos·returnStatus 포함)
 let rcJustTapped = null;                   // 방금 탭해서 켠 반납 항목 key(충전 팝 애니메이션 1회성 대상)
 let rcPrevDone = null;                      // 직전 완료 개수(늘어난 순간에만 링 숫자 팝)
+let rcWasStampFull = false;                 // 직전 '전부 완료' 여부(방금 다 찬 순간에만 게이지 완료 애니메이션)
 const RC_LEG = { cart: { before: 'intake', after: 'exit' }, club: { before: 'club_pre', after: 'club_post' } };
 const RC_META = { cart: { title: '카트 상태' }, club: { title: '클럽 상태' } };
 const RC_ICN = {
@@ -2693,8 +2694,17 @@ function rcSyncStamp(st) {
   if (ccDay && ccDay.stampedAt) { ov.classList.add('on'); ov.classList.remove('slam'); }  // 이미 찍힘 → 애니메이션 없이 표시
   else { ov.classList.remove('on', 'slam'); }
   if (miss) miss.classList.remove('on');                                         // 미완료 안내는 저장 시도 때만 노출
-  if (st.allDone) { btn.textContent = '완료 도장 찍기'; btn.classList.remove('incomplete'); }
-  else { btn.textContent = `저장 (미완료 ${rcMissingList(st).length}개)`; btn.classList.add('incomplete'); }
+  // 게이지: 완료 항목 비율만큼 왼→오 차오름(CSS transition), 다 차면 팝+샤인 1회.
+  const total = st.total || 6, done = st.doneCount || 0;
+  const lbl = $('rcStampLbl'), fill = $('rcStampFill');
+  if (lbl) lbl.textContent = st.allDone ? '완료 도장 찍기' : `미완료 ${rcMissingList(st).length}개`;
+  if (fill) fill.style.width = (total ? (done / total * 100) : 0).toFixed(1) + '%';
+  btn.classList.toggle('done', !!st.allDone);
+  if (st.allDone && !rcWasStampFull) {                                           // 방금 다 찬 순간에만 완료 애니메이션
+    btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
+    btn.addEventListener('animationend', () => btn.classList.remove('pop'), { once: true });
+  }
+  rcWasStampFull = !!st.allDone;
   btn.onclick = async () => {
     const cur = (ccDay && ccDay.returnStatus) || st;
     if (cur.allDone) {

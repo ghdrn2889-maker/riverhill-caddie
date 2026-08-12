@@ -1455,9 +1455,18 @@
     .rc2-nudge { display:flex; gap:9px; align-items:center; background:var(--as); border-radius:13px; padding:11px 13px; margin-top:12px; }
     .rc2-nudge svg { flex:none; width:17px; height:17px; color:var(--a); } .rc2-nudge .t { font-size:11px; color:#5a6660; line-height:1.5; } .rc2-nudge .t b { color:var(--ai); }
     /* 완료 도장 찍기 버튼 + 미완료 안내 + 도장 오버레이 */
-    .rc2-stampbtn { width:100%; margin:16px 0 4px; padding:16px; border:0; border-radius:16px; background:linear-gradient(135deg,#10a37a,#0a7657); color:#fff; font-size:15px; font-weight:850; letter-spacing:.3px; box-shadow:0 6px 18px rgba(12,120,70,.26); cursor:pointer; transition:filter .15s, transform .08s; }
-    .rc2-stampbtn:active { transform:translateY(1px); filter:brightness(.97); }
-    .rc2-stampbtn.incomplete { background:linear-gradient(135deg,#e6a417,#d07d06); box-shadow:0 6px 18px rgba(200,130,10,.24); }
+    /* 완료 게이지 버튼 — 밝은 검정 바탕에 딥민트 게이지가 왼→오 차오름, 다 차면 팝+샤인 */
+    .rc2-stampbtn { position:relative; overflow:hidden; width:100%; margin:16px 0 4px; padding:16px; border:0; border-radius:16px; background:#2b2e35; color:#fff; font-size:15px; font-weight:850; letter-spacing:.3px; box-shadow:0 6px 18px rgba(20,24,32,.22); cursor:pointer; }
+    .rc2-stampbtn:active { filter:brightness(.95); }
+    .rc2-stampbtn .rc2-fill { position:absolute; left:0; top:0; bottom:0; width:0; background:linear-gradient(90deg,#12a884,#0c8f6a); box-shadow:0 0 16px rgba(14,158,120,.5); border-radius:16px 0 0 16px; transition:width .55s cubic-bezier(.34,1.06,.5,1); z-index:0; }
+    .rc2-stampbtn.done .rc2-fill { border-radius:16px; }
+    .rc2-stampbtn .rc2-shine { position:absolute; top:0; bottom:0; left:0; width:45%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent); transform:translateX(-140%); opacity:0; z-index:1; pointer-events:none; }
+    .rc2-stampbtn .rc2-lbl { position:relative; z-index:2; }
+    .rc2-stampbtn.pop { animation:rcStampPop .5s cubic-bezier(.34,1.56,.64,1); }
+    .rc2-stampbtn.pop .rc2-shine { animation:rcStampShine .75s ease-out .05s; }
+    @keyframes rcStampPop { 0%{transform:scale(1)} 45%{transform:scale(1.035)} 100%{transform:scale(1)} }
+    @keyframes rcStampShine { 0%{transform:translateX(-140%);opacity:0} 30%{opacity:1} 100%{transform:translateX(260%);opacity:0} }
+    @media (prefers-reduced-motion:reduce){ .rc2-stampbtn .rc2-fill{transition:none} .rc2-stampbtn.pop{animation:none} .rc2-stampbtn.pop .rc2-shine{animation:none} }
     .rc2-miss { display:none; margin:8px 4px 0; font-size:11.5px; color:#b4460b; line-height:1.65; }
     .rc2-miss.on { display:block; }
     .rc2-miss b { color:#8f3708; font-weight:850; }
@@ -2393,13 +2402,12 @@
       </section>
 
       <div class="rc-sheet">
-        <div class="rc-prg"><b>반납 점검</b><span class="p" id="rcProgTxt">0 / 6</span></div>
+        <div class="rc-prg"><b>반납 점검</b></div>
 
         <!-- 오늘 헤더 + 지난 기록 찾기 -->
         <div class="rc-findbar rc2-datebar">
           <div class="rc-todayh">
             <span class="d" id="rcSelDate">오늘</span>
-            <span class="tag" id="rcSelTag">오늘 · 반납 점검</span>
             <button class="rc-backtoday" id="rcBackToday" type="button" hidden>오늘로</button>
           </div>
           <button class="rc-findrow" id="rcFindOpen" type="button">
@@ -2419,15 +2427,15 @@
 
         <div class="rc2-sect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
         <div class="rc-g2">
-          <div class="rc-pcard" id="rcCardCart"><div class="k">카트 상태 <span class="rc2-badge" id="rcBdCart"></span></div><div class="s">전 <em id="rcCcb">0</em> · 후 <em id="rcCca">0</em></div><div class="bd">전·후 비교 ›</div></div>
-          <div class="rc-pcard" id="rcCardClub"><div class="k">클럽 상태 <span class="rc2-badge" id="rcBdClub"></span></div><div class="s">전 <em id="rcLcb">0</em> · 후 <em id="rcLca">0</em></div><div class="bd">전·후 비교 ›</div></div>
+          <div class="rc-pcard" id="rcCardCart"><div class="k">카트 상태</div><div class="s">전 <em id="rcCcb">0</em> · 후 <em id="rcCca">0</em></div><div class="bd">전·후 비교 ›</div></div>
+          <div class="rc-pcard" id="rcCardClub"><div class="k">클럽 상태</div><div class="s">전 <em id="rcLcb">0</em> · 후 <em id="rcLca">0</em></div><div class="bd">전·후 비교 ›</div></div>
         </div>
 
-        <div class="rc2-sect">장비 반납 확인<span class="rc2-c">탭 체크</span></div>
+        <div class="rc2-sect">장비 반납 확인</div>
         <div class="rc2-grid" id="rcReturnGrid"></div>
 
         <!-- 고객 분실물 확인 -->
-        <div class="rc2-sect">고객 분실물 확인<span class="rc2-c">두고 간 물건</span></div>
+        <div class="rc2-sect">고객 분실물 확인</div>
         <div class="lf-card">
           <div class="lf-lead">
             <div class="lf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg></div>
@@ -2441,7 +2449,7 @@
 
         <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
 
-        <button id="rcStampBtn" class="rc2-stampbtn" type="button">완료 도장 찍기</button>
+        <button id="rcStampBtn" class="rc2-stampbtn" type="button"><span class="rc2-fill" id="rcStampFill"></span><span class="rc2-shine"></span><span class="rc2-lbl" id="rcStampLbl">완료 도장 찍기</span></button>
         <div class="rc2-miss" id="rcMiss"></div>
       </div>
 
