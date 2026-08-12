@@ -1265,18 +1265,22 @@
     .rc-findrow { display:flex; align-items:center; gap:9px; width:100%; padding:12px 14px; border:1.5px solid #e6e8f0; border-radius:13px; background:#fbfbfe; color:#3a4050; font-size:13px; font-weight:800; cursor:pointer; }
     .rc-findrow svg { width:17px; height:17px; color:var(--a); flex:none; }
     .rc-findrow .ch { margin-left:auto; color:#b8bdcb; font-weight:700; }
-    /* 스크림은 항상 전체화면(inset:0). 카드는 키보드 높이(--kbh)만큼 띄워 절대배치 → 키보드에 딱 붙고, 남는 높이에 맞춰 목록만 내부 스크롤. */
-    .rc-findsheet { position:fixed; inset:0; z-index:1300; display:none; background:rgba(16,20,34,.42); }
-    .rc-findsheet.on { display:block; }
-    .rc-fs-card { position:absolute; left:0; right:0; bottom:var(--kbh,0px); margin:0 auto; width:100%; max-width:600px; background:#fff; border-radius:20px 20px 0 0; padding:16px 15px calc(18px + env(safe-area-inset-bottom,0)); max-height:calc(100dvh - var(--kbh,0px) - 10px); display:flex; flex-direction:column; transition:bottom .22s cubic-bezier(.2,.8,.3,1); animation:rcSheetUp .26s cubic-bezier(.2,.8,.3,1); }
-    @keyframes rcSheetUp { from{ transform:translateY(30px); opacity:.4 } to{ transform:translateY(0); opacity:1 } }
-    .rc-fs-head { display:flex; align-items:center; margin-bottom:12px; }
-    .rc-fs-head span { font-size:15px; font-weight:850; color:#20242e; }
-    .rc-fs-head button { margin-left:auto; border:0; background:transparent; font-size:19px; color:var(--mut); cursor:pointer; line-height:1; padding:2px 4px; }
-    .rc-fs-search { display:flex; align-items:center; gap:8px; border:1.5px solid #d9dcea; border-radius:12px; padding:11px 12px; margin-bottom:11px; }
-    .rc-fs-search svg { width:17px; height:17px; color:var(--mut); flex:none; }
-    .rc-fs-search input { border:0; outline:0; width:100%; font-size:14px; font-weight:700; background:transparent; color:#20242e; }
-    .rc-fs-list { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+    /* 지난 반납 기록 = 전체화면 검색 페이지(네이버 모바일식). 상단 검색바 고정 + 아래 결과 스크롤
+       → 키보드가 하단을 덮어도 검색바는 위에 있어 안 가림. 밑에서 올라오는 시트/키보드 회피 계산 불필요. */
+    .rc-search-page { position:fixed; inset:0; z-index:1460; display:none; flex-direction:column; background:#f4f6f8; }
+    .rc-search-page.on { display:flex; animation:rcSpIn .2s cubic-bezier(.22,.61,.36,1); }
+    @keyframes rcSpIn { from{ opacity:.3; transform:translateX(16px); } to{ opacity:1; transform:none; } }
+    .rc-sp-bar { flex:none; display:flex; align-items:center; gap:8px; padding:calc(env(safe-area-inset-top,0px) + 9px) 12px 9px; background:#fff; border-bottom:1px solid #edeef3; }
+    .rc-sp-back { flex:none; width:38px; height:38px; border:0; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; -webkit-tap-highlight-color:transparent; }
+    .rc-sp-back svg { width:23px; height:23px; color:#3a4050; }
+    .rc-sp-back:active { opacity:.5; }
+    .rc-sp-field { flex:1; min-width:0; display:flex; align-items:center; gap:8px; background:#f1f3f6; border-radius:12px; padding:10px 12px; }
+    .rc-sp-field > svg { width:18px; height:18px; color:var(--mut,#8b91a3); flex:none; }
+    .rc-sp-field input { flex:1; min-width:0; border:0; outline:0; background:transparent; font-size:15px; font-weight:700; color:#20242e; }
+    .rc-sp-clear { flex:none; width:22px; height:22px; border:0; background:transparent; padding:0; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .rc-sp-clear svg { width:20px; height:20px; display:block; }
+    .rc-sp-list { flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:8px; padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px)); }
+    .rc-search-page .rc-fs-empty { text-align:center; color:var(--mut); font-size:13px; font-weight:700; padding:44px 0; }
     .rc-rec { display:flex; align-items:center; gap:11px; padding:12px; border:1px solid #ebedf4; border-radius:13px; background:#fff; cursor:pointer; text-align:left; width:100%; }
     .rc-rec .dt { font-size:14px; font-weight:850; color:#20242e; min-width:78px; }
     .rc-rec .dt small { font-weight:800; color:var(--mut); margin-left:3px; font-size:11px; }
@@ -2423,13 +2427,21 @@
           </button>
         </div>
 
-        <!-- 지난 반납 기록 찾기 시트 -->
-        <div class="rc-findsheet" id="rcFindSheet">
-          <div class="rc-fs-card">
-            <div class="rc-fs-head"><span>지난 반납 기록</span><button id="rcFindClose" type="button" aria-label="닫기">✕</button></div>
-            <div class="rc-fs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg><input id="rcFindInput" type="text" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)"></div>
-            <div class="rc-fs-list" id="rcFindList"></div>
+        <!-- 지난 반납 기록 찾기 — 전체화면 검색 페이지(네이버 모바일식) -->
+        <div class="rc-search-page" id="rcFindSheet" role="dialog" aria-label="지난 반납 기록 검색">
+          <div class="rc-sp-bar">
+            <button class="rc-sp-back" id="rcFindClose" type="button" aria-label="뒤로">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            </button>
+            <div class="rc-sp-field">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+              <input id="rcFindInput" type="text" inputmode="text" autocomplete="off" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)">
+              <button class="rc-sp-clear" id="rcFindClear" type="button" aria-label="지우기" hidden>
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#c3c9d4"></circle><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2.1" stroke-linecap="round"></path></svg>
+              </button>
+            </div>
           </div>
+          <div class="rc-sp-list" id="rcFindList"></div>
         </div>
 
         <div class="rc2-sect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>

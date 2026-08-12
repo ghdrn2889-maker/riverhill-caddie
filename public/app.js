@@ -2776,17 +2776,19 @@ function rcSyncFindBar() {
   if (back) back.hidden = isToday;
 }
 
+function rcFindClearToggle() { const c = $('rcFindClear'), i = $('rcFindInput'); if (c && i) c.hidden = !i.value; }
 async function rcOpenFind() {
   const sheet = $('rcFindSheet'); if (!sheet) return;
   sheet.classList.add('on');
   const input = $('rcFindInput'); if (input) input.value = '';
+  rcFindClearToggle();
   $('rcFindList').innerHTML = '<div class="rc-fs-empty">불러오는 중…</div>';
   try { const r = await (await fetch('/api/cartcheck/records')).json(); rcRecordsCache = r.records || []; if (r.today) rcTodayISO = r.today; }
   catch { rcRecordsCache = []; }
   rcRenderFindList('');
-  if (input) setTimeout(() => { input.focus({ preventScroll: true }); if (rcKbApply) rcKbApply(); }, 60);
+  if (input) setTimeout(() => input.focus(), 80);   // 전체화면 검색 페이지 → 스크롤 걱정 없음
 }
-const rcCloseFind = () => { const s = $('rcFindSheet'); if (s) s.classList.remove('on'); if (rcKbApply) rcKbApply(); };
+const rcCloseFind = () => { const s = $('rcFindSheet'); if (s) s.classList.remove('on'); };
 
 // 날짜 검색 매칭 — "8/3"·"8.3"·"8월3일"·"2026-08-03" 등 부분입력 흡수.
 function rcRecMatch(rec, q) {
@@ -3122,10 +3124,10 @@ function rcInitKbAvoid() {
 
 function initCartButtons() {
   $('rcBackToday').onclick = () => loadCartCheck();                       // 오늘로
-  $('rcFindOpen').onclick = rcOpenFind;                                    // 지난 기록 찾기 열기
-  $('rcFindClose').onclick = rcCloseFind;
-  $('rcFindSheet').onclick = (e) => { if (e.target === $('rcFindSheet')) rcCloseFind(); };  // 스크림 탭 닫기
-  $('rcFindInput').oninput = (e) => rcRenderFindList(e.target.value);
+  $('rcFindOpen').onclick = rcOpenFind;                                    // 지난 기록 검색 페이지 열기
+  $('rcFindClose').onclick = rcCloseFind;                                  // 뒤로(←)
+  $('rcFindInput').oninput = (e) => { rcFindClearToggle(); rcRenderFindList(e.target.value); };
+  $('rcFindClear').onclick = () => { const i = $('rcFindInput'); i.value = ''; rcFindClearToggle(); rcRenderFindList(''); i.focus(); };  // 입력 지우기
   $('rcCardCart').onclick = () => rcOpenGallery('cart');
   $('rcCardClub').onclick = () => rcOpenGallery('club');
   rcInitHero();       // 카트번호 히어로(표정·번호 팝업·주인 조회)
