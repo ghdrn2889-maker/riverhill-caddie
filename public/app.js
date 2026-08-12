@@ -3058,26 +3058,36 @@ function rcRenderLost(items) {
   });
 }
 let rcAddPhoto = null;
-function rcResetAdd() { rcAddPhoto = null; $('rcAddName').value = ''; $('rcAddFile').value = ''; const im = $('rcAddImg'); im.hidden = true; im.src = ''; $('rcAddEmpty').hidden = false; rcCheckAdd(); }
+function rcResetAdd() { rcAddPhoto = null; $('rcAddName').value = ''; $('rcAddFile').value = ''; $('rcAddCamIn').value = ''; const im = $('rcAddImg'); im.hidden = true; im.src = ''; $('rcAddEmpty').hidden = false; rcCheckAdd(); }
 function rcCheckAdd() { $('rcAddConfirm').disabled = !$('rcAddName').value.trim(); }
 function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => $('rcAddName').focus(), 320); }
-function rcCloseAdd() { $('rcAddWrap').classList.remove('on'); }
+function rcCloseAdd() { $('rcAddChooser').classList.remove('on'); $('rcAddWrap').classList.remove('on'); }
 async function rcConfirmAdd() {
   const name = $('rcAddName').value.trim(); if (!name) return;
   const btn = $('rcAddConfirm'); btn.disabled = true; btn.textContent = '저장 중…';
   try { await postJSON('/api/cartcheck/lost/add', { date: ccDate, name, image: rcAddPhoto || null }); } finally { btn.textContent = '추가'; }
   rcCloseAdd(); loadCartCheck(ccDate);
 }
+async function rcAddOnPick(e) {                       // 카메라·파일 공용 핸들러
+  const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { rcAddPhoto = await compressImage(f, 1400, 0.75); const im = $('rcAddImg'); im.src = rcAddPhoto; im.hidden = false; $('rcAddEmpty').hidden = true; } catch { /* noop */ }
+}
+function rcCloseAddChooser() { $('rcAddChooser').classList.remove('on'); }
 function rcInitLost() {
   $('rcLostAdd').onclick = rcOpenAdd;
   $('rcAddCancel').onclick = rcCloseAdd;
   $('rcAddConfirm').onclick = rcConfirmAdd;
   $('rcAddName').oninput = rcCheckAdd;
   $('rcAddWrap').onclick = (e) => { if (e.target === $('rcAddWrap')) rcCloseAdd(); };
-  $('rcAddFile').onchange = async (e) => {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    try { rcAddPhoto = await compressImage(f, 1400, 0.75); const im = $('rcAddImg'); im.src = rcAddPhoto; im.hidden = false; $('rcAddEmpty').hidden = true; } catch { /* noop */ }
-  };
+  // 사진 영역 탭 → 카메라/파일 선택 시트
+  $('rcAddPhotoBox').onclick = () => $('rcAddChooser').classList.add('on');
+  $('rcAddPhotoBox').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('rcAddChooser').classList.add('on'); } };
+  $('rcAddChCancel').onclick = rcCloseAddChooser;
+  $('rcAddChooser').onclick = (e) => { if (e.target === $('rcAddChooser')) rcCloseAddChooser(); };
+  $('rcAddPickCam').onclick = () => { rcCloseAddChooser(); $('rcAddCamIn').click(); };
+  $('rcAddPickFile').onclick = () => { rcCloseAddChooser(); $('rcAddFile').click(); };
+  $('rcAddCamIn').onchange = rcAddOnPick;
+  $('rcAddFile').onchange = rcAddOnPick;
 }
 
 function initCartButtons() {

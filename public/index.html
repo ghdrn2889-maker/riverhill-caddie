@@ -1475,8 +1475,7 @@
     #view-cart .rc-hero5 .edithint { display:block; font-size:11.5px; font-weight:750; opacity:.8; cursor:pointer; color:#fff; }
     @keyframes rcFacePop { 0%{transform:scale(1) rotate(0)} 35%{transform:scale(1.24) rotate(-6deg)} 70%{transform:scale(.97) rotate(3deg)} 100%{transform:scale(1) rotate(0)} }
 
-    #view-cart .rc-sheet { margin:-16px -14px 0; padding:22px 14px 6px; background:#f4f6f8; border-radius:22px 22px 0 0; position:relative; min-height:52vh; }
-    #view-cart .rc-sheet::before { content:''; position:absolute; top:9px; left:50%; transform:translateX(-50%); width:40px; height:5px; border-radius:3px; background:#cfd8d3; }
+    #view-cart .rc-sheet { margin:-16px -14px 0; padding:20px 14px 6px; background:#f4f6f8; border-radius:22px 22px 0 0; position:relative; min-height:52vh; }
     #view-cart .rc-prg { display:flex; align-items:center; justify-content:space-between; margin:4px 2px 2px; }
     #view-cart .rc-prg b { font-size:16px; font-weight:850; color:#16241e; }
     #view-cart .rc-prg .p { font-size:12px; font-weight:800; color:var(--a); background:#e6f6f0; padding:5px 12px; border-radius:20px; }
@@ -1545,6 +1544,7 @@
     #view-cart .rc-asheet .aphoto img:not([hidden]) { width:100%; height:150px; object-fit:cover; display:block; }
     #view-cart .rc-asheet .ainput { width:100%; margin-top:11px; border:1.6px solid #e0e4ea; border-radius:12px; padding:13px 14px; font-size:14px; font-weight:700; color:#171a23; outline:none; background:#fafbfc; }
     #view-cart .rc-asheet .ainput:focus { border-color:#bfe0cf; background:#fff; }
+    #rcAddChooser { z-index:1500; }   /* 분실물 추가 시트(1400) 위로 */
     .rc2-stampov { position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px;
       background:rgba(248,250,252,.34); -webkit-backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); }
     .rc2-stampov.on { display:flex; }
@@ -2459,7 +2459,9 @@
       <div class="rc-ov" id="rcAddWrap">
         <div class="rc-asheet">
           <div class="ash">분실물 추가</div>
-          <label class="aphoto"><input type="file" accept="image/*" id="rcAddFile" hidden><div class="aph-empty" id="rcAddEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg>사진 촬영 / 선택<span>선택 사항</span></div><img id="rcAddImg" hidden alt=""></label>
+          <div class="aphoto" id="rcAddPhotoBox" role="button" tabindex="0"><div class="aph-empty" id="rcAddEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg>사진 촬영 / 선택<span>선택 사항</span></div><img id="rcAddImg" hidden alt=""></div>
+          <input type="file" accept="image/*" capture="environment" id="rcAddCamIn" hidden>
+          <input type="file" accept="image/*" id="rcAddFile" hidden>
           <input class="ainput" id="rcAddName" type="text" placeholder="물건 이름 (예: 지갑, 장갑, 우산)">
           <div class="aacts"><button class="g" type="button" id="rcAddCancel">취소</button><button class="p" type="button" id="rcAddConfirm" disabled>추가</button></div>
         </div>
@@ -2540,6 +2542,14 @@
   </div></div>
   <input id="rcCamIn" type="file" accept="image/*" capture="environment" hidden>
   <input id="rcAlbIn" type="file" accept="image/*" multiple hidden>
+
+  <!-- 분실물 사진: 카메라/파일 선택 시트 -->
+  <div class="rc2-sheet" id="rcAddChooser"><div class="rc2-sc2">
+    <div class="st">분실물 사진</div>
+    <button class="opt" id="rcAddPickCam"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span><div>카메라로 촬영<small>지금 바로 찍기</small></div></button>
+    <button class="opt" id="rcAddPickFile"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></span><div>앨범·파일에서 선택<small>저장된 사진 고르기</small></div></button>
+    <button class="cancel" id="rcAddChCancel">취소</button>
+  </div></div>
 
   <!-- 정산: 문서 미리보기 모달 -->
   <div class="lg-modal" id="lgModal" hidden>
