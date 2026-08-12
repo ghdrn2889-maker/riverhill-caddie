@@ -2780,7 +2780,7 @@ async function rcOpenFind() {
   try { const r = await (await fetch('/api/cartcheck/records')).json(); rcRecordsCache = r.records || []; if (r.today) rcTodayISO = r.today; }
   catch { rcRecordsCache = []; }
   rcRenderFindList('');
-  if (input) setTimeout(() => input.focus(), 60);
+  if (input) setTimeout(() => input.focus({ preventScroll: true }), 60);
 }
 const rcCloseFind = () => { const s = $('rcFindSheet'); if (s) s.classList.remove('on'); };
 
@@ -3032,7 +3032,7 @@ function rcOwnerLookup() {
 }
 function rcOpenNum() {
   $('rcNumIn').value = rcCartVal; rcOwnerLookup(); $('rcNumWrap').classList.add('on');
-  setTimeout(() => { const i = $('rcNumIn'); i.focus(); try { i.select(); } catch { /* noop */ } }, 320);
+  setTimeout(() => { const i = $('rcNumIn'); i.focus({ preventScroll: true }); try { i.select(); } catch { /* noop */ } }, 320);
 }
 function rcCloseNum() { $('rcNumWrap').classList.remove('on'); }
 async function rcSaveNum() {
@@ -3070,7 +3070,7 @@ function rcRenderLost(items) {
 let rcAddPhoto = null;
 function rcResetAdd() { rcAddPhoto = null; $('rcAddName').value = ''; $('rcAddFile').value = ''; $('rcAddCamIn').value = ''; const im = $('rcAddImg'); im.hidden = true; im.src = ''; $('rcAddEmpty').hidden = false; rcCheckAdd(); }
 function rcCheckAdd() { $('rcAddConfirm').disabled = !$('rcAddName').value.trim(); }
-function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => $('rcAddName').focus(), 320); }
+function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => $('rcAddName').focus({ preventScroll: true }), 320); }
 function rcCloseAdd() { $('rcAddChooser').classList.remove('on'); $('rcAddWrap').classList.remove('on'); }
 async function rcConfirmAdd() {
   const name = $('rcAddName').value.trim(); if (!name) return;
