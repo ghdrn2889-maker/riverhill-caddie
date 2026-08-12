@@ -51,7 +51,10 @@ function showView(name) {
       _boxFxDone.add(name);
       boxFx(el);                               // 최초 진입 1회: 카드 박스들이 순서대로 부드럽게 올라옴
     } else {
-      el.classList.add(to > from ? 'slide-r' : 'slide-l');   // 재방문·기타 탭: 가벼운 방향 슬라이드
+      const dir = to > from ? 'slide-r' : 'slide-l';         // 재방문·기타 탭: 가벼운 방향 슬라이드
+      el.classList.add(dir);
+      // 애니 끝나면 클래스 제거 → #view-cart가 애니 타깃으로 남지 않게(fixed 팝업이 뷰에 갇히는 것 방지)
+      el.addEventListener('animationend', () => el.classList.remove(dir), { once: true });
     }
   }
   curView = name;

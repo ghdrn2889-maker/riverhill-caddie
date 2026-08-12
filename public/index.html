@@ -1072,9 +1072,12 @@
     @keyframes enterIris { from { clip-path:circle(8% at 84% 20%); } to { clip-path:circle(150% at 84% 20%); } }
 
     /* ===== 탭/달 전환 방향성 슬라이드 ===== */
+    /* ★fill-mode 'both' 금지: 채워진 transform 애니는 #view-cart를 영구적으로 containing block으로
+       만들어, 안에 있는 position:fixed 팝업/시트를 뷰에 가둬 스크롤에 딸려 움직이게 함(키보드 가림·버벅임).
+       to 키프레임이 이미 정지 상태(transform:none)라 fill 없이도 최종 모습 동일. */
     @media (prefers-reduced-motion: no-preference) {
-      .slide-r { animation:slideInR .28s cubic-bezier(.22,.61,.36,1) both; }
-      .slide-l { animation:slideInL .28s cubic-bezier(.22,.61,.36,1) both; }
+      .slide-r { animation:slideInR .28s cubic-bezier(.22,.61,.36,1); }
+      .slide-l { animation:slideInL .28s cubic-bezier(.22,.61,.36,1); }
     }
     @keyframes slideInR { from { opacity:0; transform:translateX(26px); } to { opacity:1; transform:none; } }
     @keyframes slideInL { from { opacity:0; transform:translateX(-26px); } to { opacity:1; transform:none; } }
