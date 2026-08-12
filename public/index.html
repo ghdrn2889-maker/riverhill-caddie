@@ -1206,6 +1206,20 @@
     .cc-step-h { font-size:12px; font-weight:850; color:#0a5f46; margin-bottom:7px; display:flex; align-items:center; gap:8px; }
     .cc-prog { font-size:10px; font-weight:800; color:#647168; }
     .cc-prog.done { color:#14936f; }
+    /* 오늘의 카트 번호 — 눈에 띄는 상단 입력 카드 */
+    .cc-cartcard { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 4px;
+      background:linear-gradient(135deg,#14c99b 0%,#0a9e77 100%); border-radius:18px; padding:14px 16px;
+      box-shadow:0 10px 24px -10px rgba(10,158,119,.55); }
+    .cc-cartL .lab { display:block; font-size:13.5px; font-weight:850; color:#fff; letter-spacing:-.01em; }
+    .cc-cartL .sub { display:block; font-size:10.5px; font-weight:600; color:rgba(255,255,255,.82); margin-top:3px; }
+    .cc-cartR { display:flex; align-items:center; gap:8px; flex:none; }
+    .cc-cartR input { width:74px; padding:8px 6px; border:0; border-radius:12px; background:#fff; color:#0a5f46;
+      font-size:24px; font-weight:900; text-align:center; letter-spacing:.02em; box-shadow:0 2px 8px rgba(0,40,25,.16); }
+    .cc-cartR input::placeholder { color:#a9d6c7; }
+    .cc-cartR button { flex:none; padding:11px 15px; border:1px solid rgba(255,255,255,.45); border-radius:12px;
+      background:rgba(255,255,255,.2); color:#fff; font-weight:850; font-size:13px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .cc-cartR button:active { background:rgba(255,255,255,.34); }
+    .cc-dash { margin-top:8px; }
     .cc-item { display:flex; align-items:center; gap:11px; padding:9px 2px; border-bottom:1px solid #f1f4ef; font-size:12.5px; cursor:pointer; user-select:none; }
     .cc-item:last-child { border-bottom:0; }
     .cc-item .box { width:20px; height:20px; border-radius:6px; border:2px solid #cfd8d0; flex:none; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; }
@@ -1447,6 +1461,90 @@
     .rc2-miss { display:none; margin:8px 4px 0; font-size:11.5px; color:#b4460b; line-height:1.65; }
     .rc2-miss.on { display:block; }
     .rc2-miss b { color:#8f3708; font-weight:850; }
+
+    /* ===== s5 카트뷰 재디자인 (히어로·표정·시트·분실물·팝업) ===== */
+    #view-cart .rc-hero5 { margin:-14px -14px 0; padding:22px 20px 30px; text-align:center; color:#fff; background:linear-gradient(180deg,#12bf94,#0c8f6a); }
+    #view-cart .rc-hero5 .lab { font-size:11px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; opacity:.85; }
+    #view-cart .heroface { display:flex; align-items:center; justify-content:center; gap:16px; min-height:96px; margin:6px 0 4px; cursor:pointer; }
+    #view-cart .heroface .face { display:inline-block; line-height:0; transition:opacity .32s ease, transform .32s ease; transform-origin:center; }
+    #view-cart .heroface .face svg { width:118px; height:100px; display:block; }
+    #view-cart .heroface .face.happy { animation:rcFacePop .55s cubic-bezier(.34,1.56,.64,1); }
+    #view-cart .heroface .face.vanish { opacity:0; transform:scale(.55); }
+    #view-cart .heroface .num { font-size:82px; font-weight:900; letter-spacing:-.06em; line-height:.9; font-variant-numeric:tabular-nums; color:#fff; }
+    #view-cart .heroface .num:empty { display:none; }
+    #view-cart .rc-hero5 .edithint { display:block; font-size:11.5px; font-weight:750; opacity:.8; cursor:pointer; color:#fff; }
+    @keyframes rcFacePop { 0%{transform:scale(1) rotate(0)} 35%{transform:scale(1.24) rotate(-6deg)} 70%{transform:scale(.97) rotate(3deg)} 100%{transform:scale(1) rotate(0)} }
+
+    #view-cart .rc-sheet { margin:-16px -14px 0; padding:22px 14px 6px; background:#f4f6f8; border-radius:22px 22px 0 0; position:relative; min-height:52vh; }
+    #view-cart .rc-sheet::before { content:''; position:absolute; top:9px; left:50%; transform:translateX(-50%); width:40px; height:5px; border-radius:3px; background:#cfd8d3; }
+    #view-cart .rc-prg { display:flex; align-items:center; justify-content:space-between; margin:4px 2px 2px; }
+    #view-cart .rc-prg b { font-size:16px; font-weight:850; color:#16241e; }
+    #view-cart .rc-prg .p { font-size:12px; font-weight:800; color:var(--a); background:#e6f6f0; padding:5px 12px; border-radius:20px; }
+    #view-cart .rc-prg .p.done { color:#fff; background:var(--a); }
+
+    #view-cart .rc-g2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    #view-cart .rc-pcard { background:#fff; border-radius:15px; padding:14px; box-shadow:0 4px 14px rgba(20,50,35,.05); position:relative; cursor:pointer; }
+    #view-cart .rc-pcard .k { font-size:13.5px; font-weight:850; color:#171a23; display:flex; align-items:center; gap:6px; }
+    #view-cart .rc-pcard .s { font-size:11px; color:#8b968f; font-weight:750; margin-top:6px; }
+    #view-cart .rc-pcard .s em { color:#171a23; font-style:normal; font-weight:850; }
+    #view-cart .rc-pcard .bd { font-size:11.5px; font-weight:850; color:var(--a); margin-top:11px; }
+
+    #view-cart .lf-card { background:#fff; border:1.5px solid #e9ebf2; border-radius:17px; box-shadow:0 3px 16px rgba(23,30,60,.06); padding:15px 15px 16px; }
+    #view-cart .lf-lead { display:flex; gap:11px; align-items:flex-start; }
+    #view-cart .lf-ic { flex:none; width:40px; height:40px; border-radius:12px; background:#e3f4ec; display:flex; align-items:center; justify-content:center; }
+    #view-cart .lf-ic svg { width:23px; height:23px; color:#0c8f6a; }
+    #view-cart .lf-lead .t { font-size:13.5px; font-weight:850; color:#171a23; }
+    #view-cart .lf-lead .s { font-size:11.5px; font-weight:700; color:var(--mut); margin-top:3px; line-height:1.45; }
+    #view-cart .lf-items { display:flex; flex-direction:column; gap:8px; }
+    #view-cart .lf-items:not(:empty) { margin-top:12px; }
+    #view-cart .lf-item { display:flex; align-items:center; gap:11px; padding:9px; border:1.4px solid #e9ebf2; background:#fafbfc; border-radius:13px; }
+    #view-cart .lf-item .lf-thumb { flex:none; width:44px; height:44px; border-radius:10px; overflow:hidden; background:#eceff4 center/cover no-repeat; display:flex; align-items:center; justify-content:center; }
+    #view-cart .lf-item .lf-thumb.ph { background:linear-gradient(135deg,#d7c39a,#b89b63); }
+    #view-cart .lf-item .lf-thumb.ph span { color:#fff; font-size:10px; font-weight:800; }
+    #view-cart .lf-item .nm { font-size:13px; font-weight:850; color:#171a23; word-break:keep-all; }
+    #view-cart .lf-item .lf-del { margin-left:auto; flex:none; width:26px; height:26px; border-radius:50%; border:none; background:#f1f3f6; color:#8a90a2; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    #view-cart .lf-item .lf-del svg { width:14px; height:14px; }
+    #view-cart .lf-add { width:100%; margin-top:11px; padding:12px; border:1.6px dashed #c7ccd8; background:#fbfcfe; border-radius:13px; color:#5a6072; font-size:12.5px; font-weight:850; display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer; }
+    #view-cart .lf-add svg { width:16px; height:16px; }
+    #view-cart .lf-deliver { width:100%; margin-top:9px; padding:14px; border:1.6px dashed #bfe0cf; background:#f1f9f5; border-radius:13px; display:flex; align-items:center; justify-content:center; gap:9px; cursor:not-allowed; }
+    #view-cart .lf-deliver .di { flex:none; display:flex; } #view-cart .lf-deliver .di svg { width:19px; height:19px; color:#57a385; }
+    #view-cart .lf-deliver .dt { font-size:13.5px; font-weight:850; color:#3f8f6d; }
+    #view-cart .lf-deliver .soon { font-size:9.5px; font-weight:850; color:#fff; background:#0c8f6a; padding:3px 8px; border-radius:999px; }
+    #view-cart .lf-teaser { font-size:11px; font-weight:700; color:var(--mut); line-height:1.5; margin-top:9px; text-align:center; }
+    #view-cart .lf-teaser b { color:#3f8f6d; }
+
+    #view-cart .rc-ov { position:fixed; inset:0; z-index:1400; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(16,28,24,.46); opacity:0; pointer-events:none; transition:opacity .28s; }
+    #view-cart .rc-ov.on { opacity:1; pointer-events:auto; }
+    #view-cart .rc-epop, #view-cart .rc-asheet { width:318px; max-width:100%; background:#fff; border-radius:24px; box-shadow:0 30px 70px rgba(10,30,22,.42); opacity:0; transform:translateY(-46px) scale(.96); transition:transform .5s cubic-bezier(.22,1.4,.36,1), opacity .3s ease; }
+    #view-cart .rc-ov.on .rc-epop, #view-cart .rc-ov.on .rc-asheet { opacity:1; transform:translateY(0) scale(1); }
+    #view-cart .rc-epop { padding:22px 20px 18px; text-align:center; }
+    #view-cart .rc-epop .eh { font-size:12px; font-weight:850; letter-spacing:.06em; color:#8a90a2; text-transform:uppercase; }
+    #view-cart .rc-epop .efin { margin-top:12px; display:flex; align-items:center; justify-content:center; gap:8px; border-bottom:2.4px solid #e3e6ec; padding:6px 4px 8px; }
+    #view-cart .rc-epop .efin input { border:none; outline:none; background:none; text-align:center; width:150px; font-size:52px; font-weight:900; letter-spacing:-.04em; color:#171a23; font-variant-numeric:tabular-nums; }
+    #view-cart .rc-epop .efin .u { font-size:20px; font-weight:850; color:#9aa0ae; }
+    #view-cart .rc-epop .eowner { margin-top:15px; min-height:2px; }
+    #view-cart .rc-epop .oc { display:flex; align-items:center; gap:11px; text-align:left; border-radius:14px; padding:11px 13px; background:#eef7f2; border:1.5px solid #cfeada; animation:rcOwnerPop .34s cubic-bezier(.34,1.56,.64,1); }
+    #view-cart .rc-epop .oc .av { flex:none; width:36px; height:36px; border-radius:50%; background:#0c8f6a; color:#fff; font-size:15px; font-weight:850; display:flex; align-items:center; justify-content:center; }
+    #view-cart .rc-epop .oc .tx { font-size:13px; font-weight:800; color:#0a5f47; line-height:1.35; }
+    #view-cart .rc-epop .oc .tx b { font-size:15.5px; }
+    #view-cart .rc-epop .eowner.free .oc { background:#f3f4f8; border-color:#e3e6ec; }
+    #view-cart .rc-epop .eowner.free .oc .av { background:#aab0bd; }
+    #view-cart .rc-epop .eowner.free .oc .tx { color:#5a6070; }
+    @keyframes rcOwnerPop { from{transform:scale(.82);opacity:0} to{transform:scale(1);opacity:1} }
+    #view-cart .rc-epop .eacts, #view-cart .rc-asheet .aacts { display:flex; gap:9px; margin-top:18px; }
+    #view-cart .rc-epop .eacts button, #view-cart .rc-asheet .aacts button { flex:1; padding:14px; border:none; border-radius:13px; font-size:14.5px; font-weight:850; cursor:pointer; }
+    #view-cart .rc-epop .eacts .g, #view-cart .rc-asheet .aacts .g { background:#f1f3f6; color:#59606e; }
+    #view-cart .rc-epop .eacts .p, #view-cart .rc-asheet .aacts .p { background:#0c8f6a; color:#fff; }
+    #view-cart .rc-asheet .aacts .p:disabled { background:#cfd8d3; cursor:not-allowed; }
+    #view-cart .rc-asheet { padding:18px 18px 16px; }
+    #view-cart .rc-asheet .ash { font-size:15px; font-weight:850; text-align:center; margin-bottom:14px; color:#171a23; }
+    #view-cart .rc-asheet .aphoto { display:block; border:1.7px dashed #cdd3dd; border-radius:14px; overflow:hidden; cursor:pointer; }
+    #view-cart .rc-asheet .aph-empty { height:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:#7f8698; font-weight:800; font-size:13px; background:#fafbfc; }
+    #view-cart .rc-asheet .aph-empty svg { width:27px; height:27px; color:#9aa0ae; }
+    #view-cart .rc-asheet .aph-empty span { font-size:10.5px; color:#aab0bd; font-weight:750; }
+    #view-cart .rc-asheet .aphoto img:not([hidden]) { width:100%; height:150px; object-fit:cover; display:block; }
+    #view-cart .rc-asheet .ainput { width:100%; margin-top:11px; border:1.6px solid #e0e4ea; border-radius:12px; padding:13px 14px; font-size:14px; font-weight:700; color:#171a23; outline:none; background:#fafbfc; }
+    #view-cart .rc-asheet .ainput:focus { border-color:#bfe0cf; background:#fff; }
     .rc2-stampov { position:fixed; inset:0; z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:24px;
       background:rgba(248,250,252,.34); -webkit-backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); backdrop-filter:blur(7px) brightness(1.13) saturate(1.04); }
     .rc2-stampov.on { display:flex; }
@@ -2287,51 +2385,85 @@
 
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
-      <section class="rc2-hero">
-        <div class="rc2-ring" id="rcRing"><svg width="62" height="62"><circle cx="31" cy="31" r="26" fill="none" stroke="#eef0f6" stroke-width="7"></circle><circle id="rcRingArc" cx="31" cy="31" r="26" fill="none" stroke="#12bf94" stroke-width="7" stroke-linecap="round" stroke-dasharray="163.4" stroke-dashoffset="163.4"></circle></svg><div class="rc2-rc"><b id="rcRingN">0<i>/6</i></b><span>완료</span></div></div>
-        <div><div class="rc2-ht" id="rcHt">반납 점검</div><div class="rc2-hs" id="rcHs">불러오는 중…</div></div>
+      <!-- s5 히어로: 오늘 카트 번호 + 디지털 표정 -->
+      <section class="rc-hero5">
+        <div class="lab">오늘 카트 번호</div>
+        <div class="heroface" id="rcHeroFace" role="button" tabindex="0" aria-label="카트 번호 수정"><span class="face idle" id="rcFace"></span><span class="num" id="rcHeroNum"></span></div>
+        <div class="edithint" id="rcEditHint">탭하여 카트 번호 입력</div>
       </section>
 
-      <!-- 오늘 헤더 + 지난 기록 찾기 -->
-      <div class="rc-findbar rc2-datebar">
-        <div class="rc-todayh">
-          <span class="d" id="rcSelDate">오늘</span>
-          <span class="tag" id="rcSelTag">오늘 · 반납 점검</span>
-          <button class="rc-backtoday" id="rcBackToday" type="button" hidden>오늘로</button>
+      <div class="rc-sheet">
+        <div class="rc-prg"><b>반납 점검</b><span class="p" id="rcProgTxt">0 / 6</span></div>
+
+        <!-- 오늘 헤더 + 지난 기록 찾기 -->
+        <div class="rc-findbar rc2-datebar">
+          <div class="rc-todayh">
+            <span class="d" id="rcSelDate">오늘</span>
+            <span class="tag" id="rcSelTag">오늘 · 반납 점검</span>
+            <button class="rc-backtoday" id="rcBackToday" type="button" hidden>오늘로</button>
+          </div>
+          <button class="rc-findrow" id="rcFindOpen" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
+            <span>지난 반납 기록 찾기</span><span class="ch">›</span>
+          </button>
         </div>
-        <button class="rc-findrow" id="rcFindOpen" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-          <span>지난 반납 기록 찾기</span><span class="ch">›</span>
-        </button>
+
+        <!-- 지난 반납 기록 찾기 시트 -->
+        <div class="rc-findsheet" id="rcFindSheet">
+          <div class="rc-fs-card">
+            <div class="rc-fs-head"><span>지난 반납 기록</span><button id="rcFindClose" type="button" aria-label="닫기">✕</button></div>
+            <div class="rc-fs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg><input id="rcFindInput" type="text" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)"></div>
+            <div class="rc-fs-list" id="rcFindList"></div>
+          </div>
+        </div>
+
+        <div class="rc2-sect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
+        <div class="rc-g2">
+          <div class="rc-pcard" id="rcCardCart"><div class="k">카트 상태 <span class="rc2-badge" id="rcBdCart"></span></div><div class="s">전 <em id="rcCcb">0</em> · 후 <em id="rcCca">0</em></div><div class="bd">전·후 비교 ›</div></div>
+          <div class="rc-pcard" id="rcCardClub"><div class="k">클럽 상태 <span class="rc2-badge" id="rcBdClub"></span></div><div class="s">전 <em id="rcLcb">0</em> · 후 <em id="rcLca">0</em></div><div class="bd">전·후 비교 ›</div></div>
+        </div>
+
+        <div class="rc2-sect">장비 반납 확인<span class="rc2-c">탭 체크</span></div>
+        <div class="rc2-grid" id="rcReturnGrid"></div>
+
+        <!-- 고객 분실물 확인 -->
+        <div class="rc2-sect">고객 분실물 확인<span class="rc2-c">두고 간 물건</span></div>
+        <div class="lf-card">
+          <div class="lf-lead">
+            <div class="lf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg></div>
+            <div><div class="t">카트를 비웠나요?</div><div class="s">두고 간 물건이 있으면 <b>사진과 함께</b> 남겨 주세요.<br>사진이 없으면 그대로 저장 시 <b>‘분실물 없음’</b>으로 기록됩니다.</div></div>
+          </div>
+          <div class="lf-items" id="rcLostItems"></div>
+          <button class="lf-add" type="button" id="rcLostAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>분실물 추가 (이름·사진)</button>
+          <button class="lf-deliver" type="button" disabled aria-disabled="true"><span class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg></span><span class="dt">고객에게 전달하기</span><span class="soon">출시 예정</span></button>
+          <div class="lf-teaser">예약팀 연동 후, 발견한 분실물을 고객에게 <b>바로 알림</b>으로 전달할 수 있어요.</div>
+        </div>
+
+        <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
+
+        <button id="rcStampBtn" class="rc2-stampbtn" type="button">완료 도장 찍기</button>
+        <div class="rc2-miss" id="rcMiss"></div>
       </div>
 
-      <!-- 지난 반납 기록 찾기 시트 -->
-      <div class="rc-findsheet" id="rcFindSheet">
-        <div class="rc-fs-card">
-          <div class="rc-fs-head"><span>지난 반납 기록</span><button id="rcFindClose" type="button" aria-label="닫기">✕</button></div>
-          <div class="rc-fs-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg><input id="rcFindInput" type="text" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)"></div>
-          <div class="rc-fs-list" id="rcFindList"></div>
+      <!-- 번호 수정 팝업 -->
+      <div class="rc-ov" id="rcNumWrap">
+        <div class="rc-epop">
+          <div class="eh">오늘 카트 번호</div>
+          <div class="efin"><input id="rcNumIn" type="text" inputmode="numeric" maxlength="3" placeholder="00"><span class="u">번</span></div>
+          <div class="eowner" id="rcNumOwner"></div>
+          <div class="eacts"><button class="g" type="button" id="rcNumCancel">취소</button><button class="p" type="button" id="rcNumSave">저장</button></div>
         </div>
       </div>
 
-      <div class="rc2-sect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
-      <div class="rc2-subj" id="rcCardCart">
-        <div class="rc2-sc"><div class="rc2-st">카트 상태 <span class="rc2-badge" id="rcBdCart"></span></div>
-          <div class="rc2-ss"><span class="b">라운드 전 <em id="rcCcb">0</em></span><span class="a">라운드 후 <em id="rcCca">0</em></span></div></div>
-        <div class="rc2-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="3" y="5" width="8" height="14" rx="1.6"></rect><rect x="13" y="5" width="8" height="14" rx="1.6"></rect></svg>라운드 전·후 비교</div>
+      <!-- 분실물 추가 팝업 -->
+      <div class="rc-ov" id="rcAddWrap">
+        <div class="rc-asheet">
+          <div class="ash">분실물 추가</div>
+          <label class="aphoto"><input type="file" accept="image/*" id="rcAddFile" hidden><div class="aph-empty" id="rcAddEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg>사진 촬영 / 선택<span>선택 사항</span></div><img id="rcAddImg" hidden alt=""></label>
+          <input class="ainput" id="rcAddName" type="text" placeholder="물건 이름 (예: 지갑, 장갑, 우산)">
+          <div class="aacts"><button class="g" type="button" id="rcAddCancel">취소</button><button class="p" type="button" id="rcAddConfirm" disabled>추가</button></div>
+        </div>
       </div>
-      <div class="rc2-subj" id="rcCardClub">
-        <div class="rc2-sc"><div class="rc2-st">클럽 상태 <span class="rc2-badge" id="rcBdClub"></span></div>
-          <div class="rc2-ss"><span class="b">라운드 전 <em id="rcLcb">0</em></span><span class="a">라운드 후 <em id="rcLca">0</em></span></div></div>
-        <div class="rc2-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"><rect x="3" y="5" width="8" height="14" rx="1.6"></rect><rect x="13" y="5" width="8" height="14" rx="1.6"></rect></svg>라운드 전·후 비교</div>
-      </div>
-
-      <div class="rc2-sect">장비 반납 확인<span class="rc2-c">탭 체크</span></div>
-      <div class="rc2-grid" id="rcReturnGrid"></div>
-      <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
-
-      <button id="rcStampBtn" class="rc2-stampbtn" type="button">완료 도장 찍기</button>
-      <div class="rc2-miss" id="rcMiss"></div>
 
       <!-- 완료 도장 오버레이(전체 확인 완료 시) -->
       <div class="rc2-stampov" id="rcStampOverlay">
@@ -2351,17 +2483,6 @@
         </div>
       </div>
 
-      <details class="rc2-legacy">
-        <summary><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"></path></svg>카트 소지품 점검 · 카트번호 (선택)</summary>
-        <section class="hero" style="margin-top:6px;">
-          <div class="wl-row"><span>카트번호</span><input id="ccCart" type="text" style="width:90px;" placeholder="예: 12" aria-label="카트번호"><button id="ccCartSave" class="wl-btn wl-no">저장</button></div>
-          <div class="cc-step">
-            <div class="cc-step-h">고객 소지품 훑기 <span id="ccProg" class="cc-prog"></span><button id="ccEdit" class="cc-editbtn">항목 편집</button></div>
-            <div id="ccList"></div>
-          </div>
-          <div class="wl-note">카트 안 고객 소지품을 빠뜨리지 않도록 하는 <b>개인 체크리스트</b>예요(경기팀 반납 확인과 별개).</div>
-        </section>
-      </details>
     </section>
   </main>
 

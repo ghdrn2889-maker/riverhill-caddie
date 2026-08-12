@@ -829,6 +829,27 @@ app.get('/api/cartcheck/photo/:fname', (req, res) => {
   if (!/^[\w.-]+\.(jpg|png)$/.test(fname)) return res.status(400).end();
   res.sendFile(cartcheck.photoPath(fname, req.user?.id || 1), (err) => { if (err) res.status(404).end(); });
 });
+// 고객 분실물 로그 — 이름(제목) + 선택 사진. 완료 6칸과 독립.
+app.post('/api/cartcheck/lost/add', (req, res) => {
+  const { date, name, image } = req.body || {};
+  if (!date || !name) return res.status(400).json({ error: 'date, name 필요' });
+  res.json({ ok: true, day: cartcheck.addLostItem(date, name, image || null, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/lost/remove', (req, res) => {
+  const { date, id } = req.body || {};
+  if (!date || !id) return res.status(400).json({ error: 'date, id 필요' });
+  res.json({ ok: true, day: cartcheck.removeLostItem(date, id, req.user?.id || 1) });
+});
+// 카트 소유자 매핑(번호→이름) — 팝업의 '이 카트 주인' 표시용. data/cart-owners.json(수정 가능), mtime 캐시.
+let _cartOwners = null, _cartOwnersMtime = -1;
+app.get('/api/cart-owners', (req, res) => {
+  try {
+    const p = path.join(DATA_DIR, 'cart-owners.json');
+    const st = fs.statSync(p);
+    if (!_cartOwners || st.mtimeMs !== _cartOwnersMtime) { _cartOwners = JSON.parse(fs.readFileSync(p, 'utf8')); _cartOwnersMtime = st.mtimeMs; }
+    res.json({ ok: true, owners: _cartOwners });
+  } catch { res.json({ ok: true, owners: {} }); }
+});
 
 const PORT = Number(process.env.PORT || 3000);
 // HOST 기본값은 '0.0.0.0'(기존과 동일 — 홈서버·Tailscale Funnel 무영향). Lightsail 공존 배치에선

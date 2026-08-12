@@ -106,7 +106,7 @@ export function recommendItems(userId = 1) {
 
 function blank(dateISO) {
   return { date: dateISO, cartNo: '', photos: {}, checklist: {}, checklistDoneAt: null,
-    opsReturn: {}, returnDoneAt: null, stampedAt: null, remindedAt: null, updatedAt: null };
+    opsReturn: {}, returnDoneAt: null, stampedAt: null, remindedAt: null, updatedAt: null, lostItems: [] };
 }
 
 // 하루 기록 조회(없으면 빈 구조). 체크리스트 진행률 + 반납 완료 판정(6칸)도 같이 계산.
@@ -116,7 +116,7 @@ export function getDay(dateISO, userId = 1) {
   const rec = d[dateISO] || blank(dateISO);
   const items = getItems(userId);
   const checked = items.filter((i) => (rec.checklist || {})[i.key]).length;
-  return { ...rec, opsReturn: rec.opsReturn || {},
+  return { ...rec, opsReturn: rec.opsReturn || {}, lostItems: Array.isArray(rec.lostItems) ? rec.lostItems : [],
     progress: { checked, total: items.length, done: items.length > 0 && checked === items.length },
     returnStatus: computeReturn(rec) };
 }
@@ -207,6 +207,35 @@ export function removePhoto(dateISO, leg, fname, userId = 1) {
   }, userId);
 }
 
+// 고객 분실물 로그 — 물건 이름(제목) + 선택 사진 1장(없으면 이름만). 완료 6칸과 독립.
+let lostSeq = 0;
+export function addLostItem(dateISO, name, dataUrl, userId = 1) {
+  const nm = String(name || '').trim().slice(0, 60);
+  if (!isISO(dateISO) || !nm) return getDay(dateISO, userId);
+  let fname = null;
+  const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
+  if (m) {
+    const ext = m[1] === 'image/png' ? 'png' : 'jpg';
+    const dir = userPhotoDir(userId);
+    fs.mkdirSync(dir, { recursive: true });
+    fname = `lost_${dateISO}_${Date.now()}_${photoSeq++}.${ext}`;
+    fs.writeFileSync(path.join(dir, fname), Buffer.from(m[2], 'base64'));
+  }
+  const id = `l${Date.now().toString(36)}${lostSeq++}`;
+  return mutate(dateISO, (r) => {
+    const arr = Array.isArray(r.lostItems) ? r.lostItems : [];
+    r.lostItems = [...arr, { id, name: nm, photo: fname, at: Date.now() }];
+  }, userId);
+}
+export function removeLostItem(dateISO, id, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const arr = Array.isArray(r.lostItems) ? r.lostItems : [];
+    const it = arr.find((x) => x.id === id);
+    if (it && it.photo) { try { if (/^[\w.-]+\.(jpg|png)$/.test(it.photo)) fs.unlinkSync(path.join(userPhotoDir(userId), it.photo)); } catch { /* 이미 없음 */ } }
+    r.lostItems = arr.filter((x) => x.id !== id);
+  }, userId);
+}
+
 // 유예기간 내(sinceISO 이상) 기록 있는 날 요약 — 상단 날짜바용.
 export function recordsSince(userId = 1, sinceISO) {
   const d = loadAll(userId);
@@ -267,6 +296,10 @@ export function pruneOld(userId, cutoffISO) {
       for (const f of arr) {
         try { if (f && /^[\w.-]+\.(jpg|png)$/.test(f)) { fs.unlinkSync(path.join(userPhotoDir(userId), f)); files++; } } catch { /* 이미 없음 */ }
       }
+    }
+    const lost = Array.isArray(d[key] && d[key].lostItems) ? d[key].lostItems : [];  // 분실물 사진도 롤링 삭제
+    for (const it of lost) {
+      try { if (it && it.photo && /^[\w.-]+\.(jpg|png)$/.test(it.photo)) { fs.unlinkSync(path.join(userPhotoDir(userId), it.photo)); files++; } } catch { /* 이미 없음 */ }
     }
     delete d[key];
     days++;

@@ -2653,15 +2653,8 @@ function rcRenderDash() {
     el.onclick = async () => { const on = el.classList.contains('on'); rcChime(!on); rcJustTapped = on ? null : el.dataset.rk; await postJSON('/api/cartcheck/return', { date: ccDate, key: el.dataset.rk, done: !on }); loadCartCheck(ccDate); };
   });
   const done = st.doneCount || 0, total = st.total || 6;
-  $('rcRingN').innerHTML = `${done}<i>/${total}</i>`;
-  // 링은 CSS transition으로 실시간 차오름 — 값만 갱신하면 부드럽게 채워진다.
-  $('rcRingArc').setAttribute('stroke-dashoffset', (163.4 * (1 - done / total)).toFixed(1));
-  // 완료 개수가 늘어난 순간에만 숫자 팝(rcbump). 첫 로드(rcPrevDone=null)엔 튀지 않음.
-  const ring = $('rcRing');
-  if (ring && rcPrevDone !== null && done > rcPrevDone) {
-    ring.classList.remove('rcbump'); void ring.offsetWidth; ring.classList.add('rcbump');
-    ring.addEventListener('animationend', () => ring.classList.remove('rcbump'), { once: true });
-  }
+  const pt = $('rcProgTxt');
+  if (pt) { pt.textContent = `${done} / ${total}${done >= total ? ' 완료' : ''}`; pt.classList.toggle('done', done >= total); }
   rcPrevDone = done;
   rcSyncStamp(st);
 }
@@ -2839,16 +2832,13 @@ async function loadCartCheck(date) {
     ccDate = r.date;
     if (r.today) rcTodayISO = r.today;
     ccDay = r.day || {};
-    const work = r.work || {}, items = r.items || [];
-    const md = `${Number(r.date.slice(5, 7))}/${Number(r.date.slice(8, 10))}`;
-    $('rcHt').textContent = work.isWorkToday ? '반납 점검' : `${md} 반납 점검`;
-    $('rcHs').textContent = '라운드 전·후를 사진으로 남기면 경기팀이 바로 확인하고, 분쟁 시 내 증거가 됩니다.';
-    $('ccCart').value = ccDay.cartNo || work.cartNo || '';
+    const work = r.work || {};
+    rcSetCart(ccDay.cartNo || work.cartNo || '', false);   // 히어로 번호(로드 시 즉시 반영, 애니메이션 없음)
     rcRenderDash();
-    ccRenderList(items, ccDay.checklist || {}, ccDay.progress || { checked: 0, total: items.length, done: false });
+    rcRenderLost(ccDay.lostItems || []);
     if ($('rcGallery').classList.contains('on')) { ['before', 'after'].forEach(rcRenderRail); rcRenderPane('top'); rcRenderPane('bot'); }
     rcSyncFindBar();
-  } catch { $('rcHt').textContent = '불러오기 실패'; $('rcHs').textContent = '잠시 후 다시 시도해주세요.'; }
+  } catch { const pt = $('rcProgTxt'); if (pt) pt.textContent = '불러오기 실패'; }
 }
 
 /* ── 전·후 갤러리(사진 올리기·삭제·핀치 확대·좌우 슬라이드) ── */
@@ -2980,9 +2970,117 @@ function rcInitGallery() {
   });
   document.addEventListener('keydown', (e) => { if ($('rcGallery').classList.contains('on') && e.key === 'Escape') { if ($('rcConfirm').classList.contains('on')) $('rcConfirm').classList.remove('on'); else if ($('rcChooser').classList.contains('on')) $('rcChooser').classList.remove('on'); else rcCloseGallery(); } });
 }
+/* ── 카트번호 히어로: 디지털 도트 표정 + 번호 팝업(주인 조회) ── */
+let rcOwners = {};                                   // 번호→소유자 이름 (서버 seed, data/cart-owners.json)
+const RC_EYES       = '<circle cx="45" cy="42" r="7.5" fill="#fff"/><circle cx="93" cy="42" r="7.5" fill="#fff"/>';
+const RC_EYES_BLINK = '<rect x="37" y="40" width="16" height="5.5" rx="2.75" fill="#fff"/><rect x="85" y="40" width="16" height="5.5" rx="2.75" fill="#fff"/>';
+const RC_MOUTH3     = '<text x="69" y="96" text-anchor="middle" font-size="44" font-weight="800" fill="#fff" font-family="Courier New,monospace">3</text>';
+const RC_SMILE      = '<path d="M45 75 Q69 96 93 75" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>';
+const rcFaceSvg = (inner) => `<svg viewBox="0 0 138 118" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+const RC_FACE_IDLE = rcFaceSvg(RC_EYES + RC_MOUTH3), RC_FACE_BLINK = rcFaceSvg(RC_EYES_BLINK + RC_MOUTH3), RC_FACE_HAPPY = rcFaceSvg(RC_EYES + RC_SMILE);
+let rcCartVal = '', rcTypeTimer = null, rcT1 = null, rcT2 = null, rcIdle = null;
+function rcStopIdle() { if (rcIdle) { clearInterval(rcIdle); rcIdle = null; } }
+function rcStartIdle() {
+  rcStopIdle(); const f = $('rcFace'); if (!f) return; f.innerHTML = RC_FACE_IDLE;
+  rcIdle = setInterval(() => {
+    const f2 = $('rcFace'); if (!f2 || !f2.classList.contains('idle')) return;
+    f2.innerHTML = RC_FACE_BLINK;
+    setTimeout(() => { const f3 = $('rcFace'); if (f3 && f3.classList.contains('idle')) f3.innerHTML = RC_FACE_IDLE; }, 220);
+  }, 2600);
+}
+function rcClearFaceTimers() { [rcTypeTimer, rcT1, rcT2].forEach((t) => t && clearTimeout(t)); rcTypeTimer = rcT1 = rcT2 = null; }
+// 카트번호 반영. animate=true면 웃음→표정 사라짐→차분한 타이핑. false면 즉시(로드 시).
+function rcSetCart(v, animate) {
+  v = String(v || '').trim(); rcCartVal = v; rcClearFaceTimers();
+  const face = $('rcFace'), num = $('rcHeroNum'), hint = $('rcEditHint'); if (!face) return;
+  if (!v) {
+    num.textContent = ''; if (hint) hint.textContent = '탭하여 카트 번호 입력';
+    face.classList.remove('happy', 'vanish'); face.style.opacity = ''; face.style.transform = ''; face.style.display = '';
+    face.classList.add('idle'); rcStartIdle(); return;
+  }
+  rcStopIdle();
+  if (hint) hint.textContent = '탭하여 번호 수정';
+  face.classList.remove('idle'); face.style.display = ''; face.style.opacity = '1'; face.style.transform = '';
+  if (!animate) { num.textContent = v; face.classList.remove('happy', 'vanish'); face.style.display = 'none'; return; }
+  num.textContent = ''; face.classList.remove('happy', 'vanish'); face.innerHTML = RC_FACE_HAPPY; void face.offsetWidth; face.classList.add('happy');
+  rcT1 = setTimeout(() => {
+    face.classList.add('vanish');
+    rcT2 = setTimeout(() => {
+      face.style.display = 'none';
+      const d = v.split(''); let i = 0;
+      (function step() { if (i < d.length) { num.textContent += d[i++]; rcTypeTimer = setTimeout(step, 200); } })();
+    }, 330);
+  }, 780);
+}
+function rcOwnerLookup() {
+  const el = $('rcNumOwner'); if (!el) return;
+  const v = $('rcNumIn').value.trim();
+  if (!v) { el.className = 'eowner'; el.innerHTML = ''; return; }
+  const name = rcOwners[String(parseInt(v, 10))];
+  if (name) el.className = 'eowner', el.innerHTML = `<div class="oc"><div class="av">${esc(name.charAt(0))}</div><div class="tx">이 카트의 주인은 <b>${esc(name)}</b>님</div></div>`;
+  else el.className = 'eowner free', el.innerHTML = '<div class="oc"><div class="av">?</div><div class="tx">지정 주인이 없는 <b>대여용</b> 카트예요</div></div>';
+}
+function rcOpenNum() {
+  $('rcNumIn').value = rcCartVal; rcOwnerLookup(); $('rcNumWrap').classList.add('on');
+  setTimeout(() => { const i = $('rcNumIn'); i.focus(); try { i.select(); } catch { /* noop */ } }, 320);
+}
+function rcCloseNum() { $('rcNumWrap').classList.remove('on'); }
+async function rcSaveNum() {
+  const v = $('rcNumIn').value.trim(); rcCloseNum();
+  await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: v });
+  setTimeout(() => rcSetCart(v, true), 260);
+}
+function rcInitHero() {
+  fetch('/api/cart-owners').then((r) => r.json()).then((r) => { rcOwners = (r && r.owners) || {}; }).catch(() => { /* noop */ });
+  const open = () => rcOpenNum();
+  $('rcHeroFace').onclick = open;
+  $('rcHeroFace').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  $('rcEditHint').onclick = (e) => { e.stopPropagation(); open(); };
+  $('rcNumIn').oninput = rcOwnerLookup;
+  $('rcNumCancel').onclick = rcCloseNum;
+  $('rcNumSave').onclick = rcSaveNum;
+  $('rcNumWrap').onclick = (e) => { if (e.target === $('rcNumWrap')) rcCloseNum(); };
+  rcStartIdle();
+}
+
+/* ── 고객 분실물 로그(이름 + 선택 사진) ── */
+const RC_XSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>';
+function rcRenderLost(items) {
+  const box = $('rcLostItems'); if (!box) return;
+  box.innerHTML = (items || []).map((it) => {
+    const thumb = it.photo
+      ? `<div class="lf-thumb" style="background-image:url(${rcUrl(it.photo)})"></div>`
+      : '<div class="lf-thumb ph"><span>사진</span></div>';
+    return `<div class="lf-item">${thumb}<div><div class="nm">${esc(it.name || '')}</div></div><button class="lf-del" data-id="${esc(it.id)}" type="button" aria-label="삭제">${RC_XSVG}</button></div>`;
+  }).join('');
+  box.querySelectorAll('.lf-del').forEach((b) => {
+    b.onclick = async () => { await postJSON('/api/cartcheck/lost/remove', { date: ccDate, id: b.dataset.id }); loadCartCheck(ccDate); };
+  });
+}
+let rcAddPhoto = null;
+function rcResetAdd() { rcAddPhoto = null; $('rcAddName').value = ''; $('rcAddFile').value = ''; const im = $('rcAddImg'); im.hidden = true; im.src = ''; $('rcAddEmpty').hidden = false; rcCheckAdd(); }
+function rcCheckAdd() { $('rcAddConfirm').disabled = !$('rcAddName').value.trim(); }
+function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => $('rcAddName').focus(), 320); }
+function rcCloseAdd() { $('rcAddWrap').classList.remove('on'); }
+async function rcConfirmAdd() {
+  const name = $('rcAddName').value.trim(); if (!name) return;
+  const btn = $('rcAddConfirm'); btn.disabled = true; btn.textContent = '저장 중…';
+  try { await postJSON('/api/cartcheck/lost/add', { date: ccDate, name, image: rcAddPhoto || null }); } finally { btn.textContent = '추가'; }
+  rcCloseAdd(); loadCartCheck(ccDate);
+}
+function rcInitLost() {
+  $('rcLostAdd').onclick = rcOpenAdd;
+  $('rcAddCancel').onclick = rcCloseAdd;
+  $('rcAddConfirm').onclick = rcConfirmAdd;
+  $('rcAddName').oninput = rcCheckAdd;
+  $('rcAddWrap').onclick = (e) => { if (e.target === $('rcAddWrap')) rcCloseAdd(); };
+  $('rcAddFile').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try { rcAddPhoto = await compressImage(f, 1400, 0.75); const im = $('rcAddImg'); im.src = rcAddPhoto; im.hidden = false; $('rcAddEmpty').hidden = true; } catch { /* noop */ }
+  };
+}
+
 function initCartButtons() {
-  $('ccEdit').onclick = () => { ccEditMode = !ccEditMode; loadCartCheck(ccDate); };
-  $('ccCartSave').onclick = async () => { await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: $('ccCart').value.trim() }); };
   $('rcBackToday').onclick = () => loadCartCheck();                       // 오늘로
   $('rcFindOpen').onclick = rcOpenFind;                                    // 지난 기록 찾기 열기
   $('rcFindClose').onclick = rcCloseFind;
@@ -2990,6 +3088,8 @@ function initCartButtons() {
   $('rcFindInput').oninput = (e) => rcRenderFindList(e.target.value);
   $('rcCardCart').onclick = () => rcOpenGallery('cart');
   $('rcCardClub').onclick = () => rcOpenGallery('club');
+  rcInitHero();       // 카트번호 히어로(표정·번호 팝업·주인 조회)
+  rcInitLost();       // 고객 분실물 로그(추가 시트)
   rcInitGallery();
 }
 
