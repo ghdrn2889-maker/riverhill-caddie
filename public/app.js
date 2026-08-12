@@ -61,6 +61,8 @@ function showView(name) {
   if (name === 'settle') { lgPage = -1; loadLedger(); }
   // 배치표 탭: 날씨 하늘 백드롭 켜고 전체 순번표 렌더. 나갈 땐 백드롭·밤클래스 해제.
   document.body.classList.toggle('on-board', name === 'board');
+  // 라운드 점검·근무 기록·정산: 상단바(알림·햄버거) 숨겨 공간 확보(오늘·배치표는 유지).
+  document.body.classList.toggle('no-top', name === 'cart' || name === 'worklog' || name === 'settle');
   if (name === 'board') { boardActiveIdx = boardFocusIdx(); renderFullBoard(); applyBoardSky(); }
   else document.body.classList.remove('sky-night');
   // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
