@@ -3101,19 +3101,22 @@ function rcInitLost() {
   $('rcAddFile').onchange = rcAddOnPick;
 }
 
-/* 모바일 키보드가 팝업/시트를 가리지 않도록 — 열린 오버레이를 visualViewport(키보드 위 보이는 영역)에 맞춤 */
+/* 모바일 키보드가 팝업/시트를 가리지 않도록 — 스크림은 전체화면 유지하고
+   열린 오버레이에 키보드 높이만큼 하단 패딩을 줘 카드를 키보드 위로 재배치.
+   (오버레이 자체를 축소하면 스크림에 빈틈이 생겨 뒤 페이지가 비침) */
 function rcInitKbAvoid() {
   const vv = window.visualViewport; if (!vv) return;
   const IDS = ['rcNumWrap', 'rcAddWrap', 'rcFindSheet'];
   const apply = () => {
+    const kb = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
     IDS.forEach((id) => {
       const ov = document.getElementById(id); if (!ov) return;
-      if (ov.classList.contains('on')) {
-        ov.style.top = vv.offsetTop + 'px';
-        ov.style.height = vv.height + 'px';
-        ov.style.bottom = 'auto';
-      } else { ov.style.top = ''; ov.style.height = ''; ov.style.bottom = ''; }
+      const on = ov.classList.contains('on');
+      ov.style.paddingBottom = (on && kb > 1) ? kb + 'px' : '';
     });
+    // 지난 기록 카드는 키보드 위 남는 높이에 맞춰 헤더가 잘리지 않게 캡
+    const card = document.querySelector('#rcFindSheet .rc-fs-card');
+    if (card) card.style.maxHeight = (kb > 1) ? Math.max(180, vv.height - 12) + 'px' : '';
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
