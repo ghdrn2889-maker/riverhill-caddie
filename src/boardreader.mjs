@@ -89,7 +89,17 @@ async function recoverSubstitutes(imagePath, names) {
   } catch (e) { console.error('[boardreader] 대바 복구 오류:', e.message); return names; }
 }
 
-function snapRoster(roster) {
+// ★성(姓) 복원 — 부 크롭 좌변 클립으로 성 글자가 잘려 '이름 2글자'만 읽힌 셀을, 정본 명단에서
+//  '끝 2글자(=이름)가 유일하게 일치하는' 3글자 full-name으로 복원한다(서동환→'동환'류 오독 교정).
+//  유일할 때만 복원(서동명/서동환 같은 애매는 그대로) → 잘못된 성 복원 방지. confirmedCaddies=정본 스냅 기준 명단.
+export function restoreSurname(bare) {
+  const s = String(bare || '').replace(/\s/g, '');
+  if (!/^[가-힣]{2}$/.test(s)) return null;
+  const hits = [...new Set(confirmedCaddies().filter((n) => /^[가-힣]{3}$/.test(n) && n.slice(1) === s))];
+  return hits.length === 1 ? hits[0] : null;
+}
+
+export function snapRoster(roster) {
   // ★중복 생성 방지 — 이미 명단에 '정본명 그대로' 있는 이름으로는 스냅하지 않는다.
   //  (예: 남재권이 정본 누락이라 편집거리2로 '최재영'에 스냅되려 하지만, 최재영이 이미 다른 순번에 있으면
   //   그건 오독교정이 아니라 서로 다른 사람을 한 명으로 뭉개는 오스냅 → 원문 유지.) 실제 캐디 누락에 견고.
@@ -99,6 +109,8 @@ function snapRoster(roster) {
   const snap1 = (x) => {
     const y = snapOfficial(x);
     if (y !== x && present.has(y) && !CONF.has(String(x).trim())) return String(x).trim();  // 이미 있는 정본명으로 스냅 = 중복 → 원문 유지
+    // ★성 복원 — 스냅 후에도 2글자(성 흘림)면 정본 유일완성 시도(동환→서동환). 이미 있는 이름으론 복원 안 함(중복 방지).
+    if (!CONF.has(y)) { const r = restoreSurname(y); if (r && !present.has(r)) { present.add(r); return r; } }
     return y;
   };
   return (roster || []).map((cell) => {
@@ -429,6 +441,42 @@ export function reconcileCrossPart(parts, known) {
   return parts;
 }
 
+// ── 교차 오염 제거 (근본: 옆 부 명단이 크롭 번짐으로 이 부에 통째 유입되는 사고 차단) ──
+//  2026-08-13 실사고: 부3.x0 경계가 3부 로스터 안쪽으로 밀려 '2부 크롭'이 3부 명단을 흡수 → 2부에 3부 전용
+//  캐디(서동환·박준서·장성원…)가 유입, 회원에 유령 2부 대기가 붙음. reconcile은 '태그 교차근무자'만 봐서 못 잡음.
+//  규칙(안전): 태그(54·1,3·2,3)는 정당한 전부/교차 근무라 절대 안 건드림. '태그 없이' 3부와 겹치는 이름 =
+//   단일부 캐디가 두 부에 중복 = 번짐. 회원 부(3부)는 절대 안 지우고 마이너 부(1·2)에서만 제거한다.
+//   3개 이상 겹칠 때만(우연 동명 1~2건 오제거 방지). 어디든 교차태그로 등장하는 이름은 정당 교차라 보존.
+export function purgeCrossPartContamination(parts) {
+  try {
+    const p3 = parts && parts['3']; if (!p3 || !Array.isArray(p3.roster)) return parts;
+    const CROSS_TAG = /(^|[^0-9])(54|1[,、]3|2[,、]3)([^0-9]|$)/;
+    const crossTagged = new Set();                       // 어느 부에서든 교차태그로 등장 = 정당 교차근무자(보존)
+    for (const p of ['1', '2', '3']) for (const c of ((parts[p] && parts[p].roster) || [])) {
+      if (CROSS_TAG.test(_tag(c))) { const b = _bare(c); if (b) crossTagged.add(b); }
+    }
+    const p3untag = new Set();                            // 3부의 '태그 없는' 이름 = 3부 전용 캐디(옆 부에 있으면 번짐)
+    for (const c of p3.roster) { if (_tag(c)) continue; const b = _bare(c); if (b) p3untag.add(b); }
+    for (const a of ['1', '2']) {
+      const pa = parts[a]; if (!pa || !Array.isArray(pa.roster)) continue;
+      const hits = [];
+      for (let i = 0; i < pa.roster.length; i++) {
+        const c = pa.roster[i]; if (!c || _tag(c)) continue;          // 태그 있는 셀 보존
+        const b = _bare(c); if (!b || crossTagged.has(b)) continue;   // 정당 교차근무자 보존
+        if (p3untag.has(b)) hits.push({ i, b });
+      }
+      if (hits.length >= 3) {
+        for (const h of hits) pa.roster[h.i] = '';
+        pa._contaminated = true;
+        const detail = hits.map((h) => `순번${h.i + 1} ${h.b}`);
+        console.warn(`[boardreader] ★교차오염 정리: ${a}부에서 3부 전용 이름 ${hits.length}개 제거(크롭 번짐) — ${detail.slice(0, 12).join(', ')}`);
+        try { appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'cross_part_contamination', part: Number(a), purged: hits.length, names: detail, note: '옆 부(3부) 명단이 크롭 번짐으로 이 부에 유입 → 제거. 부 명단 불완전할 수 있어 관리자 검수 권장.' }); } catch { /* noop */ }
+      }
+    }
+  } catch (e) { console.error('[교차오염 정리 오류]', e.message); }
+  return parts;
+}
+
 // 조편성 근무칸이 '근무'인가(근태 아님) — 애매이름 티브레이크의 '오늘 근무자' 판정.
 const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|찾근|정출|선발|당번|배치|마감|대리|주임|마샬|프리|콜|정근/;
 
@@ -491,6 +539,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   if (!best) return null;
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
   reconcileCrossPart(best, known);   // ★부 간 앞순번 교차보정 — 유령 이름 제거(하유린→정유경)
+  purgeCrossPartContamination(best); // ★교차 오염 제거 — 옆 부(3부) 명단이 크롭 번짐으로 유입된 것(2부=3부 사고) 정리
   // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표' 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 판독.
   //  ★조 열분할 우선: 통짜 크루 크롭은 다열이 빽빽해 이름을 다른 유효이름으로 뭉갠다(박시윤→박신훈, 스냅으로도 못 잡음).
   //   조별 단일 크롭(8배)이면 이름·근태 안정(실측 박시윤·서동명 정확). 조 경계 실패 시 통짜 크루 크롭(6배)으로 폴백.
