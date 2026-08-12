@@ -68,6 +68,27 @@ function showView(name) {
   // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
   const _sc = document.querySelector('main');
   if (_sc) _sc.scrollTo(0, 0); else window.scrollTo(0, 0);
+  document.body.classList.remove('nav-hidden');   // 탭 전환 시 하단 탭바 다시 표시
+}
+// 하단 탭바 자동 숨김 — main을 아래로 스크롤하면 탭이 내려가 숨고, 위로 올리면 다시 올라온다.
+//  nav가 fixed라 콘텐츠 마지막 줄이 가리지 않게 main 하단 여백 = 탭 높이로 맞춘다.
+function initNavAutohide() {
+  const main = document.querySelector('main');
+  const nav = document.querySelector('nav.nav');
+  if (!main || !nav) return;
+  const setPad = () => { if (nav.offsetHeight) main.style.paddingBottom = nav.offsetHeight + 'px'; };
+  setPad();
+  window.addEventListener('resize', setPad);
+  let lastY = 0, ticking = false;
+  const onScroll = () => {
+    const y = main.scrollTop, dy = y - lastY;
+    if (y <= 4) { document.body.classList.remove('nav-hidden'); lastY = y; return; }   // 최상단 근처는 항상 표시
+    if (Math.abs(dy) > 6) { document.body.classList.toggle('nav-hidden', dy > 0); lastY = y; }   // 내리면 숨김·올리면 표시
+  };
+  main.addEventListener('scroll', () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => { onScroll(); ticking = false; });
+  }, { passive: true });
 }
 // 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션(뷰별 최초 1회).
 //  잔류 클래스 제거는 showView가 매 전환마다 처리 → 여기선 부여만.
@@ -79,6 +100,7 @@ function boxFx(view) {
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+  initNavAutohide();
   showView(location.hash.slice(1) || 'today');
 }
 

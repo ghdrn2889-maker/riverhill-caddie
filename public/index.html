@@ -1458,7 +1458,10 @@
     .rc2-editbtn { padding:12px 22px; border:1.5px solid #c9d2cd; border-radius:14px; background:#fff; color:#2f4a3b; font-size:13.5px; font-weight:800; display:inline-flex; align-items:center; gap:7px; cursor:pointer; box-shadow:0 3px 12px rgba(23,40,30,.08); }
     .rc2-editbtn.ghost { background:transparent; box-shadow:none; color:#5a6660; }
     .rc2-editbtn svg { width:16px; height:16px; }
-    nav.nav { position:relative; z-index:300; }
+    nav.nav { position:fixed; left:0; right:0; bottom:0; z-index:300;
+              transition:transform .32s cubic-bezier(.2,.7,.3,1); will-change:transform; }
+    /* ★스크롤 내리면 하단 탭바가 아래로 내려가 숨고, 올리면 다시 올라온다(자동 숨김/표시). */
+    body.nav-hidden nav.nav { transform:translateY(100%); }
     /* ★하단 탭(nav)이 오버레이·시트·스플래시를 뚫고 보이던 버그 — 블로킹 화면이 떠 있으면 탭을 숨긴다.
        (nav의 z-index가 높아 z<300 오버레이 위로 새던 문제를 상태 기반(:has)으로 원천 차단.) */
     body:has(.ov:not([hidden])) nav.nav,
