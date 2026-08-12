@@ -2759,6 +2759,7 @@ async function loadRcStrip() {
 // ── 지난 반납 기록 '찾기' (평소엔 오늘만, 문제 시 날짜 검색으로 그 날 빠르게) ──
 let rcTodayISO = '';
 let rcRecordsCache = [];
+let rcKbApply = null;                                 // visualViewport 키보드-가림 방지 리페인트
 const rcDowOf = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); };
 const rcDateKo = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${Number(m[2])}월 ${Number(m[3])}일` : ''; };
 
@@ -2780,9 +2781,9 @@ async function rcOpenFind() {
   try { const r = await (await fetch('/api/cartcheck/records')).json(); rcRecordsCache = r.records || []; if (r.today) rcTodayISO = r.today; }
   catch { rcRecordsCache = []; }
   rcRenderFindList('');
-  if (input) setTimeout(() => input.focus({ preventScroll: true }), 60);
+  if (input) setTimeout(() => { input.focus({ preventScroll: true }); if (rcKbApply) rcKbApply(); }, 60);
 }
-const rcCloseFind = () => { const s = $('rcFindSheet'); if (s) s.classList.remove('on'); };
+const rcCloseFind = () => { const s = $('rcFindSheet'); if (s) s.classList.remove('on'); if (rcKbApply) rcKbApply(); };
 
 // 날짜 검색 매칭 — "8/3"·"8.3"·"8월3일"·"2026-08-03" 등 부분입력 흡수.
 function rcRecMatch(rec, q) {
@@ -3032,9 +3033,9 @@ function rcOwnerLookup() {
 }
 function rcOpenNum() {
   $('rcNumIn').value = rcCartVal; rcOwnerLookup(); $('rcNumWrap').classList.add('on');
-  setTimeout(() => { const i = $('rcNumIn'); i.focus({ preventScroll: true }); try { i.select(); } catch { /* noop */ } }, 320);
+  setTimeout(() => { const i = $('rcNumIn'); i.focus({ preventScroll: true }); try { i.select(); } catch { /* noop */ } if (rcKbApply) rcKbApply(); }, 320);
 }
-function rcCloseNum() { $('rcNumWrap').classList.remove('on'); }
+function rcCloseNum() { $('rcNumWrap').classList.remove('on'); if (rcKbApply) rcKbApply(); }
 async function rcSaveNum() {
   const v = $('rcNumIn').value.trim(); rcCloseNum();
   await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: v });
@@ -3070,8 +3071,8 @@ function rcRenderLost(items) {
 let rcAddPhoto = null;
 function rcResetAdd() { rcAddPhoto = null; $('rcAddName').value = ''; $('rcAddFile').value = ''; $('rcAddCamIn').value = ''; const im = $('rcAddImg'); im.hidden = true; im.src = ''; $('rcAddEmpty').hidden = false; rcCheckAdd(); }
 function rcCheckAdd() { $('rcAddConfirm').disabled = !$('rcAddName').value.trim(); }
-function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => $('rcAddName').focus({ preventScroll: true }), 320); }
-function rcCloseAdd() { $('rcAddChooser').classList.remove('on'); $('rcAddWrap').classList.remove('on'); }
+function rcOpenAdd() { rcResetAdd(); $('rcAddWrap').classList.add('on'); setTimeout(() => { $('rcAddName').focus({ preventScroll: true }); if (rcKbApply) rcKbApply(); }, 320); }
+function rcCloseAdd() { $('rcAddChooser').classList.remove('on'); $('rcAddWrap').classList.remove('on'); if (rcKbApply) rcKbApply(); }
 async function rcConfirmAdd() {
   const name = $('rcAddName').value.trim(); if (!name) return;
   const btn = $('rcAddConfirm'); btn.disabled = true; btn.textContent = '저장 중…';
@@ -3100,6 +3101,25 @@ function rcInitLost() {
   $('rcAddFile').onchange = rcAddOnPick;
 }
 
+/* 모바일 키보드가 팝업/시트를 가리지 않도록 — 열린 오버레이를 visualViewport(키보드 위 보이는 영역)에 맞춤 */
+function rcInitKbAvoid() {
+  const vv = window.visualViewport; if (!vv) return;
+  const IDS = ['rcNumWrap', 'rcAddWrap', 'rcFindSheet'];
+  const apply = () => {
+    IDS.forEach((id) => {
+      const ov = document.getElementById(id); if (!ov) return;
+      if (ov.classList.contains('on')) {
+        ov.style.top = vv.offsetTop + 'px';
+        ov.style.height = vv.height + 'px';
+        ov.style.bottom = 'auto';
+      } else { ov.style.top = ''; ov.style.height = ''; ov.style.bottom = ''; }
+    });
+  };
+  vv.addEventListener('resize', apply);
+  vv.addEventListener('scroll', apply);
+  rcKbApply = apply;
+}
+
 function initCartButtons() {
   $('rcBackToday').onclick = () => loadCartCheck();                       // 오늘로
   $('rcFindOpen').onclick = rcOpenFind;                                    // 지난 기록 찾기 열기
@@ -3111,6 +3131,7 @@ function initCartButtons() {
   rcInitHero();       // 카트번호 히어로(표정·번호 팝업·주인 조회)
   rcInitLost();       // 고객 분실물 로그(추가 시트)
   rcInitGallery();
+  rcInitKbAvoid();    // 키보드 가림 방지(visualViewport)
 }
 
 /* ── 사진 확대 보기(라이트박스) — 카트 점검 사진 탭 시 전체화면, 좌우로 넘김 ── */
