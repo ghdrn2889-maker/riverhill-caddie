@@ -3201,6 +3201,7 @@ async function obWelcomeFlow(name, my, isTest) {
 }
 // ── 테스터 유도 가이드(코치마크) — 프로필 버튼으로 회원 배치표를 볼 수 있음을 세션당 1회 안내 ──
 function maybeShowTesterGuide() {
+  return;   // 상단 프로필 버튼 숨김(나중에 재배치) — 프로필을 가리키는 가이드는 잠시 비활성화
   if (!(meState && meState.user && meState.user.role === 'tester')) return;
   if (!$('acctBtn') || $('acctBtn').hidden) return;              // 프로필 버튼이 떠 있을 때만
   try { if (sessionStorage.getItem('testerGuideShown') === '1') return; } catch { /* 무해 */ }

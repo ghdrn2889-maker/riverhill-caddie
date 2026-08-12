@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>리버힐 캐디 일정</title>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#87d2bf" />
+  <meta name="theme-color" content="#f7f6f0" />
   <link rel="apple-touch-icon" href="/icon-192.png?v=4" />
   <!-- iOS PWA: 홈 화면에 추가 시 앱처럼(주소창 없이) 실행 + 상태바 스타일 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,12 +22,14 @@
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
            /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡혀 하단 탭이 바닥에 안 붙고 떠 보임 → 동적 뷰포트 높이로 고정. */
            height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
-    .top { background:linear-gradient(135deg,#87d2bf,#43a994); color:#0a5f47; padding:calc(25px + env(safe-area-inset-top,0)) 18px 14px; }
+    .top { background:transparent; color:#17231d; padding:calc(10px + env(safe-area-inset-top,0)) 12px 4px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
     .brand { font-size:11px; font-weight:850; letter-spacing:.09em; }
-    /* 앱 로고 — 아이콘에서 추출한 Cm 마크(흰색·투명배경) */
-    .cmlogo { display:inline-flex; align-items:center; }
-    .cmlogo img { height:40px; display:block; }
+    /* 상단바 아이콘 버튼 — 알림(좌)·메뉴(우), 배경 없음(A안) */
+    .tbicon { width:40px; height:40px; border:0; background:transparent; display:flex; align-items:center; justify-content:center; position:relative; padding:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .tbicon svg { width:24px; height:24px; stroke:#2b3a33; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .tbicon:active { opacity:.55; }
+    .tbdot { position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:#12bf94; border:2px solid #f7f6f0; }
     .date { font-size:10px; opacity:.85; font-weight:600; }
     main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
            overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
@@ -1922,11 +1924,18 @@
     <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
     <header class="top reveal" style="--i:0">
       <div class="toprow">
-        <span class="cmlogo"><img src="cmmark.png" alt="CADDIE 총무"></span>
-        <div class="topright">
-          <span class="date" id="date">—</span>
-          <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
-        </div>
+        <button class="tbicon" id="notifBtn" type="button" aria-label="알림">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+          <span class="tbdot" id="notifDot" hidden></span>
+        </button>
+        <button class="tbicon" id="menuBtn" type="button" aria-label="메뉴">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+      </div>
+      <!-- 프로필·날짜는 나중에 재배치 예정 — 지금은 숨김(JS 참조 유지용) -->
+      <div id="topMetaLegacy" style="display:none">
+        <span class="date" id="date">—</span>
+        <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
       </div>
     </header>
 
