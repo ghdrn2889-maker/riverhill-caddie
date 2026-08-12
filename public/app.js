@@ -3101,26 +3101,20 @@ function rcInitLost() {
   $('rcAddFile').onchange = rcAddOnPick;
 }
 
-/* 모바일 키보드가 팝업/시트를 가리지 않도록 — 스크림은 전체화면 유지하고
-   열린 오버레이에 키보드 높이만큼 하단 패딩을 줘 카드를 키보드 위로 재배치.
-   (오버레이 자체를 축소하면 스크림에 빈틈이 생겨 뒤 페이지가 비침) */
+/* 모바일 키보드 회피 — 유일한 역할은 --kbh(키보드 높이) CSS 변수를 실시간 갱신하는 것.
+   실제 위치 보정은 전부 CSS가 --kbh만 보고 처리(스크림 전체화면 유지 + 카드만 키보드 위로).
+   overlay-mode(레이아웃 뷰포트 불변)든 resize-mode(레이아웃 축소)든 같은 CSS로 수렴. */
 function rcInitKbAvoid() {
-  const vv = window.visualViewport; if (!vv) return;
-  const IDS = ['rcNumWrap', 'rcAddWrap', 'rcFindSheet'];
-  const apply = () => {
-    const kb = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-    IDS.forEach((id) => {
-      const ov = document.getElementById(id); if (!ov) return;
-      const on = ov.classList.contains('on');
-      ov.style.paddingBottom = (on && kb > 1) ? kb + 'px' : '';
-    });
-    // 지난 기록 카드는 키보드 위 남는 높이에 맞춰 헤더가 잘리지 않게 캡
-    const card = document.querySelector('#rcFindSheet .rc-fs-card');
-    if (card) card.style.maxHeight = (kb > 1) ? Math.max(180, vv.height - 12) + 'px' : '';
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  const upd = () => {
+    const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    root.style.setProperty('--kbh', kb + 'px');
   };
-  vv.addEventListener('resize', apply);
-  vv.addEventListener('scroll', apply);
-  rcKbApply = apply;
+  if (vv) { vv.addEventListener('resize', upd); vv.addEventListener('scroll', upd); }
+  window.addEventListener('resize', upd);
+  rcKbApply = upd;
+  upd();
 }
 
 function initCartButtons() {
