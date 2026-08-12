@@ -30,7 +30,7 @@ function tickDate() {
 }
 
 /* ── 하단 내비 / 뷰 전환 ── */
-const VIEWS = ['today', 'news', 'cart', 'worklog', 'settle'];
+const VIEWS = ['today', 'board', 'cart', 'worklog', 'settle'];
 let curView = 'today';
 const _boxFxDone = new Set();   // 박스 스태거는 뷰별 최초 1회만(이후엔 가벼운 방향 슬라이드)
 function showView(name) {
@@ -59,7 +59,10 @@ function showView(name) {
   if (name === 'worklog') { loadJournal(); }
   if (name === 'cart') loadCartCheck();
   if (name === 'settle') { lgPage = -1; loadLedger(); }
-  if (name === 'news') markAllRead();
+  // 배치표 탭: 날씨 하늘 백드롭 켜고 전체 순번표 렌더. 나갈 땐 백드롭·밤클래스 해제.
+  document.body.classList.toggle('on-board', name === 'board');
+  if (name === 'board') { boardActiveIdx = boardFocusIdx(); renderFullBoard(); applyBoardSky(); }
+  else document.body.classList.remove('sky-night');
   // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
   const _sc = document.querySelector('main');
   if (_sc) _sc.scrollTo(0, 0); else window.scrollTo(0, 0);
@@ -73,7 +76,6 @@ function boxFx(view) {
 }
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
-  $('toNews').onclick = () => showView('news');
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
   showView(location.hash.slice(1) || 'today');
 }
@@ -334,7 +336,7 @@ let testerAsMember = Number(localStorage.getItem('testerAsMember')) || null;
 let _boardOwnerName = '';
 async function loadToday() {
   const q = testerAsMember ? ('?asMember=' + testerAsMember) : '';
-  try { const t = await (await fetch('/api/today' + q)).json(); lastToday = t; todayOk = true; _boardOwnerName = (testerAsMember && t && t.ownerName) ? t.ownerName : ''; renderToday(t); }
+  try { const t = await (await fetch('/api/today' + q)).json(); lastToday = t; todayOk = true; _boardOwnerName = (testerAsMember && t && t.ownerName) ? t.ownerName : ''; renderToday(t); if (document.body.classList.contains('on-board')) renderFullBoard(); }
   catch { if (!todayOk) { $('heroTitle').textContent = '일정을 확인하지 못했어요'; $('heroSub').textContent = '잠시 후 다시 시도합니다.'; } }
   loadWeather();
   loadCheer();
@@ -418,6 +420,7 @@ function applySky(cat, mode) {
   };
   if (changed && lastWxCat) crossfadeSky(hero, swap); else swap();
   lastWxCat = cat; lastSkyMode = mode;
+  if (document.body.classList.contains('on-board')) applyBoardSky();   // 배치표 하늘 백드롭도 함께 갱신
 }
 // 현재 배경을 스냅샷한 오버레이를 덮고 새 배경으로 바꾼 뒤 오버레이를 페이드아웃 → 시간대·날씨 전환이 자연스럽게.
 function crossfadeSky(hero, swap) {
@@ -446,10 +449,15 @@ async function loadWeather() {
   try {
     const w = await (await fetch('/api/weather')).json();
     const cur = w && w.ok && w.current;
-    if (!cur) { hero.classList.remove('has-wx', 'wx-night', 'wx-dusk', 'wx-dawn', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; lastWxCat = null; return; }
+    if (!cur) { hero.classList.remove('has-wx', 'wx-night', 'wx-dusk', 'wx-dawn', ...CATS); if (fx) fx.innerHTML = ''; if (ref) ref.hidden = true; lastWxCat = null; lastWx = null; return; }
     const cat = wmoCategory(cur.code);
     applySky(cat, skyModeNow());
     if (ref) { ref.innerHTML = `<b>${cur.temp}°</b><em>${esc(wmoDesc(cur.code))}</em><small>강수 ${cur.pop}%</small>`; ref.hidden = false; }
+    // 배치표 히어로용 당일 최고/최저·체감(요약은 낮 시간대 창 기준).
+    lastWx = { hi: (w.summary && w.summary.hi != null) ? w.summary.hi : null,
+               lo: (w.summary && w.summary.lo != null) ? w.summary.lo : null,
+               feels: (cur.feels != null ? cur.feels : cur.temp) };
+    if (document.body.classList.contains('on-board')) renderFullBoard();
   } catch { /* 실패 시 기존 배경 유지 */ }
 }
 
@@ -1146,40 +1154,212 @@ function renderSpareBoard(s, partLabel = '3부') {
   </div>`;
 }
 
-/* ── 소식 피드 ── */
-const LAST_READ_KEY = 'riverhill_lastReadTs';
-const getLastRead = () => Number(localStorage.getItem(LAST_READ_KEY) || 0);
-const setLastRead = (ts) => localStorage.setItem(LAST_READ_KEY, String(ts || 0));
-function newsHTML(a) {
-  const ts = a.detectedAt || 0;
-  const isNew = ts > getLastRead();
-  const tag = a.status === 'your_turn' ? '<span class="tag red">지금 차례</span>'
-    : a.status === 'near' ? '<span class="tag red">곧 차례</span>'
-    : (a.status === 'assigned' || a.status === 'work') ? '<span class="tag amb">근무</span>'
-    : a.status === 'spare' ? '<span class="tag amb">스페어</span>'
-    : (a.relevant && a.priority === 'high') ? '<span class="tag amb">일정</span>' : '';
-  const cat = a.category ? `<span class="tag cat">${esc(a.category)}</span>` : '';
-  const dot = isNew ? '<span class="red">● </span>' : '';
-  const head = a.aiMessage || a.subject;
-  const when = timeAgo(ts) || a.writeDate || '';
-  const rest = [a.aiMessage ? a.subject : '', a.writer, a.menuName].filter(Boolean).join(' · ');
-  return `<a class="news${isNew ? ' newitem' : ''}${a.relevant === false ? ' dim' : ''}" href="${a.url}" target="_blank" rel="noopener">
-    <b>${dot}${cat}${tag}${esc(head)}</b><small>${[when, rest].filter(Boolean).map(esc).join(' · ')}</small></a>`;
+/* ── 배치표 뷰(우리 부 전체 순번표) — 소식 피드를 대체. 이미 내려오는 roster3·teeGrid·cutLine만으로 그린다.
+     날씨 씬(하늘+언덕) 배경 + 히어로(큰 티오프·최고/최저·체감) + 글래스 카드/타일 + 부 스위처(중복근무). ── */
+let boardOrder = 'seq';   // 'seq'(순번순) | 'time'(시간순)
+let boardActiveIdx = 0;   // 중복근무 시 활성 부(스위처·스와이프)
+let boardSlideDir = 0;    // 부 전환 슬라이드 방향(−1 왼쪽/이전 · +1 오른쪽/다음 · 0 없음)
+let lastWx = null;        // { hi, lo, feels } — loadWeather가 채움(히어로 온도)
+// 날씨 하늘 백드롭 — 히어로 날씨 CSS(.hero.has-wx.w-*.wx-*)를 #skyBg에 그대로 재사용.
+function applyBoardSky() {
+  const sky = $('skyBg'); if (!sky) return;
+  const cat = lastWxCat || 'clear';                 // 날씨 미확보 시에도 예쁜 하늘(기본 맑음)
+  const mode = skyModeNow();
+  const CATS = ['w-clear', 'w-cloud', 'w-rain', 'w-snow', 'w-storm'];
+  sky.classList.remove(...CATS);
+  sky.classList.add('has-wx', 'w-' + cat);
+  sky.classList.toggle('wx-night', mode === 'night');
+  sky.classList.toggle('wx-dusk', mode === 'dusk');
+  sky.classList.toggle('wx-dawn', mode === 'dawn');
+  const fx = $('skyFx'); if (fx) fx.innerHTML = wxFxHTML(cat, mode);
+  document.body.classList.toggle('sky-night', mode === 'night');   // 카드 글래스 낮/밤 대비 전환
 }
-async function loadRecent() {
-  let raw; try { raw = await (await fetch('/api/recent')).json(); } catch { return; }
-  // 관련 있는 소식만 표시(무관한 건 서버가 애초에 안 남김 — 사용자 요청). 옛 무관 항목 대비 방어 필터.
-  const all = (raw || []).filter((a) => a.relevant !== false);
-  const lastRead = getLastRead(); let unread = 0, newest = 0;
-  all.forEach((a) => { const ts = a.detectedAt || 0; if (ts > newest) newest = ts; if (ts > lastRead) unread++; });
-  const u = $('unread'), r = $('readAll');
-  if (unread > 0) { u.textContent = unread; u.hidden = false; r.hidden = false; } else { u.hidden = true; r.hidden = true; }
-  r.dataset.newest = String(newest);
-
-  $('todayNews').innerHTML = all.length ? all.slice(0, 3).map(newsHTML).join('') : '<div class="empty">관련 소식이 아직 없어요.</div>';
-  $('recent').innerHTML = all.length ? all.map(newsHTML).join('') : '<div class="empty">아직 감지된 소식이 없어요.</div>';
+// t.rounds → 배치표 표시용 라운드 목록. roster3가 있는 라운드를 부 순서로. 각 라운드에 status/myPos/tee/course/cut 부여.
+function boardStatusNorm(st) {
+  if (st === 'assigned' || st === 'work' || st === 'your_turn') return 'work';
+  if (st === 'spare' || st === 'waiting' || st === 'near') return 'spare';
+  if (st === 'off') return 'off';
+  return st || 'none';
 }
-function markAllRead() { setLastRead(Number($('readAll').dataset.newest) || Date.now()); loadRecent(); }
+function boardStatusKo(s) { return s === 'work' ? '근무' : s === 'spare' ? '스페어' : s === 'off' ? '휴무' : '미배치'; }
+function boardRounds() {
+  const t = lastToday;
+  if (!t || t.empty || !t.state) return [];
+  const myName = boardOwnerName();
+  const norm = (x) => String(x || '').replace(/\s/g, '');
+  const mn = norm(myName);
+  const myPosOf = (roster, fallback) => {
+    if (!mn) return Number(fallback) || 0;
+    let i = roster.findIndex((nm) => norm(nm) === mn);
+    if (i < 0) i = roster.findIndex((nm) => nameLooseEq(nm, myName));
+    return i >= 0 ? i + 1 : (Number(fallback) || 0);
+  };
+  const rounds = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
+  let src = rounds.filter((r) => r.state && Array.isArray(r.state.roster3) && r.state.roster3.length)
+    .map((r) => ({ part: String(r.part), s: r.state, status: boardStatusNorm(r.state.status || r.status) }));
+  if (!src.length && Array.isArray(t.state.roster3) && t.state.roster3.length) {
+    const prt = String(t.primaryPart || (t.state.part ? String(t.state.part).replace('부', '') : '3'));
+    src = [{ part: prt, s: t.state, status: boardStatusNorm(t.state.status) }];
+  }
+  return src.map((b) => {
+    const roster = Array.isArray(b.s.roster3) ? b.s.roster3 : [];
+    const grid = Array.isArray(b.s.teeGrid) ? b.s.teeGrid : [];
+    const teeMap = {}; grid.forEach((g) => { teeMap[Number(g.pos)] = g; });
+    const myPos = myPosOf(roster, b.s.myPosition);
+    const myTee = myPos && teeMap[myPos] ? teeMap[myPos] : null;
+    return { part: b.part, status: b.status, roster, teeMap, cut: Number(b.s.cutLine) || 0,
+      myPos, tee: myTee && myTee.time ? myTee.time : '', course: myTee && myTee.course ? myTee.course : '' };
+  });
+}
+// 진입 시 기본 활성 부 = focus 라운드(보통 저녁 3부, 아침엔 1·2부)와 같은 부.
+function boardFocusIdx() {
+  const rounds = boardRounds(); if (rounds.length < 2) return 0;
+  const t = lastToday;
+  const all = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
+  const focus = pickFocus(t, all, (Number(t.dayOffset) || 0) >= 1);
+  const fp = focus ? String(focus.part) : null;
+  const i = fp ? rounds.findIndex((r) => r.part === fp) : -1;
+  return i >= 0 ? i : 0;
+}
+function boardHeroFor(r) {
+  if (r.status === 'work' && r.tee) return { big: r.tee, word: false, cond: (r.course ? `${r.course} 코스` : '근무') };
+  if (r.status === 'work') return { big: '근무', word: true, cond: '티오프가 매칭되면 알려드려요' };
+  if (r.status === 'spare') return { big: '스페어', word: true, cond: r.myPos ? `내 순번 ${r.myPos}번 · 대기` : '대기 중' };
+  if (r.status === 'off') return { big: '휴무', word: true, cond: '오늘은 푹 쉬어요' };
+  return { big: '미배치', word: true, cond: '배치되면 바로 알려드려요' };
+}
+// 스페어 지표 — 확정선(cut) 밖 대기 기준. { rank: 몇 번째 스페어, ahead: 내 앞 대기 인원 } 또는 null.
+function spareInfo(r) {
+  if (!r.cut || !r.myPos || r.myPos <= r.cut) return null;
+  return { rank: r.myPos - r.cut, ahead: r.myPos - r.cut - 1 };
+}
+// 히어로 코어 — 숫자가 있으면 큰 숫자(티오프·스페어 순번)를 주인공으로, 없으면 배지+문장 상태 히어로.
+function boardStateHero(badge, line, kind) {
+  return `<div class="fb-state fb-state-${kind}"><span class="fb-state-badge">${esc(badge)}</span><div class="fb-state-line">${esc(line)}</div></div>`;
+}
+function boardHeroCore(r) {
+  if (r.status === 'work' && r.tee) {
+    return `<div class="fb-bigtee">${esc(r.tee)}</div><div class="fb-cond">${r.course ? `${esc(r.course)} 코스` : '근무'}</div>`;
+  }
+  if (r.status === 'spare') {
+    const sp = spareInfo(r);
+    if (sp) {   // 큰 숫자 = 몇 번째 스페어. 앞 대기 인원은 카드 헤더로 이동(히어로는 깔끔하게).
+      return `<div class="fb-bigtee"><span class="fb-teenum">${sp.rank}</span><span class="fb-teeunit">번째<br>스페어</span></div>`;
+    }
+    if (r.myPos) return `<div class="fb-bigtee"><span class="fb-teenum">${r.myPos}</span><span class="fb-teeunit">번<br>순번</span></div><div class="fb-cond">스페어 · 대기 중</div>`;
+    return boardStateHero('스페어', '대기 순번을 확인하는 중이에요', 'spare');
+  }
+  if (r.status === 'work') return boardStateHero('근무 예정', '티오프가 매칭되면 알려드려요', 'work');
+  if (r.status === 'off') return boardStateHero('휴무', '오늘은 푹 쉬어요', 'off');
+  return boardStateHero('미배치', '배치되면 바로 알려드려요', 'none');
+}
+function renderFullBoard() {
+  const host = $('boardFull'); if (!host) return;
+  const t = lastToday;
+  if (!t || t.empty || !t.state) {
+    host.innerHTML = `<div class="fb-empty">${t && t.stale ? '오늘 배치표를 확인하는 중이에요.<br>확보되면 전체 순번표가 표시됩니다.' : '아직 오늘 배치표가 없어요.<br>배치표가 올라오면 여기에 우리 부 전체 순번표가 표시됩니다.'}</div>`;
+    return;
+  }
+  const rounds = boardRounds();
+  if (!rounds.length) {
+    const off = Number(t.dayOffset) || 0;
+    const dayW = off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : (t.date || `${off}일 뒤`);
+    host.innerHTML = `<div class="fb-empty">${dayW} 우리 부 순번표가 아직 확보되지 않았어요.<br>이름이 또렷이 읽히면 전체 순번을 표시할게요.</div>`;
+    return;
+  }
+  if (boardActiveIdx >= rounds.length) boardActiveIdx = 0;
+  const r = rounds[boardActiveIdx];
+  host.innerHTML = boardHeroHTML(rounds, r) + `<div class="fb-cards">${boardCardHTML(r)}${boardTilesHTML(r)}</div>`;
+  if (boardSlideDir) {   // 부 전환(스와이프·탭) 방향에 맞춰 슬라이드-인
+    const cls = boardSlideDir > 0 ? 'fb-in-r' : 'fb-in-l';
+    host.querySelectorAll('.fb-hero, .fb-cards').forEach((n) => n.classList.add(cls));
+    boardSlideDir = 0;
+  }
+  host.querySelectorAll('.fb-switch button').forEach((b) => { b.onclick = () => { const ni = Number(b.dataset.i) || 0; boardSlideDir = ni > boardActiveIdx ? 1 : ni < boardActiveIdx ? -1 : 0; boardActiveIdx = ni; renderFullBoard(); }; });
+  host.querySelectorAll('.fb-seg button').forEach((b) => { b.onclick = () => { boardOrder = b.dataset.o; renderFullBoard(); }; });
+}
+function boardHeroHTML(rounds, r) {
+  const parts = `${rounds.map((x) => x.part).join('·')}부`;
+  const sw = rounds.length >= 2
+    ? `<div class="fb-switch">${rounds.map((x, i) => `<button data-i="${i}" class="${i === boardActiveIdx ? 'on' : ''}">${x.part}부 <em>${boardStatusKo(x.status)}</em></button>`).join('')}</div>`
+    : '';
+  const arUp = '<svg class="fb-ar up" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L11 10 H1 Z"/></svg>';
+  const arDn = '<svg class="fb-ar dn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 11 L1 2 H11 Z"/></svg>';
+  const temps = (lastWx && (lastWx.hi != null || lastWx.lo != null))
+    ? `<div class="fb-hilo"><span class="up">${arUp}${lastWx.hi != null ? lastWx.hi : '—'}°</span><span class="dn">${arDn}${lastWx.lo != null ? lastWx.lo : '—'}°</span></div>${lastWx.feels != null ? `<div class="fb-feels">체감온도 ${lastWx.feels}°</div>` : ''}`
+    : '';
+  return `<div class="fb-hero">${sw}
+    <div class="fb-loc"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>리버힐 CC · ${parts}</div>
+    ${boardHeroCore(r)}
+    ${temps}
+  </div>`;
+}
+function boardCardHTML(r) {
+  // 스페어면 헤더 칩에 '내 앞 대기 인원'을, 그 외엔 확정선 번호를 표기.
+  const sp = r.status === 'spare' ? spareInfo(r) : null;
+  const chip = sp ? (sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`) : (r.cut ? `확정선 ${r.cut}번` : '집계 중');
+  return `<div class="fb-card">
+    <div class="fb-chd"><span>${r.part}부 전체 순번표</span><span class="cut2">${chip}</span></div>
+    <div class="fb-seg"><button data-o="seq" class="${boardOrder !== 'time' ? 'on' : ''}">순번순</button><button data-o="time" class="${boardOrder === 'time' ? 'on' : ''}">시간순</button></div>
+    <div class="fb-list">${boardListHTML(r)}</div>
+  </div>`;
+}
+function boardListHTML(r) {
+  const { roster, teeMap, cut, myPos } = r;
+  const entries = roster.map((nm, i) => {
+    const p = i + 1; const g = teeMap[p] || null;
+    return { p, nm, tee: g && g.time ? g.time : '', crs: g && g.course ? g.course : '', work: cut ? p <= cut : !!(g && g.time), me: p === myPos };
+  });
+  if (boardOrder === 'time') {
+    // 타임라인 레일 — 티오프 시각별 그룹(스페어는 '대기' 밴드로 맨 뒤).
+    const groups = []; const seen = {};
+    entries.forEach((e) => { const key = e.tee || '__sp'; if (!seen[key]) { seen[key] = { t: e.tee, items: [] }; groups.push(seen[key]); } seen[key].items.push(e); });
+    groups.sort((a, b) => { const as = !a.t, bs = !b.t; if (as !== bs) return as ? 1 : -1; return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; });
+    return groups.map((g) => {
+      const sp = !g.t;
+      const rows = g.items.map((e) => `<div class="fb-brow ${e.me ? 'me' : ''}"><span class="fb-nb">${e.p}</span><span class="fb-nm">${esc(e.nm || '—')}</span>${e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : 'out'}">${esc(e.crs)}</span>` : ''}</div>`).join('');
+      return `<div class="fb-band${sp ? ' spare' : ''}"><div class="fb-bt"><span class="fb-btime">${sp ? '대기' : esc(g.t)}</span></div><div class="fb-brows">${rows}</div></div>`;
+    }).join('');
+  }
+  const rowHTML = (e) => {
+    const cls = e.me ? 'me' : e.work ? 'work' : 'wait';
+    const crs = e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : e.crs === 'OUT' ? 'out' : ''}">${esc(e.crs)}</span>` : '';
+    const big = e.tee ? `<span class="fb-big">${esc(e.tee)}</span>` : '<span class="fb-big dim">—</span>';
+    return `<div class="fb-row ${cls}"><span class="fb-nb">${e.p}</span><span class="fb-nm">${esc(e.nm || '—')}</span>${crs}${big}</div>`;
+  };
+  return entries.map((e) => rowHTML(e) + (cut && e.p === cut ? '<div class="fb-cut"><span>확정선 · 여기까지 근무</span></div>' : '')).join('');
+}
+function boardTilesHTML(r) {
+  const h = boardHeroFor(r);
+  const cutTile = `<div class="fb-tile"><div class="fb-tk">확정선</div><div class="fb-tv">${r.cut || '—'}${r.cut ? '<span style="font-size:17px">번</span>' : ''}</div><div class="fb-tsub">여기까지 근무</div></div>`;
+  let myTile;
+  if (r.status === 'work' && r.tee) myTile = `<div class="fb-tile"><div class="fb-tk">내 티오프</div><div class="fb-tv">${esc(r.tee)}</div><div class="fb-tsub">${r.course ? `${esc(r.course)} 코스 · ` : ''}${r.myPos ? `${r.myPos}번` : ''}</div></div>`;
+  else if (r.status === 'spare') {
+    const sp = spareInfo(r);
+    if (sp) myTile = `<div class="fb-tile"><div class="fb-tk">내 스페어</div><div class="fb-tv">${sp.rank}<span style="font-size:17px">번째</span></div><div class="fb-tsub">${sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`}</div></div>`;
+    else myTile = `<div class="fb-tile"><div class="fb-tk">내 순번</div><div class="fb-tv">${r.myPos || '—'}${r.myPos ? '<span style="font-size:17px">번</span>' : ''}</div><div class="fb-tsub">스페어 · 대기</div></div>`;
+  } else myTile = `<div class="fb-tile"><div class="fb-tk">내 상태</div><div class="fb-tv" style="font-size:24px">${esc(h.big)}</div><div class="fb-tsub">${esc(h.cond)}</div></div>`;
+  return `<div class="fb-tiles">${cutTile}${myTile}</div>`;
+}
+// 배치표에서 좌우 스와이프로 부 전환(중복근무 시). 세로 스크롤과 충돌하지 않게 수평 우세 제스처만.
+function initBoardSwipe() {
+  const el = $('view-board'); if (!el) return;
+  let sx = 0, sy = 0, tracking = false;
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; sx = e.clientX; sy = e.clientY; tracking = true; });
+  const end = (e) => {
+    if (!tracking) return; tracking = false;
+    if (!document.body.classList.contains('on-board')) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.3) return;   // 수평 우세 + 최소 이동
+    const rounds = boardRounds(); if (rounds.length < 2) return;
+    const dir = dx < 0 ? 1 : -1;                                          // 왼쪽으로 밀면 다음 부
+    const next = Math.min(rounds.length - 1, Math.max(0, boardActiveIdx + dir));
+    if (next === boardActiveIdx) return;
+    boardSlideDir = dir; boardActiveIdx = next; renderFullBoard();
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', () => { tracking = false; });
+}
 
 /* ── 일일 근무 일지 = 달력(통합): 날짜 탭 → 근무/부 기록·수정, 정산 자동 연동 ── */
 let jCache = { year: null, days: [] };
@@ -2844,6 +3024,7 @@ async function loadMe() {
   hidePending();
   renderAccount();
   if (lastToday) renderToday(lastToday); // 내 이름(profile)이 늦게 로드돼도 보드를 다시 그려 순번 리스트가 뜨게(레이스 방지)
+  if (lastToday && document.body.classList.contains('on-board')) renderFullBoard();
   renderNotifyNudge();               // 알림 미설정이면 유도 카드 노출
   sendTelemetry();                   // 기기·알림 상태 기록
   if (meState && meState.authed && meState.needsOnboarding) await enterOnboarding();
@@ -3565,17 +3746,16 @@ async function main() {
     const q = new URLSearchParams(location.search);
     if (q.has('new')) { _freshLogin = true; q.delete('new'); const s = q.toString(); history.replaceState(null, '', location.pathname + (s ? '?' + s : '') + location.hash); }
   } catch { /* 무해 */ }
-  tickDate(); initNav(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount(); initFax();
+  tickDate(); initNav(); initBoardSwipe(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount(); initFax();
   initInstallPrompt();
-  $('readAll').onclick = markAllRead;
   // ★렌더를 서비스워커·푸시 준비보다 먼저 — 초기 화면(홈)이 최대한 빨리 뜨게(SW register/update 대기로 스플래시가 길어지던 문제).
   loadMe();
-  loadToday(); loadWatchHealth(); loadRecent();
+  loadToday(); loadWatchHealth();
   setTimeout(hideSplash, 2000);   // 안전장치: 어떤 이유로든 2초 뒤엔 대기화면 해제(무한 대기 방지)
   // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
   registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
-  setInterval(() => { loadToday(); loadWatchHealth(); loadRecent(); refreshPushHealth(); }, 30000);
-  setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); }, 20000);
+  setInterval(() => { loadToday(); loadWatchHealth(); refreshPushHealth(); }, 30000);
+  setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); if (document.body.classList.contains('on-board')) applyBoardSky(); }, 20000);
   startHeartbeat();
 }
 

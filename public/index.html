@@ -1267,6 +1267,118 @@
     .rc-rec .rch { color:#c4c9d6; width:16px; height:16px; flex:none; }
     .rc-fs-empty { text-align:center; color:var(--mut); font-size:12px; font-weight:700; padding:26px 0; }
 
+    /* ===== 배치표 뷰 — 날씨 하늘 백드롭 + 글래스 순번표(시각강조 + 순번/시간 토글) ===== */
+    /* #skyBg: 히어로 날씨 CSS(.hero.has-wx.w-*.wx-*)를 그대로 재사용하는 전면 백드롭. 카드 박스만 무력화. */
+    #skyBg { display:none; }
+    body.on-board #skyBg { display:block; }
+    #skyBg.hero { position:fixed; inset:0; z-index:-1; border:0; border-radius:0; box-shadow:none; padding:0; overflow:hidden; }
+    #skyBg.hero .fx { border-radius:0; }
+    #skyBg.hero.has-wx::before { border-radius:0; }
+    body.on-board.sky-night .tbicon svg { stroke:#dbe6f5; }
+    body.on-board.sky-night .tbdot { border-color:transparent; }
+
+    /* 배치표 페이지에선 상단바(알림·햄버거)를 숨겨 공간을 넓게 — 히어로가 상단을 담당 */
+    body.on-board .top { display:none; }
+
+    /* 배치표 뷰 변수(낮/노을/새벽 기본 + 밤 오버라이드) */
+    #view-board { padding:0 0 26px;
+      --fbtxt:#16222e; --fbtxt2:#3a4a58; --fbglass:rgba(255,255,255,.46); --fbgline:rgba(255,255,255,.6);
+      --fbchdline:rgba(60,80,100,.15); --fbchd:#2a3947; --fbcut2:#0a8f68;
+      --fbsegbg:rgba(120,140,170,.16); --fbsegbd:rgba(120,140,170,.2); --fbsegtx:#516070; --fbsegon:#12bf94; --fbsegontx:#fff;
+      --fbrowline:rgba(60,80,100,.1); --fbnbc:#0a9e77; --fbnbbg:rgba(18,191,148,.14); --fbnbbd:rgba(18,191,148,.3);
+      --fbnm:#22303c; --fbbig2:#b7701d; --fbinbg:#e2edfb; --fbinc:#2f74c9; --fboutbg:#fbe9d6; --fboutc:#b7701d;
+      --fbmebg:rgba(18,191,148,.16); --fbmeline:rgba(18,191,148,.6); --fbmenm:#0a5f47; --fbmebig:#0a9e77; --fbmenbbg:#12bf94; --fbmenbc:#fff;
+      --fbwaitnm:#8a94a2; --fbwaitbig:#aeb6c2; --fbcut:#c07a1b; --fbcutg:#e6b877; --fbtv:#16222e; --fbtk:#3a4a58; --fbtsub:#5a6875; --fbrail:rgba(120,140,170,.3); }
+    body.sky-night #view-board {
+      --fbtxt:#fff; --fbtxt2:#cdd9ea; --fbglass:rgba(16,25,44,.5); --fbgline:rgba(150,175,210,.2);
+      --fbchdline:rgba(150,175,210,.18); --fbchd:#dfe8f5; --fbcut2:#8ce0ac;
+      --fbsegbg:rgba(255,255,255,.08); --fbsegbd:rgba(150,175,210,.22); --fbsegtx:#aeb9ca; --fbsegon:rgba(18,191,148,.28); --fbsegontx:#d9fff0;
+      --fbrowline:rgba(150,175,210,.1); --fbnbc:#a8f0c6; --fbnbbg:rgba(140,224,172,.12); --fbnbbd:rgba(140,224,172,.3);
+      --fbnm:#eaf2fb; --fbbig2:#f2cf8d; --fbinbg:rgba(120,170,230,.24); --fbinc:#bcd6f5; --fboutbg:rgba(230,180,120,.22); --fboutc:#f2cf8d;
+      --fbmebg:rgba(18,191,148,.2); --fbmeline:#33d6a6; --fbmenm:#eafff6; --fbmebig:#4defb0; --fbmenbbg:#12bf94; --fbmenbc:#04241a;
+      --fbwaitnm:rgba(200,215,235,.5); --fbwaitbig:#5b6b82; --fbcut:#e6b877; --fbcutg:rgba(230,184,119,.5); --fbtv:#fff; --fbtk:#cdd9ea; --fbtsub:#aab8cc; --fbrail:rgba(150,175,210,.26); }
+    .fb-empty { padding:64px 26px; text-align:center; font-size:13px; color:var(--fbtxt2); line-height:1.7; }
+    body.sky-night .fb-empty { text-shadow:0 1px 3px rgba(0,0,0,.4); }
+
+    /* 히어로(위치 · 큰 티오프 · 최고/최저 · 체감) */
+    .fb-hero { padding:calc(14px + env(safe-area-inset-top,0)) 24px 8px; color:var(--fbtxt); }
+    .fb-switch { display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; }
+    .fb-switch button { border:1px solid var(--fbgline); background:var(--fbglass); color:var(--fbtxt); font:800 12px sans-serif; padding:7px 13px; border-radius:999px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); cursor:pointer; }
+    .fb-switch button em { font-style:normal; font-weight:700; margin-left:3px; font-size:11px; opacity:.72; }
+    .fb-switch button.on { background:#12bf94; color:#fff; border-color:transparent; }
+    .fb-switch button.on em { opacity:.9; }
+    .fb-loc { display:flex; align-items:center; gap:6px; font-size:18px; font-weight:800; margin-bottom:10px; }
+    .fb-loc svg { width:15px; height:15px; fill:currentColor; }
+    .fb-bigtee { display:flex; align-items:flex-end; gap:10px; font-size:60px; font-weight:300; line-height:1; letter-spacing:-.035em; font-variant-numeric:tabular-nums; color:var(--fbtxt); }
+    .fb-teenum { font-weight:300; letter-spacing:-.035em; }
+    .fb-teeunit { font-size:15px; font-weight:700; line-height:1.12; letter-spacing:0; color:var(--fbtxt2); padding-bottom:9px; }
+    /* 숫자 없는 상태(휴무·미배치·티오프 대기) — 큰 글자 대신 배지 + 한 줄 */
+    .fb-state { display:flex; flex-direction:column; align-items:flex-start; gap:11px; padding:4px 0 2px; }
+    .fb-state-badge { font:800 13px sans-serif; letter-spacing:.02em; padding:6px 14px; border-radius:999px; color:var(--fbtxt); background:var(--fbglass); border:1px solid var(--fbgline); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+    .fb-state-line { font-size:29px; font-weight:600; line-height:1.16; letter-spacing:-.02em; color:var(--fbtxt); }
+    .fb-state-work .fb-state-badge, .fb-state-spare .fb-state-badge { background:rgba(18,191,148,.16); border-color:rgba(18,191,148,.42); color:#0a7d5f; }
+    body.sky-night .fb-state-work .fb-state-badge, body.sky-night .fb-state-spare .fb-state-badge { color:#bff3df; border-color:rgba(120,220,180,.4); }
+    .fb-cond { font-size:19px; font-weight:500; margin:3px 0 0; color:var(--fbtxt2); }
+    .fb-hilo { font-size:11px; font-weight:700; margin-top:12px; letter-spacing:-.01em; color:var(--fbtxt); }
+    .fb-hilo .up { margin-right:1px; }
+    /* 최고/최저 화살표 — 얇은 유니코드 대신 꽉 찬 삼각형 + 온도 의미색(가시성↑) */
+    .fb-ar { width:9px; height:9px; margin-right:1.5px; vertical-align:-1px; }
+    .fb-ar.up { fill:#e8623a; } .fb-ar.dn { fill:#3f86d6; }
+    body.sky-night .fb-ar.up { fill:#ff8a5f; } body.sky-night .fb-ar.dn { fill:#66a6ef; }
+    .fb-feels { font-size:11px; font-weight:700; margin-top:4px; color:var(--fbtxt); }
+
+    /* 카드·타일(글래스) */
+    .fb-cards { padding:8px 16px 0; display:flex; flex-direction:column; gap:13px; }
+    .fb-card, .fb-tile { background:var(--fbglass); border:1px solid var(--fbgline); border-radius:22px; backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
+    .fb-card { padding:16px 16px 14px; }
+    .fb-chd { display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--fbchdline); font-size:13px; font-weight:800; color:var(--fbchd); }
+    .fb-chd .cut2 { color:var(--fbcut2); }
+    .fb-seg { display:flex; background:var(--fbsegbg); border:1px solid var(--fbsegbd); border-radius:11px; padding:3px; margin:12px 0 4px; }
+    .fb-seg button { flex:1; border:0; background:transparent; color:var(--fbsegtx); font:800 12px sans-serif; padding:9px; border-radius:8px; cursor:pointer; transition:.15s; }
+    .fb-seg button.on { background:var(--fbsegon); color:var(--fbsegontx); }
+    .fb-row { display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px solid var(--fbrowline); }
+    .fb-row:last-child { border-bottom:0; }
+    .fb-nb { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font:850 12px sans-serif; flex:none; color:var(--fbnbc); background:var(--fbnbbg); border:1px solid var(--fbnbbd); }
+    .fb-nm { flex:1; font:750 16px sans-serif; color:var(--fbnm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .fb-crs { font:850 9px sans-serif; padding:2px 7px; border-radius:6px; }
+    .fb-crs.in { background:var(--fbinbg); color:var(--fbinc); } .fb-crs.out { background:var(--fboutbg); color:var(--fboutc); }
+    .fb-big { font:850 22px/1 sans-serif; font-variant-numeric:tabular-nums; letter-spacing:-.02em; min-width:64px; text-align:right; color:var(--fbbig2); }
+    .fb-big.dim { color:var(--fbwaitbig); font-size:15px; }
+    .fb-row.me { background:var(--fbmebg); border-radius:12px; box-shadow:0 0 0 1.5px var(--fbmeline) inset; border-bottom-color:transparent; }
+    .fb-row.me .fb-nb { background:var(--fbmenbbg); color:var(--fbmenbc); border:0; }
+    .fb-row.me .fb-nm { color:var(--fbmenm); font-weight:850; }
+    .fb-row.me .fb-big { color:var(--fbmebig); }
+    .fb-row.wait .fb-nm { color:var(--fbwaitnm); font-weight:600; }
+    .fb-cut { display:flex; align-items:center; gap:8px; color:var(--fbcut); margin:8px 0; }
+    .fb-cut::before, .fb-cut::after { content:''; flex:1; height:1px; background:repeating-linear-gradient(90deg,var(--fbcutg) 0 6px,transparent 6px 11px); }
+    .fb-cut span { font:850 10px sans-serif; white-space:nowrap; }
+    /* 시간순 = 타임라인 레일(좌 시각+점 · 순번 뱃지 행) */
+    .fb-band { display:grid; grid-template-columns:50px 1fr; gap:11px; position:relative; }
+    .fb-bt { position:relative; padding-top:8px; text-align:right; }
+    .fb-btime { font:850 15px sans-serif; color:var(--fbbig2); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+    .fb-bt::after { content:''; position:absolute; top:7px; right:-6px; width:9px; height:9px; border-radius:50%; background:var(--fbbig2); box-shadow:0 0 0 3px var(--fbnbbg); }
+    .fb-brows { border-left:2px solid var(--fbrail); padding:2px 0 12px 13px; display:flex; flex-direction:column; gap:5px; }
+    .fb-band:last-child .fb-brows { padding-bottom:0; }
+    .fb-brow { display:flex; align-items:center; gap:9px; padding:6px 7px; border-radius:9px; }
+    .fb-brow .fb-nm { font-size:14.5px; }
+    .fb-brow.me { background:var(--fbmebg); box-shadow:0 0 0 1.4px var(--fbmeline) inset; }
+    .fb-brow.me .fb-nb { background:var(--fbmenbbg); color:var(--fbmenbc); border:0; }
+    .fb-brow.me .fb-nm { color:var(--fbmenm); font-weight:850; }
+    .fb-band.spare .fb-btime { color:var(--fbwaitnm); font-size:13px; }
+    .fb-band.spare .fb-bt::after { background:var(--fbwaitnm); }
+    .fb-band.spare .fb-nm { color:var(--fbwaitnm); font-weight:600; }
+    .fb-tiles { display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+    .fb-tile { padding:16px; }
+    .fb-tk { font-size:13px; font-weight:800; color:var(--fbtk); margin-bottom:22px; }
+    .fb-tv { font-size:32px; font-weight:800; letter-spacing:-.02em; color:var(--fbtv); }
+    .fb-tsub { font-size:12px; font-weight:700; margin-top:4px; color:var(--fbtsub); }
+    /* 부 전환 슬라이드-인(스와이프·탭) */
+    @keyframes fbInR { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:none; } }
+    @keyframes fbInL { from { opacity:0; transform:translateX(-24px); } to { opacity:1; transform:none; } }
+    .fb-in-r { animation:fbInR .24s cubic-bezier(.22,1,.36,1); }
+    .fb-in-l { animation:fbInL .24s cubic-bezier(.22,1,.36,1); }
+    @media (prefers-reduced-motion:reduce) { .fb-in-r, .fb-in-l { animation:none; } }
+
     /* ===== 라운드 점검 재편 v2 (핀테크 인디고 · rc2- 스코프) ===== */
     #view-cart { --a:#12bf94; --as:#eef3f1; --ai:#0a9e77; --mut:#8b91a3; --ln:#edeef3;
       --ok:#11b981; --oks:#e7f8f0; --warn:#e8971a; --warns:#fdf3e2; --dg:#ef4757; --dgs:#fdebed;
@@ -1920,6 +2032,9 @@
 
   <!-- (회원 관리는 관리자 모니터 :3100 승인 탭으로 이관됨) -->
 
+  <!-- 배치표 뷰 전용 날씨 하늘 백드롭(전면 고정) — 히어로 날씨 CSS 재사용 -->
+  <div id="skyBg" class="hero" aria-hidden="true"><div class="fx" id="skyFx"></div></div>
+
   <main>
     <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
     <header class="top reveal" style="--i:0">
@@ -1974,14 +2089,11 @@
         <span id="hPush">알림 확인 중…</span>
       </div>
 
-      <div class="sect reveal" style="--i:3"><span>최근 일정 소식</span><button class="more" id="toNews">전체 보기 →</button></div>
-      <div id="todayNews" class="reveal" style="--i:4"></div>
     </section>
 
-    <!-- 소식 -->
-    <section class="view body" id="view-news" role="tabpanel" aria-labelledby="tab-news" hidden>
-      <div class="sect"><span>일정 소식<span class="cnt" id="unread" hidden>0</span></span><button class="more" id="readAll" hidden>모두 읽음</button></div>
-      <div id="recent"><div class="empty">아직 감지된 소식이 없어요.</div></div>
+    <!-- 배치표 — 우리 부 전체 순번표(날씨 하늘 배경 + 글래스). 소식 피드 제거(원문·작성자 유출 차단) -->
+    <section class="view" id="view-board" role="tabpanel" aria-labelledby="tab-board" hidden>
+      <div id="boardFull"><div class="fb-empty">배치표를 불러오는 중…</div></div>
     </section>
 
     <!-- 근무 기록 -->
@@ -2243,7 +2355,7 @@
 
   <nav class="nav reveal" style="--i:5" role="tablist" aria-label="주요 화면">
     <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">오늘</button>
-    <button role="tab" id="tab-news" aria-selected="false" aria-controls="view-news" data-view="news">소식</button>
+    <button role="tab" id="tab-board" aria-selected="false" aria-controls="view-board" data-view="board">배치표</button>
     <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
     <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>
     <button role="tab" id="tab-settle" aria-selected="false" aria-controls="view-settle" data-view="settle">정산</button>

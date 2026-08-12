@@ -12,7 +12,7 @@ let cache = { at: 0, data: null };
 export async function getHourly() {
   if (cache.data && Date.now() - cache.at < TTL) return cache.data;
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`
-    + `&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,is_day`
+    + `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,is_day`
     + `&timezone=${encodeURIComponent(TZ)}&forecast_days=2`;
   const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error('weather ' + r.status);
@@ -23,6 +23,8 @@ export async function getHourly() {
     date: t.slice(0, 10),
     hour: Number(t.slice(11, 13)),
     temp: Math.round(H.temperature_2m?.[i] ?? 0),
+    feels: Math.round(H.apparent_temperature?.[i] ?? H.temperature_2m?.[i] ?? 0), // 체감온도
+
     pop: Math.round(H.precipitation_probability?.[i] ?? 0),  // 강수확률 %
     precip: Number(H.precipitation?.[i] ?? 0),               // 강수량 mm
     wind: Math.round(H.wind_speed_10m?.[i] ?? 0),            // km/h

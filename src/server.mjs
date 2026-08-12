@@ -573,7 +573,7 @@ app.get('/api/weather', async (req, res) => {
     const cur = wx.hours.find((h) => h.date === todayI && h.hour === nowH)
       || wx.hours.find((h) => h.date === todayI && h.hour >= nowH)
       || wx.hours.find((h) => h.date === todayI);
-    const current = cur ? { code: cur.code, temp: cur.temp, pop: cur.pop, day: cur.day } : null;
+    const current = cur ? { code: cur.code, temp: cur.temp, feels: cur.feels, pop: cur.pop, day: cur.day } : null;
     res.json({ ok: true, updatedAt: wx.updatedAt, course: '리버힐 · 안동', date: target, label,
       confirmed, current, hours, summary: weather.summarize(full) });
   } catch (e) {
