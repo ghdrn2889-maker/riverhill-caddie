@@ -482,9 +482,14 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     if (prevPos > 0) v._posFixed = `명단 대조: 순번 ${prevPos}→없음(이 부 명단에 부재)`;
     if (sameDayLabel(today?.date, v.dateLabel)) {
       v.myStatus = 'off';
-      v._offReason = 'removed';
-      // ★확정 병가·휴가면 '순번 빠짐'이 아니라 그 근태를 이어받는다(병가자에게 '순번이 빠졌어요' 오알림 방지).
-      if (today && (today.offType === 'sick' || today.offType === 'vacation')) v.offType = today.offType;
+      // ★확정 병가·휴가는 '부분(부별 잘린) 배치표'에 안 나올 뿐 근태가 지속되는 것 — '순번 빠짐(removed)'으로
+      //  강등하지 않고 그 근태를 그대로 잇는다. removed로 두면 today.mjs가 offType을 지워 병가자에게
+      //  '휴무/순번 빠졌어요' 오알림이 배치표 업데이트마다 나간다(사용자 지적).
+      if (today && (today.offType === 'sick' || today.offType === 'vacation')) {
+        v.offType = today.offType;                 // 병가/휴가 유지(안정 off — removed 아님)
+      } else {
+        v._offReason = 'removed';
+      }
       v._prevPosition = todayPos || prevPos || null;
       v.teeTime = ''; v.course = '';
     } else {

@@ -390,7 +390,9 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
 
   // ★순번 제외(off:removed) 표식 — 대시보드가 평소 휴무(시적 쉼)와 구분해 '담백한 안내' 화면을 띄우게.
   //  removed가 아닌 어떤 결론이든(근무·스페어·평소 휴무) 이전 removed 표식은 깨끗이 제거(오래 남지 않게).
-  if (removed && next.status === 'off') {
+  // ★확정 병가·휴가(sick/vacation)는 부분사진 부재로 '순번 제외'로 강등하지 않는다 — offType을 지우면
+  //  홈/배치표/알림이 병가→휴무로 오표기된다(사용자 지적). 이 경우 아래 else가 offType을 보존한다.
+  if (removed && next.status === 'off' && cur.offType !== 'sick' && cur.offType !== 'vacation') {
     next.offReason = 'removed';
     next.prevPosition = Number(verdict._prevPosition) || Number(cur.myPosition) || null;
     next.teeTime = ''; next.course = '';   // 빠짐=근무 아님 → 잔여 티오프 정리

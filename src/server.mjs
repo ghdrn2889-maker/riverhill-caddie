@@ -1031,7 +1031,11 @@ const envMember = () => {
 //    회원 본인의 티오프가 바뀌었으면 ⚠️ 강한 알림(변경됐어요!)이 그대로 나간다.
 //    (이미지가 그대로면 Gemini를 호출하지 않으므로 비용 낭비 없음)
 const BOARD_WATCH_FILE = 'boardwatch.json';
-let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at }
+let boardWatch = loadJSON(BOARD_WATCH_FILE, null); // { id, fp, dateLabel, at } — 3부 정본 감시(단일)
+// ★1·2부 단독 배치표 수정 감지 — 3부 boardWatch(단일)로는 1/2부를 못 봐서 '1·2부 수정본이 게시글로
+//  올라와도 모니터 판독이 안 바뀌던' 문제(사용자 지적). 부별로 최신 단독 배치표를 감시해 이미지 교체 시 재판독.
+const PART_BOARD_WATCH_FILE = 'partboardwatch.json';
+let partBoardWatch = loadJSON(PART_BOARD_WATCH_FILE, {}); // { '1': {id,fp,dateLabel,at}, '2': {...} }
 // 이미지 지문 — URL 경로 + 콘텐츠 서명(길이·최종수정)으로 '조용한 수정(같은 글 이미지 교체)'을 잡는다.
 //  네이버는 재업로드 시 보통 URL도 바뀌지만(그건 경로로 잡힘), 같은 URL로 바이트만 갈리는 경우·CDN 캐시
 //  엣지케이스까지 HEAD의 content-length·last-modified로 함께 본다(본문 다운로드 없음 → 무비용·무LLM).
@@ -1261,6 +1265,8 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
         image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, partData);
       const kept = Object.keys(saved.parts || {}).filter((k) => k !== String(part));
       console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})${kept.length ? ` · 보존 부: ${kept.join(',')}부` : ''}`);
+      // ★부별 배치표 감시 등록 — 같은 글의 이미지 교체(수정본) 감지용(recheckPartBoards가 지문 비교 후 재판독).
+      try { partBoardWatch[String(part)] = { id: String(full.id), fp: await imgFingerprint(full), dateLabel: vp.dateLabel || '', at: Date.now() }; saveJSON(PART_BOARD_WATCH_FILE, partBoardWatch); } catch { /* noop */ }
     } catch (e) { console.error('[단독부 board-parts 저장 오류]', e.message); }
   } else {
     console.log(`·  [단독 ${part}부 배치표] 판독 명단 없음 → 모니터 스킵: ${full.subject}`);
@@ -2294,5 +2300,33 @@ async function recheckBoard() {
   } catch (e) { console.error('배치표 재판독 오류:', e.message); }
   finally { recheckBusy = false; }
 }
-setInterval(() => { recheckBoard().catch(() => {}); }, BOARD_RECHECK_MS);
-console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 이미지 변경 시에만 재판독)`);
+// ── 1·2부 단독 배치표 재확인 루프: 부별 감시(partBoardWatch)를 돌며 같은 글 이미지 교체(수정본)를 잡는다 ──
+//  3부는 위 recheckBoard(단일 boardWatch)가 담당. 여기선 1·2부 각각의 최신 단독 배치표 이미지를 지문 비교.
+async function recheckPartBoards() {
+  if (recheckBusy) return;                                 // 3부 재판독 진행 중이면 이번 틱은 건너뜀
+  const h = new Date().getHours();
+  const aStart = Number(process.env.ACTIVE_START_HOUR ?? 12);
+  const aEnd = Number(process.env.ACTIVE_END_HOUR ?? 24);
+  if (h < aStart || h >= aEnd) return;                     // 활성 시간대만
+  let dirty = false;
+  for (const part of ['1', '2']) {
+    const w = partBoardWatch[part];
+    if (!w || !w.id) continue;
+    if (Date.now() - (w.at || 0) > 18 * 3600 * 1000) { delete partBoardWatch[part]; dirty = true; continue; } // 하루 지나면 감시 해제
+    let full;
+    try { full = await fetchArticle(w.id); }
+    catch (e) { console.error(`${part}부 배치표 재확인 조회 실패:`, e.message); continue; }
+    let fp;
+    try { fp = await imgFingerprint(full); } catch { continue; }
+    if (!fp || fp === w.fp) continue;                      // 이미지 그대로(서명 동일) → 재판독 안 함(무비용)
+    console.log(`🔁 ${part}부 배치표 이미지 교체 감지(같은 글 #${w.id}) → 재판독`);
+    w.fp = fp; w.at = Date.now(); dirty = true;
+    recheckBusy = true;
+    try { full.writer = full.writer || ''; await handleStandalonePartBoard(full, part, {}); }
+    catch (e) { console.error(`${part}부 배치표 재판독 오류:`, e.message); }
+    finally { recheckBusy = false; }
+  }
+  if (dirty) saveJSON(PART_BOARD_WATCH_FILE, partBoardWatch);
+}
+setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
+console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 3부+1·2부 이미지 변경 시에만 재판독)`);
