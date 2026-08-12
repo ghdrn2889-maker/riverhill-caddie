@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, readPart3Holistic, readRosterVerbatim } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 
@@ -514,6 +514,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   let best = null, bestBounds = null, bestScore = -1, lastFault = '';
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (claudeBudgetLeft() <= 0) break;
+    const toBefore = claudeTimeouts();
     const bounds = await getPartBoundaries(img);
     if (!bounds || !bounds.length) continue;
     const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
@@ -534,6 +535,12 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
     lastFault = fault;
     const score = Object.values(parts).reduce((s, p) => s + (p.roster || []).filter(Boolean).length, 0);
     if (score > bestScore) { best = parts; bestBounds = bounds; bestScore = score; }   // 불량이어도 가장 완전한 판독 보관
+    // ★타임아웃 재시도 완화 — 이번 시도에 Claude 타임아웃이 있었으면 풀 재시도 중단. 느린 상태에선 재시도(≈6콜)가
+    //  예산·시간만 태우고 또 타임아웃날 확률이 크다(실측 8/12: 150콜 캡 소진). 최선 판독 채택 → judge가 로컬/Gemini로 폴백.
+    const timedOut = claudeTimeouts() - toBefore;
+    if (timedOut > 0) { console.warn(`[boardreader] Claude 타임아웃 ${timedOut}회 — 재시도 중단(느린 판독·예산 보호, 최선 판독 채택)`); break; }
+    // 예산이 다음 풀 시도(경계+요약+부3개+근태 ≈ 6콜)에 못 미치면 재시도 안 함.
+    if (claudeBudgetLeft() < 6) { console.warn(`[boardreader] 예산 부족(${claudeBudgetLeft()}<6) — 재시도 중단(최선 판독 채택)`); break; }
     console.warn(`[boardreader] 시도 ${attempt + 1}/${maxTries} 불량(${fault}) → 경계 재추정 재시도`);
   }
   if (!best) return null;

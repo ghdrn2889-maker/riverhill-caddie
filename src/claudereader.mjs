@@ -423,6 +423,11 @@ export async function runClaudeText(prompt) {
   catch (e) { console.error('[claude] 텍스트 호출 오류:', e.message); return null; }
 }
 
+// ★타임아웃 누적 계수 — 판독기(boardreader)가 '지금 Claude가 느리다'를 감지해 풀 재시도를 완화하는 신호.
+//  단조 증가(리셋 불필요) — 소비 측은 한 시도 전후의 '델타'만 본다.
+let _claudeTimeouts = 0;
+export function claudeTimeouts() { return _claudeTimeouts; }
+
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
@@ -432,7 +437,7 @@ function runClaude(prompt) {
       cwd: os.tmpdir(),
     });
     let out = '', err = '';
-    const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('타임아웃')); }, CLAUDE_TIMEOUT_MS);
+    const timer = setTimeout(() => { p.kill('SIGKILL'); _claudeTimeouts += 1; reject(new Error('타임아웃')); }, CLAUDE_TIMEOUT_MS);
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { err += d; });
     p.on('error', (e) => { clearTimeout(timer); reject(e); });
