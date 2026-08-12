@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>리버힐 캐디 일정</title>
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#f7f6f0" />
+  <meta name="theme-color" content="#f3f4f8" />
   <link rel="apple-touch-icon" href="/icon-192.png?v=4" />
   <!-- iOS PWA: 홈 화면에 추가 시 앱처럼(주소창 없이) 실행 + 상태바 스타일 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,7 +18,7 @@
     /* ★앱 셸: 문서(body)는 스크롤하지 않고 flex 컬럼 — 상단 헤더 고정 / 가운데(main)만 스크롤 / 하단 탭바 고정.
        iOS standalone에서 body 오버스크롤(고무줄 튕김)에 하단 탭바가 딸려 올라가던 문제를 원천 차단. */
     html { height:100%; height:100dvh; }
-    body { margin:0; background:#f7f6f0; color:#17231d;
+    body { margin:0; background:#f3f4f8; color:#17231d;
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
            /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡혀 하단 탭이 바닥에 안 붙고 떠 보임 → 동적 뷰포트 높이로 고정. */
            height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
@@ -29,7 +29,7 @@
     .tbicon { width:40px; height:40px; border:0; background:transparent; display:flex; align-items:center; justify-content:center; position:relative; padding:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
     .tbicon svg { width:24px; height:24px; stroke:#2b3a33; stroke-width:2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
     .tbicon:active { opacity:.55; }
-    .tbdot { position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:#12bf94; border:2px solid #f7f6f0; }
+    .tbdot { position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:#12bf94; border:2px solid #f3f4f8; }
     .date { font-size:10px; opacity:.85; font-weight:600; }
     main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
            overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
@@ -1271,7 +1271,7 @@
     #view-cart { --a:#12bf94; --as:#eef3f1; --ai:#0a9e77; --mut:#8b91a3; --ln:#edeef3;
       --ok:#11b981; --oks:#e7f8f0; --warn:#e8971a; --warns:#fdf3e2; --dg:#ef4757; --dgs:#fdebed;
       --bfr:#c98a2b; --aft:#2f74c9;
-      background:#f7f6f0; }
+      background:#f3f4f8; }
     /* 날짜 스트립을 초록→핀테크 인디고로(옛 배포 톤 제거) */
     #view-cart .rc2-datebar { margin-top:12px; }
     #view-cart .rc-bartitle { color:var(--mut); font-weight:800; }
