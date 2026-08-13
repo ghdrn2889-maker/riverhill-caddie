@@ -1637,13 +1637,12 @@
     /* 전 둘레 accent 테두리(과거 border-top 3px는 둥근 모서리에서 잘려 보였음 → 전체 테두리로 교체). min-height:0 로 뷰포트 넘쳐 잘리는 것 방지. */
     .rc2-pane { flex:1; min-height:0; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border:2.5px solid var(--bfr); }
     .rc2-pane.a { border-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
-    /* 사진 뒤 '사진 추가' 슬라이드(옆으로 넘겨 도달 → 탭하면 추가) */
-    .rc2-pane .sl.addsl { display:flex; align-items:center; justify-content:center; background:#0a0c14; }
-    .rc2-addbig { display:flex; flex-direction:column; align-items:center; gap:9px; border:1.8px dashed rgba(255,255,255,.3); background:rgba(255,255,255,.04); color:#c9cee0; border-radius:16px; padding:22px 30px; font-family:inherit; font-size:13.5px; font-weight:850; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .rc2-addbig:active { background:rgba(255,255,255,.09); }
-    #rcGallery .rc2-pane.empty .np { cursor:pointer; }
-    .rc2-addbig svg { width:30px; height:30px; opacity:.85; } .rc2-addbig small { font-size:10.5px; opacity:.7; font-weight:700; }
-    .rc2-pane.onadd .ctl { display:none; }
+    /* '사진 추가' = 캐러셀 밖 독립 버튼(우상단 고정). 네이티브 클릭 → 제스처 판정 없음 */
+    .rc2-fab { position:absolute; top:9px; right:9px; z-index:5; display:flex; align-items:center; gap:5px; border:0; border-radius:11px; padding:8px 13px 8px 10px; background:var(--a); color:#fff; font-family:inherit; font-size:12.5px; font-weight:850; letter-spacing:-.01em; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,.35); -webkit-tap-highlight-color:transparent; }
+    .rc2-fab svg { width:16px; height:16px; }
+    .rc2-fab:active { filter:brightness(.9); }
+    #rcGallery.viewonly .rc2-fab, .rc2-pane.empty .rc2-fab { display:none; }   /* 조회모드/빈프레임엔 숨김(빈프레임은 가운데 탭으로 추가) */
+    #rcGallery .rc2-pane.empty .np.add { cursor:pointer; }
     .rc2-pane .dts i.hollow { background:transparent; border:1.4px solid rgba(255,255,255,.55); } .rc2-pane .dts i.hollow.on { background:#fff; border-color:#fff; width:16px; border-radius:3px; }
     .rc2-pane .trk { position:absolute; inset:0; display:flex; transition:transform .28s cubic-bezier(.22,.61,.36,1); }
     .rc2-pane.drag .trk { transition:none; }
@@ -2568,12 +2567,14 @@
         <div class="trk" id="rcTrkTop"></div><div class="dts" id="rcDotsTop"></div>
         <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 전'에서 올려주세요</small></div>
         <div class="ctl"><button data-z="top" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="top" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
+        <button class="rc2-fab" data-fab="top" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가</button>
       </div>
       <div class="rc2-pane a" id="rcPaneBot">
         <span class="lb">라운드 후 <span class="m" id="rcMetaBot"></span></span>
         <div class="trk" id="rcTrkBot"></div><div class="dts" id="rcDotsBot"></div>
         <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 후'에서 올려주세요</small></div>
         <div class="ctl"><button data-z="bot" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="bot" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
+        <button class="rc2-fab" data-fab="bot" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가</button>
       </div>
     </div>
     <div class="rc2-gfoot" id="rcGvFoot"><b>두 손가락으로 확대</b> · 좌우로 넘기면 다음/이전 사진</div>

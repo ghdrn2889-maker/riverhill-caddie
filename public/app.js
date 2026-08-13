@@ -2907,44 +2907,35 @@ function rcRenderRail(side) {
   strip.querySelectorAll('[data-del]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); rcAskDel(b.dataset.del, +b.dataset.i); }; });
   rcUpdateGalDone();
 }
-function rcUpdatePaneMeta(w, sel, nPhoto) {           // 추가 슬라이드 위면 '사진 추가', 아니면 n/n
-  const onAdd = sel >= nPhoto;
-  rcPaneEl(w).classList.toggle('onadd', onAdd);
-  rcMeta(w).textContent = onAdd ? '사진 추가' : `${sel + 1}/${nPhoto}`;
+function rcUpdatePaneMeta(w, sel, nPhoto) {           // n/n (추가는 별도 버튼이라 슬라이드 개념 없음)
+  rcMeta(w).textContent = nPhoto ? `${sel + 1}/${nPhoto}` : '';
 }
 function rcRenderPane(w) {
   const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
   const pane = rcPaneEl(w), trk = rcTrk(w), dots = rcDots(w);
-  const addable = !rcViewOnly;                        // 오늘 편집 모드에서만 '사진 추가' 슬라이드 제공(6)
-  const slides = arr.length + (addable ? 1 : 0);
+  const slides = arr.length;                          // ★트랙 = 사진만. '사진 추가'는 캐러셀 밖 독립 버튼(rc2-fab/빈프레임 np)
   if (rcSel[rcSubject][side] >= slides) rcSel[rcSubject][side] = Math.max(0, slides - 1);
-  if (!arr.length) {                                  // 사진 전무 → 빈 프레임(탭하면 추가)
-    pane.classList.add('empty'); pane.classList.remove('onadd');
+  if (!arr.length) {                                  // 사진 전무 → 빈 프레임(편집모드면 탭하여 추가)
+    pane.classList.add('empty');
     trk.innerHTML = ''; dots.innerHTML = ''; rcMeta(w).textContent = '';
     const np = pane.querySelector('.np');
     if (np) {
       const s = np.querySelector('span'), sm = np.querySelector('small');
-      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; }
-      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; }
-      np.onclick = null;   // 탭/스와이프는 pane pointerup 단일 핸들러가 판정(빈 프레임 탭 = 사진 추가)
+      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; np.classList.remove('add'); np.onclick = null; }
+      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; np.classList.add('add'); np.onclick = () => rcTapAdd(side); }  // 빈 프레임 = 독립 네이티브 클릭(제스처 판정 없음)
     }
     rcSetLv(w, 1); rcZ[w] = { s: 1, x: 0, y: 0 }; return;
   }
   pane.classList.remove('empty');
-  let html = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
-  if (addable) html += `<div class="sl addsl"><div class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 더 올려요</small></div></div>`;
-  trk.innerHTML = html;   // 추가 슬라이드는 순수 표시용 div — 탭/스와이프는 pane 단일 핸들러가 판정
+  trk.innerHTML = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
   const sel = rcSel[rcSubject][side];
-  let dh = arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('');
-  if (addable) dh += `<i class="hollow ${sel >= arr.length ? 'on' : ''}"></i>`;
-  dots.innerHTML = slides > 1 ? dh : '';
+  dots.innerHTML = slides > 1 ? arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('') : '';
   rcUpdatePaneMeta(w, sel, arr.length);
   rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1); rcPosTrack(w, false); rcApplyZoom(w);
 }
 function rcSelectThumb(side, i) {
   const w = side === 'before' ? 'top' : 'bot';
-  const slides = rcArr(rcSubject, side).length + (rcViewOnly ? 0 : 1);
-  if (rcTrk(w).children.length === slides) rcGoIndex(w, i);
+  if (rcTrk(w).children.length === rcArr(rcSubject, side).length) rcGoIndex(w, i);
   else { rcSel[rcSubject][side] = i; rcRenderPane(w); rcRenderRail(side); }
 }
 function rcPosTrack(w, anim) { const side = rcSideOf(w); const trk = rcTrk(w); trk.style.transition = anim ? '' : 'none'; trk.style.transform = `translateX(-${rcSel[rcSubject][side] * 100}%)`; if (!anim) requestAnimationFrame(() => { trk.style.transition = ''; }); }
@@ -2954,7 +2945,7 @@ function rcSetLv(w, s) { const lv = rcPaneEl(w).querySelector('.ctl .lv'); if (l
 function rcZoomBtn(w, f) { const s = rcZ[w]; s.s = Math.max(1, Math.min(6, s.s * f)); if (s.s === 1) { s.x = 0; s.y = 0; } rcApplyZoom(w); rcSetLv(w, s.s); }
 function rcGoIndex(w, ni) {
   const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
-  const slides = arr.length + (rcViewOnly ? 0 : 1);
+  const slides = arr.length;
   ni = Math.max(0, Math.min(slides - 1, ni));
   if (ni === rcSel[rcSubject][side]) { rcPosTrack(w, true); return; }
   rcSel[rcSubject][side] = ni; rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1);
@@ -3007,10 +2998,11 @@ function rcInitGallery() {
   $('rcDelNo').onclick = () => { $('rcConfirm').classList.remove('on'); rcPendingDel = null; };
   document.querySelectorAll('#rcGallery .ctl [data-z]').forEach((b) => { b.onclick = () => rcZoomBtn(b.dataset.z, b.dataset.f === 'in' ? 1.5 : 1 / 1.5); });
   document.querySelectorAll('#rcGallery .ctl [data-del]').forEach((b) => { b.onclick = () => rcDelCurrent(b.dataset.del); });
+  document.querySelectorAll('#rcGallery [data-fab]').forEach((b) => { b.onclick = () => rcTapAdd(b.dataset.fab === 'top' ? 'before' : 'after'); });   // 사진 추가 = 캐러셀 밖 독립 버튼(네이티브 클릭)
   ['top', 'bot'].forEach((w) => {
     const pane = rcPaneEl(w); const pts = new Map(); let startDist = 0, startScale = 1, lx = 0, ly = 0, swipeStartX = 0, swipeStartY = 0, maxMove = 0;
     pane.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.ctl')) return;   // 줌/삭제 컨트롤만 네이티브 클릭 — 그 외 전 영역은 단일 제스처(탭/스와이프) 핸들러가 담당
+      if (e.target.closest('.ctl') || e.target.closest('.rc2-fab') || e.target.closest('.np')) return;   // 컨트롤·추가버튼·빈프레임은 캐러셀 밖 독립 네이티브 클릭 → 캡처 안 함
       pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { lx = e.clientX; ly = e.clientY; swipeStartX = e.clientX; swipeStartY = e.clientY; maxMove = 0; pane.classList.add('drag'); }
       else if (pts.size === 2) { const p = [...pts.values()]; startDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); startScale = rcZ[w].s; }
@@ -3027,17 +3019,12 @@ function rcInitGallery() {
       if (!pts.has(e.pointerId)) return; const wasSize = pts.size; pts.delete(e.pointerId);
       if (wasSize === 1) {
         pane.classList.remove('drag');
-        const side = rcSideOf(w);
-        if (maxMove < 10) {                                                            // ── 탭(이동 거의 없음): 어디를 눌러도 일관 ──
-          const nPhoto = rcArr(rcSubject, side).length;
-          const onAdd = rcSel[rcSubject][side] >= nPhoto;                              // 추가 슬라이드 위
-          if (!rcViewOnly && (pane.classList.contains('empty') || onAdd)) rcTapAdd(side);  // 빈 프레임/추가 슬라이드 탭 → 사진 추가 팝업
-          else if (!pane.classList.contains('empty')) rcPosTrack(w, true);             // 사진 탭 → 제자리
-        } else if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {               // ── 스와이프: 어디서 시작해도 일관 ──
-          const off = e.clientX - swipeStartX; const th = (pane.clientWidth || 1) * 0.18;
-          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);                     // 왼쪽 → 다음
-          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);                 // 오른쪽 → 이전
-          else rcPosTrack(w, true);                                                    // 임계 미만 → 제자리
+        // 트랙엔 사진만 존재(추가는 독립 버튼). 여기선 사진 간 넘기기만 담당.
+        if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {
+          const side = rcSideOf(w); const off = e.clientX - swipeStartX; const th = (pane.clientWidth || 1) * 0.18;
+          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);                     // 왼쪽 스와이프 → 다음
+          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);                 // 오른쪽 스와이프 → 이전
+          else rcPosTrack(w, true);                                                    // 작은 이동(탭 포함) → 제자리
         }
       }
       if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; swipeStartY = p.y; maxMove = 0; }
