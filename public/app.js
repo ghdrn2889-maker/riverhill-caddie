@@ -3003,35 +3003,37 @@ function rcInitGallery() {
   document.querySelectorAll('#rcGallery .ctl [data-z]').forEach((b) => { b.onclick = () => rcZoomBtn(b.dataset.z, b.dataset.f === 'in' ? 1.5 : 1 / 1.5); });
   document.querySelectorAll('#rcGallery .ctl [data-del]').forEach((b) => { b.onclick = () => rcDelCurrent(b.dataset.del); });
   ['top', 'bot'].forEach((w) => {
-    const pane = rcPaneEl(w); const pts = new Map(); let startDist = 0, startScale = 1, lx = 0, ly = 0, swipeStartX = 0;
+    const pane = rcPaneEl(w); const pts = new Map(); let startDist = 0, startScale = 1, lx = 0, ly = 0, swipeStartX = 0, swipeStartY = 0, maxMove = 0;
     pane.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.ctl')) return; pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pts.size === 1) { lx = e.clientX; ly = e.clientY; swipeStartX = e.clientX; pane.classList.add('drag'); }
+      if (pts.size === 1) { lx = e.clientX; ly = e.clientY; swipeStartX = e.clientX; swipeStartY = e.clientY; maxMove = 0; pane.classList.add('drag'); }
       else if (pts.size === 2) { const p = [...pts.values()]; startDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); startScale = rcZ[w].s; }
     });
     pane.addEventListener('pointermove', (e) => {
       if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); const s = rcZ[w];
       if (pts.size >= 2) { const p = [...pts.values()]; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); if (startDist > 0) s.s = Math.max(1, Math.min(6, startScale * d / startDist)); if (s.s === 1) { s.x = 0; s.y = 0; } rcApplyZoom(w); rcSetLv(w, s.s); return; }
+      maxMove = Math.max(maxMove, Math.hypot(e.clientX - swipeStartX, e.clientY - swipeStartY));
       const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
       if (s.s > 1) { s.x += dx; s.y += dy; rcApplyZoom(w); }
-      else { const side = rcSideOf(w); const off = e.clientX - swipeStartX; const trk = rcTrk(w); trk.style.transition = 'none'; trk.style.transform = `translateX(calc(-${rcSel[rcSubject][side] * 100}% + ${off}px))`; }
+      else if (!pane.classList.contains('empty')) { const side = rcSideOf(w); const off = e.clientX - swipeStartX; const trk = rcTrk(w); trk.style.transition = 'none'; trk.style.transform = `translateX(calc(-${rcSel[rcSubject][side] * 100}% + ${off}px))`; }
     });
     const up = (e) => {
       if (!pts.has(e.pointerId)) return; const wasSize = pts.size; pts.delete(e.pointerId);
       if (wasSize === 1) {
         pane.classList.remove('drag');
-        const off = e.clientX - swipeStartX; const side = rcSideOf(w);
-        if (pane.classList.contains('empty')) {
-          if (!rcViewOnly && Math.abs(off) < 8) rcTapAdd(side);                       // 빈 프레임 탭 → 추가(6)
-        } else if (rcZ[w].s <= 1) {
+        const side = rcSideOf(w); const off = e.clientX - swipeStartX; const isTap = maxMove < 10;
+        if (isTap) {                                     // 탭 — 이동 거의 없음
+          const nPhoto = rcArr(rcSubject, side).length;
+          // 빈 프레임 or '사진 추가' 슬라이드 탭 → 추가. 사진 위 탭은 무시(고정).(6)
+          if (!rcViewOnly && (pane.classList.contains('empty') || rcSel[rcSubject][side] >= nPhoto)) rcTapAdd(side);
+        } else if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {   // 스와이프 — 좌우 이동
           const th = pane.clientWidth * 0.18;
           if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);
           else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);
-          else if (!rcViewOnly && Math.abs(off) < 8 && rcSel[rcSubject][side] >= rcArr(rcSubject, side).length) rcTapAdd(side);  // 추가 슬라이드 탭 → 추가(6)
           else rcPosTrack(w, true);
         }
       }
-      if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; }
+      if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; swipeStartY = p.y; maxMove = 0; }
     };
     pane.addEventListener('pointerup', up); pane.addEventListener('pointercancel', up);
     pane.addEventListener('wheel', (e) => { if (pane.classList.contains('empty')) return; e.preventDefault(); rcZoomBtn(w, e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });

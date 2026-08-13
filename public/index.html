@@ -1597,10 +1597,11 @@
     /* 갤러리/비교 오버레이 */
     #rcGallery { position:fixed; inset:0; background:#0e1017; display:none; flex-direction:column; z-index:1200; }
     #rcGallery.on { display:flex; }
-    .rc2-gtop { flex:none; display:flex; align-items:center; gap:10px; padding:14px 14px 9px; color:#fff; }
+    .rc2-gtop { flex:none; display:flex; align-items:center; gap:10px; padding:calc(12px + env(safe-area-inset-top,0px)) 14px 9px; color:#fff; }
     .rc2-gtop .bk { background:rgba(255,255,255,.12); border:0; color:#fff; width:34px; height:34px; border-radius:11px; font-size:19px; cursor:pointer; }
     .rc2-gtop .tt { flex:none; min-width:0; font-size:20px; font-weight:850; letter-spacing:-.02em; }
-    .rc2-gtop .tog { flex:none; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:12px; font-weight:800; padding:7px 11px; border-radius:11px; cursor:pointer; }
+    .rc2-gtop .tog { flex:none; display:flex; align-items:center; justify-content:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:12px; font-weight:800; line-height:1; padding:8px 12px; min-width:78px; border-radius:11px; cursor:pointer; }
+    .rc2-gtop .tog .x { font-size:12px; font-weight:800; }
     .rc2-gtop .tog svg { width:13px; height:13px; transition:transform .2s; } #rcGallery.mini .rc2-gtop .tog svg { transform:rotate(180deg); }
     .rc2-gtop .tog .x::after { content:'접기'; } #rcGallery.mini .rc2-gtop .tog .x::after { content:'전체'; }
     .rc2-gtop .done { margin-left:auto; flex:none; border:0; border-radius:11px; padding:9px 18px; font-size:13px; font-weight:850; cursor:pointer; background:#12a884; color:#fff; box-shadow:0 4px 14px rgba(18,168,132,.42); transition:background .2s, box-shadow .2s, opacity .2s; }
@@ -1625,9 +1626,9 @@
     .rc2-th .del svg { width:13px; height:13px; }
     #rcGallery.viewonly .rc2-add, #rcGallery.viewonly .rc2-th .del { display:none; }
     .rc2-rail .noshot { display:flex; align-items:center; height:46px; padding:0 12px; color:#6b7186; font-size:11px; font-weight:700; }
-    .rc2-stage { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:2px 10px calc(10px + env(safe-area-inset-bottom,0)); }
-    /* 전 둘레 accent 테두리(과거 border-top 3px는 둥근 모서리에서 잘려 보였음 → 전체 테두리로 교체) */
-    .rc2-pane { flex:1; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border:2.5px solid var(--bfr); }
+    .rc2-stage { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:4px 12px calc(12px + env(safe-area-inset-bottom,0px)); }
+    /* 전 둘레 accent 테두리(과거 border-top 3px는 둥근 모서리에서 잘려 보였음 → 전체 테두리로 교체). min-height:0 로 뷰포트 넘쳐 잘리는 것 방지. */
+    .rc2-pane { flex:1; min-height:0; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border:2.5px solid var(--bfr); }
     .rc2-pane.a { border-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
     /* 사진 뒤 '사진 추가' 슬라이드(옆으로 넘겨 도달 → 탭하면 추가) */
     .rc2-pane .sl.addsl { display:flex; align-items:center; justify-content:center; background:#0a0c14; }
