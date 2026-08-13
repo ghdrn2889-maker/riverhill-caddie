@@ -1595,6 +1595,11 @@
     .rc2-legacy > summary svg { width:13px; height:13px; transition:transform .2s; } .rc2-legacy[open] > summary svg { transform:rotate(90deg); }
 
     /* 갤러리/비교 오버레이 */
+    /* ★갤러리·시트·팝업은 #view-cart 밖에 있어 --dg/--bfr/--aft/--mut 등 색 변수가 안 풀림
+       (삭제 버튼·테두리·X가 투명/안 보임) → 여기서 필요한 변수를 직접 정의. */
+    #rcGallery, #rcChooser, #rcConfirm, #rcAddChooser {
+      --a:#12bf94; --as:#eef3f1; --mut:#8b91a3; --dg:#ef4757; --dgs:#fdebed;
+      --ok:#11b981; --oks:#e7f8f0; --warn:#e8971a; --warns:#fdf3e2; --bfr:#c98a2b; --aft:#2f74c9; }
     /* overflow:hidden + max-width:100vw → 내부 요소가 문서 폭을 넓혀 모바일이 페이지 전체를 축소(압축)하는 것 방지 */
     #rcGallery { position:fixed; inset:0; max-width:100vw; overflow:hidden; background:#0e1017; display:none; flex-direction:column; z-index:1200; touch-action:manipulation; }
     #rcGallery.on { display:flex; }
@@ -1624,8 +1629,8 @@
     .rc2-th img { width:100%; height:100%; object-fit:cover; display:block; }
     .rc2-rail.b .rc2-th.sel { border-color:var(--bfr); } .rc2-rail.a .rc2-th.sel { border-color:var(--aft); }
     .rc2-th .ix { position:absolute; left:3px; bottom:3px; font-size:8px; font-weight:800; color:#fff; background:rgba(8,10,20,.6); padding:1px 5px; border-radius:5px; }
-    .rc2-th .del { position:absolute; right:2px; top:2px; width:20px; height:20px; border-radius:50%; background:var(--dg); border:1.5px solid #fff; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:3; box-shadow:0 1px 4px rgba(0,0,0,.35); }
-    .rc2-th .del svg { width:13px; height:13px; }
+    .rc2-th .del { position:absolute; right:2px; top:2px; width:22px; height:22px; border-radius:50%; background:#ef4757; border:1.5px solid #fff; color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:3; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+    .rc2-th .del svg { width:16px; height:16px; stroke:#fff; stroke-width:3.4; }
     #rcGallery.viewonly .rc2-add, #rcGallery.viewonly .rc2-th .del { display:none; }
     .rc2-rail .noshot { display:flex; align-items:center; height:46px; padding:0 12px; color:#6b7186; font-size:11px; font-weight:700; }
     .rc2-stage { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:4px 12px calc(12px + env(safe-area-inset-bottom,0px)); }
