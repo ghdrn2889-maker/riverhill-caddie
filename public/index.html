@@ -1595,7 +1595,8 @@
     .rc2-legacy > summary svg { width:13px; height:13px; transition:transform .2s; } .rc2-legacy[open] > summary svg { transform:rotate(90deg); }
 
     /* 갤러리/비교 오버레이 */
-    #rcGallery { position:fixed; inset:0; background:#0e1017; display:none; flex-direction:column; z-index:1200; }
+    /* overflow:hidden + max-width:100vw → 내부 요소가 문서 폭을 넓혀 모바일이 페이지 전체를 축소(압축)하는 것 방지 */
+    #rcGallery { position:fixed; inset:0; max-width:100vw; overflow:hidden; background:#0e1017; display:none; flex-direction:column; z-index:1200; touch-action:manipulation; }
     #rcGallery.on { display:flex; }
     .rc2-gtop { flex:none; display:flex; align-items:center; gap:10px; padding:calc(12px + env(safe-area-inset-top,0px)) 14px 9px; color:#fff; }
     .rc2-gtop .bk { background:rgba(255,255,255,.12); border:0; color:#fff; width:34px; height:34px; border-radius:11px; font-size:19px; cursor:pointer; }
@@ -1616,7 +1617,7 @@
     .rc2-rail.b .rl { color:#e8c07a; } .rc2-rail.a .rl { color:#93b8f2; }
     .rc2-rail .rl i { width:7px; height:7px; border-radius:2px; } .rc2-rail.b .rl i { background:var(--bfr); } .rc2-rail.a .rl i { background:var(--aft); }
     .rc2-rail .rl .n { margin-left:auto; opacity:.6; font-weight:700; }
-    .rc2-strip { display:flex; gap:7px; overflow-x:auto; padding:1px 0; scrollbar-width:none; } .rc2-strip::-webkit-scrollbar { display:none; }
+    .rc2-strip { display:flex; gap:7px; min-width:0; max-width:100%; overflow-x:auto; padding:1px 0; scrollbar-width:none; } .rc2-strip::-webkit-scrollbar { display:none; }
     .rc2-add { flex:none; width:46px; height:46px; border-radius:11px; border:1.6px dashed rgba(255,255,255,.32); background:rgba(255,255,255,.05); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#c3c8da; cursor:pointer; }
     .rc2-add svg { width:16px; height:16px; } .rc2-add span { font-size:8px; font-weight:800; }
     .rc2-th { flex:none; width:46px; height:46px; border-radius:11px; overflow:hidden; position:relative; cursor:pointer; background:#05060a; border:2px solid transparent; }

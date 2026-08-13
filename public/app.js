@@ -3027,16 +3027,15 @@ function rcInitGallery() {
       if (!pts.has(e.pointerId)) return; const wasSize = pts.size; pts.delete(e.pointerId);
       if (wasSize === 1) {
         pane.classList.remove('drag');
-        const side = rcSideOf(w); const off = e.clientX - swipeStartX; const isTap = maxMove < 10;
-        if (isTap) {                                     // 탭 — 이동 거의 없음
-          const nPhoto = rcArr(rcSubject, side).length;
-          // 빈 프레임 or '사진 추가' 슬라이드 탭 → 추가. 사진 위 탭은 무시(고정).(6)
-          if (!rcViewOnly && (pane.classList.contains('empty') || rcSel[rcSubject][side] >= nPhoto)) rcTapAdd(side);
-        } else if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {   // 스와이프 — 좌우 이동
-          const th = pane.clientWidth * 0.18;
-          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);
-          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);
-          else rcPosTrack(w, true);
+        const side = rcSideOf(w); const off = e.clientX - swipeStartX; const W = pane.clientWidth || 1; const nPhoto = rcArr(rcSubject, side).length;
+        if (pane.classList.contains('empty')) {
+          if (!rcViewOnly && Math.abs(off) < W * 0.4) rcTapAdd(side);                  // 빈 프레임: 큰 드래그 아니면 탭 → 추가(6)
+        } else if (rcZ[w].s <= 1) {
+          const th = W * 0.18;
+          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);                     // 왼쪽 스와이프 → 다음
+          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);                 // 오른쪽 스와이프 → 이전
+          else if (!rcViewOnly && rcSel[rcSubject][side] >= nPhoto) rcTapAdd(side);    // 추가 슬라이드에서 안 넘겼으면 탭 → 추가(6)
+          else rcPosTrack(w, true);                                                    // 사진 위 탭/작은 이동 → 제자리
         }
       }
       if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; swipeStartY = p.y; maxMove = 0; }
