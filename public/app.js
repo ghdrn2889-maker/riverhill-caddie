@@ -2896,7 +2896,8 @@ function rcRenderRail(side) {
   const arr = rcArr(rcSubject, side);
   const strip = $(side === 'before' ? 'rcStripB' : 'rcStripA');
   $(side === 'before' ? 'rcRnB' : 'rcRnA').textContent = arr.length + '장';
-  if (rcSel[rcSubject][side] >= arr.length) rcSel[rcSubject][side] = Math.max(0, arr.length - 1);
+  const slides = arr.length + (rcViewOnly ? 0 : 1);   // ★레일은 사진만이지만 rcSel은 추가 프레임(=arr.length)을 가리킬 수 있음 → 슬라이드 수 기준으로 클램프(안 그러면 추가 프레임에서 rcSel이 마지막 사진으로 몰래 당겨져 '두 칸 이동' 버그)
+  if (rcSel[rcSubject][side] >= slides) rcSel[rcSubject][side] = Math.max(0, slides - 1);
   let h = '';
   if (!rcViewOnly) h += `<div class="rc2-add" data-add="${side}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg><span>올리기</span></div>`;
   if (!arr.length && rcViewOnly) h += '<div class="noshot">사진 없음</div>';
@@ -2933,9 +2934,17 @@ function rcRenderPane(w) {
   }
   pane.classList.remove('empty');
   let html = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
-  if (addable) html += `<div class="sl addsl"><div class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 올려요</small></div></div>`;
+  if (addable) html += `<div class="sl addsl"><button type="button" class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 올려요</small></button></div>`;
   trk.innerHTML = html;
-  const addsl = trk.querySelector('.addsl'); if (addsl) addsl.onclick = () => rcTapAdd(side);   // ★프레임 전체가 하나의 탭 영역(네이티브 클릭) — 두 구역 충돌 없음
+  const addbtn = trk.querySelector('.rc2-addbig');
+  if (addbtn) {
+    addbtn.onclick = () => rcTapAdd(side);              // ★탭 = 추가(프레임 전체 네이티브 button, 모바일 어디든 확실)
+    let ax = 0, amv = 0, atrk = false;                  // ★오른쪽으로 밀면 이전 사진 — 캡처 안 하므로 탭 클릭과 공존(큰 이동만 넘기고, 작은 탭은 click이 추가 처리)
+    addbtn.onpointerdown = (e) => { ax = e.clientX; amv = 0; atrk = true; };
+    addbtn.onpointermove = (e) => { if (atrk) amv = e.clientX - ax; };
+    const aend = () => { const go = atrk && amv > 40; atrk = false; if (go) rcGoIndex(w, rcSel[rcSubject][side] - 1); };
+    addbtn.onpointerup = aend; addbtn.onpointercancel = aend;
+  }
   const sel = rcSel[rcSubject][side];
   let dh = arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('');
   if (addable) dh += `<i class="hollow ${sel >= arr.length ? 'on' : ''}"></i>`;
@@ -3001,6 +3010,8 @@ function rcInitGallery() {
   $('rcGvDone').onclick = () => { if (!$('rcGvDone').disabled) rcCloseGallery(); };   // 완료(2)
   window.addEventListener('popstate', () => { if ($('rcGallery').classList.contains('on')) { rcGalPushed = false; rcCloseGalleryUI(); } });  // 기기 뒤로가기 → 앱 대신 갤러리만 닫힘(1)
   $('rcChCancel').onclick = () => $('rcChooser').classList.remove('on');
+  $('rcChooser').onclick = (e) => { if (e.target === $('rcChooser')) $('rcChooser').classList.remove('on'); };   // 팝업 바깥(스크림) 탭 → 닫힘
+  $('rcConfirm').onclick = (e) => { if (e.target === $('rcConfirm')) { $('rcConfirm').classList.remove('on'); rcPendingDel = null; } };   // 삭제 확인도 바깥 탭 → 취소
   $('rcPickCam').onclick = () => { $('rcChooser').classList.remove('on'); $('rcCamIn').click(); };
   $('rcPickAlb').onclick = () => { $('rcChooser').classList.remove('on'); $('rcAlbIn').click(); };
   const onPick = async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; await rcDoUpload(files); };

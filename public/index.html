@@ -1637,10 +1637,10 @@
     /* 전 둘레 accent 테두리(과거 border-top 3px는 둥근 모서리에서 잘려 보였음 → 전체 테두리로 교체). min-height:0 로 뷰포트 넘쳐 잘리는 것 방지. */
     .rc2-pane { flex:1; min-height:0; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border:2.5px solid var(--bfr); }
     .rc2-pane.a { border-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
-    /* 사진 뒤 '사진 추가' 프레임(옆으로 넘겨 도달·전/후 버튼으로도 이동). ★슬라이드 전체가 하나의 탭 영역 = 두 구역 충돌 없음 */
-    .rc2-pane .sl.addsl { display:flex; align-items:center; justify-content:center; background:#0a0c14; cursor:pointer; }
-    .rc2-pane .sl.addsl:active { background:#0d1019; }
-    .rc2-addbig { display:flex; flex-direction:column; align-items:center; gap:9px; color:#c9cee0; font-size:14px; font-weight:850; pointer-events:none; text-align:center; }
+    /* 사진 뒤 '사진 추가' 프레임(옆으로 넘겨 도달·전/후 버튼으로도 이동). ★프레임 전체 = 슬라이드를 꽉 채운 네이티브 button → 모바일에서 아무 데나 탭해도 확실히 인식 */
+    .rc2-pane .sl.addsl { display:flex; background:#0a0c14; }
+    .rc2-addbig { flex:1; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; border:0; background:transparent; color:#c9cee0; font-family:inherit; font-size:14px; font-weight:850; text-align:center; cursor:pointer; -webkit-tap-highlight-color:transparent; touch-action:none; }
+    .rc2-addbig:active { background:rgba(255,255,255,.05); }
     .rc2-addbig svg { width:34px; height:34px; opacity:.85; } .rc2-addbig small { font-size:11px; opacity:.7; font-weight:700; }
     .rc2-pane.onadd .ctl { display:none; }   /* 추가 프레임에선 줌/삭제 숨김 */
     /* 좌우 넘기기 버튼(스와이프와 병행). 끝 사진에선 해당 방향 자동 숨김 */
@@ -1671,7 +1671,11 @@
     #rcGallery.viewonly .rc2-pane .ctl .tr, #rcGallery.viewonly .rc2-pane .ctl .sep { display:none; }
     .rc2-gfoot { flex:none; padding:8px 18px calc(14px + env(safe-area-inset-bottom,0)); text-align:center; color:#8b90a6; font-size:11px; } .rc2-gfoot b { color:#fff; }
     /* 소스 선택 시트 + 삭제 팝업 */
-    .rc2-sheet { position:fixed; inset:0; background:rgba(10,13,25,.5); display:none; align-items:flex-end; justify-content:center; z-index:1300; } .rc2-sheet.on { display:flex; }
+    /* 아래에서 위로 슬라이드하는 시트(열림) / 아래로 사라짐(닫힘). 스크림 페이드 동반 */
+    .rc2-sheet { position:fixed; inset:0; background:rgba(10,13,25,0); display:flex; align-items:flex-end; justify-content:center; z-index:1300; visibility:hidden; transition:background .28s ease, visibility .28s; }
+    .rc2-sheet.on { background:rgba(10,13,25,.5); visibility:visible; }
+    .rc2-sheet .rc2-sc2 { transform:translateY(100%); transition:transform .34s cubic-bezier(.22,.61,.36,1); }
+    .rc2-sheet.on .rc2-sc2 { transform:translateY(0); }
     /* 프레임 탭으로 시트가 손가락 밑에서 올라올 때 그 탭의 유령 클릭이 버튼을 누르는 것 차단(450ms) */
     .rc2-sheet.arming .rc2-sc2 { pointer-events:none; }
     .rc2-sc2 { width:100%; max-width:600px; background:#fff; border-radius:24px 24px 0 0; padding:18px 16px calc(16px + env(safe-area-inset-bottom,0)); }
