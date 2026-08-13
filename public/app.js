@@ -2962,7 +2962,13 @@ function rcGoIndex(w, ni) {
   rcPosTrack(w, true); rcRenderRail(side); rcApplyZoom(w);
 }
 function rcDelCurrent(w) { const side = rcSideOf(w); if (!rcArr(rcSubject, side).length) return; rcAskDel(side, rcSel[rcSubject][side]); }
-function rcTapAdd(side) { rcPendingAdd = { subject: rcSubject, side }; $('rcChTitle').textContent = `${RC_META[rcSubject].title} · ${side === 'before' ? '라운드 전' : '라운드 후'} 사진 추가`; $('rcChooser').classList.add('on'); }
+let rcArmTimer = null;
+function rcTapAdd(side) {
+  rcPendingAdd = { subject: rcSubject, side };
+  $('rcChTitle').textContent = `${RC_META[rcSubject].title} · ${side === 'before' ? '라운드 전' : '라운드 후'} 사진 추가`;
+  const ch = $('rcChooser'); ch.classList.add('on', 'arming');   // arming=유령클릭 차단
+  clearTimeout(rcArmTimer); rcArmTimer = setTimeout(() => ch.classList.remove('arming'), 450);
+}
 function rcAskDel(side, i) { rcPendingDel = { side, i }; $('rcDelTitle').textContent = `${side === 'before' ? '라운드 전' : '라운드 후'} ${i + 1}번째 사진`; $('rcConfirm').classList.add('on'); }
 async function rcDoUpload(files) {
   if (!rcPendingAdd || !files.length) return;

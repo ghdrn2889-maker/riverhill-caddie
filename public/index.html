@@ -1601,7 +1601,8 @@
     .rc2-gtop .bk { background:rgba(255,255,255,.12); border:0; color:#fff; width:34px; height:34px; border-radius:11px; font-size:19px; cursor:pointer; }
     .rc2-gtop .tt { flex:none; min-width:0; font-size:20px; font-weight:850; letter-spacing:-.02em; }
     .rc2-gtop .tog { flex:none; display:flex; align-items:center; justify-content:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:12px; font-weight:800; line-height:1; padding:8px 12px; min-width:78px; border-radius:11px; cursor:pointer; }
-    .rc2-gtop .tog .x { font-size:12px; font-weight:800; }
+    .rc2-gtop .tog .x, .rc2-gtop .tog .x::after { font-size:12px; font-weight:800; color:#dfe3f0; }
+    #rcGallery.mini .rc2-gtop .tog, #rcGallery.mini .rc2-gtop .tog .x, #rcGallery.mini .rc2-gtop .tog .x::after { color:#dfe3f0; }
     .rc2-gtop .tog svg { width:13px; height:13px; transition:transform .2s; } #rcGallery.mini .rc2-gtop .tog svg { transform:rotate(180deg); }
     .rc2-gtop .tog .x::after { content:'접기'; } #rcGallery.mini .rc2-gtop .tog .x::after { content:'전체'; }
     .rc2-gtop .done { margin-left:auto; flex:none; border:0; border-radius:11px; padding:9px 18px; font-size:13px; font-weight:850; cursor:pointer; background:#12a884; color:#fff; box-shadow:0 4px 14px rgba(18,168,132,.42); transition:background .2s, box-shadow .2s, opacity .2s; }
@@ -1659,6 +1660,8 @@
     .rc2-gfoot { flex:none; padding:8px 18px calc(14px + env(safe-area-inset-bottom,0)); text-align:center; color:#8b90a6; font-size:11px; } .rc2-gfoot b { color:#fff; }
     /* 소스 선택 시트 + 삭제 팝업 */
     .rc2-sheet { position:fixed; inset:0; background:rgba(10,13,25,.5); display:none; align-items:flex-end; justify-content:center; z-index:1300; } .rc2-sheet.on { display:flex; }
+    /* 프레임 탭으로 시트가 손가락 밑에서 올라올 때 그 탭의 유령 클릭이 버튼을 누르는 것 차단(450ms) */
+    .rc2-sheet.arming .rc2-sc2 { pointer-events:none; }
     .rc2-sc2 { width:100%; max-width:600px; background:#fff; border-radius:24px 24px 0 0; padding:18px 16px calc(16px + env(safe-area-inset-bottom,0)); }
     .rc2-sc2 .st { text-align:center; font-size:13px; font-weight:800; color:var(--mut); padding:4px 0 14px; }
     .rc2-sc2 .opt { display:flex; align-items:center; gap:13px; width:100%; background:#f4f5f9; border:0; border-radius:15px; padding:15px; font-size:15px; font-weight:800; color:#171a23; cursor:pointer; margin-bottom:9px; text-align:left; }
