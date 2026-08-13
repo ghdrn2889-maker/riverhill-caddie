@@ -2859,6 +2859,7 @@ async function loadCartCheck(date) {
 
 /* ── 전·후 갤러리(사진 올리기·삭제·핀치 확대·좌우 슬라이드) ── */
 let rcSubject = 'cart', rcViewOnly = false, rcPendingAdd = null, rcPendingDel = null;
+let rcGalPushed = false;                              // 갤러리 열 때 history 항목 1개 push → 기기 뒤로가기로 앱 대신 갤러리만 닫힘
 const rcSel = { cart: { before: 0, after: 0 }, club: { before: 0, after: 0 } };
 const rcZ = { top: { s: 1, x: 0, y: 0 }, bot: { s: 1, x: 0, y: 0 } };
 const rcSideOf = (w) => (w === 'top' ? 'before' : 'after');
@@ -2869,16 +2870,27 @@ const rcMeta = (w) => $(w === 'top' ? 'rcMetaTop' : 'rcMetaBot');
 
 function rcOpenGallery(subject, vo) {
   rcSubject = subject; rcViewOnly = !!vo;
-  const g = $('rcGallery'); g.classList.toggle('viewonly', rcViewOnly); g.classList.remove('mini');
-  $('rcGvTitle').childNodes[0].nodeValue = RC_META[subject].title;
-  const md = ccDate ? `${Number(ccDate.slice(5, 7))}/${Number(ccDate.slice(8, 10))}` : '';
-  $('rcGvSub').textContent = subject === 'cart' ? `${md} · 받았을 때 → 반납(청소)` : `${md} · 개수·헤드커버·파손`;
+  const g = $('rcGallery'); g.classList.toggle('viewonly', rcViewOnly); g.classList.add('mini');   // 기본=접힘(4)
+  $('rcGvTitle').textContent = RC_META[subject].title;
   $('rcGvFoot').innerHTML = '<b>두 손가락으로 확대</b> · 좌우로 넘기면 다음/이전 사진';
   ['before', 'after'].forEach(rcRenderRail);
   rcRenderPane('top'); rcRenderPane('bot');
+  rcUpdateGalDone();
   g.classList.add('on'); document.body.style.overflow = 'hidden';
+  if (!rcGalPushed) { try { history.pushState({ rcgal: 1 }, ''); rcGalPushed = true; } catch { /* noop */ } }
 }
-function rcCloseGallery() { $('rcGallery').classList.remove('on'); document.body.style.overflow = ''; }
+function rcUpdateGalDone() {                          // 완료 버튼: 전·후 각 1장 이상일 때만 활성(2)
+  const btn = $('rcGvDone'); if (!btn) return;
+  const ok = rcArr(rcSubject, 'before').length > 0 && rcArr(rcSubject, 'after').length > 0;
+  btn.disabled = !ok; btn.textContent = ok ? '완료' : '미완료';
+}
+function rcCloseGalleryUI() {                         // UI만 닫기(히스토리 조작 없음) — popstate에서 호출
+  $('rcGallery').classList.remove('on'); $('rcChooser').classList.remove('on'); $('rcConfirm').classList.remove('on');
+  document.body.style.overflow = '';
+}
+function rcCloseGallery() {                           // 사용자가 닫기(‹/완료) → 뒤로가기 소비 → popstate가 UI 닫음
+  if (rcGalPushed) { rcGalPushed = false; history.back(); } else rcCloseGalleryUI();
+}
 
 function rcRenderRail(side) {
   const arr = rcArr(rcSubject, side);
@@ -2893,21 +2905,45 @@ function rcRenderRail(side) {
   strip.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => rcTapAdd(b.dataset.add); });
   strip.querySelectorAll('[data-sel]').forEach((t) => { t.onclick = () => rcSelectThumb(t.dataset.sel, +t.dataset.i); });
   strip.querySelectorAll('[data-del]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); rcAskDel(b.dataset.del, +b.dataset.i); }; });
+  rcUpdateGalDone();
+}
+function rcUpdatePaneMeta(w, sel, nPhoto) {           // 추가 슬라이드 위면 '사진 추가', 아니면 n/n
+  const onAdd = sel >= nPhoto;
+  rcPaneEl(w).classList.toggle('onadd', onAdd);
+  rcMeta(w).textContent = onAdd ? '사진 추가' : `${sel + 1}/${nPhoto}`;
 }
 function rcRenderPane(w) {
   const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
   const pane = rcPaneEl(w), trk = rcTrk(w), dots = rcDots(w);
-  if (rcSel[rcSubject][side] >= arr.length) rcSel[rcSubject][side] = Math.max(0, arr.length - 1);
-  if (!arr.length) { pane.classList.add('empty'); trk.innerHTML = ''; dots.innerHTML = ''; rcMeta(w).textContent = ''; rcSetLv(w, 1); rcZ[w] = { s: 1, x: 0, y: 0 }; return; }
+  const addable = !rcViewOnly;                        // 오늘 편집 모드에서만 '사진 추가' 슬라이드 제공(6)
+  const slides = arr.length + (addable ? 1 : 0);
+  if (rcSel[rcSubject][side] >= slides) rcSel[rcSubject][side] = Math.max(0, slides - 1);
+  if (!arr.length) {                                  // 사진 전무 → 빈 프레임(탭하면 추가)
+    pane.classList.add('empty'); pane.classList.remove('onadd');
+    trk.innerHTML = ''; dots.innerHTML = ''; rcMeta(w).textContent = '';
+    const np = pane.querySelector('.np');
+    if (np) {
+      const s = np.querySelector('span'), sm = np.querySelector('small');
+      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; }
+      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; }
+    }
+    rcSetLv(w, 1); rcZ[w] = { s: 1, x: 0, y: 0 }; return;
+  }
   pane.classList.remove('empty');
-  trk.innerHTML = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
-  dots.innerHTML = arr.length > 1 ? arr.map((f, i) => `<i class="${i === rcSel[rcSubject][side] ? 'on' : ''}"></i>`).join('') : '';
-  rcMeta(w).textContent = (rcSel[rcSubject][side] + 1) + '/' + arr.length;
+  let html = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
+  if (addable) html += `<div class="sl addsl"><div class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 더 올려요</small></div></div>`;
+  trk.innerHTML = html;
+  const sel = rcSel[rcSubject][side];
+  let dh = arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('');
+  if (addable) dh += `<i class="hollow ${sel >= arr.length ? 'on' : ''}"></i>`;
+  dots.innerHTML = slides > 1 ? dh : '';
+  rcUpdatePaneMeta(w, sel, arr.length);
   rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1); rcPosTrack(w, false); rcApplyZoom(w);
 }
 function rcSelectThumb(side, i) {
   const w = side === 'before' ? 'top' : 'bot';
-  if (rcTrk(w).children.length === rcArr(rcSubject, side).length) rcGoIndex(w, i);
+  const slides = rcArr(rcSubject, side).length + (rcViewOnly ? 0 : 1);
+  if (rcTrk(w).children.length === slides) rcGoIndex(w, i);
   else { rcSel[rcSubject][side] = i; rcRenderPane(w); rcRenderRail(side); }
 }
 function rcPosTrack(w, anim) { const side = rcSideOf(w); const trk = rcTrk(w); trk.style.transition = anim ? '' : 'none'; trk.style.transform = `translateX(-${rcSel[rcSubject][side] * 100}%)`; if (!anim) requestAnimationFrame(() => { trk.style.transition = ''; }); }
@@ -2916,10 +2952,12 @@ function rcApplyZoom(w) { const z = rcCurZoom(w); if (!z) return; const s = rcZ[
 function rcSetLv(w, s) { const lv = rcPaneEl(w).querySelector('.ctl .lv'); if (lv) lv.textContent = Math.round(s * 100) + '%'; }
 function rcZoomBtn(w, f) { const s = rcZ[w]; s.s = Math.max(1, Math.min(6, s.s * f)); if (s.s === 1) { s.x = 0; s.y = 0; } rcApplyZoom(w); rcSetLv(w, s.s); }
 function rcGoIndex(w, ni) {
-  const side = rcSideOf(w); const arr = rcArr(rcSubject, side); ni = Math.max(0, Math.min(arr.length - 1, ni));
+  const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
+  const slides = arr.length + (rcViewOnly ? 0 : 1);
+  ni = Math.max(0, Math.min(slides - 1, ni));
   if (ni === rcSel[rcSubject][side]) { rcPosTrack(w, true); return; }
   rcSel[rcSubject][side] = ni; rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1);
-  rcMeta(w).textContent = (ni + 1) + '/' + arr.length;
+  rcUpdatePaneMeta(w, ni, arr.length);
   [...rcDots(w).children].forEach((d, i) => d.classList.toggle('on', i === ni));
   rcPosTrack(w, true); rcRenderRail(side); rcApplyZoom(w);
 }
@@ -2953,6 +2991,8 @@ function rcInitGallery() {
   if (rcBound) return; rcBound = true;
   $('rcGvBack').onclick = rcCloseGallery;
   $('rcGvTog').onclick = () => $('rcGallery').classList.toggle('mini');
+  $('rcGvDone').onclick = () => { if (!$('rcGvDone').disabled) rcCloseGallery(); };   // 완료(2)
+  window.addEventListener('popstate', () => { if ($('rcGallery').classList.contains('on')) { rcGalPushed = false; rcCloseGalleryUI(); } });  // 기기 뒤로가기 → 앱 대신 갤러리만 닫힘(1)
   $('rcChCancel').onclick = () => $('rcChooser').classList.remove('on');
   $('rcPickCam').onclick = () => { $('rcChooser').classList.remove('on'); $('rcCamIn').click(); };
   $('rcPickAlb').onclick = () => { $('rcChooser').classList.remove('on'); $('rcAlbIn').click(); };
@@ -2978,7 +3018,19 @@ function rcInitGallery() {
     });
     const up = (e) => {
       if (!pts.has(e.pointerId)) return; const wasSize = pts.size; pts.delete(e.pointerId);
-      if (wasSize === 1) { pane.classList.remove('drag'); if (rcZ[w].s <= 1) { const off = e.clientX - swipeStartX; const th = pane.clientWidth * 0.18; if (off < -th) rcGoIndex(w, rcSel[rcSubject][rcSideOf(w)] + 1); else if (off > th) rcGoIndex(w, rcSel[rcSubject][rcSideOf(w)] - 1); else rcPosTrack(w, true); } }
+      if (wasSize === 1) {
+        pane.classList.remove('drag');
+        const off = e.clientX - swipeStartX; const side = rcSideOf(w);
+        if (pane.classList.contains('empty')) {
+          if (!rcViewOnly && Math.abs(off) < 8) rcTapAdd(side);                       // 빈 프레임 탭 → 추가(6)
+        } else if (rcZ[w].s <= 1) {
+          const th = pane.clientWidth * 0.18;
+          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);
+          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);
+          else if (!rcViewOnly && Math.abs(off) < 8 && rcSel[rcSubject][side] >= rcArr(rcSubject, side).length) rcTapAdd(side);  // 추가 슬라이드 탭 → 추가(6)
+          else rcPosTrack(w, true);
+        }
+      }
       if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; }
     };
     pane.addEventListener('pointerup', up); pane.addEventListener('pointercancel', up);

@@ -1599,10 +1599,14 @@
     #rcGallery.on { display:flex; }
     .rc2-gtop { flex:none; display:flex; align-items:center; gap:10px; padding:14px 14px 9px; color:#fff; }
     .rc2-gtop .bk { background:rgba(255,255,255,.12); border:0; color:#fff; width:34px; height:34px; border-radius:11px; font-size:19px; cursor:pointer; }
-    .rc2-gtop .tt { flex:1; min-width:0; font-size:15px; font-weight:850; } .rc2-gtop .tt small { display:block; font-size:11px; opacity:.6; font-weight:600; margin-top:2px; }
-    .rc2-gtop .tog { flex:none; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:11px; font-weight:800; padding:8px 11px; border-radius:11px; cursor:pointer; }
+    .rc2-gtop .tt { flex:none; min-width:0; font-size:20px; font-weight:850; letter-spacing:-.02em; }
+    .rc2-gtop .tog { flex:none; display:flex; align-items:center; gap:5px; background:rgba(255,255,255,.12); border:0; color:#dfe3f0; font-size:12px; font-weight:800; padding:7px 11px; border-radius:11px; cursor:pointer; }
     .rc2-gtop .tog svg { width:13px; height:13px; transition:transform .2s; } #rcGallery.mini .rc2-gtop .tog svg { transform:rotate(180deg); }
-    .rc2-gtop .tog .x::after { content:'접기'; } #rcGallery.mini .rc2-gtop .tog .x::after { content:'목록'; }
+    .rc2-gtop .tog .x::after { content:'접기'; } #rcGallery.mini .rc2-gtop .tog .x::after { content:'전체'; }
+    .rc2-gtop .done { margin-left:auto; flex:none; border:0; border-radius:11px; padding:9px 18px; font-size:13px; font-weight:850; cursor:pointer; background:#12a884; color:#fff; box-shadow:0 4px 14px rgba(18,168,132,.42); transition:background .2s, box-shadow .2s, opacity .2s; }
+    .rc2-gtop .done:disabled { background:rgba(255,255,255,.1); color:#727892; box-shadow:none; cursor:not-allowed; }
+    .rc2-gtop .done:not(:disabled):active { transform:translateY(1px); }
+    #rcGallery.viewonly .rc2-gtop .done { display:none; }
     .rc2-rails { flex:none; padding:0 12px 6px; overflow:hidden; transition:max-height .25s, opacity .2s; max-height:260px; }
     #rcGallery.mini .rc2-rails { max-height:0; opacity:0; padding-bottom:0; pointer-events:none; }
     .rc2-rail { margin-bottom:6px; }
@@ -1621,9 +1625,16 @@
     .rc2-th .del svg { width:13px; height:13px; }
     #rcGallery.viewonly .rc2-add, #rcGallery.viewonly .rc2-th .del { display:none; }
     .rc2-rail .noshot { display:flex; align-items:center; height:46px; padding:0 12px; color:#6b7186; font-size:11px; font-weight:700; }
-    .rc2-stage { flex:1; display:flex; flex-direction:column; gap:6px; min-height:0; padding:0 10px 8px; }
-    .rc2-pane { flex:1; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border-top:3px solid var(--bfr); }
-    .rc2-pane.a { border-top-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
+    .rc2-stage { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; padding:2px 10px calc(10px + env(safe-area-inset-bottom,0)); }
+    /* 전 둘레 accent 테두리(과거 border-top 3px는 둥근 모서리에서 잘려 보였음 → 전체 테두리로 교체) */
+    .rc2-pane { flex:1; position:relative; border-radius:14px; overflow:hidden; background:#05060a; touch-action:none; cursor:grab; border:2.5px solid var(--bfr); }
+    .rc2-pane.a { border-color:var(--aft); } .rc2-pane:active { cursor:grabbing; }
+    /* 사진 뒤 '사진 추가' 슬라이드(옆으로 넘겨 도달 → 탭하면 추가) */
+    .rc2-pane .sl.addsl { display:flex; align-items:center; justify-content:center; background:#0a0c14; }
+    .rc2-addbig { display:flex; flex-direction:column; align-items:center; gap:9px; border:1.8px dashed rgba(255,255,255,.3); background:rgba(255,255,255,.04); color:#c9cee0; border-radius:16px; padding:22px 30px; font-size:13.5px; font-weight:850; cursor:pointer; }
+    .rc2-addbig svg { width:30px; height:30px; opacity:.85; } .rc2-addbig small { font-size:10.5px; opacity:.7; font-weight:700; }
+    .rc2-pane.onadd .ctl { display:none; }
+    .rc2-pane .dts i.hollow { background:transparent; border:1.4px solid rgba(255,255,255,.55); } .rc2-pane .dts i.hollow.on { background:#fff; border-color:#fff; width:16px; border-radius:3px; }
     .rc2-pane .trk { position:absolute; inset:0; display:flex; transition:transform .28s cubic-bezier(.22,.61,.36,1); }
     .rc2-pane.drag .trk { transition:none; }
     .rc2-pane .sl { flex:none; width:100%; height:100%; position:relative; overflow:hidden; }
@@ -2534,7 +2545,7 @@
 
   <!-- 라운드 점검: 전·후 사진 갤러리/비교 -->
   <div id="rcGallery" role="dialog" aria-modal="true" aria-label="전후 사진 비교">
-    <div class="rc2-gtop"><button class="bk" id="rcGvBack" aria-label="닫기">‹</button><div class="tt" id="rcGvTitle">카트 상태<small id="rcGvSub"></small></div><button class="tog" id="rcGvTog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"></path></svg><span class="x"></span></button></div>
+    <div class="rc2-gtop"><button class="bk" id="rcGvBack" aria-label="닫기">‹</button><div class="tt" id="rcGvTitle">카트 상태</div><button class="tog" id="rcGvTog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"></path></svg><span class="x"></span></button><button class="done" id="rcGvDone" type="button" disabled>미완료</button></div>
     <div class="rc2-rails">
       <div class="rc2-rail b" id="rcRailB"><div class="rl"><i></i>라운드 전<span class="n" id="rcRnB">0장</span></div><div class="rc2-strip" id="rcStripB"></div></div>
       <div class="rc2-rail a" id="rcRailA"><div class="rl"><i></i>라운드 후<span class="n" id="rcRnA">0장</span></div><div class="rc2-strip" id="rcStripA"></div></div>
