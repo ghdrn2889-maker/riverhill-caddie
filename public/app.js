@@ -2924,16 +2924,16 @@ function rcRenderPane(w) {
     const np = pane.querySelector('.np');
     if (np) {
       const s = np.querySelector('span'), sm = np.querySelector('small');
-      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; np.onclick = null; }
-      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; np.onclick = () => rcTapAdd(side); }  // 빈 프레임 = 네이티브 클릭(스와이프 오인식 없음)
+      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; }
+      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; }
+      np.onclick = null;   // 탭/스와이프는 pane pointerup 단일 핸들러가 판정(빈 프레임 탭 = 사진 추가)
     }
     rcSetLv(w, 1); rcZ[w] = { s: 1, x: 0, y: 0 }; return;
   }
   pane.classList.remove('empty');
   let html = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
-  if (addable) html += `<div class="sl addsl"><button type="button" class="rc2-addbig" data-addbig="${side}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 더 올려요</small></button></div>`;
-  trk.innerHTML = html;
-  trk.querySelectorAll('[data-addbig]').forEach((b) => { b.onclick = () => rcTapAdd(b.dataset.addbig); });  // 추가 슬라이드 버튼 = 네이티브 클릭
+  if (addable) html += `<div class="sl addsl"><div class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 더 올려요</small></div></div>`;
+  trk.innerHTML = html;   // 추가 슬라이드는 순수 표시용 div — 탭/스와이프는 pane 단일 핸들러가 판정
   const sel = rcSel[rcSubject][side];
   let dh = arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('');
   if (addable) dh += `<i class="hollow ${sel >= arr.length ? 'on' : ''}"></i>`;
@@ -3010,8 +3010,7 @@ function rcInitGallery() {
   ['top', 'bot'].forEach((w) => {
     const pane = rcPaneEl(w); const pts = new Map(); let startDist = 0, startScale = 1, lx = 0, ly = 0, swipeStartX = 0, swipeStartY = 0, maxMove = 0;
     pane.addEventListener('pointerdown', (e) => {
-      // 컨트롤·'사진 추가' 버튼·빈 프레임 안내는 캡처하지 않음 → 네이티브 클릭이 그대로 발생(스와이프로 오인식 안 됨)
-      if (e.target.closest('.ctl') || e.target.closest('.rc2-addbig') || e.target.closest('.np')) return;
+      if (e.target.closest('.ctl')) return;   // 줌/삭제 컨트롤만 네이티브 클릭 — 그 외 전 영역은 단일 제스처(탭/스와이프) 핸들러가 담당
       pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { lx = e.clientX; ly = e.clientY; swipeStartX = e.clientX; swipeStartY = e.clientY; maxMove = 0; pane.classList.add('drag'); }
       else if (pts.size === 2) { const p = [...pts.values()]; startDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); startScale = rcZ[w].s; }
@@ -3028,12 +3027,17 @@ function rcInitGallery() {
       if (!pts.has(e.pointerId)) return; const wasSize = pts.size; pts.delete(e.pointerId);
       if (wasSize === 1) {
         pane.classList.remove('drag');
-        // 사진 추가는 네이티브 클릭(rc2-addbig/np)이 처리 → 여기선 사진 간 스와이프만 담당
-        if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {
-          const side = rcSideOf(w); const off = e.clientX - swipeStartX; const th = (pane.clientWidth || 1) * 0.18;
-          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);                     // 왼쪽 스와이프 → 다음
-          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);                 // 오른쪽 스와이프 → 이전
-          else rcPosTrack(w, true);                                                    // 작은 이동 → 제자리
+        const side = rcSideOf(w);
+        if (maxMove < 10) {                                                            // ── 탭(이동 거의 없음): 어디를 눌러도 일관 ──
+          const nPhoto = rcArr(rcSubject, side).length;
+          const onAdd = rcSel[rcSubject][side] >= nPhoto;                              // 추가 슬라이드 위
+          if (!rcViewOnly && (pane.classList.contains('empty') || onAdd)) rcTapAdd(side);  // 빈 프레임/추가 슬라이드 탭 → 사진 추가 팝업
+          else if (!pane.classList.contains('empty')) rcPosTrack(w, true);             // 사진 탭 → 제자리
+        } else if (rcZ[w].s <= 1 && !pane.classList.contains('empty')) {               // ── 스와이프: 어디서 시작해도 일관 ──
+          const off = e.clientX - swipeStartX; const th = (pane.clientWidth || 1) * 0.18;
+          if (off < -th) rcGoIndex(w, rcSel[rcSubject][side] + 1);                     // 왼쪽 → 다음
+          else if (off > th) rcGoIndex(w, rcSel[rcSubject][side] - 1);                 // 오른쪽 → 이전
+          else rcPosTrack(w, true);                                                    // 임계 미만 → 제자리
         }
       }
       if (pts.size === 1) { const p = [...pts.values()][0]; lx = p.x; ly = p.y; swipeStartX = p.x; swipeStartY = p.y; maxMove = 0; }
