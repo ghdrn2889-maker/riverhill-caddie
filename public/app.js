@@ -2907,35 +2907,46 @@ function rcRenderRail(side) {
   strip.querySelectorAll('[data-del]').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); rcAskDel(b.dataset.del, +b.dataset.i); }; });
   rcUpdateGalDone();
 }
-function rcUpdatePaneMeta(w, sel, nPhoto) {           // n/n (추가는 별도 버튼이라 슬라이드 개념 없음)
-  rcMeta(w).textContent = nPhoto ? `${sel + 1}/${nPhoto}` : '';
+function rcUpdatePaneMeta(w, sel, nPhoto) {           // 추가 프레임 위면 '사진 추가', 아니면 n/n
+  const onAdd = sel >= nPhoto;
+  rcPaneEl(w).classList.toggle('onadd', onAdd);
+  rcMeta(w).textContent = onAdd ? '사진 추가' : (nPhoto ? `${sel + 1}/${nPhoto}` : '');
+}
+function rcUpdateNav(w) {                             // 좌우 넘기기 버튼: 슬라이드(사진+추가프레임) 2개 이상일 때, 끝단은 해당 방향 숨김
+  const side = rcSideOf(w); const n = rcArr(rcSubject, side).length + (rcViewOnly ? 0 : 1); const sel = rcSel[rcSubject][side]; const pane = rcPaneEl(w);
+  const prev = pane.querySelector('.rc2-nav.prev'), next = pane.querySelector('.rc2-nav.next');
+  if (prev) prev.disabled = n <= 1 || sel <= 0;
+  if (next) next.disabled = n <= 1 || sel >= n - 1;
 }
 function rcRenderPane(w) {
   const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
   const pane = rcPaneEl(w), trk = rcTrk(w), dots = rcDots(w);
-  const slides = arr.length;                          // ★트랙 = 사진만. '사진 추가'는 캐러셀 밖 독립 버튼(rc2-fab/빈프레임 np)
+  const addable = !rcViewOnly;                        // 편집모드면 맨 뒤에 '사진 추가' 프레임 1칸
+  const slides = arr.length + (addable ? 1 : 0);
   if (rcSel[rcSubject][side] >= slides) rcSel[rcSubject][side] = Math.max(0, slides - 1);
-  if (!arr.length) {                                  // 사진 전무 → 빈 프레임(편집모드면 탭하여 추가)
-    pane.classList.add('empty');
+  if (!slides) {                                      // 조회모드 + 사진 0 → 빈 프레임
+    pane.classList.add('empty'); pane.classList.remove('onadd');
     trk.innerHTML = ''; dots.innerHTML = ''; rcMeta(w).textContent = '';
     const np = pane.querySelector('.np');
-    if (np) {
-      const s = np.querySelector('span'), sm = np.querySelector('small');
-      if (rcViewOnly) { if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; np.classList.remove('add'); np.onclick = null; }
-      else { if (s) s.textContent = '탭하여 사진 추가'; if (sm) sm.textContent = (w === 'top' ? '라운드 전' : '라운드 후') + ' 사진을 올려요'; np.classList.add('add'); np.onclick = () => rcTapAdd(side); }  // 빈 프레임 = 독립 네이티브 클릭(제스처 판정 없음)
-    }
+    if (np) { const s = np.querySelector('span'), sm = np.querySelector('small'); if (s) s.textContent = '사진 없음'; if (sm) sm.textContent = ''; np.onclick = null; }
     rcSetLv(w, 1); rcZ[w] = { s: 1, x: 0, y: 0 }; return;
   }
   pane.classList.remove('empty');
-  trk.innerHTML = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
+  let html = arr.map((f) => `<div class="sl"><div class="zm"><img loading="lazy" decoding="async" src="${rcUrl(f)}" alt=""></div></div>`).join('');
+  if (addable) html += `<div class="sl addsl"><div class="rc2-addbig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>사진 추가<small>${w === 'top' ? '라운드 전' : '라운드 후'} 사진을 올려요</small></div></div>`;
+  trk.innerHTML = html;
+  const addsl = trk.querySelector('.addsl'); if (addsl) addsl.onclick = () => rcTapAdd(side);   // ★프레임 전체가 하나의 탭 영역(네이티브 클릭) — 두 구역 충돌 없음
   const sel = rcSel[rcSubject][side];
-  dots.innerHTML = slides > 1 ? arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('') : '';
-  rcUpdatePaneMeta(w, sel, arr.length);
+  let dh = arr.map((f, i) => `<i class="${i === sel ? 'on' : ''}"></i>`).join('');
+  if (addable) dh += `<i class="hollow ${sel >= arr.length ? 'on' : ''}"></i>`;
+  dots.innerHTML = slides > 1 ? dh : '';
+  rcUpdatePaneMeta(w, sel, arr.length); rcUpdateNav(w);
   rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1); rcPosTrack(w, false); rcApplyZoom(w);
 }
 function rcSelectThumb(side, i) {
   const w = side === 'before' ? 'top' : 'bot';
-  if (rcTrk(w).children.length === rcArr(rcSubject, side).length) rcGoIndex(w, i);
+  const slides = rcArr(rcSubject, side).length + (rcViewOnly ? 0 : 1);
+  if (rcTrk(w).children.length === slides) rcGoIndex(w, i);
   else { rcSel[rcSubject][side] = i; rcRenderPane(w); rcRenderRail(side); }
 }
 function rcPosTrack(w, anim) { const side = rcSideOf(w); const trk = rcTrk(w); trk.style.transition = anim ? '' : 'none'; trk.style.transform = `translateX(-${rcSel[rcSubject][side] * 100}%)`; if (!anim) requestAnimationFrame(() => { trk.style.transition = ''; }); }
@@ -2945,13 +2956,13 @@ function rcSetLv(w, s) { const lv = rcPaneEl(w).querySelector('.ctl .lv'); if (l
 function rcZoomBtn(w, f) { const s = rcZ[w]; s.s = Math.max(1, Math.min(6, s.s * f)); if (s.s === 1) { s.x = 0; s.y = 0; } rcApplyZoom(w); rcSetLv(w, s.s); }
 function rcGoIndex(w, ni) {
   const side = rcSideOf(w); const arr = rcArr(rcSubject, side);
-  const slides = arr.length;
+  const slides = arr.length + (rcViewOnly ? 0 : 1);
   ni = Math.max(0, Math.min(slides - 1, ni));
   if (ni === rcSel[rcSubject][side]) { rcPosTrack(w, true); return; }
   rcSel[rcSubject][side] = ni; rcZ[w] = { s: 1, x: 0, y: 0 }; rcSetLv(w, 1);
   rcUpdatePaneMeta(w, ni, arr.length);
   [...rcDots(w).children].forEach((d, i) => d.classList.toggle('on', i === ni));
-  rcPosTrack(w, true); rcRenderRail(side); rcApplyZoom(w);
+  rcPosTrack(w, true); rcRenderRail(side); rcApplyZoom(w); rcUpdateNav(w);
 }
 function rcDelCurrent(w) { const side = rcSideOf(w); if (!rcArr(rcSubject, side).length) return; rcAskDel(side, rcSel[rcSubject][side]); }
 function rcTapAdd(side) {
@@ -2998,11 +3009,11 @@ function rcInitGallery() {
   $('rcDelNo').onclick = () => { $('rcConfirm').classList.remove('on'); rcPendingDel = null; };
   document.querySelectorAll('#rcGallery .ctl [data-z]').forEach((b) => { b.onclick = () => rcZoomBtn(b.dataset.z, b.dataset.f === 'in' ? 1.5 : 1 / 1.5); });
   document.querySelectorAll('#rcGallery .ctl [data-del]').forEach((b) => { b.onclick = () => rcDelCurrent(b.dataset.del); });
-  document.querySelectorAll('#rcGallery [data-fab]').forEach((b) => { b.onclick = () => rcTapAdd(b.dataset.fab === 'top' ? 'before' : 'after'); });   // 사진 추가 = 캐러셀 밖 독립 버튼(네이티브 클릭)
+  document.querySelectorAll('#rcGallery [data-nav]').forEach((b) => { const w = b.dataset.nav, d = +b.dataset.d; b.onclick = () => rcGoIndex(w, rcSel[rcSubject][rcSideOf(w)] + d); });   // 좌우 넘기기 버튼(네이티브 클릭)
   ['top', 'bot'].forEach((w) => {
     const pane = rcPaneEl(w); const pts = new Map(); let startDist = 0, startScale = 1, lx = 0, ly = 0, swipeStartX = 0, swipeStartY = 0, maxMove = 0;
     pane.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.ctl') || e.target.closest('.rc2-fab') || e.target.closest('.np')) return;   // 컨트롤·추가버튼·빈프레임은 캐러셀 밖 독립 네이티브 클릭 → 캡처 안 함
+      if (e.target.closest('.ctl') || e.target.closest('.rc2-nav') || e.target.closest('.addsl') || e.target.closest('.np')) return;   // 컨트롤·넘기기 버튼·추가 프레임 전체·빈프레임은 네이티브 클릭 → 캡처 안 함(추가 프레임 뒤로가기는 '이전' 버튼)
       pane.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) { lx = e.clientX; ly = e.clientY; swipeStartX = e.clientX; swipeStartY = e.clientY; maxMove = 0; pane.classList.add('drag'); }
       else if (pts.size === 2) { const p = [...pts.values()]; startDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); startScale = rcZ[w].s; }
