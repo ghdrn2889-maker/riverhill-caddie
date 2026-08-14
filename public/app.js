@@ -1572,6 +1572,8 @@ function jDayBadge(d) {
 // 하루 → 편집기 초기 상태.
 function jDayToEdit(d) {
   const base = (!d) ? { kind: 'work', parts: ['3'] }
+    // ★당번·벌당이 최우선 — 순번상 휴무로 잡혀 있어도 편집기는 그날의 실제 역할을 보여야 한다.
+    : (d.duty && d.duty.kind) ? { kind: d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', parts: [d.duty.part || '3'] }
     : d.excluded ? { kind: 'removed', parts: [] }
     : d.kind === 'off' ? { kind: d.offType === 'sick' ? 'sick' : d.offType === 'vacation' ? 'vacation' : 'off', parts: [] }
     : d.kind === 'spare' ? { kind: 'spare', parts: [] }
@@ -1767,21 +1769,35 @@ function drawDayEditor() {
   const mdL = `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}(${dow})`;
   const isWork = jEdit.kind === 'work';
   const exists = !!jMap[key];
-  const KINDS = [['work', '근무', 'work'], ['spare', '스페어', 'spare'], ['off', '휴무', 'off'], ['vacation', '휴가', 'vac'], ['sick', '병가', 'sick'], ['removed', '순번 제외', 'removed']];
+  // ★당번·벌당 — 순번 근무는 아니지만 그날 7·13시간을 일한 날. '휴무'로만 남으면 일한 사실이 사라진다.
+  const KINDS = [['work', '근무', 'work'], ['spare', '스페어', 'spare'], ['dangbeon', '당번', 'dangbeon'], ['beoldang', '벌당', 'beoldang'],
+    ['off', '휴무', 'off'], ['vacation', '휴가', 'vac'], ['sick', '병가', 'sick'], ['removed', '순번 제외', 'removed']];
+  const isDuty = jEdit.kind === 'dangbeon' || jEdit.kind === 'beoldang';
+  const dutyKo = jEdit.kind === 'beoldang' ? '벌당' : '당번';
+  const dutyHrs = jEdit.kind === 'beoldang' ? 13 : 7;
   const res = jEdit.kind === 'del' ? '이 날 기록을 지웁니다'
     : isWork ? `${jCombo(jEdit.parts) || '부 선택'} · 캐디피 정산 자동 반영`
+    : isDuty ? `${jEdit.parts[0] || '부 선택'}${jEdit.parts.length ? '부' : ''} ${dutyKo} · ${dutyHrs}시간 · 무보수(정산 미반영)`
     : ({ spare: '스페어', off: '휴무', vacation: '휴가', sick: '병가', removed: '순번 제외' })[jEdit.kind];
   const showMood = jEdit.kind !== 'del' && jEdit.kind !== 'removed';
   const pen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
   ed.innerHTML = `<div class="jed-h">${mdL} <b>· 이 날 기록</b></div>
     <div class="jkinds">${KINDS.map(([k, lab, c]) => `<button class="jkbtn ${c}${jEdit.kind === k ? ' on' : ''}" data-k="${k}">${lab}</button>`).join('')}${exists ? `<button class="jkbtn jdel${jEdit.kind === 'del' ? ' on' : ''}" data-k="del">지우기</button>` : ''}</div>
     ${isWork ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts.includes(p) ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">그날 뛴 부를 다 누르세요 · 여러 개 = 복수 근무(2·3부·54)</div></div>` : ''}
+    ${isDuty ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts[0] === p ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">${dutyKo}는 부에 따라 출근 시각이 정해져요 · 하나만 고르세요</div></div>` : ''}
     ${showMood ? `<div class="jmood"><div class="jmood-l">${pen}오늘의 기분과 한 줄</div><div class="jmoods">${JMOODS.map((m) => `<button class="jmoodbtn${jEdit.mood === m.k ? ' on' : ''}" data-m="${m.k}"><span class="fw">${jFaceSVG(m.k, 36)}</span><em>${m.l}</em></button>`).join('')}</div><div class="jmemo-ip"><input id="jMemoIn" maxlength="60" placeholder="그날의 순간을 한 줄로…" value="${esc(jEdit.memo || '')}"><span class="jmemo-cnt" id="jMemoCnt"></span></div></div>` : ''}
     <div class="jed-res${isWork && !jEdit.parts.length ? ' muted' : ''}">→ ${res}</div>
     <button class="jed-save">${exists ? '저장' : '추가'}</button>`;
   ed.hidden = false; if ($('jHint')) $('jHint').hidden = true;
-  ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.kind = b.dataset.k; if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3']; drawDayEditor(); }; });
-  ed.querySelectorAll('.jpchip[data-p]').forEach((b) => { b.onclick = () => { jSyncMemo(); const p = b.dataset.p, i = jEdit.parts.indexOf(p); if (i >= 0) jEdit.parts.splice(i, 1); else jEdit.parts.push(p); if (!jEdit.parts.length) jEdit.parts = [p]; drawDayEditor(); }; });
+  ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.kind = b.dataset.k;
+    if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3'];
+    // 당번·벌당은 한 부만(부에 따라 출근 시각이 정해짐) — 복수 선택 상태로 넘어왔으면 하나로 줄인다.
+    if ((jEdit.kind === 'dangbeon' || jEdit.kind === 'beoldang')) jEdit.parts = [jEdit.parts[0] || '3'];
+    drawDayEditor(); }; });
+  ed.querySelectorAll('.jpchip[data-p]').forEach((b) => { b.onclick = () => { jSyncMemo(); const p = b.dataset.p;
+    if (isDuty) { jEdit.parts = [p]; drawDayEditor(); return; }        // 당번·벌당 = 단일 선택
+    const i = jEdit.parts.indexOf(p); if (i >= 0) jEdit.parts.splice(i, 1); else jEdit.parts.push(p);
+    if (!jEdit.parts.length) jEdit.parts = [p]; drawDayEditor(); }; });
   ed.querySelectorAll('.jmoodbtn[data-m]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.mood = (jEdit.mood === b.dataset.m ? '' : b.dataset.m); drawDayEditor(); }; });
   const mi = $('jMemoIn'); if (mi) { const cnt = $('jMemoCnt'); const upd = () => { jEdit.memo = mi.value; if (cnt) cnt.textContent = `${mi.value.length}/60`; }; mi.oninput = upd; upd(); }
   ed.querySelector('.jed-save').onclick = () => saveDayEditor();
@@ -1795,7 +1811,13 @@ async function saveDayEditor() {
     if (e.kind === 'del') { await postJSON('/api/journal/remove', { date }); }
     else {
       if (e.kind === 'work') { await postJSON('/api/journal/kind', { date, kind: 'work' }); await postJSON('/api/ledger/dayparts', { date, parts: e.parts.slice().sort() }); }
-      else { await postJSON('/api/journal/kind', { date, kind: e.kind }); await postJSON('/api/ledger/dayparts', { date, parts: [] }); }
+      // ★당번·벌당 — 순번 근무가 아니므로 kind는 휴무로 두고 duty를 얹는다(무보수라 정산 부는 비운다).
+      else if (e.kind === 'dangbeon' || e.kind === 'beoldang') {
+        await postJSON('/api/journal/kind', { date, kind: 'off' });
+        await postJSON('/api/journal/duty', { date, kind: e.kind === 'beoldang' ? '벌당' : '당번', part: e.parts[0] || '3' });
+        await postJSON('/api/ledger/dayparts', { date, parts: [] });
+      }
+      else { await postJSON('/api/journal/kind', { date, kind: e.kind }); await postJSON('/api/journal/duty', { date, kind: '' }); await postJSON('/api/ledger/dayparts', { date, parts: [] }); }
       if (e.kind !== 'removed') await postJSON('/api/journal/note', { date, memo: e.memo || '', mood: e.mood || '' });   // ★그날 기분·메모(비파괴적)
     }
   } catch { /* noop */ }

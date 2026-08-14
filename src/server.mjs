@@ -256,6 +256,17 @@ app.post('/api/journal/kind', (req, res) => {
   const day = journal.setDayKind(date, kind, uid);
   res.json({ ok: true, day });
 });
+// 그날의 당번·벌당 지정(일지 수동 보정) — kind 빈값이면 해제. 순번 근무 상태는 안 건드린다.
+app.post('/api/journal/duty', (req, res) => {
+  const { date, kind, part } = req.body || {};
+  const uid = req.user?.id || 1;
+  const k = String(kind || '').trim();
+  if (k && !dutyMod.DUTY_KINDS.includes(k)) return res.status(400).json({ error: '종류는 당번 또는 벌당' });
+  const day = journal.setDayDuty(date, k ? { kind: k, part } : null, uid);
+  // 오늘 날짜면 히어로용 duty 저장소도 함께 맞춘다(일지에서 고쳤는데 홈은 그대로이던 어긋남 방지).
+  if (date === todayISOKST()) dutyMod.saveDuty(uid, date, k, part || '', 'admin');
+  res.json({ ok: true, day });
+});
 // 그날의 한 줄 메모·기분(mood) 저장 — 근무 상태는 안 건드리고 memo/mood만 병합(비파괴적).
 app.post('/api/journal/note', (req, res) => {
   const { date, memo, mood } = req.body || {};
