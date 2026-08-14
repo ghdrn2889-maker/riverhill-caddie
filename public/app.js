@@ -1560,6 +1560,9 @@ function jCombo(parts) { if (!parts || !parts.length) return ''; if (parts.lengt
 // 하루 → [배지 색클래스, 라벨]. 기록 없으면 null.
 function jDayBadge(d) {
   if (!d) return null;
+  // ★당번·벌당이 최우선 — 순번상으론 휴무로 잡히지만 그날 7·13시간을 실제로 일한 날이다.
+  //  '휴무'로만 남으면 일한 사실이 기록에서 사라진다.
+  if (d.duty && d.duty.kind) return [d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', d.duty.kind];
   if (d.excluded) return ['removed', '제외'];   // 셀은 좁아 짧게(편집기 칩은 '순번 제외' 그대로)
   if (d.kind === 'off') return d.offType === 'sick' ? ['sick', '병가'] : d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
   if (d.kind === 'spare') return ['spare', '스페어'];

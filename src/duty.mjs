@@ -6,6 +6,7 @@
 //  interpretForMember가 회원 이름으로 찾아 v.myDuty로 얹는다. 저장은 today.myDuty.
 
 import { loadUserJSON, saveUserJSON } from './store.mjs';
+import { setDayDuty } from './journal.mjs';
 
 export const DUTY_KINDS = ['당번', '벌당'];
 
@@ -22,9 +23,16 @@ export function loadDuty(userId, todayISO) {
 //  ★admin이 넣은 값은 그날 자동판독이 덮지 못한다 — 안 그러면 수동 교정이 90초 뒤 배치표 재판독에 지워진다.
 export function saveDuty(userId, date, kind, part, by = 'admin') {
   const k = String(kind || '').trim(), p = String(part || '').replace(/[^123]/g, '');
-  if (!k) { saveUserJSON(userId, FILE, null); return null; }   // 빈 값 = 해제
-  const rec = { date: String(date || ''), kind: k, part: p, by, at: Date.now() };
+  const d = String(date || '');
+  if (!k) {
+    saveUserJSON(userId, FILE, null);                       // 빈 값 = 해제
+    try { if (d) setDayDuty(d, null, userId); } catch { /* 일지 기록 실패는 무해 */ }
+    return null;
+  }
+  const rec = { date: d, kind: k, part: p, by, at: Date.now() };
   saveUserJSON(userId, FILE, rec);
+  // ★근무 기록에도 남긴다 — 히어로에만 뜨고 일지에 안 남으면 그날 일한 사실이 사라진다.
+  try { if (d) setDayDuty(d, { kind: k, part: p }, userId); } catch { /* 무해 */ }
   return rec;
 }
 // 오늘 이 회원의 당번이 '관리자 확정'인가 — 자동판독이 건너뛸지 판단.

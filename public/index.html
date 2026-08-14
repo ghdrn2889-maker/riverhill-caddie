@@ -386,6 +386,9 @@
     .jcbd.off { background:#ffe985; color:#7a5a00; } .jcbd.vac { background:#c3e39a; color:#33610f; }
     .jcbd.sick { background:#5f9e6a; color:#fff; }
     .jcbd.spare { background:#fdf3df; color:#8a5d14; } .jcbd.removed { background:#eceef0; color:#8a97a0; }
+    /* 당번·벌당 — 순번 근무와 별개인 그날의 역할(금색 계열). 벌당은 13시간이라 더 진하게. */
+    .jcbd.dangbeon { background:#f3ead0; color:#7a5f16; } .jcbd.beoldang { background:#d9a441; color:#3c2a05; }
+    .jk.dangbeon { background:#f3ead0; color:#7a5f16; } .jk.beoldang { background:#d9a441; color:#3c2a05; }
     .jcal-legend { display:flex; flex-wrap:wrap; gap:5px 10px; margin-top:11px; font-size:9.5px; color:#7a857c; }
     .jcal-legend i { display:inline-block; width:9px; height:9px; border-radius:3px; vertical-align:-1px; margin-right:3px; }
     .jcal-hint { margin-top:12px; border-top:1px dashed #e6ebe4; padding-top:12px; font-size:11px; color:#9aa49c; text-align:center; }
@@ -2369,7 +2372,7 @@
         <div id="jSub" class="wl-sub"></div>
         <div class="jcal" id="jCal"></div>
         <div class="jcal-legend">
-          <span><i style="background:#e9e2fb"></i>3부</span><span><i style="background:#fbe2ee"></i>1부</span><span><i style="background:#dcecfb"></i>2부·2·3</span><span><i style="background:#ffc9e2"></i>1·3</span><span><i style="background:#e6f3c9"></i>54</span><span><i style="background:#ffe985"></i>휴무</span><span><i style="background:#5f9e6a"></i>병가</span><span><i style="background:#fdf3df"></i>스페어</span>
+          <span><i style="background:#e9e2fb"></i>3부</span><span><i style="background:#fbe2ee"></i>1부</span><span><i style="background:#dcecfb"></i>2부·2·3</span><span><i style="background:#ffc9e2"></i>1·3</span><span><i style="background:#e6f3c9"></i>54</span><span><i style="background:#ffe985"></i>휴무</span><span><i style="background:#5f9e6a"></i>병가</span><span><i style="background:#fdf3df"></i>스페어</span><span><i style="background:#f3ead0"></i>당번</span><span><i style="background:#d9a441"></i>벌당</span>
         </div>
         <div class="jedit-cal" id="jEditor" hidden></div>
         <div class="jcal-hint" id="jHint">날짜를 눌러 그날 근무를 기록하세요 · 이미 있는 날은 눌러서 수정</div>

@@ -92,6 +92,23 @@ export function setDayNote(dateISO, patch = {}, userId = 1) {
   return next;
 }
 
+// ★당번·벌당 기록 — 그날의 '역할'. 순번 근무(work/spare/off)와 별개 축이라 kind를 덮지 않고
+//  duty 필드로 얹는다(memo/mood와 같은 비파괴 병합). 당번인 사람은 순번상 휴무로 잡히는데,
+//  일지에 '휴무'로만 남으면 그날 7·13시간을 일한 사실이 사라진다.
+//  duty가 빈 값이면 그날 역할을 지운다(배정 해제).
+export function setDayDuty(dateISO, duty, userId = 1) {
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return null;
+  const j = loadUserJSON(userId, FILE, {});
+  const prev = j[dateISO] || { date: dateISO };
+  const next = { ...prev, date: dateISO, updatedAt: Date.now() };
+  const k = String((duty && duty.kind) || '').trim();
+  if (k) next.duty = { kind: k, part: String((duty && duty.part) || '').replace(/[^123]/g, '') };
+  else delete next.duty;
+  j[dateISO] = next;
+  saveUserJSON(userId, FILE, j);
+  return next;
+}
+
 // ★수동 보정 — 사용자가 일지에서 그날 분류를 직접 지정(근무/스페어/휴무/휴가/순번 제외).
 //  userKind:true 로 표식해 이후 자동 판독이 덮지 않게 한다(수동 우선). null 지정 시 자동으로 되돌림.
 const MANUAL_KINDS = { work: 'work', spare: 'spare', off: 'off', vacation: 'off', sick: 'off', removed: 'off' };
