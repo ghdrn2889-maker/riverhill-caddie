@@ -431,6 +431,22 @@
     .jkbtn.on.dangbeon, .jkbtn.on.beoldang { background:#f5811f; color:#fff; border-color:#dd6f10; }
     /* ★[hidden]이 먹도록 — .rc-g2/.rc2-sect가 display:grid/flex라 UA의 display:none을 덮어쓴다. */
     #rcPhotoSect[hidden], #rcPhotoCards[hidden] { display:none !important; }
+    /* ★도장이 찍힌 날은 잠근다 — 안 잠그면 체크·사진·카트번호가 그대로 눌려 모르는 사이 도장이 풀린다.
+       (서버 mutate가 변경 시 stampedAt을 지우도록 설계돼 있어, 실수 한 번에 완료 기록이 사라졌다.)
+       고치려면 완료 표식의 '수정하기'를 눌러 명시적으로 잠금을 풀어야 한다. */
+    #view-cart.rc-locked .rc2-grid,
+    #view-cart.rc-locked #rcPhotoCards,
+    #view-cart.rc-locked #rcLostItems,
+    #view-cart.rc-locked #rcLostAdd,
+    #view-cart.rc-locked .heroface,
+    #view-cart.rc-locked #rcEditItems,
+    #view-cart.rc-locked #rcStampBtn { pointer-events:none; }
+    #view-cart.rc-locked .rc2-grid,
+    #view-cart.rc-locked #rcPhotoCards,
+    #view-cart.rc-locked #rcLostAdd { opacity:.62; filter:grayscale(.25); }
+    .rc-donebar .lockbtn { flex:none; font:inherit; font-size:11.5px; font-weight:850; color:#0a5f46;
+      background:#fff; border:1px solid #bfe3cd; border-radius:9px; padding:7px 11px; cursor:pointer; }
+    .rc-donebar .lockbtn:active { filter:brightness(.96); }
     /* 근무 완료 표식 — 도장을 닫은 뒤에도 그날이 저장·완료됐음을 계속 보여준다. 눌러 도장 다시 보기. */
     .rc-donebar { display:flex; align-items:center; gap:10px; width:100%; margin:10px 0 2px; padding:12px 14px;
       border-radius:14px; background:#eaf7ef; border:1px solid #bfe3cd; text-align:left; font:inherit; cursor:pointer;

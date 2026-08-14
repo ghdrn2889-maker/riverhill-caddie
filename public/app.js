@@ -2960,16 +2960,25 @@ function rcSyncStamp(st) {
   if (!rcStampJustShown) ov.classList.remove('on', 'slam');
   rcStampJustShown = false;
   // 완료 표식 — 도장을 닫아도 '저장됐다'가 남게. 저장 시각까지 보여줘야 기록으로 믿긴다.
+  //  ★도장이 찍힌 날은 화면을 잠근다. 안 그러면 체크 하나만 잘못 눌러도 완료 기록이 조용히 풀린다.
+  const at = ccDay && ccDay.stampedAt;
+  const view = $('view-cart'); if (view) view.classList.toggle('rc-locked', !!at);
   const db = $('rcDoneBar');
   if (db) {
-    const at = ccDay && ccDay.stampedAt;
     db.hidden = !at;
     if (at) {
       const t = new Date(at), hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0');
       db.innerHTML = '<span class="ic"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>'
-        + `<span class="tx"><b>근무 완료로 저장됐어요</b><span>${esc(rcDateKo(ccDate))} · ${hh}:${mm} 저장</span></span>`
-        + '<span class="go">도장 보기 ›</span>';
-      db.onclick = () => rcShowStampAnimated();
+        + `<span class="tx"><b>근무 완료로 저장됐어요</b><span>${esc(rcDateKo(ccDate))} · ${hh}:${mm} 저장 · 잠김</span></span>`
+        + '<button class="lockbtn" id="rcUnlock" type="button">수정하기</button>';
+      db.onclick = (e) => { if (!e.target.closest('#rcUnlock')) rcShowStampAnimated(); };
+      const ub = $('rcUnlock');
+      if (ub) ub.onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm('수정하려면 근무 완료를 해제해야 해요.\n해제 후 고치고 다시 완료 도장을 찍어주세요.')) return;
+        try { const r = await postJSON('/api/cartcheck/stamp', { date: ccDate, stamped: false }); if (r && r.day) ccDay = r.day; } catch { /* noop */ }
+        rcCloseStamp(); rcRenderDash();
+      };
     }
   }
   if (miss) miss.classList.remove('on');                                         // 미완료 안내는 저장 시도 때만 노출
