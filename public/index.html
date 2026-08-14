@@ -67,11 +67,15 @@
     /* ── ★오늘의 기록 위젯(접힌 메모지) ──
        기록은 앱 안에서 유일하게 '종이 결'(크림·금색·Georgia 이탤릭)로 제 정체성을 갖는다.
        민트로 통일하면 그 정체성이 죽어서, 여기서도 종이 결을 그대로 유지한다. 우상단은 접힌 모서리. */
-    .jw2 { position:relative; width:100%; display:block; text-align:left; font:inherit; color:inherit; cursor:pointer;
+    .jw2 { position:relative; width:100%; display:block; color:inherit;
            background:#fffdf6; border:1px solid #ece2c9; border-radius:18px; padding:15px 16px 16px; margin-top:10px;
-           overflow:hidden; box-shadow:0 4px 14px rgba(120,100,50,.07); -webkit-tap-highlight-color:transparent;
-           transition:transform .07s ease, background .16s ease; }
-    .jw2:active { transform:translateY(1px) scale(.996); background:#fefaef; }
+           overflow:hidden; box-shadow:0 4px 14px rgba(120,100,50,.07);
+           transition:background .16s ease; }
+    /* 카드 안에 입력·버튼이 들어가므로 '누르는 면'은 요약부만(버튼 안에 버튼은 못 넣는다) */
+    .jw2-tap { display:block; width:100%; text-align:left; font:inherit; color:inherit; background:none; border:0; padding:0;
+               cursor:pointer; -webkit-tap-highlight-color:transparent; transition:transform .07s ease; }
+    .jw2-tap:active { transform:translateY(1px) scale(.996); }
+    .jw2.open { background:#fefaef; }
     .jw2-lb { display:block; font-size:9px; font-weight:850; letter-spacing:.13em; color:#b0a079; }
     .jw2-rule { display:flex; align-items:flex-start; gap:12px; margin-top:11px; border-top:1px dashed #e4d9bf; padding-top:12px; }
     .jw2-tx { flex:1; min-width:0; font-family:Georgia,"Times New Roman",serif; font-style:italic; font-size:15px;
@@ -85,6 +89,20 @@
     .jw2-fw { flex:none; text-align:center; }
     .jw2-mlab { display:block; font-size:10px; font-weight:800; color:#a08a5f; margin-top:4px; }
     .jw2-foot { display:block; font-size:10.5px; color:#a89873; margin-top:10px; }
+    .jw2-foot.saved { color:#0c8f6a; font-weight:800; }
+    /* 제자리 쓰기 — 기분·한 줄 입력은 기록 탭 편집기(.jmoods/.jmemo-ip)를 그대로 재사용해 모양이 갈라지지 않게 */
+    .jw2-ed { display:block; margin-top:12px; border-top:1px dashed #e4d9bf; padding-top:12px; animation:jw2in .18s ease; }
+    @keyframes jw2in { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:none; } }
+    .jw2-act { display:flex; align-items:center; gap:10px; margin-top:12px; }
+    .jw2-more { flex:1; min-width:0; text-align:left; background:none; border:0; padding:0; font:inherit;
+                font-size:11px; font-weight:750; color:#a89873; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .jw2-save { flex:none; border:0; border-radius:11px; padding:10px 20px; background:#0c8f6a; color:#fff;
+                font:inherit; font-size:13px; font-weight:850; cursor:pointer; -webkit-tap-highlight-color:transparent;
+                transition:transform .07s ease, background .16s ease; }
+    .jw2-save:active { transform:translateY(1px) scale(.98); }
+    .jw2-save:disabled { background:#e9e0c8; color:#b3a684; cursor:default; transform:none; }
+    /* ★[hidden]은 display 선언에 진다 — 숨길 수 있는 요소는 반드시 여기에 함께 적는다 */
+    .jw2-ed[hidden] { display:none !important; }
 
     /* ── 하루 흐름(다중 라운드) — 미니맵·라운드사이·라운드 카드. 부별 색(1부 분홍·2부 하늘·3부 보라) ── */
     :root { --p1c:#c14b86; --p2c:#1f6bb0; --p3c:#6a4bbf; }
@@ -2377,12 +2395,26 @@
       </div>
 
       <!-- ★오늘의 기록 위젯 — 안 썼으면 한 줄을 청하고, 썼으면 표정과 그 말이 그대로 남는다.
-           탭하면 근무 기록의 오늘 편집기가 바로 열린다. -->
-      <button class="jw2" id="hwJournal" type="button" aria-label="오늘의 기록 — 근무 기록으로 이동">
-        <span class="jw2-lb">오늘의 기록</span>
-        <span class="jw2-rule" id="hwJRule"></span>
-        <span class="jw2-foot" id="hwJFoot">기분을 고르고 그날의 순간을 적어요</span>
-      </button>
+           ★탭하면 탭 이동 없이 '그 자리에서' 바로 쓴다(기분 5종 + 한 줄). 한 줄 남기려고
+           기록 탭까지 들어갔다 나오는 왕복이 사라진다. 더 손볼 게 있으면 아래 '기록 탭에서 자세히'. -->
+      <section class="jw2" id="hwJournal">
+        <button class="jw2-tap" id="hwJTap" type="button" aria-expanded="false" aria-controls="hwJEd" aria-label="오늘의 기록 — 여기서 바로 쓰기">
+          <span class="jw2-lb">오늘의 기록</span>
+          <span class="jw2-rule" id="hwJRule"></span>
+          <span class="jw2-foot" id="hwJFoot">기분을 고르고 그날의 순간을 적어요</span>
+        </button>
+        <div class="jw2-ed" id="hwJEd" hidden>
+          <div class="jmoods" id="hwJMoods"></div>
+          <div class="jmemo-ip">
+            <input id="hwJIn" maxlength="60" placeholder="그날의 순간을 한 줄로…" autocomplete="off" enterkeyhint="done">
+            <span class="jmemo-cnt" id="hwJCnt">0/60</span>
+          </div>
+          <div class="jw2-act">
+            <button class="jw2-more" id="hwJMore" type="button">기록 탭에서 자세히</button>
+            <button class="jw2-save" id="hwJSave" type="button">저장</button>
+          </div>
+        </div>
+      </section>
 
       <div id="notifyNudge" class="nudge" hidden></div>
 

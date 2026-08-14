@@ -2098,10 +2098,11 @@ function renderHomeJournal() {
   const rule = $('hwJRule'), foot = $('hwJFoot'); if (!rule || !foot) return;
   const memo = (hwJournal && hwJournal.memo) ? String(hwJournal.memo).trim() : '';
   const mood = (hwJournal && hwJournal.mood) ? hwJournal.mood : '';
+  foot.classList.remove('saved');
   if (!memo && !mood) {
     rule.innerHTML = '<span class="jw2-ask">오늘 하루, 한 줄 남겨볼까요…</span>'
       + '<span class="jw2-pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>';
-    foot.textContent = '기분을 고르고 그날의 순간을 적어요';
+    foot.textContent = hwJOpen ? '기분을 고르고 한 줄을 적은 뒤 저장을 눌러요' : '탭하면 여기서 바로 적을 수 있어요';
     return;
   }
   const m = jMoodOf(mood);
@@ -2110,7 +2111,80 @@ function renderHomeJournal() {
     ? `<span class="jw2-tx"><span class="q">“</span>${esc(memo)}<span class="q">”</span></span>`
     : '<span class="jw2-tx none">기분만 남겼어요 — 한 줄도 적어볼까요</span>';
   rule.innerHTML = tx + fw;
-  foot.textContent = '탭하면 오늘 기록을 이어서 손봐요';
+  foot.textContent = hwJOpen ? '고치고 저장을 누르면 바로 반영돼요' : '탭하면 여기서 바로 고칠 수 있어요';
+}
+
+// ── ★제자리 쓰기 — 위젯을 탭하면 탭 이동 없이 카드 안에서 바로 기분·한 줄을 남긴다 ──
+//  ★기분 버튼·입력칸은 기록 탭 편집기의 JMOODS·jFaceSVG·.jmoods/.jmemo-ip를 그대로 재사용.
+//   위젯 전용 얼굴·입력칸을 새로 만들면 두 화면의 모양과 규칙이 갈라진다(위젯 숫자를 따로 계산하지 않는 것과 같은 이유).
+let hwJOpen = false, hwJDraft = null, hwJSaveTm = null;
+
+function hwJDirty() {
+  if (!hwJDraft) return false;
+  const om = (hwJournal && hwJournal.memo) ? String(hwJournal.memo) : '';
+  const od = (hwJournal && hwJournal.mood) ? String(hwJournal.mood) : '';
+  return hwJDraft.memo.trim() !== om.trim() || hwJDraft.mood !== od;
+}
+function hwJPaint() {
+  const box = $('hwJMoods'); if (!box || !hwJDraft) return;
+  box.innerHTML = JMOODS.map((m) => `<button class="jmoodbtn${hwJDraft.mood === m.k ? ' on' : ''}" type="button" data-m="${m.k}"><span class="fw">${jFaceSVG(m.k, 34)}</span><em>${esc(m.l)}</em></button>`).join('');
+  box.querySelectorAll('.jmoodbtn[data-m]').forEach((b) => {
+    b.onclick = () => { hwJDraft.mood = (hwJDraft.mood === b.dataset.m ? '' : b.dataset.m); hwJPaint(); };  // 다시 누르면 해제
+  });
+  const cnt = $('hwJCnt'); if (cnt) cnt.textContent = `${hwJDraft.memo.length}/60`;
+  const sv = $('hwJSave'); if (sv) sv.disabled = !hwJDirty();
+}
+function hwJClose() {
+  hwJOpen = false; hwJDraft = null;
+  const ed = $('hwJEd'), card = $('hwJournal'), tap = $('hwJTap');
+  if (ed) ed.hidden = true;
+  if (card) card.classList.remove('open');
+  if (tap) tap.setAttribute('aria-expanded', 'false');
+  renderHomeJournal();
+}
+function hwJToggle() {
+  if (hwJOpen) { hwJClose(); return; }
+  const ed = $('hwJEd'), card = $('hwJournal'), tap = $('hwJTap'), ip = $('hwJIn');
+  if (!ed || !ip) { showView('worklog'); jWriteToday().catch(() => {}); return; }   // 마크업이 옛 버전이면 종전대로 탭 이동
+  hwJOpen = true;
+  hwJDraft = { memo: (hwJournal && hwJournal.memo) ? String(hwJournal.memo) : '', mood: (hwJournal && hwJournal.mood) || '' };
+  ip.value = hwJDraft.memo;
+  ip.oninput = () => { hwJDraft.memo = ip.value; const c = $('hwJCnt'); if (c) c.textContent = `${ip.value.length}/60`; const s = $('hwJSave'); if (s) s.disabled = !hwJDirty(); };
+  ip.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ip.blur(); hwJSave(); } };
+  ed.hidden = false;
+  if (card) card.classList.add('open');
+  if (tap) tap.setAttribute('aria-expanded', 'true');
+  hwJPaint(); renderHomeJournal();
+  // 키보드가 올라오며 카드가 가려지지 않게 — 펼친 뒤 한 박자 두고 화면 안으로.
+  setTimeout(() => { try { ed.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); ip.focus({ preventScroll: true }); } catch { /* 무해 */ } }, 90);
+}
+async function hwJSave() {
+  if (!hwJDraft) return;
+  const sv = $('hwJSave'); const memo = hwJDraft.memo.trim().slice(0, 60), mood = hwJDraft.mood;
+  if (sv) { sv.disabled = true; sv.textContent = '저장 중…'; }
+  try {
+    await postJSON('/api/journal/note', { date: jTodayISO(), memo, mood });
+  } catch {
+    if (sv) { sv.textContent = '저장'; sv.disabled = false; }
+    const f = $('hwJFoot'); if (f) { f.classList.remove('saved'); f.textContent = '저장하지 못했어요 — 잠시 뒤 다시 눌러주세요'; }
+    return;
+  }
+  if (sv) sv.textContent = '저장';
+  // 홈 위젯 즉시 반영 + 기록 탭 캐시도 같이 맞춘다(홈에서 쓴 글이 기록 탭엔 없던 어긋남 방지).
+  hwJournal = { ...(hwJournal || { date: jTodayISO() }), memo, mood };
+  const iso = jTodayISO();
+  if (typeof jMap === 'object' && jMap) {
+    if (jMap[iso]) { jMap[iso].memo = memo; jMap[iso].mood = mood; }
+    else if (jCache && Array.isArray(jCache.days)) { const d = { date: iso, memo, mood }; jCache.days.push(d); jMap[iso] = d; }
+  }
+  hwJClose();
+  const f = $('hwJFoot');
+  if (f) {
+    f.classList.add('saved');
+    f.textContent = memo || mood ? '오늘 기록을 저장했어요' : '오늘 기록을 비웠어요';
+    clearTimeout(hwJSaveTm);
+    hwJSaveTm = setTimeout(() => renderHomeJournal(), 2600);
+  }
 }
 
 function renderHomeWidgets() {
@@ -2154,7 +2228,8 @@ async function loadHomeWidgets() {
     hwPay = { revenueTotal: Number(cur.revenueTotal) || 0, workedDays: Number(cur.workedDays) || 0, mom };
   } catch { /* 무해 — 직전 값 유지 */ }
   // 오늘의 기록 — 기록 탭과 같은 소스. 이번 달만 받아 오늘 하루치만 꺼낸다(연 전체는 불필요).
-  try {
+  //  ★쓰는 중에는 건너뛴다 — 갱신이 들어오면 입력 중인 초안의 기준값이 바뀌어 저장 버튼이 어긋난다.
+  if (!hwJOpen) try {
     const n = new Date(), y = n.getFullYear(), mo = n.getMonth() + 1;
     const r = await (await fetch(`/api/journal?year=${y}&month=${mo}`)).json();
     const iso = jTodayISO();
@@ -2165,11 +2240,13 @@ async function loadHomeWidgets() {
 }
 
 function initHomeWidgets() {
-  const c = $('hwCart'), p = $('hwPay'), j = $('hwJournal');
+  const c = $('hwCart'), p = $('hwPay');
   if (c) c.onclick = () => showView('cart');
   if (p) p.onclick = () => showView('settle');
-  // 기록 위젯 → 근무 기록 탭으로 이동한 뒤 '오늘' 편집기를 바로 연다(기록 카드의 쓰기 바와 같은 동작).
-  if (j) j.onclick = async () => { showView('worklog'); try { await jWriteToday(); } catch { /* 무해 */ } };
+  // ★기록 위젯 → 탭 이동 없이 카드 안에서 바로 쓴다. 더 손볼 게 있을 때만 '기록 탭에서 자세히'로 이동.
+  const jt = $('hwJTap'); if (jt) jt.onclick = hwJToggle;
+  const jm = $('hwJMore'); if (jm) jm.onclick = async () => { hwJClose(); showView('worklog'); try { await jWriteToday(); } catch { /* 무해 */ } };
+  const js = $('hwJSave'); if (js) js.onclick = hwJSave;
 }
 
 async function loadLedger() {
