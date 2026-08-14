@@ -865,7 +865,9 @@ function renderToday(t) {
   }
   // ★당번·벌당 — 순번 근무와 별개인 '그날의 역할'. 있으면 히어로를 통째로 당번 보드로 바꾸고 끝낸다.
   //  (당번인 사람은 당번 시간까지만 일하므로 순번 라운드 카드는 띄우지 않는다.)
-  if (t && t.duty && renderDutyHero(t.duty)) { renderRoundsStack(null); return; }
+  //  ★단 '오늘' 화면일 때만 — 내일 배치표가 뜨면 t.dayOffset이 1이 되는데, 그때까지 오늘 당번 보드를
+  //   붙들고 있으면 내일 근무를 못 본다(당번 끝난 뒤에도 '마쳤어요'가 계속 남던 문제).
+  if (t && t.duty && (Number(t.dayOffset) || 0) <= 0 && renderDutyHero(t.duty)) { renderRoundsStack(null); return; }
   $('todayHero').classList.remove('duty-live', 'duty-on');
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
@@ -4252,7 +4254,7 @@ async function main() {
   //  (시계는 당번 것, 그림은 휴무 것으로 섞이던 원인). 대신 당번 보드를 갱신해 시계도 최신으로 유지한다.
   setInterval(() => {
     tickDate(); refreshSky();
-    if (lastToday && lastToday.duty && renderDutyHero(lastToday.duty)) { /* 당번 보드 유지·시계 갱신 */ }
+    if (lastToday && lastToday.duty && (Number(lastToday.dayOffset) || 0) <= 0 && renderDutyHero(lastToday.duty)) { /* 당번 보드 유지·시계 갱신 */ }
     else if (lastToday) renderBoard(lastToday);
     if (document.body.classList.contains('on-board')) applyBoardSky();
   }, 20000);
