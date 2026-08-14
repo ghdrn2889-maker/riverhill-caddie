@@ -19,6 +19,7 @@ import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
+import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 
 loadEnv();
@@ -185,6 +186,8 @@ app.get('/api/user-dash', gate, (req, res) => {
         locked: (st._adminLock && dayKey(st.date) === dayKey(st._adminLock.dk)) ? Object.keys(st._adminLock.fields || {}).filter((k) => st._adminLock.fields[k]) : [],
         teeTime: heroTee, course: heroCourse, commute, commuteMin,
         rosterFound: !!rosterPos, updatedAt: st.updatedAt || 0, subCount,
+        duty: dutyMod.dutyForToday(m.id, todayISO),   // ★당번·벌당(그날의 역할) — 판독 오류 시 여기서 교정
+
         lastPush: lp ? { at: lp.at, title: lp.title || '', body: lp.body || '', level: lp.level || lp.push || '', sent: lp.sent ?? null, devices: lp.devices ?? null } : null,
         match,
       });
@@ -517,6 +520,21 @@ function stashNotify(pending) {
   pendingNotify[token] = { at: now, items: pending };
   return token;
 }
+// ★당번·벌당 수동 교정 — 하단 배정표 판독이 틀렸거나(부분 크롭 등) 구두 지시로 바뀌었을 때.
+//  body: { userId, kind:'당번'|'벌당'|'', part:'1'|'2'|'3' } · kind 빈값 = 해제.
+app.post('/api/duty-set', gate, (req, res) => {
+  const id = Number(req.body?.userId) || 0;
+  if (!id) return res.status(400).json({ error: 'userId 필요' });
+  const kind = String(req.body?.kind ?? '');
+  const part = String(req.body?.part ?? '');
+  if (kind && !dutyMod.DUTY_KINDS.includes(kind)) return res.status(400).json({ error: '종류는 당번 또는 벌당' });
+  const today = todayISOkst();
+  dutyMod.saveDuty(id, today, kind, part);
+  const duty = dutyMod.dutyForToday(id, today);
+  console.log(`✏️ [monitor] 회원 #${id} 당번 교정: ${duty ? `${duty.part}부 ${duty.kind}(${duty.start}~${duty.end})` : '해제'}`);
+  res.json({ ok: true, duty });
+});
+
 app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;

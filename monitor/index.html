@@ -1129,12 +1129,15 @@
       ? '<span class="ud-sub"><span class="d"></span>구독 '+u.subCount+'</span>'
       : '<span class="ud-sub no"><span class="d"></span>구독없음</span>';
     var staleChip = u.stale? ' <span class="ud-chip stale">지난 날짜</span>' : '';
+    // ★당번·벌당 — 순번 근무와 별개인 그날의 역할. 있으면 히어로 줄에 눈에 띄게.
+    var dutyChip = u.duty ? '<span class="ud-chip" style="background:#f3ead0;color:#8a6d1e;border-color:#e0cd9a">'
+      + esc(u.duty.part) + '부 ' + esc(u.duty.kind) + (u.duty.start ? ' ' + esc(u.duty.start) + '~' + esc(u.duty.end) : '') + '</span>' : '';
     var lockChip = (u.locked && u.locked.length) ? '<span class="ud-lockchip">관리자확정</span>' : '';
     return '<div class="ud-card k-'+esc(u.kind)+(warn?' warnrow':'')+'">'+
       '<div class="ud-head"><span class="ud-name">'+esc(u.name)+'</span><span class="ud-part">'+esc(u.part)+'</span>'+
         ((!u.rosterFound && (u.kind==='work'||u.kind==='spare'))?'<span class="ud-chip" style="color:var(--warn)">명단밖</span>':'')+lockChip+
         '<span class="ud-when"><button class="ud-editbtn" data-uid="'+u.id+'">수정</button>'+subTag+' · '+rel(u.updatedAt)+'</span></div>'+
-      '<div class="ud-hero">'+udBadge(u.badge)+'<span class="ud-htitle">'+esc(u.heroTitle)+'</span>'+staleChip+'</div>'+
+      '<div class="ud-hero">'+udBadge(u.badge)+'<span class="ud-htitle">'+esc(u.heroTitle)+'</span>'+staleChip+dutyChip+'</div>'+
       body + push + udEditor(u) +
     '</div>';
   }
@@ -1149,6 +1152,15 @@
       '<div class="ude-row"><label>티오프</label><input class="ude-tee" placeholder="예 17:21" value="'+esc(u.teeTime||'')+'">'+
         '<label>순번</label><input class="ude-pos" type="number" min="0" value="'+(u.myPos||'')+'">'+
         '<label>확정선</label><input class="ude-cut" type="number" min="0" value="'+(u.cut||'')+'"></div>'+
+      // ★당번·벌당 — 배치표 하단 배정표 판독이 틀렸을 때 여기서 교정. 시각은 고정 시간표라 부·종류만 고르면 된다.
+      '<div class="ude-row"><label>당번</label><select class="ude-dkind">'+
+        '<option value=""'+(!u.duty?' selected':'')+'>없음</option>'+
+        '<option value="당번"'+((u.duty&&u.duty.kind==='당번')?' selected':'')+'>당번(7시간)</option>'+
+        '<option value="벌당"'+((u.duty&&u.duty.kind==='벌당')?' selected':'')+'>벌당(13시간)</option>'+
+      '</select>'+
+      '<label>부</label><select class="ude-dpart">'+
+        ['1','2','3'].map(function(p){ return '<option value="'+p+'"'+((u.duty&&u.duty.part===p)?' selected':'')+'>'+p+'부</option>'; }).join('')+
+      '</select><button class="ude-dsave" data-uid="'+u.id+'">당번 저장</button></div>'+
       '<label class="ude-notify"><input type="checkbox" class="ude-notify-cb"> 이 변경을 회원에게 알림 보내기</label>'+
       '<div class="ude-btns"><button class="ude-save" data-uid="'+u.id+'">저장</button>'+
         '<button class="ude-cancel" data-uid="'+u.id+'">취소</button>'+
@@ -1184,6 +1196,25 @@
     Array.prototype.forEach.call(root.querySelectorAll('.ude-save'), function(b){
       b.onclick=function(){ udSaveCorrect(Number(b.getAttribute('data-uid')), b); };
     });
+    Array.prototype.forEach.call(root.querySelectorAll('.ude-dsave'), function(b){
+      b.onclick=function(){ udSaveDuty(Number(b.getAttribute('data-uid')), b); };
+    });
+  }
+  // 당번·벌당 저장 — 시각은 서버 고정 시간표가 채우므로 부·종류만 보낸다.
+  async function udSaveDuty(id, btn){
+    var p=$('udedit-'+id); if(!p) return;
+    var kind=p.querySelector('.ude-dkind').value;
+    var part=p.querySelector('.ude-dpart').value;
+    var msg=$('udemsg-'+id);
+    btn.disabled=true; if(msg){ msg.className='ude-msg'; msg.textContent='저장 중…'; }
+    try{
+      var r=await fetch(apiUrl('/api/duty-set'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,kind:kind,part:part})});
+      var j=await r.json();
+      if(!j.ok) throw new Error(j.error||'실패');
+      if(msg){ msg.className='ude-msg ok'; msg.textContent = j.duty ? (j.duty.part+'부 '+j.duty.kind+' 저장됨 ('+j.duty.start+'~'+j.duty.end+')') : '당번 해제됨'; }
+      setTimeout(function(){ udEditing=0; loadUserDash(); }, 900);
+    }catch(e){ if(msg){ msg.className='ude-msg err'; msg.textContent=e.message; } }
+    finally{ btn.disabled=false; }
   }
   async function udSaveCorrect(id, btn){
     var p=$('udedit-'+id); if(!p) return;
