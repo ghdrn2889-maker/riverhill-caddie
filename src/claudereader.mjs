@@ -253,7 +253,10 @@ const DUTY_BOX_PROMPT = (
   + '★Report a row ONLY if it has a real Korean person name printed in the name column. '
   + 'If a row has no name, SKIP it entirely — never guess, never carry a name down from the row above, never repeat one name across rows. '
   + 'Ignore any other box such as 흡연실 당번, 공지사항, 마샬/대리/주임 contact rows, and the counts table. '
-  + 'Output STRICT JSON only, no prose: {"duties":[{"name":"김홍구","part":"1","kind":"당번"}, ... only rows that have a name ...]}'
+  + '★Also report whether that 당번/벌당 table exists in this image at all: "found". '
+  + 'Many images are only a CROPPED PART of the board (roster or tee table only) and simply do not contain the table — for those set found=false. '
+  + 'found=true means you can actually see rows printed as "N부 당번/벌당" with times, even if every name cell happens to be empty today. '
+  + 'Output STRICT JSON only, no prose: {"found":true,"duties":[{"name":"김홍구","part":"1","kind":"당번"}, ... only rows that have a name ...]}'
 );
 export async function readDutyBox(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
@@ -266,6 +269,10 @@ export async function readDutyBox(imagePath) {
   if (!m) return null;
   try {
     const j = JSON.parse(m[0]);
+    // ★표 자체가 없으면 null — 빈 배열([])과 반드시 구분해야 한다.
+    //  지금 들어오는 이미지 상당수가 '부분 크롭'(명단·티오프만)이라 당번 박스가 아예 없는데,
+    //  그걸 '오늘 당번 없음'으로 읽으면 멀쩡한 당번이 해제된다.
+    if (j.found === false) return null;
     const rows = (Array.isArray(j.duties) ? j.duties : [])
       .map((r) => ({
         name: String(r?.name || '').replace(/\s/g, '').trim(),

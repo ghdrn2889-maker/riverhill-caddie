@@ -628,7 +628,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   // ★당번·벌당 배정표(하단 주황 박스) — 순번 근무와 별개인 '그날의 역할'.
   //  조편성 근태칸에도 '당번' 태그는 찍히지만 거기엔 '몇 부'가 없어 시각을 못 정한다. 그래서 이 박스를 따로 읽는다.
   //  실패해도 판독 전체를 망치지 않게 완전 격리(당번만 비고 나머지는 정상).
-  let dutyList = [];
+  let dutyList = null;   // ★기본 null(반영 안 함) — 캡 초과로 판독을 아예 못 했을 때 '배정 0명'으로 오해하지 않게.
   if (claudeBudgetLeft() > 0) {
     try {
       const dPath = path.join(TMP, `duty_${Date.now()}.png`);
@@ -636,9 +636,11 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       await runPy({ image: img, crop_only: dPath, slice: { x0: 0.28, x1: 0.74, y0: 0.76, y1: 1.0, lmargin: 0 }, scale: 5 }, 30000);
       const rows = await readDutyBox(dPath);
       try { fs.unlinkSync(dPath); } catch { /* noop */ }
-      dutyList = (rows || []).map((r) => ({ ...r, name: snapOfficial(r.name) || r.name }));
-      if (dutyList.length) console.log(`[boardreader] 당번·벌당 판독: ${dutyList.map((d) => `${d.name}(${d.part}부 ${d.kind})`).join(', ')}`);
-      else console.log('[boardreader] 당번·벌당 판독: 배정 없음');
+      // ★null(표 없음 — 부분 크롭 등)과 []( 표는 있는데 배정 0명)는 의미가 다르다. null이면 반영을 건너뛴다.
+      dutyList = rows ? rows.map((r) => ({ ...r, name: snapOfficial(r.name) || r.name })) : null;
+      if (dutyList === null) console.log('[boardreader] 당번·벌당: 이 이미지엔 배정표 없음(부분 크롭) → 기존 유지');
+      else if (dutyList.length) console.log(`[boardreader] 당번·벌당 판독: ${dutyList.map((d) => `${d.name}(${d.part}부 ${d.kind})`).join(', ')}`);
+      else console.log('[boardreader] 당번·벌당 판독: 배정표 있음 · 오늘 배정 0명');
     } catch (e) { console.error('[boardreader] 당번·벌당 판독 실패:', e.message); }
   }
   return { boundaries: bestBounds, parts: best, offList, dutyList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
