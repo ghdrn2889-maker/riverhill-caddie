@@ -1203,9 +1203,15 @@
   // 당번·벌당 저장 — 시각은 서버 고정 시간표가 채우므로 부·종류만 보낸다.
   async function udSaveDuty(id, btn){
     var p=$('udedit-'+id); if(!p) return;
-    var kind=p.querySelector('.ude-dkind').value;
-    var part=p.querySelector('.ude-dpart').value;
+    var ks=p.querySelector('.ude-dkind'), ps=p.querySelector('.ude-dpart');
+    if(!ks||!ps){ alert('당번 입력칸을 찾지 못했습니다. 새로고침(Ctrl+F5) 후 다시 시도해 주세요.'); return; }
+    var kind=ks.value, part=ps.value;
     var msg=$('udemsg-'+id);
+    // ★실수로 해제되는 걸 막는다 — '없음'은 명시적으로 확인받는다(종류를 안 고르고 저장을 누르는 실수 방지).
+    if(!kind && !confirm('종류가 "없음"입니다.\n이 회원의 당번을 해제할까요?\n\n(당번을 지정하려면 먼저 당번/벌당을 고르세요.)')){
+      if(msg){ msg.className='ude-msg'; msg.textContent='취소됨 — 종류를 고른 뒤 다시 저장하세요.'; }
+      return;
+    }
     btn.disabled=true; if(msg){ msg.className='ude-msg'; msg.textContent='저장 중…'; }
     try{
       var r=await fetch(apiUrl('/api/duty-set'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,kind:kind,part:part})});

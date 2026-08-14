@@ -18,12 +18,19 @@ export function loadDuty(userId, todayISO) {
   if (!d || !d.kind || (todayISO && d.date !== todayISO)) return null;
   return d;
 }
-export function saveDuty(userId, date, kind, part) {
+// by: 'admin'(모니터 수동) | 'board'(하단 배정표 자동판독).
+//  ★admin이 넣은 값은 그날 자동판독이 덮지 못한다 — 안 그러면 수동 교정이 90초 뒤 배치표 재판독에 지워진다.
+export function saveDuty(userId, date, kind, part, by = 'admin') {
   const k = String(kind || '').trim(), p = String(part || '').replace(/[^123]/g, '');
   if (!k) { saveUserJSON(userId, FILE, null); return null; }   // 빈 값 = 해제
-  const rec = { date: String(date || ''), kind: k, part: p, at: Date.now() };
+  const rec = { date: String(date || ''), kind: k, part: p, by, at: Date.now() };
   saveUserJSON(userId, FILE, rec);
   return rec;
+}
+// 오늘 이 회원의 당번이 '관리자 확정'인가 — 자동판독이 건너뛸지 판단.
+export function isAdminSet(userId, todayISO) {
+  const d = loadDuty(userId, todayISO);
+  return !!(d && d.by === 'admin');
 }
 // 회원 화면에 내려줄 형태 — 시각·근무시간을 고정 시간표에서 채워 반환. 없으면 null.
 export function dutyForToday(userId, todayISO) {

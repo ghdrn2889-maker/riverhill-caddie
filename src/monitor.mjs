@@ -529,9 +529,10 @@ app.post('/api/duty-set', gate, (req, res) => {
   const part = String(req.body?.part ?? '');
   if (kind && !dutyMod.DUTY_KINDS.includes(kind)) return res.status(400).json({ error: '종류는 당번 또는 벌당' });
   const today = todayISOkst();
-  dutyMod.saveDuty(id, today, kind, part);
+  dutyMod.saveDuty(id, today, kind, part, 'admin');   // ★관리자 확정 — 자동판독이 덮지 못함
   const duty = dutyMod.dutyForToday(id, today);
-  console.log(`✏️ [monitor] 회원 #${id} 당번 교정: ${duty ? `${duty.part}부 ${duty.kind}(${duty.start}~${duty.end})` : '해제'}`);
+  // 받은 원본을 함께 남긴다 — '저장을 눌렀는데 해제됨' 류 신고를 즉시 판별하기 위해.
+  console.log(`✏️ [monitor] 회원 #${id} 당번 교정: ${duty ? `${duty.part}부 ${duty.kind}(${duty.start}~${duty.end})` : '해제'} · 수신값 kind=[${kind}] part=[${part}]`);
   res.json({ ok: true, duty });
 });
 

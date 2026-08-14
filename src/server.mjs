@@ -1267,14 +1267,16 @@ async function applyDutyList(article) {
   for (const m of activeMembers()) {
     const nm = key(m.board_name || m.name);
     if (!nm) continue;
+    // ★관리자가 모니터에서 확정한 값은 그날 자동판독이 건드리지 않는다(수동 교정이 재판독에 지워지던 문제).
+    if (dutyMod.isAdminSet(m.id, today)) continue;
     const hit = byName.get(nm);
     const cur = dutyMod.loadDuty(m.id, today);
     if (hit) {
       if (cur && cur.kind === hit.kind && cur.part === hit.part) continue;   // 변화 없음
-      dutyMod.saveDuty(m.id, today, hit.kind, hit.part); set += 1;
+      dutyMod.saveDuty(m.id, today, hit.kind, hit.part, 'board'); set += 1;
       console.log(`·  [당번] ${m.name} → ${hit.part}부 ${hit.kind}`);
     } else if (cur) {
-      dutyMod.saveDuty(m.id, today, '', ''); cleared += 1;                    // 배정표에서 빠짐 → 해제
+      dutyMod.saveDuty(m.id, today, '', '', 'board'); cleared += 1;           // 배정표에서 빠짐 → 해제
       console.log(`·  [당번] ${m.name} 해제(배정표에서 빠짐)`);
     }
   }
