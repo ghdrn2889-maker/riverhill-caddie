@@ -43,6 +43,27 @@
     .hero h3 { font-size:25px; line-height:1.1; letter-spacing:-.045em; margin:8px 0 6px; }
     .sub { font-size:11px; line-height:1.5; color:#647168; margin:0; }
 
+    /* ── ★홈 위젯 — 배치표 대시보드 아래 2분할(카트 번호 · 이번 달 수입) ──
+       B안(민트 틴트 면): 테두리·그림자 없는 '색면'. 흰 카드가 연달아 쌓이는 답답함을 덜고
+       히어로(흰색)를 주인공으로 도드라지게 한다. 앱 민트/그린 색 언어 안에서만 씀. */
+    .hw { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+    .hw-w { border:0; border-radius:18px; padding:15px; min-height:132px; display:flex; flex-direction:column;
+            text-align:left; font-family:inherit; color:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent;
+            transition:transform .07s ease, filter .16s ease; }
+    .hw-w:active { transform:translateY(1px) scale(.994); filter:brightness(.975); }
+    .hw-w.cart { background:linear-gradient(160deg,#e9f6f1,#ddefe7); }
+    .hw-w.pay  { background:linear-gradient(160deg,#eef2ee,#e4ebe5); }
+    .hw-w .label { color:#5c7d70; }
+    .hw-w.pay .label { color:#6b7a71; }
+    .hw-num { font-size:40px; font-weight:900; letter-spacing:-.05em; line-height:1; margin-top:auto;
+              color:#0f3d2e; font-variant-numeric:tabular-nums; }
+    .hw-num small { font-size:14px; font-weight:800; opacity:.55; margin-left:3px; letter-spacing:0; }
+    .hw-num.m { font-size:24px; letter-spacing:-.04em; color:#243329; }        /* 금액(자릿수 많음) */
+    /* ★'empty'가 아니라 'noval' — 전역 .empty{text-align:center;padding:22px}가 위젯 숫자를 가운데로 밀었다(클래스명 충돌). */
+    .hw-num.noval { font-size:19px; letter-spacing:-.02em; color:#7d9a8d; }    /* 카트 번호 미입력 */
+    .hw-ft { font-size:10.5px; font-weight:750; color:#5c7d70; margin-top:7px; }
+    .hw-w.pay .hw-ft { color:#6b7a71; }
+
     /* ── 하루 흐름(다중 라운드) — 미니맵·라운드사이·라운드 카드. 부별 색(1부 분홍·2부 하늘·3부 보라) ── */
     :root { --p1c:#c14b86; --p2c:#1f6bb0; --p3c:#6a4bbf; }
     @media (prefers-color-scheme:dark) { :root { --p1c:#f0a6c8; --p2c:#7fc0ef; --p3c:#c3b0f0; } }
@@ -2243,6 +2264,21 @@
       <!-- 2부 라운드("2,3 출근" 두 탕) — 2부 근무가 잡힌 날만 3부 위에 카드로 -->
       <div id="round2Slot" hidden></div>
 
+      <!-- ★홈 위젯 — 배치표 대시보드 바로 아래 2분할. 왼쪽 오늘 카트 번호, 오른쪽 이번 달 수입.
+           탭하면 각각 라운드 점검·정산으로 이동(요약을 보고 바로 들어가는 진입점). -->
+      <div class="hw" id="homeWidgets">
+        <button class="hw-w cart" id="hwCart" type="button" aria-label="오늘 카트 번호 — 라운드 점검으로 이동">
+          <span class="label">오늘 카트 번호</span>
+          <span class="hw-num noval" id="hwCartNum">번호 없음</span>
+          <span class="hw-ft" id="hwCartFt">탭하여 입력</span>
+        </button>
+        <button class="hw-w pay" id="hwPay" type="button" aria-label="이번 달 수입 — 정산으로 이동">
+          <span class="label" id="hwPayLab">이번 달 수입</span>
+          <span class="hw-num m" id="hwPayNum">—</span>
+          <span class="hw-ft" id="hwPayFt">불러오는 중…</span>
+        </button>
+      </div>
+
       <div id="notifyNudge" class="nudge" hidden></div>
 
       <div class="health reveal" id="health" style="--i:2" aria-live="polite">
@@ -2547,7 +2583,7 @@
   </main>
 
   <nav class="nav reveal" style="--i:5" role="tablist" aria-label="주요 화면">
-    <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">오늘</button>
+    <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">홈</button>
     <button role="tab" id="tab-board" aria-selected="false" aria-controls="view-board" data-view="board">배치표</button>
     <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
     <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>

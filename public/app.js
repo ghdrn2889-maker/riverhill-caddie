@@ -62,6 +62,9 @@ function showView(name) {
   if (name === 'worklog') { loadJournal(); }
   if (name === 'cart') loadCartCheck();
   if (name === 'settle') { lgPage = -1; loadLedger(); }
+  // 홈 진입마다 위젯 갱신 — 다른 탭에서 카트 번호·팁·지출을 바꾸고 돌아와도 숫자가 어긋나지 않게.
+  //  (가벼운 로컬 JSON 읽기 2건. curView는 위에서 이미 name으로 바뀌어 '이전 뷰' 비교는 못 쓴다.)
+  if (name === 'today') loadHomeWidgets();
   // 배치표 탭: 날씨 하늘 백드롭 켜고 전체 순번표 렌더. 나갈 땐 백드롭·밤클래스 해제.
   document.body.classList.toggle('on-board', name === 'board');
   // 라운드 점검·근무 기록·정산: 상단바(알림·햄버거) 숨겨 공간 확보(오늘·배치표는 유지).
@@ -1927,6 +1930,61 @@ const lgWorkByDate = (date) => (lgData && lgData.rows || []).find((r) => r.date 
 const lgExpsByDate = (date) => (lgData && lgData.expenses || []).filter((e) => e.date === date);
 const lgExpSumDate = (date) => lgExpsByDate(date).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
+// ── ★홈 위젯(배치표 대시보드 아래 2분할) — 왼쪽 오늘 카트 번호, 오른쪽 이번 달 수입 ──
+//  요약만 보여주고 탭하면 각각 라운드 점검·정산으로 들어가는 진입점.
+//  ★데이터 소스는 각 탭과 '완전히 동일'(/api/cartcheck·/api/ledger) — 위젯 전용 계산을 새로 만들지 않는다.
+//   따로 계산하면 위젯과 실제 탭 숫자가 갈라져 신뢰를 잃는다(1·2부 판독이 3부와 갈라졌던 것과 같은 함정).
+let hwCartNo = null, hwPay = null;
+
+function renderHomeWidgets() {
+  const nEl = $('hwCartNum'), fEl = $('hwCartFt');
+  if (nEl && fEl) {
+    const v = String(hwCartNo == null ? '' : hwCartNo).trim();
+    if (v) { nEl.className = 'hw-num'; nEl.innerHTML = `${esc(v)}<small>번</small>`; fEl.textContent = '탭하여 번호 수정'; }
+    else { nEl.className = 'hw-num noval'; nEl.textContent = '번호 없음'; fEl.textContent = '탭하여 입력'; }
+  }
+  const lab = $('hwPayLab'); if (lab) lab.textContent = `${new Date().getMonth() + 1}월 수입`;
+  const pEl = $('hwPayNum'), pf = $('hwPayFt');
+  if (pEl && pf) {
+    if (hwPay) {
+      pEl.className = 'hw-num m';
+      pEl.innerHTML = `${fmtN(hwPay.revenueTotal)}<small>원</small>`;
+      const bits = [];
+      if (hwPay.workedDays) bits.push(`근무 ${hwPay.workedDays}일`);
+      if (Number.isFinite(hwPay.mom)) bits.push(`지난달 대비 ${hwPay.mom >= 0 ? '+' : ''}${hwPay.mom}%`);
+      pf.textContent = bits.join(' · ') || '아직 기록이 없어요';
+    } else { pEl.className = 'hw-num m'; pEl.textContent = '—'; pf.textContent = '불러오는 중…'; }
+  }
+}
+
+async function loadHomeWidgets() {
+  // 카트 번호 — 라운드 점검과 같은 소스(그날 기록 우선, 없으면 배치표 배정 카트).
+  try {
+    const r = await (await fetch('/api/cartcheck')).json();
+    hwCartNo = (r.day && r.day.cartNo) || (r.work && r.work.cartNo) || '';
+  } catch { /* 무해 — 직전 값 유지 */ }
+  // 이번 달 수입 — 정산과 같은 소스(캐디피+팁 = revenueTotal). 지난달은 비교용이라 실패해도 그냥 생략.
+  try {
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+    const cur = (await (await fetch(`/api/ledger?year=${y}&month=${m}`)).json()).summary || {};
+    let mom = null;
+    try {
+      const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1;
+      const prev = (await (await fetch(`/api/ledger?year=${py}&month=${pm}`)).json()).summary || {};
+      const p = Number(prev.revenueTotal) || 0, c = Number(cur.revenueTotal) || 0;
+      if (p > 0) mom = Math.round(((c - p) / p) * 100);   // 지난달 0원이면 증감률이 무의미 → 표시 안 함
+    } catch { /* 비교 생략 */ }
+    hwPay = { revenueTotal: Number(cur.revenueTotal) || 0, workedDays: Number(cur.workedDays) || 0, mom };
+  } catch { /* 무해 — 직전 값 유지 */ }
+  renderHomeWidgets();
+}
+
+function initHomeWidgets() {
+  const c = $('hwCart'), p = $('hwPay');
+  if (c) c.onclick = () => showView('cart');
+  if (p) p.onclick = () => showView('settle');
+}
+
 async function loadLedger() {
   const now = new Date();
   if (lgYear == null) { lgYear = now.getFullYear(); lgMonth = now.getMonth() + 1; }
@@ -3115,6 +3173,8 @@ async function rcSaveNum() {
   const v = $('rcNumIn').value.trim(); rcCloseNum();
   await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: v });
   setTimeout(() => rcSetCart(v, true), 260);
+  // 홈 위젯 즉시 동기화 — 오늘 날짜를 고칠 때만(지난 기록 수정은 오늘 카트와 무관).
+  if (!ccDate || !rcTodayISO || ccDate === rcTodayISO) { hwCartNo = v; renderHomeWidgets(); }
 }
 function rcInitHero() {
   fetch('/api/cart-owners').then((r) => r.json()).then((r) => { rcOwners = (r && r.owners) || {}; }).catch(() => { /* noop */ });
@@ -3991,11 +4051,11 @@ async function main() {
     const q = new URLSearchParams(location.search);
     if (q.has('new')) { _freshLogin = true; q.delete('new'); const s = q.toString(); history.replaceState(null, '', location.pathname + (s ? '?' + s : '') + location.hash); }
   } catch { /* 무해 */ }
-  tickDate(); initNav(); initBoardSwipe(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initAccount(); initFax();
+  tickDate(); initNav(); initBoardSwipe(); initWorklogButtons(); initLedgerButtons(); initCartButtons(); initHomeWidgets(); initAccount(); initFax();
   initInstallPrompt();
   // ★렌더를 서비스워커·푸시 준비보다 먼저 — 초기 화면(홈)이 최대한 빨리 뜨게(SW register/update 대기로 스플래시가 길어지던 문제).
   loadMe();
-  loadToday(); loadWatchHealth();
+  loadToday(); loadWatchHealth(); loadHomeWidgets();
   setTimeout(hideSplash, 2000);   // 안전장치: 어떤 이유로든 2초 뒤엔 대기화면 해제(무한 대기 방지)
   // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
   registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
