@@ -88,6 +88,19 @@
   .ude-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .ude-row>label{ font-size:11.5px; font-weight:700; color:var(--tx3); min-width:34px; }
   .ude-row select,.ude-row input{ font:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--bord); border-radius:8px; background:var(--panel); color:var(--tx); min-width:0; }
+  /* 당번 줄 — 선택지 글자가 잘리면(‘당번(7시2’) 고른 게 맞는지 확인이 안 된다. 넉넉히. */
+  .ude-drow{ background:#fdfaf1; border:1px solid #efe4c9; border-radius:10px; padding:9px 10px; margin-top:4px; }
+  .ude-dkind{ min-width:120px !important; } .ude-dpart{ min-width:76px !important; }
+  .ude-dsave{ font:inherit; font-size:12.5px; font-weight:800; padding:7px 13px; border-radius:8px; cursor:pointer;
+              background:#f3ead0; color:#7a5f16; border:1px solid #e0cd9a; }
+  .ude-dsave:hover{ background:#ede0bd; }
+  /* ★좁은 화면(폰) — 모니터는 데스크톱 기준이라 이 줄이 눌러지지 않을 만큼 좁아진다. 세로로 펼친다. */
+  @media (max-width:560px){
+    .ude-row{ flex-wrap:wrap; }
+    .ude-drow>label{ flex:1 1 100%; min-width:0; }
+    .ude-drow select{ flex:1 1 46%; min-width:0 !important; font-size:15px !important; padding:10px 9px !important; }
+    .ude-dsave{ flex:1 1 100%; margin-top:6px; padding:11px; font-size:14px; }
+  }
   .ude-row input{ width:74px; font-variant-numeric:tabular-nums; }
   .ude-row select{ flex:1; }
   .ude-notify{ display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:700; color:var(--tx2); cursor:pointer; }
@@ -1153,7 +1166,7 @@
         '<label>순번</label><input class="ude-pos" type="number" min="0" value="'+(u.myPos||'')+'">'+
         '<label>확정선</label><input class="ude-cut" type="number" min="0" value="'+(u.cut||'')+'"></div>'+
       // ★당번·벌당 — 배치표 하단 배정표 판독이 틀렸을 때 여기서 교정. 시각은 고정 시간표라 부·종류만 고르면 된다.
-      '<div class="ude-row"><label>당번</label><select class="ude-dkind">'+
+      '<div class="ude-row ude-drow"><label>당번 · 벌당 (종류와 부를 고른 뒤 저장)</label><select class="ude-dkind">'+
         '<option value=""'+(!u.duty?' selected':'')+'>없음</option>'+
         '<option value="당번"'+((u.duty&&u.duty.kind==='당번')?' selected':'')+'>당번(7시간)</option>'+
         '<option value="벌당"'+((u.duty&&u.duty.kind==='벌당')?' selected':'')+'>벌당(13시간)</option>'+
@@ -1179,6 +1192,10 @@
       '<span class="lg"><span class="sw" style="background:var(--tx3)"></span>휴무·병가·휴가</span>'+
       '<span class="lg"><span class="sw" style="background:var(--warn)"></span>순번 제외</span>'+
       '<span class="lg" style="margin-left:auto">'+(bad?'<b style="color:var(--bad)">알림 불일치 '+bad+'명</b>':'')+(bad&&nosub?' · ':'')+(nosub?'<b style="color:var(--bad)">구독없음 '+nosub+'명</b>':'')+((!bad&&!nosub)?'<b style="color:var(--good)">모두 정상</b>':'')+'</span>';
+    // ★편집 중이면 절대 다시 그리지 않는다 — innerHTML 전면 교체라 열려 있던 패널의 선택값이 통째로 날아간다.
+    //  loadUserDash 시작 시점에도 막지만, '이미 나가 있던' 요청이 늦게 도착하면 여기서 덮어쓴다(10초 주기 경쟁).
+    //  실제로 당번 종류를 고르는 도중 값이 '없음'으로 되돌아가던 원인.
+    if (udEditing) return;
     el.innerHTML = '<div class="ud-grid">'+us.map(udCard).join('')+'</div>';
     udWireEdit(el);
   }
