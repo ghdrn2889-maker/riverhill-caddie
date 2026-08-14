@@ -429,8 +429,10 @@
     .jkbtn.on.sick { background:#5f9e6a; color:#fff; border-color:#4f8c5a; }
     .jkbtn.on.removed { background:#eceef0; color:#8a97a0; border-color:#d4dade; }
     .jkbtn.on.dangbeon, .jkbtn.on.beoldang { background:#f5811f; color:#fff; border-color:#dd6f10; }
-    /* ★[hidden]이 먹도록 — .rc-g2/.rc2-sect가 display:grid/flex라 UA의 display:none을 덮어쓴다. */
-    #rcPhotoSect[hidden], #rcPhotoCards[hidden] { display:none !important; }
+    /* ★[hidden]이 먹도록 — display:grid/flex를 준 요소는 UA의 [hidden]{display:none}을 덮어써
+       '빈 상자'만 남는다. 이 화면에서 hidden으로 접는 요소는 전부 여기 등록할 것. */
+    #rcPhotoSect[hidden], #rcPhotoCards[hidden],
+    #rcDoneBar[hidden], #rcDutyNote[hidden] { display:none !important; }
     /* ★도장이 찍힌 날은 잠근다 — 안 잠그면 체크·사진·카트번호가 그대로 눌려 모르는 사이 도장이 풀린다.
        (서버 mutate가 변경 시 stampedAt을 지우도록 설계돼 있어, 실수 한 번에 완료 기록이 사라졌다.)
        고치려면 완료 표식의 '수정하기'를 눌러 명시적으로 잠금을 풀어야 한다. */
