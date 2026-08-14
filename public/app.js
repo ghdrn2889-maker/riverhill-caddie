@@ -749,6 +749,10 @@ function renderDutyHero(d) {
   const ph = dutyPhaseNow(d);
   const label = `${d.part}부 ${d.kind}`;
   stopOffTitle();
+  // ★hero-off 제거 — 휴무 전용 스타일(#heroTitle 18px·응원문구 배치·제목 로테이션)이 당번 보드를 덮어쓴다.
+  //  당번인 사람은 배치표상 '휴무'로 잡혀 있을 수 있어(순번 근무가 아니므로) 이 클래스가 붙어 있다.
+  hero.classList.remove('hero-off');
+  hero.classList.add('duty-on');
   hero.classList.toggle('duty-live', ph === 'during');
   if (ph === 'during') {
     const n = new Date(), now = n.getHours() * 60 + n.getMinutes(), s = _dtMin(d.start);
@@ -862,7 +866,7 @@ function renderToday(t) {
   // ★당번·벌당 — 순번 근무와 별개인 '그날의 역할'. 있으면 히어로를 통째로 당번 보드로 바꾸고 끝낸다.
   //  (당번인 사람은 당번 시간까지만 일하므로 순번 라운드 카드는 띄우지 않는다.)
   if (t && t.duty && renderDutyHero(t.duty)) { renderRoundsStack(null); return; }
-  $('todayHero').classList.remove('duty-live');
+  $('todayHero').classList.remove('duty-live', 'duty-on');
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';
@@ -4216,7 +4220,14 @@ async function main() {
   // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
   registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
   setInterval(() => { loadToday(); loadWatchHealth(); refreshPushHealth(); }, 30000);
-  setInterval(() => { tickDate(); refreshSky(); if (lastToday) renderBoard(lastToday); if (document.body.classList.contains('on-board')) applyBoardSky(); }, 20000);
+  // ★당번이 잡힌 날엔 renderBoard를 부르면 안 된다 — boardSlot에 휴무·근무 보드를 다시 그려 당번 장면을 덮어썼다
+  //  (시계는 당번 것, 그림은 휴무 것으로 섞이던 원인). 대신 당번 보드를 갱신해 시계도 최신으로 유지한다.
+  setInterval(() => {
+    tickDate(); refreshSky();
+    if (lastToday && lastToday.duty && renderDutyHero(lastToday.duty)) { /* 당번 보드 유지·시계 갱신 */ }
+    else if (lastToday) renderBoard(lastToday);
+    if (document.body.classList.contains('on-board')) applyBoardSky();
+  }, 20000);
   startHeartbeat();
 }
 
