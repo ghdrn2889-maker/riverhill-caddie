@@ -82,7 +82,14 @@ export function summary({ year, month } = {}, userId = 1) {
   // ★수익 산정 = 일일 근무 일지(journal)의 '근무'일 기준(사용자가 보고 편집하는 그 일지와 동일 소스).
   //  worklog(세무·차량 기록)는 주행거리·영수증 전용으로 분리 — 정산 수익은 일지가 단일 진실.
   const all = journal.listJournal({ year, month }, userId);
-  const worked = all.filter((x) => x.kind === 'work' && !x.excluded);  // 확정 근무일 → 수익 산정 대상
+  // ★아직 안 한 근무는 수익으로 잡지 않는다 — 내일 배치표가 '근무 확정'이어도 오늘 통장에 들어온 돈이 아니다.
+  //  미래 근무는 upcoming(예정)으로 따로 세어 UI가 '예정 N일'로만 알려준다.
+  // ★당번·벌당은 무보수(관리자 확인) — 그날 일해도 캐디피가 없다. 수익 산정에서 완전히 제외.
+  const todayISO = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);   // KST 기준 오늘
+  const payable = (x) => x.kind === 'work' && !x.excluded && !(x.duty && x.duty.kind);
+  const worked = all.filter((x) => payable(x) && x.date <= todayISO);   // 확정 근무일 → 수익 산정 대상
+  const upcoming = all.filter((x) => payable(x) && x.date > todayISO);  // 예정(미반영)
+  const dutyDays = all.filter((x) => x.duty && x.duty.kind);            // 당번·벌당(무보수) 일수
   const pending = [];                                                   // 일지엔 '확인 대기' 개념 없음(확정만 기록)
 
   const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1') }, 2: { days: 0, amount: 0, fee: feeOf('2') }, 3: { days: 0, amount: 0, fee: feeOf('3') } };
@@ -123,6 +130,10 @@ export function summary({ year, month } = {}, userId = 1) {
     fees: FEES,
     byPart, partKo: PART_KO,
     workedDays: worked.length, pendingDays: pending.length,
+    // 예정(아직 안 한 근무) — 금액엔 안 넣고 '예정 N일'로만 알린다. 당번·벌당은 무보수라 일수만.
+    upcomingDays: upcoming.length,
+    upcomingRevenue: upcoming.reduce((a, day) => a + dayRevenue(partsForDay(day, d), d.holeSettle[day.date] || null), 0),
+    dutyDays: dutyDays.length,
     workRevenue, pendingRevenue,
     tipTotal, revenueTotal,
     expTotal, expByCat,

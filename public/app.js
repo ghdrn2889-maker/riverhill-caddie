@@ -2376,7 +2376,10 @@ function renderLgList() {
   const shown = entries.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
   $('lgList').innerHTML = shown.length ? shown.map(lgRowHTML).join('') : '<div class="lg-empty" style="padding:26px 0;text-align:center;color:#9aa49c;font-size:12.5px;">이 달 기록이 없어요.</div>';
   const wN = (lgData.rows || []).length, xN = (lgData.expenses || []).length;
-  $('lgListCount').textContent = `근무 ${wN}일 · 지출 ${xN}건`;
+  // ★예정(아직 안 한 근무)·당번(무보수)은 금액에 안 들어가니, 왜 안 잡히는지 여기서 알려준다.
+  const upN = Number(lgData.upcomingDays) || 0, dtN = Number(lgData.dutyDays) || 0;
+  const extra = (upN ? ` · 예정 ${upN}일(미반영)` : '') + (dtN ? ` · 당번·벌당 ${dtN}일(무보수)` : '');
+  $('lgListCount').textContent = `근무 ${wN}일 · 지출 ${xN}건${extra}`;
   $('lgPager').innerHTML = `<button data-pg="prev" ${lgPage <= 0 ? 'disabled' : ''}>‹ 이전 7일</button><div class="pinfo">${lgPage + 1} / ${pages}</div><button data-pg="next" ${lgPage >= pages - 1 ? 'disabled' : ''}>다음 7일 ›</button>`;
   bindLgList();
 }
