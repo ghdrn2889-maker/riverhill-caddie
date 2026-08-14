@@ -124,6 +124,13 @@ export function snapRoster(roster) {
 // 이름처럼 보이는가(2~4 한글, 괄호태그 허용) — 열분할에서 티오프 열 오검출을 거른다.
 const _looksName = (nm) => /^[가-힣]{2,4}$/.test(String(nm || '').replace(/\([^)]*\).*/, '').replace(/\s/g, ''));
 
+// ★명단 열 크롭의 세로 한계 — 부 크롭(y1=0.73)은 '공지영역 배제'가 목적이라 명단이 긴 부(2부 50명 2열)에선
+//  표 아랫부분을 통째로 잘라먹는다(실측 8/13 #27261: 25행 중 하단 7행 = 19~25·44~46 증발, 두 열 대칭으로 잘림).
+//  3부만 홀리스틱 전용 크롭(y1=0.98)이라 멀쩡했고 1·2부는 이 절단을 그대로 맞았다.
+//  열 크롭은 '명단 열'만 좁게 따므로 아래로 늘려도 티오프표를 안 물고, COLUMN_PROMPT가 '순번 없는 텍스트
+//  (공지·범례)는 무시'하므로 표 아래 공지가 섞여도 안전하다. → 열분할만 전체 높이로 읽는다.
+const ROSTER_COL_Y1 = 0.95;
+
 // ★티오프 충돌 시각 — 한 시각에 3명↑ 또는 같은 코스(OUT/IN) 중복 = 순번↔시각 사다리 밀림. 충돌 시각 문자열 배열.
 //  (boardReadFault의 티오프 규칙과 동일. 밀림 자가교정 트리거·해소판정 공용.)
 function _teeConflicts(tees) {
@@ -138,6 +145,18 @@ function _teeConflicts(tees) {
     if (arr.length > 2 || arr.filter((c) => /IN/.test(c)).length > 1 || arr.filter((c) => /OUT/.test(c)).length > 1) bad.push(tm);
   }
   return bad;
+}
+
+// ★명단 구멍 — 채워진 마지막 순번 이전의 빈 자리들. 3부의 '티오프 누락 자가검증'과 같은 원리를 명단에 적용한다.
+//  두 열 명단에서 한 열 하단이 잘리면 열 사이에 구멍이 남는다(실측: 1~18 읽고 19~25 비고 26~43 읽음 → 구멍 19~25).
+//  꼬리 절단(마지막 열의 아랫부분)은 구멍으로 안 보이므로 별도로 잡을 수 없다 — 그건 크롭 높이(ROSTER_COL_Y1)로 해결.
+function _rosterHoles(roster) {
+  const arr = roster || [];
+  let last = -1;
+  for (let i = arr.length - 1; i >= 0; i--) if (_bare(arr[i])) { last = i; break; }
+  const holes = [];
+  for (let i = 0; i < last; i++) if (!_bare(arr[i])) holes.push(i + 1);
+  return holes;
 }
 
 // ★열분할 채택 가드 — 열분할 결과(cand)가 기존 판독(base)과 '같은 순서'인지(겹치는 자리 접두 일치율).
@@ -182,10 +201,23 @@ async function readColumnsAssemble(img, rosterCols, cropX0, cropX1, y1, part) {
       try { fs.unlinkSync(colPath); } catch { /* noop */ }
       if (!rows || !rows.length) return [];
       const valid = rows.filter((r) => _looksName(r.name));
-      return valid.length >= 2 ? valid.map((r) => r.name) : [];   // 명단 열 아님(티오프 등)이면 빈 배열
+      return valid.length >= 2 ? valid : [];   // 명단 열 아님(티오프 등)이면 빈 배열. ★{pos,name} 유지
     } catch (e) { console.error(`[boardreader] 부${part} 열${k} 오류:`, e.message); return []; }
   }));
-  const names = perCol.flat();   // 열 순서 유지(위→아래 누적 순서 그대로)
+  const flat = perCol.flat();
+  if (!flat.length) return null;
+  // ★순번(pos) 기준 위치배치 — 이어붙이기(flat)는 중간 한 줄만 못 읽어도 그 뒤가 통째로 한 칸씩 밀린다.
+  //  (3부 홀리스틱은 names[pos-1]이라 안전했고, 1·2부만 이 밀림 위험을 안고 있었다.)
+  //  COLUMN_PROMPT가 '인쇄된 순번'을 pos로 주므로 전역 위치로 그대로 쓴다 — 열이 몇 개든 좌→우 순서에 의존하지 않는다.
+  //  pos가 부실한(0·비정상) 열이 섞이면 위치배치를 못 믿으니 종전처럼 순차 이어붙이기로 폴백.
+  const posOK = flat.filter((r) => r.pos > 0 && r.pos <= 80).length >= Math.ceil(flat.length * 0.8);
+  if (posOK) {
+    const maxPos = flat.reduce((mx, r) => Math.max(mx, (r.pos > 0 && r.pos <= 80) ? r.pos : 0), 0);
+    const names = new Array(maxPos).fill('');
+    for (const r of flat) if (r.pos > 0 && r.pos <= maxPos) names[r.pos - 1] = r.name;
+    return names.filter(Boolean).length ? names : null;
+  }
+  const names = flat.map((r) => r.name);   // 폴백: 열 순서 유지(위→아래 누적 순서 그대로)
   return names.length ? names : null;
 }
 
@@ -361,19 +393,34 @@ async function readPartsOnce(img, sorted, cuts) {
       const cut = Number(cuts[b.part]) || r.cut || 0;   // 요약숫자 우선(더 신뢰), 없으면 per-part cut
       // ★열분할: 판독한 열 경계로 각 열을 단일 크롭 재판독 → 더 완전하면 채택(2부 다열 하단 누락·밀림 해결).
       let roster = r.roster;
-      const cx0 = Number(meta?.x0), cx1 = Number(meta?.x1), cy1 = Number(meta?.y1) || 0.73;
+      const cx0 = Number(meta?.x0), cx1 = Number(meta?.x1);
       if (rcols && rcols.length && Number.isFinite(cx0) && Number.isFinite(cx1) && cx1 > cx0) {
-        const colRoster = await readColumnsAssemble(img, rcols, cx0, cx1, cy1, b.part);
+        // ★세로는 부 크롭(0.73)이 아니라 ROSTER_COL_Y1(전체) — '하단 누락 해결'하라고 만든 열분할이
+        //  정작 잘린 크롭 높이를 그대로 물려받아 같은 범위만 다시 읽던 근본 버그(하단은 영원히 복구 불가).
+        const colRoster = await readColumnsAssemble(img, rcols, cx0, cx1, ROSTER_COL_Y1, b.part);
         const base = r.roster.filter(Boolean).length;
+        const gain = (colRoster || []).filter(Boolean).length;   // ★위치배치 후엔 length에 구멍이 섞이니 '채워진 수'로 비교
         // ★접두 일치 가드 — 단일판독과 앞자리가 어긋나면(밀림·옆부 침범) 채택 거부(유령/과대판독 방지).
-        if (colRoster && colRoster.length >= base && colRoster.length <= 60 && _prefixAgrees(colRoster, r.roster)) {
-          console.log(`[boardreader] 부${b.part} 열분할 채택: ${colRoster.length}명(${rcols.length}열, 단일 대비 +${colRoster.length - base})`);
+        if (colRoster && gain >= base && colRoster.length <= 60 && _prefixAgrees(colRoster, r.roster)) {
+          console.log(`[boardreader] 부${b.part} 열분할 채택: ${gain}명/순번${colRoster.length}(${rcols.length}열, 단일 대비 +${gain - base})`);
           roster = colRoster;
         }
       }
       // ★대바 복구 — 부 프롬프트가 버린 마젠타 '주인(태그)대체자' 셀을 명단전용 재판독으로 순번별 오버레이.
       roster = await recoverSubstitutes(cropPath, roster);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
+      // ★자가검증(3부 교정 원리 이식) — 1·2부는 그동안 어떤 완전성 검사도 없이 조용히 통과했다.
+      //  고치지는 못해도(고치려면 재판독=비용) '이상하다'를 남겨 모니터·사람이 잡게 한다. 3부의 grid_short와 같은 취지.
+      const holes = _rosterHoles(roster);
+      if (holes.length) {
+        console.warn(`[boardreader] 부${b.part} 명단 구멍 ${holes.length}칸(순번 ${holes.slice(0, 12).join(',')}${holes.length > 12 ? '…' : ''}) — 열 하단 절단/누락 의심`);
+        appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'roster_holes', part: Number(b.part), holes: holes.slice(0, 30), rosterLen: roster.length, cut, note: '명단 중간 빈 순번 — 열 하단 절단 또는 판독 누락(사람 확인 필요)' });
+      }
+      const tconf = _teeConflicts(r.tee);
+      if (tconf.length) {
+        console.warn(`[boardreader] 부${b.part} 티오프 충돌(${tconf.join(',')}) — 순번↔시각 밀림 의심`);
+        appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'tee_conflict', part: Number(b.part), times: tconf, note: '한 시각 3명↑ 또는 코스 중복 — 순번↔시각 사다리 밀림(사람 확인 필요)' });
+      }
       parts[String(b.part)] = { roster: snapRoster(roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
   }
