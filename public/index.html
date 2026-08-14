@@ -72,9 +72,6 @@
            overflow:hidden; box-shadow:0 4px 14px rgba(120,100,50,.07); -webkit-tap-highlight-color:transparent;
            transition:transform .07s ease, background .16s ease; }
     .jw2:active { transform:translateY(1px) scale(.996); background:#fefaef; }
-    /* 접힌 모서리 — 바깥 삼각형은 페이지 배경색(#f3f4f8)과 같아야 '접힌' 것처럼 보인다. */
-    .jw2::after { content:''; position:absolute; top:0; right:0; width:26px; height:26px;
-                  background:linear-gradient(225deg,#f3f4f8 0 50%,#e8dcbc 50% 100%); }
     .jw2-lb { display:block; font-size:9px; font-weight:850; letter-spacing:.13em; color:#b0a079; }
     .jw2-rule { display:flex; align-items:flex-start; gap:12px; margin-top:11px; border-top:1px dashed #e4d9bf; padding-top:12px; }
     .jw2-tx { flex:1; min-width:0; font-family:Georgia,"Times New Roman",serif; font-style:italic; font-size:15px;
