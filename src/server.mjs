@@ -192,7 +192,8 @@ app.post('/api/telemetry', requireAuth, (req, res) => {
 //  회원제(SOLO_MODE=0)에서 비로그인 요청이 데이터에 접근하지 못하게 차단(남의 데이터 노출 방지).
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
 //  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
-const OPEN_API = ['/config', '/health', '/ingest', '/ingest-image', '/simulate', '/auth', '/me', '/logout'];
+//  ★/duty — 자동 판독 전까지 관리자가 토큰으로 당번·벌당을 넣는 경로(핸들러 안에서 관리자/토큰을 직접 검사).
+const OPEN_API = ['/config', '/health', '/ingest', '/ingest-image', '/simulate', '/auth', '/me', '/logout', '/duty'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   if (OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
@@ -685,7 +686,14 @@ app.post('/api/duty', (req, res) => {
   res.json({ ok: true, duty: rec ? dutyMod.dutyForToday(uid, date) : null, saved: rec });
 });
 app.get('/api/duty', (req, res) => {
-  const uid = Number(req.query.userId) || req.user?.id || 1;
+  // ★게이트(OPEN_API)를 통과하는 경로라 여기서 직접 막는다 — 남의 당번 여부가 새지 않게.
+  //  다른 회원 조회는 관리자·토큰만. 본인 조회는 로그인만 있으면 된다.
+  const token = req.get('x-token') || req.query.token;
+  const priv = !!req.user?.admin || (process.env.INGEST_TOKEN && token === process.env.INGEST_TOKEN);
+  const asked = Number(req.query.userId) || 0;
+  if (asked && asked !== req.user?.id && !priv) return res.status(403).json({ error: '권한 없음' });
+  const uid = asked || req.user?.id;
+  if (!uid) return res.status(401).json({ error: '로그인이 필요합니다' });
   res.json({ ok: true, duty: dutyMod.dutyForToday(uid, todayISOKST()) });
 });
 
