@@ -6,6 +6,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadUserJSON, saveUserJSON, userPhotoDir } from './store.mjs';
+import { getDay as journalDay } from './journal.mjs';
+
+// 그날이 당번·벌당이었나 — 일지가 날짜별로 갖고 있다(duty.json은 '오늘' 한 건만 보관).
+//  당번인 날은 라운드에 카트를 안 끌고 나가므로 카트·클럽 사진 점검을 면제한다.
+function isDutyDay(dateISO, userId) {
+  try { const d = journalDay(dateISO, userId); return !!(d && d.duty && d.duty.kind); }
+  catch { return false; }
+}
 
 const FILE = 'cartcheck.json'; // ★userId 미지정이면 1번 회원. 사진은 data/users/{id}/photos.
 
@@ -39,7 +47,9 @@ const OPS_KEYS = new Set(OPS_RETURN_ITEMS.map((i) => i.key));
 // 반납 완료 판정(경기팀 공유·캐디 대시보드 링 공용):
 //  6칸 = 카트(전·후 사진 있음) + 클럽(전·후 사진 있음) + 반납체크 4종.
 function legCount(photos, leg) { const c = photos && photos[leg]; return Array.isArray(c) ? c.length : (c ? 1 : 0); }
-export function computeReturn(rec) {
+//  ★당번·벌당인 날(dutyDay)은 라운드에 카트를 끌고 나가지 않는다 → 카트·클럽 사진 자체가 없으므로
+//   4칸(반납체크)만으로 완료 판정한다. 안 그러면 영원히 6칸을 못 채워 완료 도장을 못 찍는다.
+export function computeReturn(rec, dutyDay = false) {
   const p = (rec && rec.photos) || {};
   const cart = { before: legCount(p, 'intake'), after: legCount(p, 'exit') };
   cart.done = cart.before > 0 && cart.after > 0;
@@ -47,9 +57,10 @@ export function computeReturn(rec) {
   club.done = club.before > 0 && club.after > 0;
   const or = (rec && rec.opsReturn) || {};
   const checks = OPS_RETURN_ITEMS.map((i) => ({ key: i.key, label: i.label, done: !!or[i.key], at: or[i.key] || null }));
-  const doneCount = (cart.done ? 1 : 0) + (club.done ? 1 : 0) + checks.filter((c) => c.done).length;
-  const total = 2 + OPS_RETURN_ITEMS.length; // 6
-  return { cart, club, checks, doneCount, total, allDone: doneCount === total };
+  const checkDone = checks.filter((c) => c.done).length;
+  const doneCount = dutyDay ? checkDone : ((cart.done ? 1 : 0) + (club.done ? 1 : 0) + checkDone);
+  const total = dutyDay ? OPS_RETURN_ITEMS.length : (2 + OPS_RETURN_ITEMS.length); // 4 또는 6
+  return { cart, club, checks, doneCount, total, allDone: doneCount === total, dutyDay };
 }
 
 function loadAll(userId = 1) { return loadUserJSON(userId, FILE, {}); }
@@ -118,7 +129,7 @@ export function getDay(dateISO, userId = 1) {
   const checked = items.filter((i) => (rec.checklist || {})[i.key]).length;
   return { ...rec, opsReturn: rec.opsReturn || {}, lostItems: Array.isArray(rec.lostItems) ? rec.lostItems : [],
     progress: { checked, total: items.length, done: items.length > 0 && checked === items.length },
-    returnStatus: computeReturn(rec) };
+    returnStatus: computeReturn(rec, isDutyDay(dateISO, userId)) };
 }
 
 function mutate(dateISO, fn, userId = 1) {
@@ -127,7 +138,7 @@ function mutate(dateISO, fn, userId = 1) {
   const rec = d[dateISO] || blank(dateISO);
   fn(rec);
   rec.updatedAt = Date.now();
-  const st = computeReturn(rec);                                  // 반납 완료 시각(경기팀 '반납 완료' 표시)
+  const st = computeReturn(rec, isDutyDay(dateISO, userId));      // 반납 완료 시각(경기팀 '반납 완료' 표시)
   rec.returnDoneAt = st.allDone ? (rec.returnDoneAt || Date.now()) : null;
   if (!st.allDone) rec.stampedAt = null;                          // 완료 미달로 떨어지면 '완료 도장' 자동 해제
   d[dateISO] = rec;
@@ -167,7 +178,7 @@ export function setStamp(dateISO, stamped, userId = 1) {
   const d = loadAll(userId);
   const rec = d[dateISO] || blank(dateISO);
   if (stamped) {
-    if (!computeReturn(rec).allDone) return { ...getDay(dateISO, userId), stampError: 'incomplete' };
+    if (!computeReturn(rec, isDutyDay(dateISO, userId)).allDone) return { ...getDay(dateISO, userId), stampError: 'incomplete' };
     rec.stampedAt = rec.stampedAt || Date.now();
   } else {
     rec.stampedAt = null;
@@ -276,7 +287,7 @@ export function returnRecords(userId = 1, sinceISO) {
     const rec = d[date] || {};
     const photos = rec.photos || {};
     const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);
-    const st = computeReturn(rec);
+    const st = computeReturn(rec, isDutyDay(date, userId));
     return { date, cartNo: rec.cartNo || '', nPhoto, allDone: st.allDone, doneCount: st.doneCount, total: st.total, stamped: !!rec.stampedAt };
   }).filter((r) => r.nPhoto > 0 || r.cartNo || r.doneCount > 0);   // 빈 날 제외(실제 기록만)
 }

@@ -2904,7 +2904,15 @@ function rcRenderDash() {
   grid.querySelectorAll('[data-rk]').forEach((el) => {
     el.onclick = async () => { const on = el.classList.contains('on'); rcChime(!on); rcJustTapped = on ? null : el.dataset.rk; await postJSON('/api/cartcheck/return', { date: ccDate, key: el.dataset.rk, done: !on }); loadCartCheck(ccDate); };
   });
-  const done = st.doneCount || 0, total = st.total || 6;
+  // ★당번·벌당인 날 — 라운드에 카트를 끌고 나가지 않으므로 카트·클럽 사진 점검은 면제(4칸만 완료 판정).
+  const duty = !!st.dutyDay;
+  ['rcPhotoSect', 'rcPhotoCards'].forEach((id) => { const el = $(id); if (el) el.hidden = duty; });
+  const dn = $('rcDutyNote');
+  if (dn) {
+    dn.hidden = !duty;
+    if (duty) dn.innerHTML = '<b>오늘은 당번이에요</b><span>라운드에 카트를 끌고 나가지 않으니 카트·클럽 사진은 안 올려도 돼요. 아래 장비 반납만 확인하면 완료입니다.</span>';
+  }
+  const done = st.doneCount || 0, total = st.total || (duty ? 4 : 6);
   const pt = $('rcProgTxt');
   if (pt) { pt.textContent = `${done} / ${total}${done >= total ? ' 완료' : ''}`; pt.classList.toggle('done', done >= total); }
   rcPrevDone = done;
