@@ -17,6 +17,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as ledger from './ledger.mjs';
+import * as dutyMod from './duty.mjs';
 import { analyzeReceiptLocal } from './ollama.mjs';
 import * as cheer from './cheer.mjs';
 import { loadJSON, saveJSON, loadUserJSON, saveUserJSON, migratePrimaryToUserStore, appendJSONL, DATA_DIR } from './store.mjs';
@@ -512,16 +513,19 @@ app.get('/api/today', (req, res) => {
     if (Number.isFinite(asId) && activeMembers().some((m) => m.id === asId)) uid = asId;
   }
   const nowISO = todayISOKST();
+  // ★당번·벌당 — 순번 근무와 별개인 그날의 역할. 배치표가 없어도(명단 밖이어도) 떠야 하므로 여기서 먼저 읽어
+  //  아래 모든 응답 경로에 함께 실어 보낸다.
+  const duty = dutyMod.dutyForToday(uid, nowISO);
   // ★대표부(홈 베이스)·라운드 해석은 공용 모듈(rounds.mjs)로 — 모니터 user-dash와 '같은 로직'을 써 화면이 갈라지지 않게.
   //  (1·2부 섀도 게이트·순수 1/2부날 대표선정 규칙 전부 resolvePrimary 안에 있음. 앱 출력 100% 동일.)
   const minorPartOn = minorPartActive();
   const { base: t, primaryPart, tISO } = resolvePrimary({ uid, minorPartOn, todayISO: nowISO });
-  if (!t) return res.json({ ok: true, empty: true, message: '아직 오늘 파악된 상황이 없어요.' });
+  if (!t) return res.json({ ok: true, empty: true, duty, message: '아직 오늘 파악된 상황이 없어요.' });
 
   // ── 낡은 상태 가드 ── (대표가 3부일 때만; 1·2부 대표는 위에서 이미 낡음 제외)
   if (primaryPart === '3' && tISO && tISO < nowISO) {
     return res.json({
-      ok: true, empty: true, stale: true, staleDate: t.date,
+      ok: true, empty: true, stale: true, staleDate: t.date, duty,
       message: '오늘 배치표를 아직 확보하지 못했어요. (마지막 확인: ' + t.date + ')',
     });
   }
@@ -544,7 +548,7 @@ app.get('/api/today', (req, res) => {
   // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
   const r2 = rounds.find((r) => r.part === '2' && r.kind === 'work');
   const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
-  res.json({ ok: true, date: t.date, dayOffset, primaryPart, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2, ownerName: prof.board_name || '' });
+  res.json({ ok: true, date: t.date, dayOffset, primaryPart, duty, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2, ownerName: prof.board_name || '' });
 });
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
@@ -661,6 +665,28 @@ app.get('/api/worklog/report.html', (req, res) => {
   const month = req.query.month ? Number(req.query.month) : undefined;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(worklog.reportHTML({ year, month }, req.user?.id || 1));
+});
+
+// ── 당번·벌당 수동 지정 ──
+//  ★배치표 하단 '당번/벌당' 섹션 자동 판독은 아직 없다(레이아웃 확정 대기). 그때까지 관리자가 직접 넣는 경로.
+//   자동 판독이 붙으면 같은 저장소(duty.mjs)에 쓰기만 하면 되고 회원 화면은 그대로 동작한다.
+//   body: { userId, kind:'당번'|'벌당', part:'1'|'2'|'3', date? }  · kind 빈값이면 해제.
+app.post('/api/duty', (req, res) => {
+  const token = req.get('x-token') || req.query.token || req.body?.token;
+  if (!req.user?.admin && process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
+    return res.status(401).json({ error: '인증 실패(관리자 또는 토큰 필요)' });
+  }
+  const uid = Number(req.body?.userId || req.query.userId) || 0;
+  if (!uid) return res.status(400).json({ error: 'userId 필요' });
+  const date = String(req.body?.date || req.query.date || todayISOKST());
+  const kind = String(req.body?.kind ?? req.query.kind ?? '');
+  const part = String(req.body?.part ?? req.query.part ?? '');
+  const rec = dutyMod.saveDuty(uid, date, kind, part);
+  res.json({ ok: true, duty: rec ? dutyMod.dutyForToday(uid, date) : null, saved: rec });
+});
+app.get('/api/duty', (req, res) => {
+  const uid = Number(req.query.userId) || req.user?.id || 1;
+  res.json({ ok: true, duty: dutyMod.dutyForToday(uid, todayISOKST()) });
 });
 
 // ── 정산(회계) — 수익 자동 산정 + 팁 + 지출/영수증 + 수익계산서(PDF/Word) ──

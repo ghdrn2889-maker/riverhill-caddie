@@ -1229,6 +1229,36 @@
     .hero-off #heroCheer .ic svg path:last-child { fill:#1a8f68; }
     .hero.wx-night.hero-off #heroCheer { color:#e2f0e8; background:linear-gradient(180deg,rgba(9,20,15,0) 0%,rgba(9,20,15,.44) 100%); text-shadow:0 1px 2px rgba(0,0,0,.4); }
 
+    /* ===== ★당번·벌당 보드 — 순번 근무와 별개인 '그날의 역할'. 코스가 아니라 시설(카트대기장·차고)이라
+       휴무·병가의 능선+깃발과 다른 시각 어휘를 쓴다. 근무 전=부감 대기장 / 근무 중=차고. ===== */
+    .dt-scene { position:relative; height:190px; margin:12px -17px -17px; }
+    .dt-scene svg { position:absolute; inset:0; width:100%; height:100%; display:block; }
+    /* 장면 색 — 날씨·시간대에 따라 바뀐다(히어로의 wx-* 클래스를 그대로 탐) */
+    .bn-ground { fill:#dcd2bd; } .bn-curb { fill:#c9bda3; } .bn-roof { fill:#3f7d63; } .bn-roof2 { fill:#356a54; }
+    .bn-col { fill:#e6dcc6; } .bn-div { stroke:#c9bda3; }
+    .yd-ground { fill:#cfe6d6; } .yd-line { stroke:#fff; }
+    .hero.wx-night .bn-ground { fill:#2c2f2c; } .hero.wx-night .bn-curb { fill:#23261f; }
+    .hero.wx-night .bn-roof { fill:#20402f; } .hero.wx-night .bn-roof2 { fill:#1a3325; }
+    .hero.wx-night .bn-col { fill:#4a4c41; } .hero.wx-night .bn-div { stroke:#3a3d33; }
+    .hero.wx-night .yd-ground { fill:#1e3a2b; } .hero.wx-night .yd-line { stroke:rgba(230,245,238,.42); }
+    .hero.wx-night .carts { filter:brightness(.66) saturate(.85); }
+    .hero.wx-dusk .bn-ground { fill:#d7bda3; } .hero.wx-dusk .bn-roof { fill:#3c6b57; }
+    .hero.wx-dusk .yd-ground { fill:#c7ceb0; } .hero.wx-dusk .carts { filter:brightness(.92) sepia(.16); }
+    .hero.wx-dawn .bn-ground { fill:#d3c8bc; } .hero.wx-dawn .yd-ground { fill:#c3d6c6; }
+    .hero.wx-dawn .carts { filter:brightness(.95) saturate(.9); }
+    .hero.w-rain .carts, .hero.w-storm .carts { filter:brightness(.9) saturate(.9); }
+    /* 근무 중 = 잠금화면형: 날씨(위) → 큰 시계(가운데) → 근무중·종료(아래). 라벨은 감춘다. */
+    .hero.duty-live { text-align:center; }
+    .hero.duty-live .label { display:none; }
+    .hero.duty-live .wxref { display:inline-flex; }
+    .hero.duty-live h3 { font-size:62px; font-weight:300; letter-spacing:-.035em; line-height:1;
+      margin:8px 0 9px; font-variant-numeric:tabular-nums; }
+    .hero.duty-live h3 small { font-size:15px; font-weight:750; letter-spacing:0; opacity:.62; margin-left:7px; }
+    .hero.duty-live .sub { font-size:12px; font-weight:700; }
+    .hero.duty-live .sub b { font-weight:850; }
+    .hero.duty-live .sub .dot { opacity:.45; margin:0 6px; }
+    .hero.wx-night.duty-live h3 { text-shadow:0 2px 10px rgba(0,0,0,.5); }
+
     /* ===== 순번 제외(off:removed) — 날씨 배경 위 글래스 안내 카드 + 은은한 언덕 스트립 ===== */
     .rm-scene { position:relative; margin-top:12px; padding-bottom:50px; }
     .rm-scene .oc-hills { position:absolute; left:0; right:0; bottom:0; top:auto; width:100%; height:58px; z-index:0; }

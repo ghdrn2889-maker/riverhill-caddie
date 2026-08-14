@@ -651,6 +651,127 @@ function cartLayerSVG() {
   return wrap('gc-day', CART_DAY) + wrap('gc-night', CART_NIGHT);
 }
 
+/* ══════ ★당번·벌당 보드 ══════
+   순번 근무와 별개인 '그날의 역할'. 근무 전=부감 대기장(내 자리가 기다림) / 근무 중=차고(택시 대기장 큐).
+   시각·근무시간은 서버 duty.mjs의 고정 시간표에서 온다(여기선 표시만). */
+const DT_CART_S = '<g id="dtCartS">'                                   // 측면 카트
+  + '<rect x="-26" y="-34" width="52" height="5" rx="2.5" fill="#4fae7f"/>'
+  + '<rect x="-22" y="-31" width="3" height="14" rx="1.5" fill="#d7e4db"/><rect x="19" y="-31" width="3" height="14" rx="1.5" fill="#d7e4db"/>'
+  + '<path d="M-26 -9 L-26 -18 Q-26 -22 -21 -22 L16 -22 Q20 -22 22 -18 L27 -14 Q29 -13 29 -11 L29 -10 Q29 -8 27 -8 L-24 -8 Q-26 -8 -26 -9 Z" fill="#fbfdfb"/>'
+  + '<rect x="-26" y="-11" width="55" height="2.4" rx="1.2" fill="#3f9e73"/>'
+  + '<rect x="-23" y="-31" width="12" height="9" rx="2" fill="#e7d9bd"/>'
+  + '<circle cx="-15" cy="-4" r="6" fill="#374a41"/><circle cx="-15" cy="-4" r="2.8" fill="#cfe0d5"/>'
+  + '<circle cx="18" cy="-4" r="6" fill="#374a41"/><circle cx="18" cy="-4" r="2.8" fill="#cfe0d5"/></g>';
+const DT_CART_T = '<g id="dtCartT">'                                   // 부감(위에서 본) 카트
+  + '<rect x="-22" y="-38" width="44" height="76" rx="10" fill="#3f9e73"/>'
+  + '<rect x="-17" y="-30" width="34" height="34" rx="7" fill="#e9f6ef"/>'
+  + '<rect x="-17" y="10" width="34" height="20" rx="6" fill="#cfe7da"/>'
+  + '<g fill="#2c7a59"><rect x="-26" y="-26" width="5" height="14" rx="2.5"/><rect x="21" y="-26" width="5" height="14" rx="2.5"/>'
+  + '<rect x="-26" y="12" width="5" height="14" rx="2.5"/><rect x="21" y="12" width="5" height="14" rx="2.5"/></g></g>';
+
+// 이동 경로 생성 — [시작초,끝초,시작x,끝x,이동여부]. ★달달달(엔진 진동)은 '이동 구간에만' 심는다
+//  (상시 진동 애니를 따로 돌리면 정차 중에도 떨린다). 화면 밖 복귀는 같은 keyTime 2개로 순간 점프
+//  — 보간하면 카트가 화면을 가로질러 날아간다.
+function dtPath(segs, dur, y) {
+  const STEP = 0.2, BOUNCE = [0, -1.2, 0, 0.5], kt = [], vs = [];
+  const push = (t, x, dy) => { kt.push((t / dur).toFixed(5)); vs.push(x.toFixed(1) + ',' + (y + dy).toFixed(1)); };
+  segs.forEach(([t0, t1, x0, x1, mv]) => {
+    if (!mv) { push(t0, x0, 0); push(t1, x1, 0); return; }
+    for (let t = t0, i = 0; t < t1 - 1e-9; t += STEP, i++) push(t, x0 + (x1 - x0) * ((t - t0) / (t1 - t0)), BOUNCE[i % 4]);
+    push(t1, x1, 0);
+  });
+  return { kt: kt.join(';'), vs: vs.join(';') };
+}
+// 차고 큐 — 오른쪽 칸이 1번(먼저 출발). 모든 이동은 오른쪽으로만(후진 없음).
+//  정차 시간은 반드시 주기(30초) 이하 — 넘으면 다음 카트가 올 때까지 안 비켜서 같은 칸에 두 대가 겹친다.
+const DT_Q_CYCLE = 30, DT_Q_PERIOD = 120, DT_Q_SLOTS = [105, 285];
+const DT_Q_SEGS = [[0, 12, -20, 105, true], [12, 40, 105, 105, false], [40, 48, 105, 285, true],
+  [48, 76, 285, 285, false], [76, 88, 285, 430, true]];
+function dtQueueCart(i, rm) {
+  if (rm) return i >= 2 ? '' : `<g transform="translate(${DT_Q_SLOTS[i]},150)"><use href="#dtCartS"/></g>`;
+  const p = dtPath(DT_Q_SEGS, DT_Q_PERIOD, 150);
+  const kt = `${p.kt};${(88 / DT_Q_PERIOD).toFixed(5)};1`, vs = `${p.vs};-20,150;-20,150`;
+  return `<g><animateTransform attributeName="transform" type="translate" dur="${DT_Q_PERIOD}s" repeatCount="indefinite"`
+    + ` calcMode="linear" begin="${-DT_Q_CYCLE * i}s" keyTimes="${kt}" values="${vs}"/><use href="#dtCartS"/></g>`;
+}
+// 대기장 위 통로를 지나는 카트 — 손님을 기다리듯 들쭉날쭉 멈췄다 가다 화면 밖으로.
+const DT_PASS_SEGS = [[0, 5, -60, 120, true], [5, 9, 120, 120, false], [9, 12, 120, 84, true], [12, 15, 84, 84, false],
+  [15, 20, 84, 222, true], [20, 23, 222, 222, false], [23, 26, 222, 180, true], [26, 29, 180, 180, false], [29, 34, 180, 470, true]];
+function dtPassCart(rm) {
+  if (rm) return '';
+  const p = dtPath(DT_PASS_SEGS, 34, 26);
+  // ★회전 g에 animateTransform을 걸면 정적 transform을 덮어써 회전이 사라진다 → 레이어를 나눈다.
+  return `<g><animateTransform attributeName="transform" type="translate" dur="34s" repeatCount="indefinite"`
+    + ` calcMode="linear" keyTimes="${p.kt}" values="${p.vs}"/><g transform="rotate(90)"><use href="#dtCartT"/></g></g>`;
+}
+// 근무 전 — 부감 대기장
+function dutyYardHTML(rm) {
+  return '<div class="dt-scene"><svg viewBox="0 0 390 190" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'
+    + `<defs>${DT_CART_T}</defs><rect class="yd-ground" x="0" y="0" width="390" height="190"/>`
+    + '<g class="yd-line" stroke-width="3" stroke-linecap="round" opacity=".9">'
+    + '<line x1="30" y1="62" x2="30" y2="178"/><line x1="102" y1="62" x2="102" y2="178"/>'
+    + '<line x1="174" y1="62" x2="174" y2="178"/><line x1="246" y1="62" x2="246" y2="178"/>'
+    + '<line x1="318" y1="62" x2="318" y2="178"/><line x1="30" y1="62" x2="360" y2="62"/></g>'
+    + '<g class="carts"><g transform="translate(66,120)"><use href="#dtCartT"/></g>'
+    + '<g transform="translate(138,120)"><use href="#dtCartT"/></g>'
+    + `<g transform="translate(282,120)"><use href="#dtCartT"/></g>${dtPassCart(rm)}</g>`
+    + '</svg></div>';
+}
+// 근무 중 — 카트 차고(2칸). 3칸이면 리듬상 늘 한 칸이 비어 허전해서 2칸으로 고정.
+function dutyBarnHTML(rm) {
+  return '<div class="dt-scene"><svg viewBox="0 0 390 190" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'
+    + `<defs>${DT_CART_S}</defs>`
+    + '<rect class="bn-ground" x="0" y="150" width="390" height="40"/><rect class="bn-curb" x="0" y="150" width="390" height="4"/>'
+    + '<path class="bn-roof" d="M14 62 L376 62 L358 84 L32 84 Z"/><rect class="bn-roof2" x="32" y="84" width="326" height="6" rx="3"/>'
+    + '<g class="bn-col"><rect x="42" y="90" width="9" height="62" rx="2"/><rect x="191" y="90" width="9" height="62" rx="2"/>'
+    + '<rect x="340" y="90" width="9" height="62" rx="2"/></g>'
+    + '<g class="bn-div" stroke-width="2" stroke-linecap="round"><line x1="195" y1="152" x2="195" y2="186"/></g>'
+    + `<g class="carts">${dtQueueCart(0, rm)}${dtQueueCart(1, rm)}${dtQueueCart(2, rm)}${dtQueueCart(3, rm)}</g>`
+    + '</svg></div>';
+}
+function dutyDoneHTML() {
+  return '<div class="dt-scene" style="height:120px"><svg viewBox="0 0 390 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true">'
+    + `<defs>${DT_CART_S}</defs><rect class="bn-ground" x="0" y="86" width="390" height="34"/>`
+    + '<g class="carts"><g transform="translate(200,86) scale(.9)"><use href="#dtCartS"/></g></g></svg></div>';
+}
+const _dtMin = (s) => { const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1]) * 60 + Number(m[2])) : null; };
+function dutyPhaseNow(d) {
+  const s = _dtMin(d && d.start), e = _dtMin(d && d.end);
+  if (s == null || e == null) return 'before';
+  const n = new Date(), now = n.getHours() * 60 + n.getMinutes();
+  return now < s ? 'before' : (now < e ? 'during' : 'done');
+}
+// 히어로를 통째로 당번 보드로. 처리했으면 true(호출부는 이후 일반 렌더를 건너뛴다).
+function renderDutyHero(d) {
+  const hero = $('todayHero'), slot = $('boardSlot');
+  if (!hero || !slot || !d || !d.kind) return false;
+  const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ph = dutyPhaseNow(d);
+  const label = `${d.part}부 ${d.kind}`;
+  stopOffTitle();
+  hero.classList.toggle('duty-live', ph === 'during');
+  if (ph === 'during') {
+    const n = new Date(), now = n.getHours() * 60 + n.getMinutes(), s = _dtMin(d.start);
+    const el = Math.max(0, now - s), h = Math.floor(el / 60), m = el % 60;
+    const doneTx = h > 0 ? `${h}시간${m ? ` ${m}분` : ''}` : `${m}분`;
+    const hh = String(n.getHours()).padStart(2, '0'), mm = String(n.getMinutes()).padStart(2, '0');
+    $('heroTitle').innerHTML = `${hh}:${mm}<small>${n.getHours() < 12 ? 'AM' : 'PM'}</small>`;
+    $('heroSub').innerHTML = `<b>${esc(doneTx)}</b>째 근무 중<span class="dot">·</span>${esc(d.end)} 종료`;
+    if (!slot.querySelector('.bn-roof')) slot.innerHTML = dutyBarnHTML(rm);
+  } else if (ph === 'before') {
+    $('heroLabel').textContent = '오늘 내 상황';
+    $('heroTitle').textContent = `오늘 ${label}이에요`;
+    $('heroSub').textContent = `${d.start}까지 출근해서 카트대기장을 맡아요.`;
+    if (!slot.querySelector('.yd-ground')) slot.innerHTML = dutyYardHTML(rm);
+  } else {
+    $('heroLabel').textContent = '오늘 내 상황';
+    $('heroTitle').textContent = `오늘 ${label} 마쳤어요`;
+    $('heroSub').textContent = `${d.start}부터 ${d.end}까지 ${d.hours}시간, 수고하셨어요.`;
+    if (!slot.querySelector('.dt-scene')) slot.innerHTML = dutyDoneHTML();
+  }
+  return true;
+}
+
 function offCourseHTML() {
   const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wave = rm ? '' : `<animate attributeName="d" dur="3.4s" repeatCount="indefinite" calcMode="linear"
@@ -738,6 +859,10 @@ function renderToday(t) {
     // 실행 등장 모션(reveal·아이리스)은 1회만 — 등장이 끝나면 클래스를 떼서 탭 복귀 때 재생되지 않게 고정.
     setTimeout(() => document.body.classList.remove('anim-play'), 1500);
   }
+  // ★당번·벌당 — 순번 근무와 별개인 '그날의 역할'. 있으면 히어로를 통째로 당번 보드로 바꾸고 끝낸다.
+  //  (당번인 사람은 당번 시간까지만 일하므로 순번 라운드 카드는 띄우지 않는다.)
+  if (t && t.duty && renderDutyHero(t.duty)) { renderRoundsStack(null); return; }
+  $('todayHero').classList.remove('duty-live');
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';
