@@ -2938,9 +2938,13 @@ function rcSetStampDate(iso) {
 }
 
 // 완료 도장 오버레이 '쿵' — 밝게+뿌옇게 뒤로 깔고 도장이 슬램. 기존 도장음(obThunk) 재사용.
+let rcStampJustShown = false;   // 방금 찍어서 띄운 오버레이인지 — 렌더가 곧바로 지우지 않게
+// 도장 오버레이 닫기 — 전체를 덮는 레이어라 반드시 빠져나올 수단이 있어야 한다(닫기·배경탭·ESC).
+function rcCloseStamp() { const ov = $('rcStampOverlay'); if (ov) ov.classList.remove('on', 'slam'); }
 function rcShowStampAnimated() {
   const ov = $('rcStampOverlay'); if (!ov) return;
   rcSetStampDate(ccDate);
+  rcStampJustShown = true;
   ov.classList.add('on');
   ov.classList.remove('slam'); void ov.offsetWidth; ov.classList.add('slam');   // 리플로우로 애니메이션 재기동
   try { obThunk(); } catch { /* noop */ }
@@ -2950,13 +2954,18 @@ function rcShowStampAnimated() {
 function rcSyncStamp(st) {
   const btn = $('rcStampBtn'), miss = $('rcMiss'), ov = $('rcStampOverlay'); if (!btn || !ov) return;
   rcSetStampDate(ccDate);
-  if (ccDay && ccDay.stampedAt) { ov.classList.add('on'); ov.classList.remove('slam'); }  // 이미 찍힘 → 애니메이션 없이 표시
-  else { ov.classList.remove('on', 'slam'); }
+  // ★이미 찍힌 날을 열 때 오버레이를 '자동으로' 띄우지 않는다 — 전체를 덮는 fixed 레이어라
+  //  하단 탭·다른 조작이 전부 막혀 갇히던 문제(닫는 수단이 수정하기·다른날짜뿐이었다).
+  //  도장은 '찍는 순간의 축하'로만 띄우고, 다시 보고 싶으면 완료 버튼을 눌러 확인한다.
+  if (!rcStampJustShown) ov.classList.remove('on', 'slam');
+  rcStampJustShown = false;
   if (miss) miss.classList.remove('on');                                         // 미완료 안내는 저장 시도 때만 노출
   // 게이지: 완료 항목 비율만큼 왼→오 차오름(CSS transition), 다 차면 팝+샤인 1회.
   const total = st.total || 6, done = st.doneCount || 0;
   const lbl = $('rcStampLbl'), fill = $('rcStampFill');
-  if (lbl) lbl.textContent = st.allDone ? '완료 도장 찍기' : `미완료 ${rcMissingList(st).length}개`;
+  // 이미 찍힌 날은 버튼이 그 사실을 알리고 '다시 보기' 역할을 한다(오버레이를 자동으로 안 띄우므로).
+  if (lbl) lbl.textContent = (ccDay && ccDay.stampedAt) ? '근무 완료 · 도장 보기'
+    : st.allDone ? '완료 도장 찍기' : `미완료 ${rcMissingList(st).length}개`;
   if (fill) fill.style.width = (total ? (done / total * 100) : 0).toFixed(1) + '%';
   btn.classList.toggle('done', !!st.allDone);
   if (st.allDone && !rcWasStampFull) {                                           // 방금 다 찬 순간에만 완료 애니메이션
@@ -2982,6 +2991,10 @@ function rcSyncStamp(st) {
   // ★도장 상태에서도 다른 날짜로 이동 — 파인더 시트(z-1300)가 오버레이(z-100) 위로 열린다(도장 후 날짜 못 바꾸던 문제 해결).
   const sf = $('rcStampFind');
   if (sf) sf.onclick = () => rcOpenFind();
+  // 닫기 — 버튼·배경 탭 둘 다. 전체를 덮는 레이어라 빠져나올 길이 없으면 앱에 갇힌다.
+  const cb = $('rcStampClose');
+  if (cb) cb.onclick = () => rcCloseStamp();
+  ov.onclick = (e) => { if (e.target === ov) rcCloseStamp(); };
 }
 // 상단 날짜 선택바 — 유예기간(최근 N일)만 롤링으로 보여주고, 누르면 그날 점검을 연다.
 //  (사진이 30일 뒤 자동 삭제되므로 그 이전 날은 열람 대상이 아니라 표시하지 않음)
