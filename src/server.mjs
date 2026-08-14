@@ -30,7 +30,7 @@ import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, 
 import { setBoardPart } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
-import { useClaudeReader, claudeMonitorParts } from './boardreader.mjs';
+import { useClaudeReader, claudeMonitorParts, claudeDutyList } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
 
@@ -1253,6 +1253,34 @@ function systemRelevant(full) {
 //           ②부내 상호 맞바꿈(A(B)&B(A))은 크로스파트 아님 → 제외. ③같은 날짜만. ④활성 회원만.
 //  3부(today.json)는 삭제 불가(clearTodayPart는 1·2부 전용) → status='unknown' 강등(off는 primaryOff가 2부
 //   근무 카드까지 지워버려 안 됨). _adminLock 필드는 안 건드림(관리자 교정 보존).
+// ★당번·벌당 반영 — 판독한 배정표를 회원 duty.json에 쓴다(이름 대조).
+//  본배치표(이미지)에만 적용. 배정이 바뀌면 그 날짜의 기존 값을 덮고, 이름이 빠지면 해제한다.
+//  ★판독이 아예 실패(null)면 아무것도 건드리지 않는다 — 실패를 '오늘 당번 없음'으로 오해하면 안 되니까.
+async function applyDutyList(article) {
+  let rows;
+  try { rows = await claudeDutyList(article); } catch { return; }
+  if (!Array.isArray(rows)) return;                     // 판독 실패·미판독 → 기존 유지
+  const today = todayISOKST();
+  const key = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
+  const byName = new Map(rows.map((r) => [key(r.name), r]));
+  let set = 0, cleared = 0;
+  for (const m of activeMembers()) {
+    const nm = key(m.board_name || m.name);
+    if (!nm) continue;
+    const hit = byName.get(nm);
+    const cur = dutyMod.loadDuty(m.id, today);
+    if (hit) {
+      if (cur && cur.kind === hit.kind && cur.part === hit.part) continue;   // 변화 없음
+      dutyMod.saveDuty(m.id, today, hit.kind, hit.part); set += 1;
+      console.log(`·  [당번] ${m.name} → ${hit.part}부 ${hit.kind}`);
+    } else if (cur) {
+      dutyMod.saveDuty(m.id, today, '', ''); cleared += 1;                    // 배정표에서 빠짐 → 해제
+      console.log(`·  [당번] ${m.name} 해제(배정표에서 빠짐)`);
+    }
+  }
+  if (set || cleared) console.log(`·  [당번] 반영 ${set}명 · 해제 ${cleared}명`);
+}
+
 function reconcileCrossPartConsistency(dateLabel) {
   try {
     const rosters = collectPartRosters();
@@ -1569,6 +1597,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
       reconcileCrossPartConsistency(vp.dateLabel || out.rawVerdict?.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리(전 부 store 기준)
+      await applyDutyList(full);   // ★당번·벌당 배정 반영(판독 실패면 기존 유지)
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 

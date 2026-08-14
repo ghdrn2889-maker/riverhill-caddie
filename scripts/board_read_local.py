@@ -520,12 +520,14 @@ def main():
         # ★x1은 호출부가 준 값을 '그대로'(가운데 부는 다음 부 경계=번짐 방지). margin은 마지막 부에서만 준다.
         x1 = min(1.0, float(sl.get("x1", 1.0)) + float(sl.get("margin", 0.0)))
         y1 = float(sl.get("y1", 0.60))
-        c = im.crop((int(x0 * W), 0, int(x1 * W), int(y1 * H)))
+        # ★y0 — 기본 0(기존 호출부 전부 무변화). 배치표 '하단' 박스(당번·벌당)처럼 아래쪽만 떼올 때 쓴다.
+        y0 = max(0.0, min(float(sl.get("y0", 0.0)), y1))
+        c = im.crop((int(x0 * W), int(y0 * H), int(x1 * W), int(y1 * H)))
         cw, ch = c.size
         scale = int(cfg.get("scale", 6))
         c.resize((cw * scale, ch * scale), _PIL.LANCZOS).save(str(cfg["crop_only"]))
         # ★실제 사용한 크롭 경계(fraction)를 함께 반환 — 호출부가 이 크롭 안 좌표(열 x-range)를 원본 fraction으로 역매핑.
-        print(json.dumps({"crop_path": str(cfg["crop_only"]), "x0": x0, "x1": x1, "y1": y1, "_ms": int((_time.time() - t0) * 1000)}))
+        print(json.dumps({"crop_path": str(cfg["crop_only"]), "x0": x0, "x1": x1, "y0": y0, "y1": y1, "_ms": int((_time.time() - t0) * 1000)}))
         return
 
     # ── single=true: 위치탐색 없이 '이 크롭은 단일 부'로 보고 고정 기하 판독(부별 잘라읽기·변동 크롭). ──

@@ -242,6 +242,44 @@ export async function readColumnRoster(imagePath) {
   } catch { return null; }
 }
 
+// ── ★당번·벌당 배정표 판독 ─────────────────────────────────────────
+//  배치표 하단의 주황 박스. 5개 슬롯(1·2·3부 당번 / 1·3부 벌당)이 '항상' 인쇄되고,
+//  그날 배정된 슬롯의 왼쪽 칸에만 이름이 적힌다. 이름이 빈 행 = 오늘 그 슬롯은 없음.
+//  ★빈 행을 억지로 채우지 않게 하는 것이 핵심 — 있는 이름만 그대로 가져온다.
+const DUTY_BOX_PROMPT = (
+  'Read the local image with the Read tool. It is the bottom strip of a Korean golf caddie board (배치표). '
+  + 'Find the table whose rows read like "[이름] [1|2|3]부 [당번|벌당] HH:MM ~ (N시간)". '
+  + 'The 부/종류/시각 columns are PRE-PRINTED for every row, but the NAME column on the LEFT is filled ONLY for rows assigned today. '
+  + '★Report a row ONLY if it has a real Korean person name printed in the name column. '
+  + 'If a row has no name, SKIP it entirely — never guess, never carry a name down from the row above, never repeat one name across rows. '
+  + 'Ignore any other box such as 흡연실 당번, 공지사항, 마샬/대리/주임 contact rows, and the counts table. '
+  + 'Output STRICT JSON only, no prose: {"duties":[{"name":"김홍구","part":"1","kind":"당번"}, ... only rows that have a name ...]}'
+);
+export async function readDutyBox(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 당번표 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${DUTY_BOX_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 당번표 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const rows = (Array.isArray(j.duties) ? j.duties : [])
+      .map((r) => ({
+        name: String(r?.name || '').replace(/\s/g, '').trim(),
+        part: (String(r?.part || '').match(/[123]/) || [''])[0],
+        kind: /벌당/.test(String(r?.kind || '')) ? '벌당' : (/당번/.test(String(r?.kind || '')) ? '당번' : ''),
+      }))
+      .filter((r) => /^[가-힣]{2,4}$/.test(r.name) && r.part && r.kind);
+    // 같은 슬롯 중복 제거(부+종류 하나에 한 사람).
+    const seen = new Set(); const outRows = [];
+    for (const r of rows) { const k = `${r.part}${r.kind}`; if (seen.has(k)) continue; seen.add(k); outRows.push(r); }
+    return outRows;
+  } catch { return null; }
+}
+
 // ── 대바(대체자) 전용 'verbatim 명단' 판독 ────────────────────────────
 //  홀리스틱/부 프롬프트는 명단+티오프+커트를 한 번에 처리하느라 마젠타 '주인(태그)대체자' 셀의 두 번째 이름을
 //  정규화로 버린다(실증 8/11: 무거운 프롬프트=대체자 누락, '명단만' 물으면 20/20·대바 5건 100% 판독).

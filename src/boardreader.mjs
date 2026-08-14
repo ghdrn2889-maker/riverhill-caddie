@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 
@@ -528,7 +528,8 @@ export function purgeCrossPartContamination(parts) {
 }
 
 // 조편성 근무칸이 '근무'인가(근태 아님) — 애매이름 티브레이크의 '오늘 근무자' 판정.
-const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|찾근|정출|선발|당번|배치|마감|대리|주임|마샬|프리|콜|정근/;
+// ★벌당 추가 — 빠져 있어 벌당 근무자가 '오늘 근무자 집합'에서 통째로 누락됐다(애매이름 티브레이크 근거 손실).
+const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|찾근|정출|선발|당번|벌당|배치|마감|대리|주임|마샬|프리|콜|정근/;
 
 // ★애매 오독 티브레이크 — 스냅이 '유일하지 않다'며 포기한 순번 이름을, '오늘 근무자'에 유일하게 있는
 //  정본 근접후보로 확정(이수련↔이수현/이승현/박수현). 안전: 평범한 2~4한글 셀만·정본 아님·후보 근무자 유일·중복금지.
@@ -624,7 +625,23 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       if (workingSet.size) disambiguateByWorking(best, workingSet);
     } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
   }
-  return { boundaries: bestBounds, parts: best, offList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
+  // ★당번·벌당 배정표(하단 주황 박스) — 순번 근무와 별개인 '그날의 역할'.
+  //  조편성 근태칸에도 '당번' 태그는 찍히지만 거기엔 '몇 부'가 없어 시각을 못 정한다. 그래서 이 박스를 따로 읽는다.
+  //  실패해도 판독 전체를 망치지 않게 완전 격리(당번만 비고 나머지는 정상).
+  let dutyList = [];
+  if (claudeBudgetLeft() > 0) {
+    try {
+      const dPath = path.join(TMP, `duty_${Date.now()}.png`);
+      // 하단 좌~중앙 띠: 공지사항 오른쪽의 주황 박스가 여기 있다. 우측 요약표(x>0.72)는 제외.
+      await runPy({ image: img, crop_only: dPath, slice: { x0: 0.28, x1: 0.74, y0: 0.76, y1: 1.0, lmargin: 0 }, scale: 5 }, 30000);
+      const rows = await readDutyBox(dPath);
+      try { fs.unlinkSync(dPath); } catch { /* noop */ }
+      dutyList = (rows || []).map((r) => ({ ...r, name: snapOfficial(r.name) || r.name }));
+      if (dutyList.length) console.log(`[boardreader] 당번·벌당 판독: ${dutyList.map((d) => `${d.name}(${d.part}부 ${d.kind})`).join(', ')}`);
+      else console.log('[boardreader] 당번·벌당 판독: 배정 없음');
+    } catch (e) { console.error('[boardreader] 당번·벌당 판독 실패:', e.message); }
+  }
+  return { boundaries: bestBounds, parts: best, offList, dutyList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -752,6 +769,15 @@ export async function readBoardClaudeVerdict(article, member) {
   const rl = pd.roster.filter(Boolean).length;
   if (cut > 0 && rl < _rosterFloor(cut)) { console.warn(`[claude] ${part}부 명단 심각부족(${rl}<${_rosterFloor(cut)}, 커트 ${cut}) — 발송용 판독 보류(폴백)`); return null; }
   return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList);
+}
+
+// ★당번·벌당 배정 — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
+//  캐시에 없으면 null(판독 안 켜졌거나 아직 안 읽음) → 호출부는 아무것도 하지 않는다.
+export async function claudeDutyList(article) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img || !_boardCache.has(img)) return null;
+  try { const b = await _boardCache.get(img); return Array.isArray(b?.dutyList) ? b.dutyList : null; }
+  catch { return null; }
 }
 
 // 모니터(board-parts-store) 채움용 — 이미 캐시된 whole-board 판독에서 지정 부들을 뽑아 setBoardPart payload로.
