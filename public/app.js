@@ -1934,7 +1934,28 @@ const lgExpSumDate = (date) => lgExpsByDate(date).reduce((s, e) => s + (Number(e
 //  요약만 보여주고 탭하면 각각 라운드 점검·정산으로 들어가는 진입점.
 //  ★데이터 소스는 각 탭과 '완전히 동일'(/api/cartcheck·/api/ledger) — 위젯 전용 계산을 새로 만들지 않는다.
 //   따로 계산하면 위젯과 실제 탭 숫자가 갈라져 신뢰를 잃는다(1·2부 판독이 3부와 갈라졌던 것과 같은 함정).
-let hwCartNo = null, hwPay = null;
+let hwCartNo = null, hwPay = null, hwJournal = null;
+
+// 오늘의 기록 — 안 썼으면 한 줄을 청하고, 썼으면 표정과 그 말이 그대로 남는다.
+//  ★표정·기분 정의는 기록 탭의 JMOODS·jFaceSVG를 그대로 재사용(위젯용 얼굴을 따로 만들지 않는다).
+function renderHomeJournal() {
+  const rule = $('hwJRule'), foot = $('hwJFoot'); if (!rule || !foot) return;
+  const memo = (hwJournal && hwJournal.memo) ? String(hwJournal.memo).trim() : '';
+  const mood = (hwJournal && hwJournal.mood) ? hwJournal.mood : '';
+  if (!memo && !mood) {
+    rule.innerHTML = '<span class="jw2-ask">오늘 하루, 한 줄 남겨볼까요…</span>'
+      + '<span class="jw2-pen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>';
+    foot.textContent = '기분을 고르고 그날의 순간을 적어요';
+    return;
+  }
+  const m = jMoodOf(mood);
+  const fw = m ? `<span class="jw2-fw">${jFaceSVG(mood, 42)}<span class="jw2-mlab">${esc(m.l)}</span></span>` : '';
+  const tx = memo
+    ? `<span class="jw2-tx"><span class="q">“</span>${esc(memo)}<span class="q">”</span></span>`
+    : '<span class="jw2-tx none">기분만 남겼어요 — 한 줄도 적어볼까요</span>';
+  rule.innerHTML = tx + fw;
+  foot.textContent = '탭하면 오늘 기록을 이어서 손봐요';
+}
 
 function renderHomeWidgets() {
   const nEl = $('hwCartNum'), fEl = $('hwCartFt');
@@ -1976,13 +1997,23 @@ async function loadHomeWidgets() {
     } catch { /* 비교 생략 */ }
     hwPay = { revenueTotal: Number(cur.revenueTotal) || 0, workedDays: Number(cur.workedDays) || 0, mom };
   } catch { /* 무해 — 직전 값 유지 */ }
+  // 오늘의 기록 — 기록 탭과 같은 소스. 이번 달만 받아 오늘 하루치만 꺼낸다(연 전체는 불필요).
+  try {
+    const n = new Date(), y = n.getFullYear(), mo = n.getMonth() + 1;
+    const r = await (await fetch(`/api/journal?year=${y}&month=${mo}`)).json();
+    const iso = jTodayISO();
+    hwJournal = (r.days || []).find((d) => d.date === iso) || null;
+  } catch { /* 무해 — 직전 값 유지 */ }
   renderHomeWidgets();
+  renderHomeJournal();
 }
 
 function initHomeWidgets() {
-  const c = $('hwCart'), p = $('hwPay');
+  const c = $('hwCart'), p = $('hwPay'), j = $('hwJournal');
   if (c) c.onclick = () => showView('cart');
   if (p) p.onclick = () => showView('settle');
+  // 기록 위젯 → 근무 기록 탭으로 이동한 뒤 '오늘' 편집기를 바로 연다(기록 카드의 쓰기 바와 같은 동작).
+  if (j) j.onclick = async () => { showView('worklog'); try { await jWriteToday(); } catch { /* 무해 */ } };
 }
 
 async function loadLedger() {
