@@ -431,6 +431,18 @@
     .jkbtn.on.dangbeon, .jkbtn.on.beoldang { background:#f5811f; color:#fff; border-color:#dd6f10; }
     /* ★[hidden]이 먹도록 — .rc-g2/.rc2-sect가 display:grid/flex라 UA의 display:none을 덮어쓴다. */
     #rcPhotoSect[hidden], #rcPhotoCards[hidden] { display:none !important; }
+    /* 근무 완료 표식 — 도장을 닫은 뒤에도 그날이 저장·완료됐음을 계속 보여준다. 눌러 도장 다시 보기. */
+    .rc-donebar { display:flex; align-items:center; gap:10px; width:100%; margin:10px 0 2px; padding:12px 14px;
+      border-radius:14px; background:#eaf7ef; border:1px solid #bfe3cd; text-align:left; font:inherit; cursor:pointer;
+      -webkit-tap-highlight-color:transparent; }
+    .rc-donebar:active { filter:brightness(.98); }
+    .rc-donebar .ic { flex:none; width:30px; height:30px; border-radius:50%; background:#1a8f68; color:#fff;
+      display:flex; align-items:center; justify-content:center; }
+    .rc-donebar .ic svg { width:17px; height:17px; stroke:currentColor; stroke-width:3; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .rc-donebar .tx { flex:1; min-width:0; }
+    .rc-donebar .tx b { display:block; font-size:13.5px; font-weight:850; color:#0a5f46; }
+    .rc-donebar .tx span { display:block; font-size:11px; font-weight:650; color:#5c8a72; margin-top:2px; }
+    .rc-donebar .go { flex:none; font-size:11.5px; font-weight:800; color:#1a8f68; }
     /* 라운드 점검 — 당번·벌당인 날 사진 면제 안내 */
     .rc-dutynote { display:flex; flex-direction:column; gap:3px; margin:12px 0 2px; padding:12px 14px; border-radius:13px;
       background:#fff6ec; border:1px solid #f7cfa6; }
@@ -2568,6 +2580,9 @@
             <span>지난 반납 기록 찾기</span><span class="ch">›</span>
           </button>
         </div>
+
+        <!-- ★근무 완료 표식 — 도장을 닫아도 '저장됐다'는 사실이 화면에 남아야 한다(닫으면 흔적이 없던 문제) -->
+        <button class="rc-donebar" id="rcDoneBar" type="button" hidden></button>
 
         <!-- 지난 반납 기록 찾기 — 전체화면 검색 페이지(네이버 모바일식) -->
         <div class="rc-search-page" id="rcFindSheet" role="dialog" aria-label="지난 반납 기록 검색">

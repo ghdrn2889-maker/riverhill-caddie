@@ -2959,6 +2959,19 @@ function rcSyncStamp(st) {
   //  도장은 '찍는 순간의 축하'로만 띄우고, 다시 보고 싶으면 완료 버튼을 눌러 확인한다.
   if (!rcStampJustShown) ov.classList.remove('on', 'slam');
   rcStampJustShown = false;
+  // 완료 표식 — 도장을 닫아도 '저장됐다'가 남게. 저장 시각까지 보여줘야 기록으로 믿긴다.
+  const db = $('rcDoneBar');
+  if (db) {
+    const at = ccDay && ccDay.stampedAt;
+    db.hidden = !at;
+    if (at) {
+      const t = new Date(at), hh = String(t.getHours()).padStart(2, '0'), mm = String(t.getMinutes()).padStart(2, '0');
+      db.innerHTML = '<span class="ic"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>'
+        + `<span class="tx"><b>근무 완료로 저장됐어요</b><span>${esc(rcDateKo(ccDate))} · ${hh}:${mm} 저장</span></span>`
+        + '<span class="go">도장 보기 ›</span>';
+      db.onclick = () => rcShowStampAnimated();
+    }
+  }
   if (miss) miss.classList.remove('on');                                         // 미완료 안내는 저장 시도 때만 노출
   // 게이지: 완료 항목 비율만큼 왼→오 차오름(CSS transition), 다 차면 팝+샤인 1회.
   const total = st.total || 6, done = st.doneCount || 0;
