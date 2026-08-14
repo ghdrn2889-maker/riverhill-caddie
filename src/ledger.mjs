@@ -85,10 +85,23 @@ export function summary({ year, month } = {}, userId = 1) {
   // ★아직 안 한 근무는 수익으로 잡지 않는다 — 내일 배치표가 '근무 확정'이어도 오늘 통장에 들어온 돈이 아니다.
   //  미래 근무는 upcoming(예정)으로 따로 세어 UI가 '예정 N일'로만 알려준다.
   // ★당번·벌당은 무보수(관리자 확인) — 그날 일해도 캐디피가 없다. 수익 산정에서 완전히 제외.
-  const todayISO = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);   // KST 기준 오늘
+  const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
+  const todayISO = nowKST.toISOString().slice(0, 10);                                   // KST 기준 오늘
+  const nowMin = nowKST.getUTCHours() * 60 + nowKST.getUTCMinutes();                     // KST 자정부터 분
+  const ROUND_MIN = 270;   // 라운드 소요 ≈ 4시간 30분 — 티오프 후 이만큼 지나야 '일을 마쳤다'로 본다.
+  const toMin = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1]) * 60 + Number(m[2])) : null; };
+  // ★오늘 근무는 '아직 안 나간' 상태로 자정부터 잡히면 안 된다(티오프 17:56인데 00:53에 수익이 뜨던 문제).
+  //  마지막 라운드 티오프 + 라운드 소요가 지나야 수익으로 친다. 티오프를 모르면 오늘은 아직 안 한 것으로 본다.
+  const doneToday = (x) => {
+    const tees = [x.teeTime, ...Object.values(x.rounds || {}).map((r) => r && r.teeTime)]
+      .map(toMin).filter((v) => v != null);
+    if (!tees.length) return false;
+    return nowMin >= Math.max(...tees) + ROUND_MIN;
+  };
   const payable = (x) => x.kind === 'work' && !x.excluded && !(x.duty && x.duty.kind);
-  const worked = all.filter((x) => payable(x) && x.date <= todayISO);   // 확정 근무일 → 수익 산정 대상
-  const upcoming = all.filter((x) => payable(x) && x.date > todayISO);  // 예정(미반영)
+  const settled = (x) => x.date < todayISO || (x.date === todayISO && doneToday(x));
+  const worked = all.filter((x) => payable(x) && settled(x));    // 실제로 마친 근무 → 수익 산정 대상
+  const upcoming = all.filter((x) => payable(x) && !settled(x)); // 예정·진행 중(미반영)
   const dutyDays = all.filter((x) => x.duty && x.duty.kind);            // 당번·벌당(무보수) 일수
   const pending = [];                                                   // 일지엔 '확인 대기' 개념 없음(확정만 기록)
 
