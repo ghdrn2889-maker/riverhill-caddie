@@ -59,9 +59,17 @@ function showView(name) {
   }
   curView = name;
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-  if (name === 'worklog') { loadJournal(); }
-  if (name === 'cart') loadCartCheck();
-  if (name === 'settle') { lgPage = -1; lgEnterNext = true; loadLedger(); }
+  // ★근무 기록·라운드 점검도 같은 원칙 — 첫 진입만 그리고, 재진입은 조용히 확인만(바뀌면 갱신).
+  if (name === 'worklog') { if (jCache.year == null) loadJournal(); else loadJournal(jCache.year, { quiet: true }); }
+  if (name === 'cart') { if (!ccDate) loadCartCheck(); else loadCartCheck(undefined, { quiet: true }); }
+  // ★정산 재진입은 '아무 일도 일어나지 않아야' 한다. 뷰는 display:none 으로 숨겨질 뿐 DOM이 그대로
+  //  남아 있는데, 들어올 때마다 통째로 다시 그리고 금액을 0부터 세고 페이드인까지 돌려서
+  //  '페이지를 새로 불러오는' 느낌이 났다(사용자 지적: "들어갈 때마다"). 첫 진입만 그렇게 하고,
+  //  그 뒤엔 이미 그려진 화면을 그대로 두고 뒤에서 조용히 갱신 — 바뀐 게 있을 때만 화면을 손댄다.
+  if (name === 'settle') {
+    if (!lgData) { lgPage = -1; lgEnterNext = true; loadLedger(); }
+    else loadLedger({ quiet: true });
+  }
   // 홈 진입마다 위젯 갱신 — 다른 탭에서 카트 번호·팁·지출을 바꾸고 돌아와도 숫자가 어긋나지 않게.
   //  (가벼운 로컬 JSON 읽기 2건. curView는 위에서 이미 name으로 바뀌어 '이전 뷰' 비교는 못 쓴다.)
   if (name === 'today') loadHomeWidgets();
@@ -1660,15 +1668,21 @@ let jSelDate = null;               // 편집 중 날짜(하나만)
 let jEdit = null;                  // { kind, parts }
 const WDX = ['일', '월', '화', '수', '목', '금', '토'];
 
-async function loadJournal(year) {
+let jSig = '';   // 마지막으로 화면에 그린 응답의 지문 — 같으면 달력을 다시 안 그린다.
+async function loadJournal(year, opts = {}) {
   const now = new Date();
   if (jViewY == null) { jViewY = now.getFullYear(); jViewM = now.getMonth() + 1; }
   const y = year || jViewY;
+  let sig = '';
   try {
     const r = await (await fetch(`/api/journal?year=${y}`)).json();
+    sig = y + '|' + JSON.stringify(r.days || []);
     jCache = { year: y, days: r.days || [] };
     jMap = {}; jCache.days.forEach((d) => { jMap[d.date] = d; });
-  } catch { if ($('jTitle')) $('jTitle').textContent = '불러오기 실패'; return; }
+  } catch { if (!opts.quiet && $('jTitle')) $('jTitle').textContent = '불러오기 실패'; return; }
+  // ★조용한 갱신(재진입): 내용이 그대로면 달력을 다시 그리지 않는다.
+  if (opts.quiet && sig === jSig) return;
+  jSig = sig;
   renderJournalCal();
 }
 
@@ -2374,14 +2388,20 @@ function initHomeWidgets() {
   const js = $('hwJSave'); if (js) js.onclick = hwJSave;
 }
 
-async function loadLedger() {
+let lgSig = '';   // 마지막으로 화면에 그린 응답의 지문 — 같은 내용이면 화면을 아예 안 건드린다.
+async function loadLedger(opts = {}) {
   const now = new Date();
   if (lgYear == null) { lgYear = now.getFullYear(); lgMonth = now.getMonth() + 1; }
+  let sig = '';
   try {
     const r = await (await fetch(`/api/ledger?year=${lgYear}&month=${lgMonth}`)).json();
+    sig = JSON.stringify(r.summary);
     lgData = r.summary; lgProfile = r.profile || { name: '', workplace: '리버힐CC' };
-  } catch { $('lgMLabel').textContent = '불러오기 실패'; return; }
+  } catch { if (!opts.quiet) $('lgMLabel').textContent = '불러오기 실패'; return; }
   lgGoal = Number(lgData.goal) || 0;
+  // ★조용한 갱신(재진입): 내용이 그대로면 다시 그리지 않는다 — 다시 그리는 그 순간이 '새로고침' 느낌의 정체.
+  if (opts.quiet && sig === lgSig) return;
+  lgSig = sig;
   // 진입 때만 등장 모션 — 저장·월이동 뒤의 재조회에선 숫자만 조용히 바뀐다.
   lgCountUpNext = lgEnterNext; lgPageInNext = lgEnterNext; lgEnterNext = false;
   renderLedger();
@@ -2399,10 +2419,26 @@ const lgIncome = () => (lgData.rows || []).reduce((s, r) => s + (Number(r.revenu
 const lgExpTotal = () => (lgData.expenses || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
 // 순수입 카운트업(진입 1회)
+// ★DOM 쓰기를 줄인 카운트업 — 정산 진입 끊김의 실제 원인이었다(측정: 이것만 꺼도 끊김 15회→2회).
+//  60번/초로 큰 숫자를 갈아끼우면 그때마다 히어로(그라데이션+오브+그림자)의 그 영역이 다시 그려지고,
+//  자릿수가 바뀔 때마다 레이아웃까지 다시 잡힌다. 마침 등장 페이드와 겹쳐 프레임이 밀렸다.
+//  → 진행 중엔 1,000원 단위로 반올림 + 초당 20회까지만 갱신. 눈에는 똑같고 실제 갱신은 1/3 이하.
 function lgCountNet(el, to) {
   if (lgReduce || to <= 0) { el.textContent = fmtN(to); return; }
-  const dur = 1150; let t0 = null; el.classList.remove('pop');
-  function step(ts) { if (t0 === null) t0 = ts; const p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmtN(to * e); if (p < 1) requestAnimationFrame(step); else { el.textContent = fmtN(to); void el.offsetWidth; el.classList.add('pop'); } }
+  const dur = 1000; let t0 = null, lastT = -1e9, last = ''; el.classList.remove('pop');
+  function step(ts) {
+    if (t0 === null) t0 = ts;
+    const p = Math.min(1, (ts - t0) / dur);
+    if (p < 1) {
+      if (ts - lastT >= 50) {
+        lastT = ts;
+        const e = 1 - Math.pow(1 - p, 3);
+        const s = fmtN(Math.round(to * e / 1000) * 1000);
+        if (s !== last) { last = s; el.textContent = s; }
+      }
+      requestAnimationFrame(step);
+    } else { el.textContent = fmtN(to); void el.offsetWidth; el.classList.add('pop'); }
+  }
   el.textContent = '0'; requestAnimationFrame(step);
 }
 
@@ -3342,14 +3378,19 @@ function ccRenderList(items, checklist, progress) {
     prog.classList.toggle('done', !!progress.done);
   }
 }
-async function loadCartCheck(date) {
+let ccSig = '';   // 마지막으로 화면에 그린 응답의 지문 — 같으면 다시 안 그린다(재진입이 '새로고침'처럼 보이던 원인).
+async function loadCartCheck(date, opts = {}) {
   try {
     const q = date ? `?date=${encodeURIComponent(date)}` : '';
     const r = await (await fetch('/api/cartcheck' + q)).json();
+    const sig = JSON.stringify(r);
     ccDate = r.date;
     if (r.today) rcTodayISO = r.today;
     ccDay = r.day || {};
     const work = r.work || {};
+    // ★조용한 갱신(재진입): 내용이 그대로면 화면을 손대지 않는다 — 상태값은 위에서 이미 최신으로 맞췄다.
+    if (opts.quiet && sig === ccSig) return;
+    ccSig = sig;
     rcSetCart(ccDay.cartNo || work.cartNo || '', false);   // 히어로 번호(로드 시 즉시 반영, 애니메이션 없음)
     rcRenderDash();
     rcRenderLost(ccDay.lostItems || []);
