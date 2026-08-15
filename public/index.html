@@ -1451,7 +1451,8 @@
       --fbrowline:rgba(60,80,100,.1); --fbnbc:#0a9e77; --fbnbbg:rgba(18,191,148,.14); --fbnbbd:rgba(18,191,148,.3);
       --fbnm:#22303c; --fbbig2:#b7701d; --fbinbg:#e2edfb; --fbinc:#2f74c9; --fboutbg:#fbe9d6; --fboutc:#b7701d;
       --fbmebg:rgba(18,191,148,.16); --fbmeline:rgba(18,191,148,.6); --fbmenm:#0a5f47; --fbmebig:#0a9e77; --fbmenbbg:#12bf94; --fbmenbc:#fff;
-      --fbwaitnm:#8a94a2; --fbwaitbig:#aeb6c2; --fbcut:#c07a1b; --fbcutg:#e6b877; --fbtv:#16222e; --fbtk:#3a4a58; --fbtsub:#5a6875; --fbrail:rgba(120,140,170,.3); }
+      --fbwaitnm:#8a94a2; --fbwaitbig:#aeb6c2; --fbcut:#c07a1b; --fbcutg:#e6b877; --fbtv:#16222e; --fbtk:#3a4a58; --fbtsub:#5a6875; --fbrail:rgba(120,140,170,.3);
+      --fbvw:#1d2b39; --fbvwtx:#fff; }        /* 옆 부 선택칩 — 내 부(민트)와 다른 색 언어 */
     body.sky-night #view-board {
       --fbtxt:#fff; --fbtxt2:#cdd9ea; --fbglass:rgba(16,25,44,.5); --fbgline:rgba(150,175,210,.2);
       --fbchdline:rgba(150,175,210,.18); --fbchd:#dfe8f5; --fbcut2:#8ce0ac;
@@ -1459,19 +1460,20 @@
       --fbrowline:rgba(150,175,210,.1); --fbnbc:#a8f0c6; --fbnbbg:rgba(140,224,172,.12); --fbnbbd:rgba(140,224,172,.3);
       --fbnm:#eaf2fb; --fbbig2:#f2cf8d; --fbinbg:rgba(120,170,230,.24); --fbinc:#bcd6f5; --fboutbg:rgba(230,180,120,.22); --fboutc:#f2cf8d;
       --fbmebg:rgba(18,191,148,.2); --fbmeline:#33d6a6; --fbmenm:#eafff6; --fbmebig:#4defb0; --fbmenbbg:#12bf94; --fbmenbc:#04241a;
-      --fbwaitnm:rgba(200,215,235,.5); --fbwaitbig:#5b6b82; --fbcut:#e6b877; --fbcutg:rgba(230,184,119,.5); --fbtv:#fff; --fbtk:#cdd9ea; --fbtsub:#aab8cc; --fbrail:rgba(150,175,210,.26); }
+      --fbwaitnm:rgba(200,215,235,.5); --fbwaitbig:#5b6b82; --fbcut:#e6b877; --fbcutg:rgba(230,184,119,.5); --fbtv:#fff; --fbtk:#cdd9ea; --fbtsub:#aab8cc; --fbrail:rgba(150,175,210,.26);
+      --fbvw:#e6eefb; --fbvwtx:#16222e; }
     .fb-empty { padding:64px 26px; text-align:center; font-size:13px; color:var(--fbtxt2); line-height:1.7; }
     body.sky-night .fb-empty { text-shadow:0 1px 3px rgba(0,0,0,.4); }
 
     /* 히어로(위치 · 큰 티오프 · 최고/최저 · 체감) */
     .fb-hero { padding:calc(14px + env(safe-area-inset-top,0)) 24px 8px; color:var(--fbtxt); }
-    .fb-switch { display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; }
-    .fb-switch button { border:1px solid var(--fbgline); background:var(--fbglass); color:var(--fbtxt); font:800 12px sans-serif; padding:7px 13px; border-radius:999px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); cursor:pointer; }
-    .fb-switch button em { font-style:normal; font-weight:700; margin-left:3px; font-size:11px; opacity:.72; }
-    .fb-switch button.on { background:#12bf94; color:#fff; border-color:transparent; }
-    .fb-switch button.on em { opacity:.9; }
     .fb-loc { display:flex; align-items:center; gap:6px; font-size:18px; font-weight:800; margin-bottom:10px; }
     .fb-loc svg { width:15px; height:15px; fill:currentColor; }
+    .fb-vwtag { font-size:10.5px; font-weight:800; letter-spacing:.01em; padding:3px 8px; border-radius:999px;
+                border:1px solid var(--fbgline); background:var(--fbglass); color:var(--fbtxt2);
+                backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+    .fb-vwwarn { margin-top:9px; font-size:11.5px; font-weight:750; color:#8a5a00; background:#fff3d6;
+                 border:1px solid #f2dca6; border-radius:10px; padding:7px 10px; }
     .fb-bigtee { display:flex; align-items:flex-end; gap:10px; font-size:60px; font-weight:300; line-height:1; letter-spacing:-.035em; font-variant-numeric:tabular-nums; color:var(--fbtxt); }
     .fb-teenum { font-weight:300; letter-spacing:-.035em; }
     .fb-teeunit { font-size:15px; font-weight:700; line-height:1.12; letter-spacing:0; color:var(--fbtxt2); padding-bottom:9px; }
@@ -1494,8 +1496,27 @@
     .fb-cards { padding:8px 16px 0; display:flex; flex-direction:column; gap:13px; }
     .fb-card, .fb-tile { background:var(--fbglass); border:1px solid var(--fbgline); border-radius:22px; backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
     .fb-card { padding:16px 16px 14px; }
-    .fb-chd { display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid var(--fbchdline); font-size:13px; font-weight:800; color:var(--fbchd); }
+    .fb-chd { display:flex; justify-content:space-between; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--fbchdline); font-size:13px; font-weight:800; color:var(--fbchd); }
     .fb-chd .cut2 { color:var(--fbcut2); }
+    /* ★부 전환 — 표 머리 오른쪽(옛 확정선 자리). 표를 보면서 부를 바꾸는 자리라 여기가 손에 가깝다.
+       칩 색 = 부 고유색(앱 전체 부 색 언어와 동일: 1부 분홍·2부 하늘·3부 보라). 지금 보는 부만 채워진다. */
+    .fb-parts { display:flex; gap:5px; flex:none; }
+    .fb-parts button { border:1px solid var(--pcw); background:transparent; color:var(--pc);
+                       font:800 12px sans-serif; padding:6px 11px; border-radius:9px; cursor:pointer;
+                       -webkit-tap-highlight-color:transparent; transition:background .15s ease, color .15s ease; }
+    .fb-parts button.p1 { --pc:#c14b86; --pcw:rgba(193,75,134,.4);  --pct:#fff; }
+    .fb-parts button.p2 { --pc:#1f6bb0; --pcw:rgba(31,107,176,.4);  --pct:#fff; }
+    .fb-parts button.p3 { --pc:#6a4bbf; --pcw:rgba(106,75,191,.4);  --pct:#fff; }
+    /* 밤(어두운 하늘) — 같은 부 색의 밝은 톤. 글자는 어둡게 뒤집어 대비 확보. */
+    body.sky-night .fb-parts button.p1 { --pc:#f0a6c8; --pcw:rgba(240,166,200,.45); --pct:#3a1526; }
+    body.sky-night .fb-parts button.p2 { --pc:#7fc0ef; --pcw:rgba(127,192,239,.45); --pct:#0d2438; }
+    body.sky-night .fb-parts button.p3 { --pc:#c3b0f0; --pcw:rgba(195,176,240,.45); --pct:#241541; }
+    .fb-parts button.vw { border-style:dashed; }      /* 옆 부(내가 안 뛰는 부) = 점선 */
+    .fb-parts button.on { background:var(--pc); color:var(--pct); border-color:transparent; border-style:solid; }
+    /* 정렬 토글 + 확정선 — 한 줄에. 확정선은 표 바로 위에서 '여기까지 근무'를 예고한다. */
+    .fb-segrow { display:flex; align-items:center; gap:10px; }
+    .fb-segrow .fb-seg { flex:1; min-width:0; }
+    .fb-cutchip { flex:none; font-size:12px; font-weight:800; color:var(--fbcut2); white-space:nowrap; }
     .fb-seg { display:flex; background:var(--fbsegbg); border:1px solid var(--fbsegbd); border-radius:11px; padding:3px; margin:12px 0 4px; }
     .fb-seg button { flex:1; border:0; background:transparent; color:var(--fbsegtx); font:800 12px sans-serif; padding:9px; border-radius:8px; cursor:pointer; transition:.15s; }
     .fb-seg button.on { background:var(--fbsegon); color:var(--fbsegontx); }

@@ -69,7 +69,8 @@ function showView(name) {
   document.body.classList.toggle('on-board', name === 'board');
   // 라운드 점검·근무 기록·정산: 상단바(알림·햄버거) 숨겨 공간 확보(오늘·배치표는 유지).
   document.body.classList.toggle('no-top', name === 'cart' || name === 'worklog' || name === 'settle');
-  if (name === 'board') { boardActiveIdx = boardFocusIdx(); renderFullBoard(); applyBoardSky(); }
+  // ★옆 부 순번표는 배치표 탭에 들어올 때만 받아온다(홈·정산엔 불필요). 도착하면 loadBoards가 다시 그린다.
+  if (name === 'board') { loadBoards(); boardActiveIdx = boardFocusIdx(); renderFullBoard(); applyBoardSky(); }
   else document.body.classList.remove('sky-night');
   // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
   const _sc = document.querySelector('main');
@@ -1321,6 +1322,23 @@ let boardOrder = 'seq';   // 'seq'(순번순) | 'time'(시간순)
 let boardActiveIdx = 0;   // 중복근무 시 활성 부(스위처·스와이프)
 let boardSlideDir = 0;    // 부 전환 슬라이드 방향(−1 왼쪽/이전 · +1 오른쪽/다음 · 0 없음)
 let lastWx = null;        // { hi, lo, feels } — loadWeather가 채움(히어로 온도)
+// ★옆 부 배치표 — 내가 안 뛰는 부의 순번표(1·2·3부 전부 볼 수 있게). /api/boards = 각 부 판독 정본.
+//  내 부는 절대 여기서 안 그린다(대시보드가 쓰는 today가 우선) — 두 소스가 같은 부를 그리면 화면이 갈라진다.
+let otherBoards = null;
+async function loadBoards() {
+  // ★목록에 옆 부가 끼면 인덱스가 밀린다 — 보고 있던 '부'를 기억했다가 그 부로 되돌린다.
+  //  (안 그러면 3부를 보다가 옆 부 도착 순간 1부로 튄다.)
+  const before = boardRounds();
+  const keepPart = (before[boardActiveIdx] || {}).part || '';
+  try {
+    const r = await (await fetch('/api/boards')).json();
+    otherBoards = Array.isArray(r.parts) ? r.parts : [];
+  } catch { otherBoards = otherBoards || []; }   // 실패해도 내 부 배치표는 그대로 보인다
+  const after = boardRounds();
+  const i = keepPart ? after.findIndex((x) => x.part === keepPart) : -1;
+  boardActiveIdx = i >= 0 ? i : boardFocusIdx();
+  if (document.body.classList.contains('on-board')) renderFullBoard();
+}
 // 날씨 하늘 백드롭 — 히어로 날씨 CSS(.hero.has-wx.w-*.wx-*)를 #skyBg에 그대로 재사용.
 function applyBoardSky() {
   const sky = $('skyBg'); if (!sky) return;
@@ -1345,7 +1363,8 @@ function boardStatusNorm(st) {
 function boardStatusKo(s) { return s === 'work' ? '근무' : s === 'spare' ? '스페어' : s === 'off' ? '휴무' : '미배치'; }
 function boardRounds() {
   const t = lastToday;
-  if (!t || t.empty || !t.state) return [];
+  // ★내 배치표가 없어도(휴무·미확보) 옆 부는 볼 수 있어야 한다 — 구경용만 그려서 돌려준다.
+  if (!t || t.empty || !t.state) return boardViewOnlyRounds(new Set(), '');
   const myName = boardOwnerName();
   const norm = (x) => String(x || '').replace(/\s/g, '');
   const mn = norm(myName);
@@ -1362,7 +1381,7 @@ function boardRounds() {
     const prt = String(t.primaryPart || (t.state.part ? String(t.state.part).replace('부', '') : '3'));
     src = [{ part: prt, s: t.state, status: boardStatusNorm(t.state.status) }];
   }
-  return src.map((b) => {
+  const mine = src.map((b) => {
     const roster = Array.isArray(b.s.roster3) ? b.s.roster3 : [];
     const grid = Array.isArray(b.s.teeGrid) ? b.s.teeGrid : [];
     const teeMap = {}; grid.forEach((g) => { teeMap[Number(g.pos)] = g; });
@@ -1372,16 +1391,48 @@ function boardRounds() {
       myPos, tee: myTee && myTee.time ? myTee.time : '', course: myTee && myTee.course ? myTee.course : '',
       offType: b.s.offType || '', offReason: b.s.offReason || '' };   // 병가·휴가·순번제외 구분(홈 대시보드와 일치)
   });
+  // ★내가 안 뛰는 부를 덧붙인다(구경용). 내 부가 이미 있으면 절대 덮지 않는다 — 회원별 교정이 반영된 today가 정답.
+  const have = new Set(mine.map((x) => x.part));
+  const myISO = (lastToday && lastToday.date) ? isoOfLabel(lastToday.date) : '';
+  return mine.concat(boardViewOnlyRounds(have, myISO, myName)).sort((a, b) => Number(a.part) - Number(b.part));
+}
+// 옆 부(내가 안 뛰는 부) 순번표 — /api/boards 판독 정본 그대로. 내 상태는 없고 '표'만 보여준다.
+function boardViewOnlyRounds(have, myISO, myName) {
+  const norm = (x) => String(x || '').replace(/\s/g, '');
+  const mn = norm(myName || boardOwnerName());
+  return (otherBoards || []).filter((b) => !have.has(String(b.part))).map((b) => {
+    const roster = Array.isArray(b.roster) ? b.roster : [];
+    const teeMap = {}; (b.teeGrid || []).forEach((g) => { teeMap[Number(g.pos)] = g; });
+    // 옆 부 명단에 내 이름이 있으면(대바·조출 등) 그 줄은 짚어준다 — 없으면 0.
+    let myPos = 0;
+    if (mn) { const i = roster.findIndex((nm) => norm(nm) === mn); myPos = i >= 0 ? i + 1 : 0; }
+    return { part: String(b.part), status: 'view', viewOnly: true, roster, teeMap,
+      cut: Number(b.cut) || 0, cutoffName: b.cutoffName || '', teamCount: Number(b.teamCount) || 0,
+      myPos, tee: '', course: '', offType: '', offReason: '',
+      dateLabel: b.dateLabel || '', targetISO: b.targetISO || '',
+      // 근무일이 내 배치표와 다르면(옆 부 판독이 아직 어제 것) 숫자를 그냥 믿게 두지 않는다.
+      dateMismatch: !!(myISO && b.targetISO && b.targetISO !== myISO) };
+  });
+}
+// '2026년 8월 15일 토요일' → '2026-08-15'
+function isoOfLabel(label) {
+  const m = String(label || '').match(/(\d{4})년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+  return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : '';
 }
 // 진입 시 기본 활성 부 = focus 라운드(보통 저녁 3부, 아침엔 1·2부)와 같은 부.
 function boardFocusIdx() {
   const rounds = boardRounds(); if (rounds.length < 2) return 0;
   const t = lastToday;
-  const all = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
-  const focus = pickFocus(t, all, (Number(t.dayOffset) || 0) >= 1);
-  const fp = focus ? String(focus.part) : null;
-  const i = fp ? rounds.findIndex((r) => r.part === fp) : -1;
-  return i >= 0 ? i : 0;
+  if (t && !t.empty && t.state) {
+    const all = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
+    const focus = pickFocus(t, all, (Number(t.dayOffset) || 0) >= 1);
+    const fp = focus ? String(focus.part) : null;
+    const i = fp ? rounds.findIndex((r) => r.part === fp) : -1;
+    if (i >= 0) return i;
+  }
+  // ★옆 부가 붙으면서 0번이 남의 부일 수 있다 — 내 부를 먼저 연다(구경은 탭해서).
+  const mineIdx = rounds.findIndex((r) => !r.viewOnly);
+  return mineIdx >= 0 ? mineIdx : 0;
 }
 // off 세분 — 병가/휴가/순번제외/휴무. 홈 대시보드(renderToday)의 판별과 일치.
 function boardOffLabel(r) {
@@ -1407,6 +1458,15 @@ function boardStateHero(badge, line, kind) {
   return `<div class="fb-state fb-state-${kind}"><span class="fb-state-badge">${esc(badge)}</span><div class="fb-state-line">${esc(line)}</div></div>`;
 }
 function boardHeroCore(r) {
+  // ★옆 부 — '내 티오프'가 없으니 그 부의 규모(팀 수)를 주인공으로. 내 상태인 척하지 않는다.
+  if (r.viewOnly) {
+    const teams = r.teamCount || 0;
+    const head = teams
+      ? `<div class="fb-bigtee"><span class="fb-teenum">${teams}</span><span class="fb-teeunit">팀<br>편성</span></div>`
+      : `<div class="fb-bigtee"><span class="fb-teenum">${r.roster.length}</span><span class="fb-teeunit">명<br>명단</span></div>`;
+    const sub = r.cut ? `확정선 ${r.cut}번${r.cutoffName ? ` · ${esc(r.cutoffName)}님까지` : ''}` : '확정선 집계 중';
+    return `${head}<div class="fb-cond">${r.part}부 · ${sub}</div>`;
+  }
   if (r.status === 'work' && r.tee) {
     return `<div class="fb-bigtee">${esc(r.tee)}</div><div class="fb-cond">${r.course ? `${esc(r.course)} 코스` : '근무'}</div>`;
   }
@@ -1438,40 +1498,76 @@ function renderFullBoard() {
   }
   if (boardActiveIdx >= rounds.length) boardActiveIdx = 0;
   const r = rounds[boardActiveIdx];
-  host.innerHTML = boardHeroHTML(rounds, r) + `<div class="fb-cards">${boardCardHTML(r)}${boardTilesHTML(r)}</div>`;
+  // ★통째 innerHTML 재작성 금지 — 순번표 카드는 2,000px짜리 backdrop-filter(글래스) 레이어다.
+  //  통째로 갈아끼우면 그 블러를 매번 처음부터 다시 래스터화한다(폰에서 '정보가 실시간으로 그려지는' 느낌의 정체).
+  //  진입 직후에만 3번(showView·날씨·옆부 도착) 재렌더되던 것도 여기서 걷어낸다 — 바뀐 조각만 갈아끼운다.
+  const heroH = boardHeroHTML(rounds, r);
+  const chdH = boardChdHTML(r, rounds);
+  const segH = boardSegHTML(r);
+  const listH = boardListHTML(r);
+  const tilesH = boardTilesHTML(r);
+  let hero = host.querySelector('.fb-hero');
+  if (!hero) {   // 첫 렌더(또는 빈 상태에서 복귀)에서만 뼈대를 세운다
+    host.innerHTML = `<div class="fb-hero"></div><div class="fb-cards"><div class="fb-card">`
+      + '<div class="fb-chd"></div><div class="fb-segrow"></div><div class="fb-list"></div>'
+      + '</div><div class="fb-tiles"></div></div>';
+    hero = host.querySelector('.fb-hero');
+  }
+  const put = (el, html) => { if (el && el._h !== html) { el.innerHTML = html; el._h = html; } };
+  put(hero, heroH);
+  put(host.querySelector('.fb-chd'), chdH);
+  put(host.querySelector('.fb-segrow'), segH);
+  put(host.querySelector('.fb-list'), listH);
+  put(host.querySelector('.fb-tiles'), tilesH);
   if (boardSlideDir) {   // 부 전환(스와이프·탭) 방향에 맞춰 슬라이드-인
+    // ★애니메이션은 '글래스가 아닌' 안쪽(히어로 내용·명단·타일)에만 건다. 카드 자체를 움직이면
+    //  2,000px 블러를 매 프레임 다시 뜬다 — 그게 전환 때 버벅이던 원인.
     const cls = boardSlideDir > 0 ? 'fb-in-r' : 'fb-in-l';
-    host.querySelectorAll('.fb-hero, .fb-cards').forEach((n) => n.classList.add(cls));
+    host.querySelectorAll('.fb-hero, .fb-list, .fb-tiles').forEach((n) => {
+      n.classList.remove('fb-in-r', 'fb-in-l');
+      void n.offsetWidth;            // 같은 방향으로 연속 전환해도 애니메이션이 다시 돌게
+      n.classList.add(cls);
+    });
     boardSlideDir = 0;
   }
-  host.querySelectorAll('.fb-switch button').forEach((b) => { b.onclick = () => { const ni = Number(b.dataset.i) || 0; boardSlideDir = ni > boardActiveIdx ? 1 : ni < boardActiveIdx ? -1 : 0; boardActiveIdx = ni; renderFullBoard(); }; });
+  host.querySelectorAll('.fb-parts button').forEach((b) => { b.onclick = () => { const ni = Number(b.dataset.i) || 0; boardSlideDir = ni > boardActiveIdx ? 1 : ni < boardActiveIdx ? -1 : 0; boardActiveIdx = ni; renderFullBoard(); }; });
   host.querySelectorAll('.fb-seg button').forEach((b) => { b.onclick = () => { boardOrder = b.dataset.o; renderFullBoard(); }; });
 }
 function boardHeroHTML(rounds, r) {
-  const parts = `${rounds.map((x) => x.part).join('·')}부`;
-  const sw = rounds.length >= 2
-    ? `<div class="fb-switch">${rounds.map((x, i) => `<button data-i="${i}" class="${i === boardActiveIdx ? 'on' : ''}">${x.part}부 <em>${boardStatusKo(x.status)}</em></button>`).join('')}</div>`
-    : '';
+  const my = rounds.filter((x) => !x.viewOnly);   // 위치줄은 '내가 뛰는 부'만 — 구경 부까지 세면 내 근무처럼 읽힌다
+  const parts = `${(my.length ? my : rounds).map((x) => x.part).join('·')}부`;
+  // ★부 전환 칩은 히어로가 아니라 순번표 카드 머리(‘N부 전체 순번표’ 줄)로 내렸다 —
+  //  표를 보면서 부를 바꾸는 동작이라, 표 바로 위에 있는 게 손과 눈이 덜 움직인다.
   const arUp = '<svg class="fb-ar up" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L11 10 H1 Z"/></svg>';
   const arDn = '<svg class="fb-ar dn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 11 L1 2 H11 Z"/></svg>';
   const temps = (lastWx && (lastWx.hi != null || lastWx.lo != null))
     ? `<div class="fb-hilo"><span class="up">${arUp}${lastWx.hi != null ? lastWx.hi : '—'}°</span><span class="dn">${arDn}${lastWx.lo != null ? lastWx.lo : '—'}°</span></div>${lastWx.feels != null ? `<div class="fb-feels">체감온도 ${lastWx.feels}°</div>` : ''}`
     : '';
-  return `<div class="fb-hero">${sw}
-    <div class="fb-loc"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>리버힐 CC · ${parts}</div>
+  // 옆 부를 보는 중이면 위치줄에 그 사실을 분명히 — 내 배치인 줄 오해하면 안 된다.
+  const loc = r.viewOnly ? `리버힐 CC · ${r.part}부 <span class="fb-vwtag">다른 부 보기</span>` : `리버힐 CC · ${parts}`;
+  const warn = (r.viewOnly && r.dateMismatch)
+    ? `<div class="fb-vwwarn">${esc(r.dateLabel || '')} 판독본이에요 — 오늘 것과 다를 수 있어요</div>` : '';
+  // ★.fb-hero 껍데기는 renderFullBoard가 세운 뼈대에 이미 있다 — 여기서 또 감싸면 이중 패딩이 된다.
+  return `<div class="fb-loc"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>${loc}</div>
     ${boardHeroCore(r)}
-    ${temps}
-  </div>`;
+    ${warn}
+    ${temps}`;
 }
-function boardCardHTML(r) {
-  // 스페어면 헤더 칩에 '내 앞 대기 인원'을, 그 외엔 확정선 번호를 표기.
+// 표 머리 — 'N부 전체 순번표' + 부 전환 칩(옛 확정선 자리). 칩 색은 부 고유색(1부 분홍·2부 하늘·3부 보라).
+function boardChdHTML(r, rounds) {
+  const all = rounds || boardRounds();
+  const sw = all.length >= 2
+    ? `<div class="fb-parts">${all.map((x, i) => `<button data-i="${i}" class="p${x.part}${i === boardActiveIdx ? ' on' : ''}${x.viewOnly ? ' vw' : ''}">${x.part}부</button>`).join('')}</div>`
+    : '';
+  return `<span>${r.part}부 전체 순번표</span>${sw}`;
+}
+// 정렬 토글 + 확정선(스페어면 '내 앞 N명').
+function boardSegHTML(r) {
   const sp = r.status === 'spare' ? spareInfo(r) : null;
-  const chip = sp ? (sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`) : (r.cut ? `확정선 ${r.cut}번` : '집계 중');
-  return `<div class="fb-card">
-    <div class="fb-chd"><span>${r.part}부 전체 순번표</span><span class="cut2">${chip}</span></div>
-    <div class="fb-seg"><button data-o="seq" class="${boardOrder !== 'time' ? 'on' : ''}">순번순</button><button data-o="time" class="${boardOrder === 'time' ? 'on' : ''}">시간순</button></div>
-    <div class="fb-list">${boardListHTML(r)}</div>
-  </div>`;
+  const chip = r.viewOnly ? (r.cut ? `확정선 ${r.cut}번` : '집계 중')
+    : sp ? (sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`) : (r.cut ? `확정선 ${r.cut}번` : '집계 중');
+  return `<div class="fb-seg"><button data-o="seq" class="${boardOrder !== 'time' ? 'on' : ''}">순번순</button><button data-o="time" class="${boardOrder === 'time' ? 'on' : ''}">시간순</button></div>`
+    + `<span class="fb-cutchip">${chip}</span>`;
 }
 function boardListHTML(r) {
   const { roster, teeMap, cut, myPos } = r;
@@ -1500,7 +1596,15 @@ function boardListHTML(r) {
 }
 function boardTilesHTML(r) {
   const h = boardHeroFor(r);
-  const cutTile = `<div class="fb-tile"><div class="fb-tk">확정선</div><div class="fb-tv">${r.cut || '—'}${r.cut ? '<span style="font-size:17px">번</span>' : ''}</div><div class="fb-tsub">여기까지 근무</div></div>`;
+  const cutTile = `<div class="fb-tile"><div class="fb-tk">확정선</div><div class="fb-tv">${r.cut || '—'}${r.cut ? '<span style="font-size:17px">번</span>' : ''}</div><div class="fb-tsub">${r.cutoffName ? `${esc(r.cutoffName)}님까지` : '여기까지 근무'}</div></div>`;
+  // 옆 부는 '내 상태'가 없다 — 대신 그 부 규모(명단 인원)와, 명단에 내 이름이 있으면 그 순번을.
+  if (r.viewOnly) {
+    const spare = Math.max(0, r.roster.length - (r.cut || 0));
+    const t2 = r.myPos
+      ? `<div class="fb-tile"><div class="fb-tk">명단 속 내 이름</div><div class="fb-tv">${r.myPos}<span style="font-size:17px">번</span></div><div class="fb-tsub">${r.cut && r.myPos <= r.cut ? '확정선 안' : '확정선 밖'}</div></div>`
+      : `<div class="fb-tile"><div class="fb-tk">명단 인원</div><div class="fb-tv">${r.roster.length}<span style="font-size:17px">명</span></div><div class="fb-tsub">${spare ? `확정선 밖 ${spare}명` : '전원 확정'}</div></div>`;
+    return cutTile + t2;
+  }
   let myTile;
   if (r.status === 'work' && r.tee) myTile = `<div class="fb-tile"><div class="fb-tk">내 티오프</div><div class="fb-tv">${esc(r.tee)}</div><div class="fb-tsub">${r.course ? `${esc(r.course)} 코스 · ` : ''}${r.myPos ? `${r.myPos}번` : ''}</div></div>`;
   else if (r.status === 'spare') {
@@ -1508,7 +1612,7 @@ function boardTilesHTML(r) {
     if (sp) myTile = `<div class="fb-tile"><div class="fb-tk">내 스페어</div><div class="fb-tv">${sp.rank}<span style="font-size:17px">번째</span></div><div class="fb-tsub">${sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`}</div></div>`;
     else myTile = `<div class="fb-tile"><div class="fb-tk">내 순번</div><div class="fb-tv">${r.myPos || '—'}${r.myPos ? '<span style="font-size:17px">번</span>' : ''}</div><div class="fb-tsub">스페어 · 대기</div></div>`;
   } else myTile = `<div class="fb-tile"><div class="fb-tk">내 상태</div><div class="fb-tv" style="font-size:24px">${esc(h.big)}</div><div class="fb-tsub">${esc(h.cond)}</div></div>`;
-  return `<div class="fb-tiles">${cutTile}${myTile}</div>`;
+  return cutTile + myTile;
 }
 // 배치표에서 좌우 스와이프로 부 전환(중복근무 시). 세로 스크롤과 충돌하지 않게 수평 우세 제스처만.
 function initBoardSwipe() {

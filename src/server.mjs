@@ -27,7 +27,7 @@ import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
-import { setBoardPart } from './boardparts.mjs';
+import { setBoardPart, loadBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts, claudeDutyList } from './boardreader.mjs';
@@ -562,6 +562,50 @@ app.get('/api/today', (req, res) => {
   const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
   res.json({ ok: true, date: t.date, dayOffset, primaryPart, duty, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2, ownerName: prof.board_name || '' });
 });
+
+// ── ★전 부 배치표(1·2·3부) — 회원이 자기 부가 아닌 부의 순번표도 볼 수 있게. ──
+//  ★소스는 각 부의 '정본' 그대로: 3부=lastboard, 1·2부=board-parts-store(모니터 검수가 고치는 바로 그 파일).
+//   여기서 새로 계산하거나 다른 저장소를 만들지 않는다 — 앱에 보이는 표와 모니터 검수 표가 갈라지면
+//   어느 쪽이 맞는지 아무도 모르게 된다(1·2부 판독이 3부와 갈라졌던 것과 같은 함정).
+//  ★내 부는 이 API를 쓰지 않는다 — 대시보드가 쓰는 today(회원별 교정·잠금 반영본)가 우선.
+//   여긴 '옆 부 구경'용이라 회원별 해석 없이 판독 정본을 그대로 내려보낸다.
+app.get('/api/boards', requireAuth, (req, res) => {
+  const out = [];
+  const push = (part, roster, teeGrid, cut, cutoffName, teamCount, dateLabel, at) => {
+    const r = Array.isArray(roster) ? roster.filter((x) => x != null).map(String) : [];
+    if (!r.length) return;
+    out.push({
+      part: String(part), roster: r,
+      teeGrid: Array.isArray(teeGrid) ? teeGrid : [],
+      cut: Number(cut) || 0, cutoffName: String(cutoffName || ''),
+      teamCount: Number(teamCount) || 0,
+      dateLabel: String(dateLabel || ''), targetISO: worklog.labelToISO(dateLabel || '') || '',
+      at: Number(at) || 0,
+    });
+  };
+  try {
+    const s = loadBoardPartsStore();
+    for (const p of ['1', '2']) {
+      const d = s && s.parts && s.parts[p];
+      if (!d) continue;
+      // 부별 도장(_targetISO)이 있으면 그 근무일을, 없으면(옛 저장본) 저장소 날짜라벨을 쓴다.
+      const label = d._targetISO ? isoToLabel(d._targetISO) : (s.dateLabel || '');
+      push(p, d.roster, d.teeGrid, d.cutLine || d.cutoffPosition, d.cutoffName, d.teamCount, label, d._at || s.at);
+    }
+  } catch (e) { console.error('[boards 1·2부 오류]', e.message); }
+  try {
+    const lb = loadJSON('lastboard.json', null);
+    const v = (lb && lb.rawVerdict) || null;
+    if (v) push('3', v.part3Roster, v.teeGrid, v.cutoffPosition || v.teamCount, v.cutoffName, v.teamCount, lb.dateLabel || v.dateLabel || '', lb.at);
+  } catch (e) { console.error('[boards 3부 오류]', e.message); }
+  out.sort((a, b) => Number(a.part) - Number(b.part));
+  res.json({ ok: true, today: todayISOKST(), parts: out });
+});
+// ISO(2026-08-15) → 배치표 표기('2026년 8월 15일') — 부별 도장만 있고 원 라벨이 없을 때 화면 표기용.
+function isoToLabel(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[1]}년 ${Number(m[2])}월 ${Number(m[3])}일` : '';
+}
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
 app.get('/api/weather', async (req, res) => {
