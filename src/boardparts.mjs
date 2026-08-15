@@ -9,6 +9,26 @@ import { labelToISO } from './worklog.mjs';
 
 const FILE = 'board-parts-store.json';
 
+// ── ★배치표 범위(scope) — "이 배치표는 어느 부를 담고 있나". 판독 결과의 정식 값. ──
+//  이게 없어서 1부 실종 사고가 두 번 났다: 저장소는 '2부만 온 배치표'라는 사실을 못 받고, 대신
+//  articleId·날짜 같은 간접 신호로 "다른 부를 지울까?"를 혼자 추측했다. 추측이 틀릴 때마다 1부가 사라졌다.
+//  근거 우선순위: ①호출자가 못박은 부(단독 부 라우터·관리자 업로드) ②제목의 'N부 배치표' ③제목의 '전체'
+//   ④이미지에서 실제로 보인 부 표(boardTables).
+//  ★넷 다 없으면 '미상'([]) — 미상이면 아무 부도 폐기하지 않는다(모르면 안 지운다).
+export function boardScope(full, verdict, declaredPart) {
+  const subject = String(full?.subject || '');
+  if (declaredPart) return { parts: [String(declaredPart)], source: 'declared' };
+  if (/전체|전부/.test(subject)) return { parts: ['1', '2', '3'], source: 'subject-full' };
+  // ★'N부'와 '배치표' 사이에 다른 말이 껴도 잡는다 — 실제 제목이 '3부 현재 배치표입니다…'처럼 온다.
+  //  여러 부가 적혔으면(예: '1부,2부 한 팀씩 추가') 그 부들이 범위. 안 적힌 부는 이 글의 권한 밖.
+  const nums = [...new Set((subject.match(/[123]\s*부/g) || []).map((x) => x.replace(/\D/g, '')))].sort();
+  if (nums.length) return { parts: nums, source: 'subject' };
+  const tables = Array.isArray(verdict?.boardTables) ? verdict.boardTables : [];
+  const ps = [...new Set(tables.map((t) => String(t?.part || '')).filter((p) => ['1', '2', '3'].includes(p)))].sort();
+  if (ps.length) return { parts: ps, source: 'tables' };
+  return { parts: [], source: 'unknown' };
+}
+
 export function loadBoardPartsStore() { return loadJSON(FILE, null); }
 export function saveBoardPartsStore(obj) { saveJSON(FILE, obj); }
 export function getBoardPart(part) {
@@ -33,17 +53,21 @@ const kstTodayISO = () => localDayStr(Date.now());
 //  반드시 살아있어야 한다 → 30시간(전날 21시 판독본이 당일 정오까지 유효).
 const STALE_MS = 30 * 3600 * 1000;
 
-// 이 부 데이터가 '이번 판독의 근무일'과 어긋나 낡았는가.
-//  ★판단은 반드시 부 단위 — 형제 부를 통째로 버리는 판단은 하지 않는다.
-function partIsStale(pd, storeAt, newISO, todayISO) {
+// 이 부 데이터를 버려야 하는가. ★판단은 반드시 부 단위 — 형제 부를 통째로 버리는 판단은 하지 않는다.
+//  inScope = 이번 배치표가 '그 부를 담고 있나'. 안 담고 있으면 이 배치표엔 그 부를 바꿀 권한이 없다.
+function partIsStale(pd, storeAt, newISO, todayISO, inScope) {
   if (!pd) return true;
   const iso = pd._targetISO || '';
-  if (iso) {
-    if (newISO && iso !== newISO) return true;   // 다른 근무일 판독본(내일 배치표가 왔는데 오늘치가 남음)
-    return iso < todayISO;                       // 근무일이 이미 지남
+  // ①근무일이 이미 지났으면 누구 권한과도 무관하게 폐기(아무도 안 쓸 데이터).
+  if (iso && iso < todayISO) return true;
+  // ②이 배치표가 그 부를 담고 있고, 근무일이 다르면 → 이 배치표가 그 부를 갈아치운다.
+  if (inScope && iso && newISO && iso !== newISO) return true;
+  // ③근무일 미상 + 오래됨. 단 '범위 밖'이면 이 배치표엔 판단할 권한이 없으니 나이로도 안 버린다.
+  if (!iso && inScope) {
+    const at = Number(pd._at) || Number(storeAt) || 0;   // 옛 저장본(부별 도장 없음) → 저장소 시각으로
+    return at > 0 && (Date.now() - at) > STALE_MS;
   }
-  const at = Number(pd._at) || Number(storeAt) || 0;   // 옛 저장본(부별 도장 없음) → 저장소 시각으로
-  return at > 0 && (Date.now() - at) > STALE_MS;
+  return false;
 }
 
 // 부별 순번표 저장(upsert).
@@ -55,10 +79,19 @@ function partIsStale(pd, storeAt, newISO, todayISO) {
 //   그래서 기준을 '판독 시각'이 아니라 배치표가 가리키는 근무일(dateLabel→ISO)로 바꾸고, 폐기도
 //   통째 리셋이 아니라 낡은 부만 골라내는 방식으로 바꾼다. 근무일을 모르면(단독 수정본 등) 아무도 안 버린다
 //   — 낡은 순번표가 잠깐 남는 손해보다 1부가 통째로 사라지는 손해가 훨씬 크다(모니터에서 눈에도 안 띔).
+//
+//   ★근본 수정(범위): 두 사고의 공통 원인은 '이 배치표가 어느 부를 담고 있나'를 저장소가 못 받아
+//    간접 신호로 추측한 것이다. 이제 판독이 범위(meta.scope)를 실어 보내고, 규칙은 추측 없이 두 줄이다:
+//     · 범위에 든 부  = 이 배치표가 말한 것 → 근무일이 다르면 갈아치운다
+//     · 범위에 없는 부 = 이 배치표가 아무 말도 안 함 → 절대 안 건드린다
+//    "2부 배치표가 1부를 지운다"가 표현 자체로 불가능해진다. 범위가 미상이면 아무도 안 지운다.
 export function setBoardPart(articleId, meta, article, part, data) {
   const id = String(articleId || '');
   const newISO = labelToISO(meta.dateLabel || '') || '';   // 이 판독이 가리키는 근무일(모르면 '')
   const todayISO = kstTodayISO();
+  // ★이 배치표가 담고 있는 부(범위). 범위 밖 부는 이 배치표에 '바꿀 권한'이 없다 — 무조건 보존.
+  //  비어 있으면(범위 미상) 아무 부도 폐기하지 않는다: 모르면 안 지운다.
+  const scope = Array.isArray(meta.scope) ? meta.scope.map(String) : [];
   let s = loadBoardPartsStore();
   if (!s || !s.parts) {
     s = { articleId: id, at: meta.at || Date.now(), targetISO: newISO, dateLabel: meta.dateLabel || '',
@@ -66,12 +99,15 @@ export function setBoardPart(articleId, meta, article, part, data) {
   } else {
     // 낡은 부만 골라 정리. 이번에 저장할 부는 어차피 덮어쓰므로 지우지 않되, '갈아탔는지' 판정엔 포함한다.
     const keys = Object.keys(s.parts);
-    const allStale = keys.length > 0 && keys.every((k) => partIsStale(s.parts[k], s.at, newISO, todayISO));
+    const inScope = (k) => scope.includes(String(k)) || String(k) === String(part);
+    const allStale = keys.length > 0 && keys.every((k) => partIsStale(s.parts[k], s.at, newISO, todayISO, inScope(k)));
     for (const k of keys) {
       if (k === String(part)) continue;
-      if (partIsStale(s.parts[k], s.at, newISO, todayISO)) {
-        console.log(`·  [board-parts] ${k}부 폐기 — 낡은 판독본(근무일 ${s.parts[k]?._targetISO || '미상'} ≠ ${newISO || todayISO})`);
+      if (partIsStale(s.parts[k], s.at, newISO, todayISO, inScope(k))) {
+        console.log(`·  [board-parts] ${k}부 폐기 — 이 배치표(범위 ${scope.join('·') || '미상'})가 덮는 부이고 근무일이 다름(${s.parts[k]?._targetISO || '미상'} → ${newISO || todayISO})`);
         delete s.parts[k];
+      } else if (!inScope(k)) {
+        console.log(`·  [board-parts] ${k}부 보존 — 이 배치표 범위(${scope.join('·') || '미상'}) 밖이라 건드리지 않음`);
       }
     }
     // 저장돼 있던 부가 전부 낡았으면 '새 배치표로 갈아탄 것' → 정체성(글·이미지)도 이번 것으로.

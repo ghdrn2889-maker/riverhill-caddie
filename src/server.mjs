@@ -27,7 +27,7 @@ import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
-import { setBoardPart, loadBoardPartsStore } from './boardparts.mjs';
+import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts, claudeDutyList } from './boardreader.mjs';
@@ -1399,10 +1399,11 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
         internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
         cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
       };
-      // ★형제 부(1·3부) 보존은 이제 setBoardPart가 '같은 날 병합'으로 보장한다(단독 수정 배치표가
-      //  새 글로 와도 1부를 지우지 않음). 여긴 그 부만 upsert.
+      // ★범위를 명시해 넘긴다 — 이 글은 '이 부'만 담은 배치표다. 저장소는 이 범위 밖 부를 절대 건드리지 않는다
+      //  (단독 2부 수정본이 멀쩡한 1부를 지우던 사고의 근본 차단).
+      const scope = boardScope(full, vp, part);
       const saved = setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
-        image: (full.images && full.images[0]) || '', url: full.url || '' }, full, part, partData);
+        image: (full.images && full.images[0]) || '', url: full.url || '', scope: scope.parts, scopeSource: scope.source }, full, part, partData);
       const kept = Object.keys(saved.parts || {}).filter((k) => k !== String(part));
       console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})${kept.length ? ` · 보존 부: ${kept.join(',')}부` : ''}`);
       // ★부별 배치표 감시 등록 — 같은 글의 이미지 교체(수정본) 감지용(recheckPartBoards가 지문 비교 후 재판독).
@@ -1544,8 +1545,9 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         try {
           const mparts = await claudeMonitorParts(full, ['1', '2']);
           if (mparts) {
+            const _sc = boardScope(full, out.rawVerdict, null);
             const meta = { at: Date.now(), dateLabel: out.rawVerdict?.dateLabel || '', subject: full.subject || '',
-              image: (full.images && full.images[0]) || '', url: full.url || '' };
+              image: (full.images && full.images[0]) || '', url: full.url || '', scope: _sc.parts, scopeSource: _sc.source };
             // ★명단이 있는 부만 저장 — 빈 명단으로 형제 부를 덮지 않도록(오독 방어).
             for (const p of ['1', '2']) if (mparts[p] && Array.isArray(mparts[p].roster) && mparts[p].roster.length) setBoardPart(full.id, meta, full, p, mparts[p]);
             console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
@@ -1591,6 +1593,9 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const txt = `${full.subject || ''} ${full.text || ''}`;
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
+    // ★이 배치표의 범위 — 아래 부별 판독·저장 전부가 이 값을 근거로 움직인다(추측 금지).
+    const _scope = boardScope(full, out.rawVerdict, null);
+    console.log(`·  [배치표 범위] ${_scope.parts.length ? _scope.parts.join('·') + '부' : '미상'} (근거: ${_scope.source}) — 범위 밖 부는 이 배치표로 절대 안 바꿈: ${full.subject}`);
     const crewDuty = out.rawVerdict?.crewDuty || null;   // 조배치표 근무표시 맵(3부 판독에서 수확) → 부별 알림 게이트 근거
     // ★이름 중복 교차확인(두 탕) — board당 1회. 각 부 근무자 집합(순번≤팀수)을 교차해 '이름→뛰는 부' authoritative 맵.
     //  2부 근무자는 조배치표 근무표시가 빈칸이라 이 교차확인이 두 탕/부소속의 가장 확실한 신호. 전체·다부 배치표에서만(비용).
@@ -1623,7 +1628,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       if (Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
         try {
           setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || out.rawVerdict?.dateLabel || '',
-            subject: full.subject || '', image: (full.images && full.images[0]) || '', url: full.url || '' }, full, p, {
+            subject: full.subject || '', image: (full.images && full.images[0]) || '', url: full.url || '',
+            scope: _scope.parts, scopeSource: _scope.source }, full, p, {
             roster: vp.part3Roster.slice(),
             teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
             teeTimes: Array.isArray(vp.teeTimes) ? vp.teeTimes : [],   // ★칸 전체 티오프 시각(검수 드롭다운용)
