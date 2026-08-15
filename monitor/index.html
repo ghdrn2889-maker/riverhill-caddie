@@ -29,6 +29,18 @@
   .btn{ appearance:none; border:1px solid var(--bord2); background:var(--panel2); color:var(--tx2); font:inherit; font-size:12px; font-weight:600; padding:6px 12px; border-radius:9px; cursor:pointer; }
   .btn:hover{ color:var(--tx); border-color:var(--acc); }
 
+  /* ★업로드 배치표 종류 — 고른 값이 그대로 판독 범위가 된다(고르지 않은 부는 안 바뀜). 부 색은 앱과 동일. */
+  .ub-kind{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:2px 0 12px; }
+  .ub-kind .ub-k{ font-size:12px; font-weight:700; color:var(--tx2); }
+  .ub-seg{ display:flex; gap:6px; }
+  .ub-seg button{ appearance:none; border:1px solid var(--bord2); background:var(--panel2); color:var(--tx2);
+                  font:inherit; font-size:12.5px; font-weight:700; padding:7px 15px; border-radius:9px; cursor:pointer;
+                  transition:background .14s ease, color .14s ease, border-color .14s ease; }
+  .ub-seg button.p1{ --pc:#c14b86; } .ub-seg button.p2{ --pc:#1f6bb0; } .ub-seg button.p3{ --pc:#6a4bbf; }
+  .ub-seg button:hover{ border-color:var(--pc,var(--acc)); color:var(--pc,var(--tx)); }
+  .ub-seg button.on{ background:var(--pc,var(--acc)); border-color:transparent; color:#fff; }
+  .ub-note{ font-size:11.5px; color:var(--tx3); }
+
   /* KPI */
   .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:11px; margin:18px 0; }
   @media(max-width:900px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
@@ -157,7 +169,10 @@
   /* ── 배치표 검수 v2 (모바일 카드) ── */
   #page-review .rv-parts{ display:flex; gap:6px; margin-bottom:9px; }
   #page-review .rv-pt{ flex:1; font:inherit; font-size:13px; font-weight:800; padding:9px 0; border-radius:11px; background:var(--panel2); border:1px solid var(--bord2); color:var(--tx2); cursor:pointer; transition:.15s; }
-  #page-review .rv-pt.on{ background:var(--acc); border-color:var(--acc); color:#fff; }
+  /* ★검수 부 탭도 앱과 같은 부 색으로 — 업로드 종류 칩과 색 언어를 통일(어느 부를 보고 있는지 색으로 즉시) */
+  #page-review .rv-pt.p1{ --pc:#c14b86; } #page-review .rv-pt.p2{ --pc:#1f6bb0; } #page-review .rv-pt.p3{ --pc:#6a4bbf; }
+  #page-review .rv-pt:hover{ border-color:var(--pc,var(--acc)); color:var(--pc,var(--tx)); }
+  #page-review .rv-pt.on{ background:var(--pc,var(--acc)); border-color:transparent; color:#fff; }
   #page-review .rv-pt .c{ font-size:10px; font-weight:700; opacity:.7; margin-left:3px; }
   #page-review .rv-sb{ position:relative; margin-bottom:7px; }
   #page-review .rv-sb svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:17px; height:17px; color:var(--tx3); pointer-events:none; }
@@ -592,6 +607,18 @@
     <div class="panel full">
       <h2>카톡 배치표 이미지 올리기 — 시스템이 판독해 반영</h2>
       <p class="desc">카톡으로 온 배치표(당추·티오프 변동) 사진은 알림으로 자동 감지가 안 됩니다. 여기 올리면 <b>서버가 판독해 전 회원에게 반영</b>합니다. (조하빈 등 승격자 티오프처럼 이미지에만 있는 값 채우기)</p>
+      <!-- ★무슨 배치표인지 먼저 고른다 — 올리는 사람은 아는 사실인데, 지금까지 버리고 이미지에서 다시
+           추측했다. 고른 값은 판독 범위가 되어 '고르지 않은 부는 이 업로드로 절대 안 바뀐다'를 보장한다. -->
+      <div class="ub-kind">
+        <span class="ub-k">어떤 배치표인가요</span>
+        <div class="ub-seg" id="ubKind">
+          <button type="button" class="on" data-p="all">전체</button>
+          <button type="button" class="p1" data-p="1">1부</button>
+          <button type="button" class="p2" data-p="2">2부</button>
+          <button type="button" class="p3" data-p="3">3부</button>
+        </div>
+        <span class="ub-note" id="ubKindNote">1·2·3부 표가 모두 있는 본배치표</span>
+      </div>
       <div class="ub-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <input type="file" id="ubFile" accept="image/*" style="font:inherit;font-size:12.5px;">
         <label style="display:flex;gap:5px;align-items:center;font-size:12px;color:var(--tx2);"><input type="checkbox" id="ubNoPush"> 발송 없이 상태만(테스트)</label>
@@ -1317,7 +1344,7 @@
   function rvConfPos(){ var s={}; rvConf().forEach(function(c){c.rows.forEach(function(r){s[r.pos]=1;});}); return s; }
   function rvPresHas(name,p){ var s=rvPresence[rvNk(name)]; return !!(s&&s.indexOf(p)>=0); }
   function rvHi(name,q){ if(!q)return esc(name); var i=name.indexOf(q); if(i<0)return esc(name); return esc(name.slice(0,i))+'<span class="h">'+esc(name.slice(i,i+q.length))+'</span>'+esc(name.slice(i+q.length)); }
-  function rvTabs(){ return '<div class="rv-parts">'+['1','2','3'].map(function(p){return '<button class="rv-pt'+(p===brPart?' on':'')+'" data-tab-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
+  function rvTabs(){ return '<div class="rv-parts">'+['1','2','3'].map(function(p){return '<button class="rv-pt p'+p+(p===brPart?' on':'')+'" data-tab-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
   function rvWireTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.rv-pt'),function(b){ b.onclick=function(){ brPart=b.getAttribute('data-tab-p'); brDirty=false; rvSearch=''; rvPage=0; loadBoardReview(true); }; }); }
   function rvMeta(b){ return '<div class="rv-meta"><span class="rv-chip">글 #'+esc(String(b.articleId||'-'))+'</span>'+(b.dateLabel?'<span class="rv-chip">'+esc(b.dateLabel)+'</span>':'')+'<span class="rv-chip">판독 '+rel(b.at)+'</span>'+(b.corrected?'<span class="rv-chip ok">관리자 교정됨</span>':(b.uncertain?'<span class="rv-chip warn">불확실</span>':''))+'<span class="rv-cut" id="rvCut"></span></div>'; }
   function rvImg(b){ var note=(b.imageId&&String(b.imageId)!==String(b.articleId))?' · 변동 #'+esc(String(b.imageId)):''; if(!b.image) return '<details class="rv-img"><summary>원본 배치표 (이미지 없음 · 텍스트 공지)</summary><div class="box"><div class="noimg">이 배치표엔 이미지가 없어요. 표만 보고 교정하세요.</div></div></details>'; return '<details class="rv-img"><summary>원본 배치표 이미지 보기'+note+'</summary><div class="box"><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본"></div></details>'; }
@@ -1761,6 +1788,19 @@
   (function(){
     var fi=$('ubFile'), btn=$('ubSend'), stat=$('ubStat'), prev=$('ubPrev'); if(!fi||!btn) return;
     var dataUrl='';
+    // 배치표 종류 — 고른 값이 판독 범위. '전체'가 기본(지금까지의 동작과 같은 결과).
+    var ubPart='all';
+    var UBN={ all:'1·2·3부 표가 모두 있는 본배치표', '1':'1부 표만 있는 배치표 — 2·3부는 안 바뀝니다',
+              '2':'2부 표만 있는 배치표 — 1·3부는 안 바뀝니다', '3':'3부 표만 있는 배치표 — 1·2부는 안 바뀝니다' };
+    (function(){
+      var box=$('ubKind'), note=$('ubKindNote'); if(!box) return;
+      box.addEventListener('click', function(e){
+        var b=e.target.closest('button[data-p]'); if(!b) return;
+        ubPart=b.dataset.p;
+        Array.prototype.forEach.call(box.querySelectorAll('button'), function(x){ x.classList.toggle('on', x===b); });
+        if(note) note.textContent=UBN[ubPart]||'';
+      });
+    })();
     fi.addEventListener('change', function(){
       var f=fi.files&&fi.files[0]; dataUrl=''; btn.disabled=true; prev.style.display='none'; stat.textContent='';
       if(!f) return;
@@ -1772,7 +1812,7 @@
       if(!dataUrl){ return; }
       btn.disabled=true; var np=$('ubNoPush').checked; stat.textContent='판독 중… (수십 초 걸릴 수 있어요)';
       try{
-        var r=await fetch(apiUrl('/api/upload-board'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ image:dataUrl, nopush:np }) });
+        var r=await fetch(apiUrl('/api/upload-board'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ image:dataUrl, nopush:np, part:ubPart }) });
         var j=await r.json();
         if(j&&j.ok){ stat.textContent='반영됨: '+(j.body||('컷 '+(j.cutLine||'?')))+(np?' · (발송 안 함)':''); brDirty=false; loadBoardReview(true); }
         else { stat.textContent='실패: '+((j&&j.error)||('HTTP '+r.status)); btn.disabled=false; }

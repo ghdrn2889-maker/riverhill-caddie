@@ -852,9 +852,15 @@ app.post('/api/upload-board', gate, async (req, res) => {
     const source = req.body?.source || '카톡업로드';
     const comments = Array.isArray(req.body?.comments) ? req.body.comments.filter(Boolean).slice(0, 8) : [];
     const nopush = req.body?.nopush ? '1' : '';
+    // ★관리자가 고른 배치표 종류(전체/1·2·3부)를 그대로 넘긴다 — 제목은 앱이 이 값으로 짓는다.
+    //  지금까지는 '[관리자업로드] 배치표 이미지'로 고정해 보내, 올리는 사람이 아는 사실을 버리고
+    //  이미지에서 다시 추측하게 만들었다(로그: '이 배치표엔 1부 표 없음' 오판의 온상).
+    const part = ['all', '1', '2', '3'].includes(String(req.body?.part || '')) ? String(req.body.part) : '';
+    const body = { image, source, comments, part };
+    if (!part) body.subject = '[관리자업로드] 배치표 이미지';   // 미지정이면 종전과 100% 동일
     const r = await fetch(`${appUrl}/api/ingest-image${nopush ? '?nopush=1' : ''}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': token },
-      body: JSON.stringify({ image, source, comments, subject: '[관리자업로드] 배치표 이미지' }),
+      body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => ({ ok: false, error: `앱 응답 파싱 실패(HTTP ${r.status})` }));
     res.status(r.ok ? 200 : r.status).json(j);

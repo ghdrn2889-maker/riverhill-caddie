@@ -465,8 +465,15 @@ app.post('/api/ingest-image', async (req, res) => {
     const source = req.body?.source || '카톡';
     const comments = Array.isArray(req.body?.comments)
       ? req.body.comments.map((c) => ({ content: String(c || ''), nick: String(source), date: ts })).filter((c) => c.content) : [];
+    // ★관리자가 올릴 때 '무슨 배치표인지' 골랐으면 그대로 제목에 못박는다.
+    //  올리는 사람은 100% 아는 사실인데 지금까지 버리고 이미지에서 다시 추측했다 —
+    //  그 추측이 범위(scope)와 부별 판독 스킵 판단의 근거라, 틀리면 멀쩡한 부가 통째로 빠졌다.
+    //  제목에 박아두면 boardScope(범위)와 단독 부 라우팅이 둘 다 정확해진다(추가 판독 비용 0).
+    const declared = String(req.body?.part || '').trim();
+    const partWord = declared === 'all' ? '전체 배치표' : ['1', '2', '3'].includes(declared) ? `${declared}부 배치표` : '';
+    const autoSubject = partWord ? `[${source}] ${partWord}` : `[${source}] 배치표 이미지`;
     const full = {
-      id: `img-${ts}`, subject: req.body?.subject || `[${source}] 배치표 이미지`,
+      id: `img-${ts}`, subject: req.body?.subject || autoSubject,
       text: String(req.body?.text || ''), writer: String(req.body?.sender || source),
       menuId: '2', menuName: '배치 시간표', images: [file], writeDate: ts, url: '/', comments,
     };

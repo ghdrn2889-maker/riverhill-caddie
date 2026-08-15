@@ -1502,19 +1502,24 @@ function renderFullBoard() {
   //  통째로 갈아끼우면 그 블러를 매번 처음부터 다시 래스터화한다(폰에서 '정보가 실시간으로 그려지는' 느낌의 정체).
   //  진입 직후에만 3번(showView·날씨·옆부 도착) 재렌더되던 것도 여기서 걷어낸다 — 바뀐 조각만 갈아끼운다.
   const heroH = boardHeroHTML(rounds, r);
+  const wxH = boardWxHTML();
   const chdH = boardChdHTML(r, rounds);
   const segH = boardSegHTML(r);
   const listH = boardListHTML(r);
   const tilesH = boardTilesHTML(r);
-  let hero = host.querySelector('.fb-hero');
+  let hero = host.querySelector('.fb-hmain');
   if (!hero) {   // 첫 렌더(또는 빈 상태에서 복귀)에서만 뼈대를 세운다
-    host.innerHTML = `<div class="fb-hero"></div><div class="fb-cards"><div class="fb-card">`
+    // ★날씨(최고/최저·체감)는 히어로 안에서 따로 둔다 — 부가 바뀌어도 날씨는 그대로라
+    //  같이 슬라이드시키면 안 바뀐 정보가 움직이는 것처럼 보인다(사용자 지적).
+    host.innerHTML = '<div class="fb-hero"><div class="fb-hmain"></div><div class="fb-hwx"></div></div>'
+      + '<div class="fb-cards"><div class="fb-card">'
       + '<div class="fb-chd"></div><div class="fb-segrow"></div><div class="fb-list"></div>'
       + '</div><div class="fb-tiles"></div></div>';
-    hero = host.querySelector('.fb-hero');
+    hero = host.querySelector('.fb-hmain');
   }
   const put = (el, html) => { if (el && el._h !== html) { el.innerHTML = html; el._h = html; } };
   put(hero, heroH);
+  put(host.querySelector('.fb-hwx'), wxH);
   put(host.querySelector('.fb-chd'), chdH);
   put(host.querySelector('.fb-segrow'), segH);
   put(host.querySelector('.fb-list'), listH);
@@ -1522,8 +1527,9 @@ function renderFullBoard() {
   if (boardSlideDir) {   // 부 전환(스와이프·탭) 방향에 맞춰 슬라이드-인
     // ★애니메이션은 '글래스가 아닌' 안쪽(히어로 내용·명단·타일)에만 건다. 카드 자체를 움직이면
     //  2,000px 블러를 매 프레임 다시 뜬다 — 그게 전환 때 버벅이던 원인.
+    // ★날씨(.fb-hwx)는 제외 — 부가 바뀌어도 안 바뀌는 정보라 움직이면 안 된다.
     const cls = boardSlideDir > 0 ? 'fb-in-r' : 'fb-in-l';
-    host.querySelectorAll('.fb-hero, .fb-list, .fb-tiles').forEach((n) => {
+    host.querySelectorAll('.fb-hmain, .fb-list, .fb-tiles').forEach((n) => {
       n.classList.remove('fb-in-r', 'fb-in-l');
       void n.offsetWidth;            // 같은 방향으로 연속 전환해도 애니메이션이 다시 돌게
       n.classList.add(cls);
@@ -1538,11 +1544,6 @@ function boardHeroHTML(rounds, r) {
   const parts = `${(my.length ? my : rounds).map((x) => x.part).join('·')}부`;
   // ★부 전환 칩은 히어로가 아니라 순번표 카드 머리(‘N부 전체 순번표’ 줄)로 내렸다 —
   //  표를 보면서 부를 바꾸는 동작이라, 표 바로 위에 있는 게 손과 눈이 덜 움직인다.
-  const arUp = '<svg class="fb-ar up" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L11 10 H1 Z"/></svg>';
-  const arDn = '<svg class="fb-ar dn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 11 L1 2 H11 Z"/></svg>';
-  const temps = (lastWx && (lastWx.hi != null || lastWx.lo != null))
-    ? `<div class="fb-hilo"><span class="up">${arUp}${lastWx.hi != null ? lastWx.hi : '—'}°</span><span class="dn">${arDn}${lastWx.lo != null ? lastWx.lo : '—'}°</span></div>${lastWx.feels != null ? `<div class="fb-feels">체감온도 ${lastWx.feels}°</div>` : ''}`
-    : '';
   // 옆 부를 보는 중이면 위치줄에 그 사실을 분명히 — 내 배치인 줄 오해하면 안 된다.
   const loc = r.viewOnly ? `리버힐 CC · ${r.part}부 <span class="fb-vwtag">다른 부 보기</span>` : `리버힐 CC · ${parts}`;
   const warn = (r.viewOnly && r.dateMismatch)
@@ -1550,8 +1551,15 @@ function boardHeroHTML(rounds, r) {
   // ★.fb-hero 껍데기는 renderFullBoard가 세운 뼈대에 이미 있다 — 여기서 또 감싸면 이중 패딩이 된다.
   return `<div class="fb-loc"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>${loc}</div>
     ${boardHeroCore(r)}
-    ${warn}
-    ${temps}`;
+    ${warn}`;
+}
+// 날씨(최고/최저·체감) — 부와 무관한 정보라 히어로 안에서 따로 그리고, 부 전환 애니메이션에서 제외한다.
+function boardWxHTML() {
+  if (!lastWx || (lastWx.hi == null && lastWx.lo == null)) return '';
+  const arUp = '<svg class="fb-ar up" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1 L11 10 H1 Z"/></svg>';
+  const arDn = '<svg class="fb-ar dn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 11 L1 2 H11 Z"/></svg>';
+  return `<div class="fb-hilo"><span class="up">${arUp}${lastWx.hi != null ? lastWx.hi : '—'}°</span><span class="dn">${arDn}${lastWx.lo != null ? lastWx.lo : '—'}°</span></div>`
+    + (lastWx.feels != null ? `<div class="fb-feels">체감온도 ${lastWx.feels}°</div>` : '');
 }
 // 표 머리 — 'N부 전체 순번표' + 부 전환 칩(옛 확정선 자리). 칩 색은 부 고유색(1부 분홍·2부 하늘·3부 보라).
 function boardChdHTML(r, rounds) {
