@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
+import { raiseBoardIssue } from './boardalert.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -54,7 +55,7 @@ const _bareNameOf = (cell) => {
 };
 // 셀에서 주인(맨앞 이름)과 대체자(대바) 추출 — crossparts.cellOwnerSub와 동일 규칙(순환 import 회피용 복제).
 //  "차은경(1,3)구경은"→{owner:차은경,sub:구경은}, "남재권(정민철)"→{owner:남재권,sub:정민철}, "우겸조(54)"→{sub:''}.
-const _SUB_TAGWORDS = new Set(['조출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어', '정출', '선발', '당번', '프리', '벌당', '배치', '콜', '정근', '휴무', '휴가', '병가', '연차', '월차', '격리', '마감', '대리', '주임', '마샬']);
+const _SUB_TAGWORDS = new Set(['조출', '후출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어', '정출', '선발', '당번', '프리', '벌당', '배치', '콜', '정근', '휴무', '휴가', '병가', '연차', '월차', '격리', '마감', '대리', '주임', '마샬']);
 function _ownerSubOf(cell) {
   const s = String(cell || '');
   const om = s.match(/^([가-힣]{2,4})/); if (!om) return { owner: '', sub: '' };
@@ -380,6 +381,7 @@ async function readPartsOnce(img, sorted, cuts) {
               // ★재판독 후에도 티오프가 컷보다 짧으면 이상 기록 — 감시 클로드·모니터가 잡아 사람이 정정하도록(무음 통과 금지).
               if (cut > 0 && gridMax < cut) {
                 appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'grid_short', part: 3, teeMax: gridMax, cut, articleHint: '3부 홀리스틱', note: '티오프 하단 누락 — 꼬리 재판독 후에도 컷 미달(사람 확인 필요)' });
+                raiseBoardIssue({ kind: 'grid_short', part: 3, teeMax: gridMax, cut });
               }
               continue;
             }
@@ -418,11 +420,14 @@ async function readPartsOnce(img, sorted, cuts) {
       if (holes.length) {
         console.warn(`[boardreader] 부${b.part} 명단 구멍 ${holes.length}칸(순번 ${holes.slice(0, 12).join(',')}${holes.length > 12 ? '…' : ''}) — 열 하단 절단/누락 의심`);
         appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'roster_holes', part: Number(b.part), holes: holes.slice(0, 30), rosterLen: roster.length, cut, note: '명단 중간 빈 순번 — 열 하단 절단 또는 판독 누락(사람 확인 필요)' });
+        // ★로그만 남기면 아무도 모른다(8/16 2부 21~25번 사고) — 관리자 폰으로 곧장.
+        raiseBoardIssue({ kind: 'roster_holes', part: Number(b.part), holes: holes.slice(0, 30), rosterLen: roster.length, cut });
       }
       const tconf = _teeConflicts(r.tee);
       if (tconf.length) {
         console.warn(`[boardreader] 부${b.part} 티오프 충돌(${tconf.join(',')}) — 순번↔시각 밀림 의심`);
         appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'tee_conflict', part: Number(b.part), times: tconf, note: '한 시각 3명↑ 또는 코스 중복 — 순번↔시각 사다리 밀림(사람 확인 필요)' });
+        raiseBoardIssue({ kind: 'tee_conflict', part: Number(b.part), times: tconf });
       }
       parts[String(b.part)] = { roster: snapRoster(roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
@@ -521,6 +526,7 @@ export function purgeCrossPartContamination(parts) {
         const detail = hits.map((h) => `순번${h.i + 1} ${h.b}`);
         console.warn(`[boardreader] ★교차오염 정리: ${a}부에서 3부 전용 이름 ${hits.length}개 제거(크롭 번짐) — ${detail.slice(0, 12).join(', ')}`);
         try { appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'cross_part_contamination', part: Number(a), purged: hits.length, names: detail, note: '옆 부(3부) 명단이 크롭 번짐으로 이 부에 유입 → 제거. 부 명단 불완전할 수 있어 관리자 검수 권장.' }); } catch { /* noop */ }
+        raiseBoardIssue({ kind: 'cross_part_contamination', part: Number(a), purged: hits.length, names: detail });
       }
     }
   } catch (e) { console.error('[교차오염 정리 오류]', e.message); }
@@ -529,7 +535,7 @@ export function purgeCrossPartContamination(parts) {
 
 // 조편성 근무칸이 '근무'인가(근태 아님) — 애매이름 티브레이크의 '오늘 근무자' 판정.
 // ★벌당 추가 — 빠져 있어 벌당 근무자가 '오늘 근무자 집합'에서 통째로 누락됐다(애매이름 티브레이크 근거 손실).
-const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|찾근|정출|선발|당번|벌당|배치|마감|대리|주임|마샬|프리|콜|정근/;
+const _WORK_DUTY_RE = /1부|2부|3부|1,3|2,3|54|조출|후출|찾근|정출|선발|당번|벌당|배치|마감|대리|주임|마샬|프리|콜|정근/;
 
 // ★애매 오독 티브레이크 — 스냅이 '유일하지 않다'며 포기한 순번 이름을, '오늘 근무자'에 유일하게 있는
 //  정본 근접후보로 확정(이수련↔이수현/이승현/박수현). 안전: 평범한 2~4한글 셀만·정본 아님·후보 근무자 유일·중복금지.
@@ -671,7 +677,7 @@ function parseCell(cell) {
   const isNum = /^[\d,.]+$/.test(inner);
   if (tail && /[가-힣]/.test(tail)) return { name: tail, holder: tail.replace(/\s/g, ''), duty: isNum ? inner : '', cross: isNum };
   if (isNum) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: true };
-  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리)$/.test(inner)) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: false };
+  if (/^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리)$/.test(inner)) return { name: base, holder: base.replace(/\s/g, ''), duty: inner, cross: false };
   return { name: inner || base, holder: (inner || base).replace(/\s/g, ''), duty: '', cross: false };
 }
 

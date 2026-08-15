@@ -57,6 +57,8 @@ export function dutyToParts(duty) {
   const m = d.match(/([123])부/);
   if (m) { parts.add(m[1]); return parts; }                     // "3부"
   if (/조출/.test(d)) { parts.add('1'); return parts; }          // 조출=1부 조기출근
+  // ★후출(늦게 출근하는 찬스권)은 일부러 부를 특정하지 않는다 — '자기 부보다 늦게'라 절대 부가 아니라
+  //  상대값이다(1부반의 후출=2부, 2부반의 후출=3부). 실제 부는 그 사람이 실린 명단이 말해준다.
   return parts;                                                  // 특정 불가
 }
 
@@ -996,7 +998,7 @@ function rosterHitsOf(roster, name) {
   const key = String(name).replace(/\s/g, '');
   // 괄호 안이 '사람 이름'이면 순번교환 점유자(정진영(조하빈)=조하빈), '근무태그/숫자'(조출·찾근·54·1,3·2,3·휴무 등)면
   //  base가 그 사람(서동환(조출)=서동환). 근무태그를 점유자로 오인해 조출/두탕 캐디가 매칭 안 되던 버그 수정.
-  const DUTY_RE = /^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리|대리|주임|마샬|54h?|[\d,.]+)$/;
+  const DUTY_RE = /^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리|대리|주임|마샬|54h?|[\d,.]+)$/;
   for (let i = 0; i < roster.length; i++) {
     const cell = String(roster[i] || '').replace(/\s/g, '');
     if (!cell) continue;
@@ -1174,8 +1176,9 @@ function normRosterName(raw) {
   if (tpm) tailName = tpm[1].trim();
   if (tailName && /[가-힣]/.test(tailName) && !/^[\d,\s.]+$/.test(tailName)) return { name: tailName, cross: /^[\d,\s.]+$/.test(inner), duty: /^[\d,\s.]+$/.test(inner) ? dutyTag : '' };
   if (/^[\d,\s.]+$/.test(inner)) return { name: base, cross: true, duty: dutyTag };  // "표승완(54)" 부/근무 구분
-  // 근무구분 키워드(찾근·조출 등)는 '순번 교환'이 아니라 태그 → 본명(base) 유지. (없으면 "우겸조(찾근)"이 이름 "찾근"으로 깨짐)
-  if (/^(찾근|조출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, cross: false, duty: dutyTag };
+  // 근무구분 키워드(찾근·조출·후출 등)는 '순번 교환'이 아니라 태그 → 본명(base) 유지. (없으면 "우겸조(찾근)"이 이름 "찾근"으로 깨짐)
+  //  ★후출(늦게 출근하는 찬스권 — 조출의 반대)이 빠져 있어 "김태리(후출)"이 이름 "후출"로 깨지던 버그 수정.
+  if (/^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근)$/.test(inner)) return { name: base, cross: false, duty: dutyTag };
   return { name: inner || base, cross: false, duty: '' };             // "정진영(조하빈)" 순번 교환 → 점유자
 }
 

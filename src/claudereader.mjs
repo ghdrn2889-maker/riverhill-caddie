@@ -30,7 +30,7 @@ export function claudeBudgetLeft() { return Math.max(0, DAILY_CAP - callsToday()
 const HOLISTIC_P3_PROMPT = (
   'Read the local image with the Read tool. It is the 3부(Part 3) section of a Korean golf caddie assignment board (배치표).\n'
   + 'LAYOUT:\n'
-  + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Read each printed name EXACTLY as written and preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(찾근). Do NOT guess or add a name that is not printed.\n'
+  + '- Left: one or two vertical [순번 이름] roster columns listing caddies in ascending 순번(number) order (e.g. "1 차은경(54)", "2 신지현(1,3)" ... continuing into a second column like "21 양태록"). Grey-shaded name rows mean 대기/spare (working but no tee assigned yet). Read each printed name EXACTLY as written and preserve parenthetical tags EXACTLY: (54)/(1,3)/(조출)/(후출)/(찾근). Do NOT guess or add a name that is not printed.\n'
   + '- Right: a tee-time grid with three columns [OUT | time | IN]. Each row shows a tee time (e.g. 16:32). The OUT cell and/or the IN cell of a row may contain a 순번 number. That number identifies which caddie (by their 순번) tees off at that time on that course. A blank/yellow cell means no one on that course/row.\n'
   + 'TASK: Match 순번 -> name (from roster) and 순번 -> tee time+course (from the grid).\n'
   + '★★CRITICAL — scan the tee grid ALL THE WAY DOWN to its LAST time row. Do NOT stop early.\n'
@@ -92,11 +92,11 @@ export async function readPart3Holistic(imagePath, opts = {}) {
   } catch { return null; }
 }
 
-// 부별 판독 프롬프트 — 순번 순서 명단 JSON만. 괄호 태그(54·1,3·조출·찾근) 원문 보존.
+// 부별 판독 프롬프트 — 순번 순서 명단 JSON만. 괄호 태그(54·1,3·조출·후출·찾근) 원문 보존.
 const READ_PROMPT = (
   'Read the given local image with the Read tool. It is one section of a Korean golf caddie assignment board (배치표). '
   + 'The left side has [순번 이름] roster column(s) (one or two side by side). '
-  + 'List ALL caddies strictly in 순번(number) order as a JSON array, reading each printed name EXACTLY as written and preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Do NOT guess or add a name that is not printed. '
+  + 'List ALL caddies strictly in 순번(number) order as a JSON array, reading each printed name EXACTLY as written and preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(후출)/(찾근). Do NOT guess or add a name that is not printed. '
   + 'Skip truly empty rows. Output ONLY strict JSON, no prose: {"roster":["name1","name2",...]}'
 );
 
@@ -164,7 +164,7 @@ const PART_PROMPT = (
   + '(e.g. the first column holds 순번 1-25, then a SECOND column to its right continues 26-50). '
   + '★Treat each vertical column as its OWN independent list. Read column by column, left to right. '
   + 'Within EACH column, read every row from the very top to the very BOTTOM — the last 1-2 rows of a column are easy to miss, do NOT stop early. '
-  + 'For every row read BOTH the printed 순번 number and the name as a pair, reading each name EXACTLY as written and preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(찾근). Do NOT guess or add a name that is not printed. Skip a row only if it has no name. '
+  + 'For every row read BOTH the printed 순번 number and the name as a pair, reading each name EXACTLY as written and preserving parenthetical tags exactly like (54)/(1,3)/(조출)/(후출)/(찾근). Do NOT guess or add a name that is not printed. Skip a row only if it has no name. '
   + 'IGNORE any text that is NOT a numbered 순번 row — notice/공지 boxes, phone-number legends, "흡연실 당번" boxes, 조편성표 grids. Only rows with a printed 순번 number count. '
   + 'RIGHT: a tee-time table with columns [OUT팀번호][시간 HH:MM][IN팀번호] — a number on the left tees off OUT, on the right tees off IN, blank = none. '
   + 'Read this tee table from the very TOP row to the very BOTTOM row — do NOT stop early; rows newly added at the BOTTOM (spares just given a tee time) matter most. '
@@ -192,7 +192,7 @@ function rosterFromFlat(raw) {
 const COLUMN_PROMPT = (
   'Read the given local image with the Read tool. It is a SINGLE vertical [순번 이름] roster column from a Korean golf caddie board (배치표). '
   + 'List EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
-  + 'For each row give the printed 순번 as "pos" and the name, reading each name EXACTLY as written and preserving tags exactly like (54)/(1,3)/(조출)/(찾근). Do NOT guess or add a name that is not printed. '
+  + 'For each row give the printed 순번 as "pos" and the name, reading each name EXACTLY as written and preserving tags exactly like (54)/(1,3)/(조출)/(후출)/(찾근). Do NOT guess or add a name that is not printed. '
   + 'Skip a row only if it has no name. Ignore any text without a printed 순번 (notices, legends). '
   + 'Output ONLY strict JSON: {"roster":[{"pos":1,"name":"차은경(54)"},...]}'
 );
@@ -295,7 +295,7 @@ const VERBATIM_ROSTER_PROMPT = (
   'Read the local image with the Read tool. It is a Korean golf caddie assignment board (배치표) section. '
   + 'Look ONLY at the [순번 이름] roster column(s) on the LEFT (there may be two columns side by side — read the left column fully top to bottom, then the right column). Ignore the tee-time table and any crew grid on the right. '
   + '★Some roster cells are MAGENTA and contain TWO names side by side: the ORIGINAL caddie with a tag such as 차은경(1,3), followed IMMEDIATELY by a SECOND black name — the 대바(substitute) — so the cell reads e.g. 차은경(1,3)구경은. Other cells show a substitute in PARENTHESES, e.g. 남재권(정민철). '
-  + 'For EVERY numbered 순번 row, transcribe the cell EXACTLY as printed, keeping BOTH names whenever a cell has two. Preserve tags (54)/(1,3)/(조출)/(찾근) exactly. NEVER normalize a two-name cell down to one name, and never drop the substitute. '
+  + 'For EVERY numbered 순번 row, transcribe the cell EXACTLY as printed, keeping BOTH names whenever a cell has two. Preserve tags (54)/(1,3)/(조출)/(후출)/(찾근) exactly. NEVER normalize a two-name cell down to one name, and never drop the substitute. '
   + 'Output STRICT JSON only, no prose: {"roster":[{"pos":1,"name":"우겸조(54)"},{"pos":4,"name":"차은경(1,3)구경은"},{"pos":15,"name":"남재권(정민철)"}, ... every numbered row ...]}'
 );
 export async function readRosterVerbatim(imagePath) {
@@ -380,7 +380,7 @@ const OFF_PROMPT = (
   + 'Read EVERY block, EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
   + 'For each row whose 근무 cell is an ABSENCE status, output the 이름 and the status. '
   + 'Distinguish the status by BOTH the text AND its cell COLOR: 휴무 = YELLOW cell, 휴가 = GREEN cell, 병가 = light BLUE cell; 격리/연차/반차/월차 as written. '
-  + 'IGNORE rows whose 근무 is a working tag (3부, 1,3, 54, 54h, 조출, 찾근, 선발, 당번, 배치, 정출, 마감, 대리, 주임, 마샬) or blank. '
+  + 'IGNORE rows whose 근무 is a working tag (3부, 1,3, 54, 54h, 조출, 후출, 찾근, 선발, 당번, 배치, 정출, 마감, 대리, 주임, 마샬) or blank. '
   + 'If nobody is marked absent, return an empty list. '
   + 'Output ONLY strict JSON: {"off":[{"name":"이수련","reason":"휴무"},{"name":"김홍구","reason":"병가"}]}'
 );
@@ -440,7 +440,7 @@ const CREW_COL_PROMPT = (
   + 'Read EVERY row from the very top to the very BOTTOM — do NOT stop early, the last rows matter. '
   + 'For each row output the 이름 (name) and the 근무 cell value (a work/absence tag, or "" if blank). '
   + 'Read the 근무 status using BOTH the text AND its cell color: 휴무 = YELLOW cell, 휴가 = GREEN cell, 병가 = light BLUE cell; '
-  + 'others (3부, 1,3, 54, 54h, 조출, 찾근, 선발, 당번, 배치, 정출, 마감, 격리, 연차, 반차, 월차) as written. '
+  + 'others (3부, 1,3, 54, 54h, 조출, 후출, 찾근, 선발, 당번, 배치, 정출, 마감, 격리, 연차, 반차, 월차) as written. '
   + 'Skip rows that have no name. Output ONLY strict JSON: {"rows":[{"name":"정진영","duty":"3부"},{"name":"이수련","duty":"휴무"}]}'
 );
 export async function readCrewColumn(imagePath) {

@@ -8,7 +8,7 @@ import { effectivePart3Verdict } from './analytics.mjs';
 // 셀에서 괄호·공백 제거한 '맨이름'("박선하(연승준)"→"박선하")
 export const swapBare = (cell) => String(cell || '').replace(/\s*\([^)]*\)\s*/g, '').replace(/\s/g, '').trim();
 // 괄호 안이 근무태그(대바 아님)인 경우 제외
-export const SWAP_TAGWORDS = new Set(['조출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어']);
+export const SWAP_TAGWORDS = new Set(['조출', '후출', '찾근', '조퇴', '반차', '오전', '오후', '대기', '스페어']);
 
 // 현재 각 부의 명단(canonical store) — 1·2부=board-parts-store, 3부=lastboard(effectivePart3Verdict 최신본).
 export function collectPartRosters() {
