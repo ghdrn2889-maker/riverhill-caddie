@@ -268,7 +268,11 @@ async function readOffByColumns(img) {
 }
 
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
-async function readPartsOnce(img, sorted, cuts) {
+// issues: 이번 '시도'에서만 알 수 있는 손상(3부 홀리스틱의 grid_short)을 담아 호출자에게 돌려준다.
+//  ★알림은 여기서 쏘지 않는다 — 판독은 최대 3회 재시도하고 그중 하나만 채택된다. 버려질 시도의 손상까지
+//   알리면 오경보다(실측 8/15 22:15: 3부 구멍[1~20]이 떴지만 최종 채택본은 34명 멀쩡했다).
+//   명단 구멍·티오프 충돌은 채택이 끝난 뒤 '최종본으로 다시 세서' 쏜다(raiseAdoptedBoardIssues).
+async function readPartsOnce(img, sorted, cuts, issues = []) {
   const parts = {};
   // ★부3(현재 회원 전원의 부)를 '먼저' 판독 — 예산(캡)이 모자라도 우리 회원 부는 절대 굶지 않게.
   //  경계(x1)는 여전히 x0정렬 이웃으로 계산하므로 크롭 정확도는 그대로. 순서만 3부 우선.
@@ -381,7 +385,7 @@ async function readPartsOnce(img, sorted, cuts) {
               // ★재판독 후에도 티오프가 컷보다 짧으면 이상 기록 — 감시 클로드·모니터가 잡아 사람이 정정하도록(무음 통과 금지).
               if (cut > 0 && gridMax < cut) {
                 appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'grid_short', part: 3, teeMax: gridMax, cut, articleHint: '3부 홀리스틱', note: '티오프 하단 누락 — 꼬리 재판독 후에도 컷 미달(사람 확인 필요)' });
-                raiseBoardIssue({ kind: 'grid_short', part: 3, teeMax: gridMax, cut });
+                issues.push({ kind: 'grid_short', part: 3, teeMax: gridMax, cut });
               }
               continue;
             }
@@ -420,14 +424,12 @@ async function readPartsOnce(img, sorted, cuts) {
       if (holes.length) {
         console.warn(`[boardreader] 부${b.part} 명단 구멍 ${holes.length}칸(순번 ${holes.slice(0, 12).join(',')}${holes.length > 12 ? '…' : ''}) — 열 하단 절단/누락 의심`);
         appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'roster_holes', part: Number(b.part), holes: holes.slice(0, 30), rosterLen: roster.length, cut, note: '명단 중간 빈 순번 — 열 하단 절단 또는 판독 누락(사람 확인 필요)' });
-        // ★로그만 남기면 아무도 모른다(8/16 2부 21~25번 사고) — 관리자 폰으로 곧장.
-        raiseBoardIssue({ kind: 'roster_holes', part: Number(b.part), holes: holes.slice(0, 30), rosterLen: roster.length, cut });
+        // ★알림은 여기가 아니라 채택 확정 후(raiseAdoptedBoardIssues) — 그때 최종 명단으로 다시 세서 쏜다.
       }
       const tconf = _teeConflicts(r.tee);
       if (tconf.length) {
         console.warn(`[boardreader] 부${b.part} 티오프 충돌(${tconf.join(',')}) — 순번↔시각 밀림 의심`);
         appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'tee_conflict', part: Number(b.part), times: tconf, note: '한 시각 3명↑ 또는 코스 중복 — 순번↔시각 사다리 밀림(사람 확인 필요)' });
-        raiseBoardIssue({ kind: 'tee_conflict', part: Number(b.part), times: tconf });
       }
       parts[String(b.part)] = { roster: snapRoster(roster), tee: r.tee, cut, x0: b.x0, x1: b.x1 };
     } catch (e) { console.error(`[boardreader] 부 ${b.part} 오류:`, e.message); }
@@ -561,6 +563,23 @@ function disambiguateByWorking(parts, workingSet) {
   }
 }
 
+// ── 채택 확정본의 손상만 관리자에게 알린다 ──
+//  재시도 중간 판독이 아니라 '실제로 저장·표시될' 명단을 다시 세기 때문에, 재시도로 스스로 나은 손상은
+//  알리지 않고(오경보 0) 끝까지 남은 손상만 사람에게 간다. 8/16 2부 21~25번은 여기서 잡힌다.
+export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
+  try {
+    for (const p of Object.keys(parts || {})) {
+      const pd = parts[p] || {};
+      const holes = _rosterHoles(pd.roster || []);
+      if (holes.length) raiseBoardIssue({ kind: 'roster_holes', part: Number(p), holes: holes.slice(0, 30), rosterLen: (pd.roster || []).length, cut: pd.cut || 0 });
+      const tconf = _teeConflicts(pd.tee || []);
+      if (tconf.length) raiseBoardIssue({ kind: 'tee_conflict', part: Number(p), times: tconf });
+    }
+    // 시도 단위로만 알 수 있는 손상(3부 홀리스틱 티오프 하단 누락) — 그 시도가 채택됐을 때만 전달됨.
+    for (const it of attemptIssues) raiseBoardIssue(it);
+  } catch (e) { console.error('[판독손상] 채택본 점검 오류:', e.message); }
+}
+
 // ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. 경계 흔들림 대비 검증+재시도(최대 3회). ──
 //  반환 { boundaries, parts: { '1': {roster,tee,cut}, ... }, _claudeCalls }
 export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies(), summaryCuts = {}, maxTries = 3 } = {}) {
@@ -569,6 +588,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   const startBudget = claudeBudgetLeft();
   let cuts = { ...summaryCuts };
   let best = null, bestBounds = null, bestScore = -1, lastFault = '';
+  let bestIssues = [];   // ★채택된 시도의 손상만 관리자에게 알린다(버려진 시도의 손상은 오경보).
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (claudeBudgetLeft() <= 0) break;
     const toBefore = claudeTimeouts();
@@ -586,12 +606,13 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
         if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
       } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
     }
-    const parts = await readPartsOnce(img, sorted, cuts);
+    const issues = [];
+    const parts = await readPartsOnce(img, sorted, cuts, issues);
     const fault = boardReadFault(parts, cuts);
-    if (!fault) { best = parts; bestBounds = bounds; lastFault = ''; break; }   // 깨끗 → 채택
+    if (!fault) { best = parts; bestBounds = bounds; bestIssues = issues; lastFault = ''; break; }   // 깨끗 → 채택
     lastFault = fault;
     const score = Object.values(parts).reduce((s, p) => s + (p.roster || []).filter(Boolean).length, 0);
-    if (score > bestScore) { best = parts; bestBounds = bounds; bestScore = score; }   // 불량이어도 가장 완전한 판독 보관
+    if (score > bestScore) { best = parts; bestBounds = bounds; bestIssues = issues; bestScore = score; }   // 불량이어도 가장 완전한 판독 보관
     // ★타임아웃 재시도 완화 — 이번 시도에 Claude 타임아웃이 있었으면 풀 재시도 중단. 느린 상태에선 재시도(≈6콜)가
     //  예산·시간만 태우고 또 타임아웃날 확률이 크다(실측 8/12: 150콜 캡 소진). 최선 판독 채택 → judge가 로컬/Gemini로 폴백.
     const timedOut = claudeTimeouts() - toBefore;
@@ -604,6 +625,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   if (lastFault) console.warn(`[boardreader] 재시도 소진 — 최선 판독 채택(마지막 불량: ${lastFault})`);
   reconcileCrossPart(best, known);   // ★부 간 앞순번 교차보정 — 유령 이름 제거(하유린→정유경)
   purgeCrossPartContamination(best); // ★교차 오염 제거 — 옆 부(3부) 명단이 크롭 번짐으로 유입된 것(2부=3부 사고) 정리
+  raiseAdoptedBoardIssues(best, bestIssues);   // ★채택 확정본 기준으로 손상 재확인 → 관리자 알림
   // ★근태(휴무/병가/휴가) 판독 — 근태는 배치표 오른쪽 '조편성표' 근무칸(색태그)에 있다. 부 크롭엔 없어 전용 판독.
   //  ★조 열분할 우선: 통짜 크루 크롭은 다열이 빽빽해 이름을 다른 유효이름으로 뭉갠다(박시윤→박신훈, 스냅으로도 못 잡음).
   //   조별 단일 크롭(8배)이면 이름·근태 안정(실측 박시윤·서동명 정확). 조 경계 실패 시 통짜 크루 크롭(6배)으로 폴백.
