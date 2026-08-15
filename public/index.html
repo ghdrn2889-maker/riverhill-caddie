@@ -1469,9 +1469,10 @@
     .fb-hero { padding:calc(14px + env(safe-area-inset-top,0)) 24px 8px; color:var(--fbtxt); }
     .fb-loc { display:flex; align-items:center; gap:6px; font-size:18px; font-weight:800; margin-bottom:10px; }
     .fb-loc svg { width:15px; height:15px; fill:currentColor; }
-    .fb-vwtag { font-size:10.5px; font-weight:800; letter-spacing:.01em; padding:3px 8px; border-radius:999px;
-                border:1px solid var(--fbgline); background:var(--fbglass); color:var(--fbtxt2);
-                backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+    /* ★히어로 코어 높이 고정 — 티오프(한 줄)·팀 편성(숫자+두 줄 단위)·상태 배지의 높이가 제각각이라
+       부를 바꿀 때마다 아래 날씨·순번표가 통째로 밀려 화면이 흔들렸다. 내용은 위 정렬로 고정. */
+    .fb-hcore { min-height:92px; display:flex; flex-direction:column; justify-content:flex-start; }
+    .fb-cond { min-height:26px; }
     .fb-vwwarn { margin-top:9px; font-size:11.5px; font-weight:750; color:#8a5a00; background:#fff3d6;
                  border:1px solid #f2dca6; border-radius:10px; padding:7px 10px; }
     .fb-bigtee { display:flex; align-items:flex-end; gap:10px; font-size:60px; font-weight:300; line-height:1; letter-spacing:-.035em; font-variant-numeric:tabular-nums; color:var(--fbtxt); }

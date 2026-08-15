@@ -1438,7 +1438,7 @@ function boardFocusIdx() {
 function boardOffLabel(r) {
   if (r.offType === 'sick') return { badge: '병가', line: '몸조리 잘 하세요' };
   if (r.offType === 'vacation') return { badge: '휴가', line: '오늘은 휴가예요' };
-  if (r.offReason === 'removed') return { badge: '배치 없음', line: '최신 배치표에서 순번이 빠졌어요' };
+  if (r.offReason === 'removed') return { badge: '배치 없음', line: '순번에서 빠졌어요' };
   return { badge: '휴무', line: '오늘은 푹 쉬어요' };
 }
 function boardHeroFor(r) {
@@ -1464,7 +1464,8 @@ function boardHeroCore(r) {
     const head = teams
       ? `<div class="fb-bigtee"><span class="fb-teenum">${teams}</span><span class="fb-teeunit">팀<br>편성</span></div>`
       : `<div class="fb-bigtee"><span class="fb-teenum">${r.roster.length}</span><span class="fb-teeunit">명<br>명단</span></div>`;
-    const sub = r.cut ? `확정선 ${r.cut}번${r.cutoffName ? ` · ${esc(r.cutoffName)}님까지` : ''}` : '확정선 집계 중';
+    // 한 줄로 유지(줄바꿈되면 아래가 밀린다) — 컷오프 이름은 바로 아래 확정선 타일에 이미 있다.
+    const sub = r.cut ? `확정선 ${r.cut}번` : '확정선 집계 중';
     return `${head}<div class="fb-cond">${r.part}부 · ${sub}</div>`;
   }
   if (r.status === 'work' && r.tee) {
@@ -1476,11 +1477,11 @@ function boardHeroCore(r) {
       return `<div class="fb-bigtee"><span class="fb-teenum">${sp.rank}</span><span class="fb-teeunit">번째<br>스페어</span></div>`;
     }
     if (r.myPos) return `<div class="fb-bigtee"><span class="fb-teenum">${r.myPos}</span><span class="fb-teeunit">번<br>순번</span></div><div class="fb-cond">스페어 · 대기 중</div>`;
-    return boardStateHero('스페어', '대기 순번을 확인하는 중이에요', 'spare');
+    return boardStateHero('스페어', '대기 순번 확인 중', 'spare');
   }
-  if (r.status === 'work') return boardStateHero('근무 예정', '티오프가 매칭되면 알려드려요', 'work');
+  if (r.status === 'work') return boardStateHero('근무 예정', '티오프 확인 중', 'work');
   if (r.status === 'off') { const o = boardOffLabel(r); return boardStateHero(o.badge, o.line, 'off'); }
-  return boardStateHero('미배치', '배치되면 바로 알려드려요', 'none');
+  return boardStateHero('미배치', '배치되면 알려드려요', 'none');
 }
 function renderFullBoard() {
   const host = $('boardFull'); if (!host) return;
@@ -1544,13 +1545,15 @@ function boardHeroHTML(rounds, r) {
   const parts = `${(my.length ? my : rounds).map((x) => x.part).join('·')}부`;
   // ★부 전환 칩은 히어로가 아니라 순번표 카드 머리(‘N부 전체 순번표’ 줄)로 내렸다 —
   //  표를 보면서 부를 바꾸는 동작이라, 표 바로 위에 있는 게 손과 눈이 덜 움직인다.
-  // 옆 부를 보는 중이면 위치줄에 그 사실을 분명히 — 내 배치인 줄 오해하면 안 된다.
-  const loc = r.viewOnly ? `리버힐 CC · ${r.part}부 <span class="fb-vwtag">다른 부 보기</span>` : `리버힐 CC · ${parts}`;
+  // 옆 부는 칩(점선·부 색)과 히어로 내용(팀 수·확정선)만으로 이미 구분된다 — 배지는 군더더기라 뺐다.
+  const loc = r.viewOnly ? `리버힐 CC · ${r.part}부` : `리버힐 CC · ${parts}`;
   const warn = (r.viewOnly && r.dateMismatch)
     ? `<div class="fb-vwwarn">${esc(r.dateLabel || '')} 판독본이에요 — 오늘 것과 다를 수 있어요</div>` : '';
   // ★.fb-hero 껍데기는 renderFullBoard가 세운 뼈대에 이미 있다 — 여기서 또 감싸면 이중 패딩이 된다.
+  //  ★코어는 높이 고정(.fb-hcore) — 티오프(한 줄)와 팀 편성(숫자+두 줄 단위)의 높이가 달라
+  //   부를 바꿀 때마다 아래 날씨·카드가 통째로 밀려 화면이 흔들렸다(사용자 지적).
   return `<div class="fb-loc"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>${loc}</div>
-    ${boardHeroCore(r)}
+    <div class="fb-hcore">${boardHeroCore(r)}</div>
     ${warn}`;
 }
 // 날씨(최고/최저·체감) — 부와 무관한 정보라 히어로 안에서 따로 그리고, 부 전환 애니메이션에서 제외한다.
