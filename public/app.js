@@ -61,7 +61,7 @@ function showView(name) {
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   if (name === 'worklog') { loadJournal(); }
   if (name === 'cart') loadCartCheck();
-  if (name === 'settle') { lgPage = -1; loadLedger(); }
+  if (name === 'settle') { lgPage = -1; lgEnterNext = true; loadLedger(); }
   // 홈 진입마다 위젯 갱신 — 다른 탭에서 카트 번호·팁·지출을 바꾸고 돌아와도 숫자가 어긋나지 않게.
   //  (가벼운 로컬 JSON 읽기 2건. curView는 위에서 이미 name으로 바뀌어 '이전 뷰' 비교는 못 쓴다.)
   if (name === 'today') loadHomeWidgets();
@@ -836,7 +836,14 @@ function removedBoardHTML(s) {
 }
 
 // 대기(스플래시) 화면 감추기 — 준비되면 페이드아웃. 여러 곳에서 불려도 무해(idempotent).
-function hideSplash() { const s = document.getElementById('splash'); if (s) s.classList.add('hide'); }
+// 대기화면 내리기 — 페이드가 끝나면 레이아웃에서도 완전히 빼낸다(다시 띄우는 경로는 없음).
+//  ★안 빼면 화면 밖에 남아 애니메이션·합성 비용을 세션 내내 계속 문다.
+function hideSplash() {
+  const s = document.getElementById('splash');
+  if (!s || s.classList.contains('hide')) return;
+  s.classList.add('hide');
+  setTimeout(() => { s.style.display = 'none'; }, 500);   // transition .45s + 여유
+}
 let _heroEntered = false;   // 실행 등장 모션은 첫 렌더(히어로가 실제 콘텐츠로 채워질 때) 1회만.
 let _holdHomeAnim = false;  // ★가입완료 흐름: 오버레이 뒤에서 등장 모션을 낭비하지 않게 보류 → 아이리스 후 수동 재생.
 // 보고 있는 board의 '나' 이름(테스터면 선택한 회원, 아니면 내 프로필).
@@ -2184,6 +2191,9 @@ let lgDocPeriod = 'month';
 let lgDocCtx = null;
 let lgGoal = 0;
 let lgCountUpNext = false;
+// ★'탭에 막 들어왔다' 표시 — 등장 모션(카운트업·페이지 페이드인)을 진입 때 한 번만 돌리기 위한 것.
+//  데이터가 바뀔 때마다(팁·지출·홀정산 저장) 다시 돌면 조작할 때마다 화면이 출렁인다.
+let lgEnterNext = false, lgPageInNext = false;
 const lgTipDirty = new Set();
 const LG_PAGE = 7;
 const wonKo = (n) => `${(Number(n) || 0).toLocaleString('ko-KR')}원`;
@@ -2372,7 +2382,8 @@ async function loadLedger() {
     lgData = r.summary; lgProfile = r.profile || { name: '', workplace: '리버힐CC' };
   } catch { $('lgMLabel').textContent = '불러오기 실패'; return; }
   lgGoal = Number(lgData.goal) || 0;
-  lgCountUpNext = true;
+  // 진입 때만 등장 모션 — 저장·월이동 뒤의 재조회에선 숫자만 조용히 바뀐다.
+  lgCountUpNext = lgEnterNext; lgPageInNext = lgEnterNext; lgEnterNext = false;
   renderLedger();
 }
 async function lgFlushTips() {
@@ -2404,7 +2415,13 @@ function renderLedger() {
   refreshLgHero();
   renderLgList();
   updateDocDesc();
-  const root = $('s2Root'); root.classList.remove('pgin'); void root.offsetWidth; root.classList.add('pgin'); setTimeout(() => root.classList.remove('pgin'), 1000);
+  // ★등장 모션은 '탭에 들어올 때' 한 번만. 예전엔 renderLedger가 불릴 때마다(팁 수정·지출 추가·
+  //  월 이동 등 데이터가 바뀔 때마다) 페이지 전체가 다시 페이드인해, 조작할 때마다 화면이 출렁였다.
+  if (lgPageInNext) {
+    lgPageInNext = false;
+    const root = $('s2Root'); root.classList.remove('pgin'); void root.offsetWidth; root.classList.add('pgin');
+    setTimeout(() => root.classList.remove('pgin'), 1000);
+  }
 }
 
 function refreshLgHero() {
@@ -2799,7 +2816,8 @@ function initLedgerButtons() {
   // 바텀시트·라이트박스는 body 직속으로 옮겨 position:fixed가 뷰 스크롤/transform에 안 갇히게(오프스크린 방지).
   ['lgGoalSheet', 'lgAnalysisSheet', 'lgLb'].forEach((id) => { const el = $(id); if (el && el.parentElement !== document.body) document.body.appendChild(el); });
   // 월 이동(히어로 라벨 → 월 점프)
-  $('lgMoBtn').onclick = () => openMonthJump({ y: lgYear, m: lgMonth }, (y, m) => { lgFlushTips().then(() => { lgYear = y; lgMonth = m; lgOpenDate = null; lgExpForm = null; lgPage = 0; loadLedger(); }); });
+  // 달을 옮기는 건 '다른 내용으로 갈아타는' 동작이라 등장 모션을 한 번 준다(저장·재조회와 구분).
+  $('lgMoBtn').onclick = () => openMonthJump({ y: lgYear, m: lgMonth }, (y, m) => { lgFlushTips().then(() => { lgYear = y; lgMonth = m; lgOpenDate = null; lgExpForm = null; lgPage = 0; lgEnterNext = true; loadLedger(); }); });
   // 목표 시트(수위·딥오션)
   $('lgGoalBtn').onclick = lgwOpen;
   $('lgwClose').onclick = lgwClose;

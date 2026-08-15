@@ -1195,6 +1195,9 @@
       background:radial-gradient(120% 80% at 50% 18%, #f2f8f5 0%, #e6efea 60%, #dde9e3 100%);
       transition:opacity .45s ease, visibility .45s ease; }
     .ldg-screen.hide { opacity:0; visibility:hidden; pointer-events:none; }
+    /* ★대기화면이 사라진 뒤에도 공·그림자·점 애니메이션이 '무한'으로 계속 돌고 있었다(보이지 않을 뿐).
+       세션 내내 매 프레임 비용을 먹어, 다른 화면의 등장 모션과 겹치면 그만큼 버벅인다. 숨는 즉시 정지. */
+    .ldg-screen.hide .ldg-ball, .ldg-screen.hide .ldg-shadow, .ldg-screen.hide .ldg-sub::after { animation:none !important; }
     .ldg-stage { position:relative; width:80px; height:96px; }
     .ldg-ball { position:absolute; left:14px; top:0; width:52px; height:52px; border-radius:50%;
       background:
@@ -2548,6 +2551,9 @@
         .lgw-w1{top:0;animation:lgwd100 9s linear infinite;opacity:.92}
         .lgw-w2{top:5px;animation:lgwd80 13s linear infinite reverse;opacity:.58}
         .lgw-w3{top:9px;animation:lgwd50 6.5s linear infinite;opacity:.4}
+        /* ★시트가 닫혀 있어도(visibility:hidden) 물결 3개가 무한으로 돌고 있었다 — 정산 화면에 있는 내내
+           보이지도 않는 애니메이션이 매 프레임 비용을 먹었다. 열렸을 때만 돌린다. */
+        .lgw-bg:not(.on) .lgw-wave{animation:none}
         @keyframes lgwd100{from{transform:translateX(0)}to{transform:translateX(-25%)}}
         @keyframes lgwd80{from{transform:translateX(0)}to{transform:translateX(-20%)}}
         @keyframes lgwd50{from{transform:translateX(0)}to{transform:translateX(-12.5%)}}
