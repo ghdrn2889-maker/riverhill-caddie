@@ -29,6 +29,7 @@ import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
+import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
@@ -2568,5 +2569,23 @@ async function recheckPartBoards() {
   }
   if (dirty) saveJSON(PART_BOARD_WATCH_FILE, partBoardWatch);
 }
+// ── 카카오골프 실시간 예약 관측 ──────────────────────────────────────
+//  명단보다 예약이 먼저 확정된다. 그래서 배치표가 나오기 전에 '내일 몇 팀 찼나'를 먼저 알 수 있고,
+//  찼던 칸이 다시 판매중으로 돌아오면 그게 캔슬이다 — 사람이 글로 알리기 전에 잡힌다.
+//  ★관리자 관측 전용. 회원 화면·알림은 건드리지 않는다(테스트 기간).
+//  Claude 호출 0, 인증 불필요. robots.txt가 허용하는 경로이며 요청 간 1.5초를 쉰다.
+const KAKAO_TICK_MS = Number(process.env.KAKAO_TICK_MS || 5 * 60 * 1000);
+if (kakaoOn()) {
+  const kakaoTick = () => {
+    const h = new Date().getHours();
+    // 예약은 배치표 나오기 전 낮~밤에 몰린다. 새벽엔 굳이 두드리지 않는다.
+    if (h < 7 || h >= 24) return;
+    kakaoGolfTick({ days: h >= 12 ? 3 : 2 }).catch((e) => console.error('[카카오골프]', e.message));
+  };
+  setTimeout(kakaoTick, 20000);
+  setInterval(kakaoTick, KAKAO_TICK_MS);
+  console.log(`⛳ 카카오골프 예약 관측: ${KAKAO_TICK_MS / 60000}분 간격(07~24시, 오늘+내일치) — 관리자 관측 전용`);
+}
+
 setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
 console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 3부+1·2부 이미지 변경 시에만 재판독)`);

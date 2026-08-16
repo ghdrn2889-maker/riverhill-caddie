@@ -148,6 +148,37 @@ export function loadSnapshot(date) {
   try { return JSON.parse(fs.readFileSync(path.join(SNAP_DIR, `${date}.json`), 'utf8')); } catch { return null; }
 }
 
+// ── 스냅샷 사이의 변화 = 예약과 캔슬 ──────────────────────────────────
+//  찼던 칸이 다시 판매중으로 돌아오면 그게 캔슬이다. 사람이 글로 알려주기 전에 우리가 먼저 안다.
+//  (카페·카톡의 "IN 12:18분 이하늘님 캔슬" 같은 글과 짝을 맞추면 확정이 된다.)
+export function diffSnapshots(prev, next) {
+  const setOf = (s) => new Set(Object.values(s?.byPart || {}).flat().map((x) => key(x.mins, x.course)));
+  const a = setOf(prev), b = setOf(next);
+  return {
+    booked: [...b].filter((k) => !a.has(k)).sort(),   // 새로 찬 칸
+    freed: [...a].filter((k) => !b.has(k)).sort(),    // 다시 풀린 칸 = 캔슬
+  };
+}
+
+// ── 예약 격자 + (있으면) 본배치표 이름 ────────────────────────────────
+//  ★명단보다 예약이 먼저 확정된다. 그래서 격자를 먼저 세우고, 이름은 본배치표가 오면 그 자리에 얹는다.
+//  배정 규칙은 실제 배치표에서 읽어낸 것: 시각 순, 같은 시각이면 OUT 먼저
+//  (8/16 본배치 실측: 1번 16:25 OUT, 2번 16:25 IN, 3번 16:32 OUT …).
+export function gridFor(snap, part = '3', { teeGrid = null, roster = null } = {}) {
+  const slots = (snap.byPart?.[part] || []).slice()
+    .sort((x, y) => x.mins - y.mins || (x.course === 'OUT' ? -1 : 1));
+  // 본배치표가 있으면 '그 표가 말하는 순번'을 우선한다 — 추정보다 사실이 낫다.
+  const byKey = new Map((teeGrid || []).map((r) => [key(toMin(r.time), String(r.course || '').toUpperCase()), Number(r.pos)]));
+  const nameOf = (pos) => (pos > 0 && roster ? String(roster[pos - 1] || '').replace(/\(.*?\)/g, '').trim() : '');
+  return slots.map((s, i) => {
+    const k = key(s.mins, s.course);
+    const posFromBoard = byKey.get(k) || 0;
+    const pos = posFromBoard || (byKey.size ? 0 : i + 1);   // 본배치표가 있으면 추정 순번을 붙이지 않는다
+    return { time: s.time, mins: s.mins, course: s.course, pos, name: nameOf(pos),
+      fromBoard: !!posFromBoard, guess: !byKey.size };
+  });
+}
+
 // ── 사진 판독과 대조(섀도우) ──────────────────────────────────────────
 //  판독 경로는 건드리지 않는다. 같은 날짜의 두 결과를 나란히 놓고 차이만 기록한다.
 //  ★어느 쪽이 옳은지 단정하지 않는다 — 그걸 정하는 게 이번 테스트 기간의 목적이다.
@@ -180,17 +211,31 @@ export async function tick({ days = 3 } = {}) {
     const d = new Date(today); d.setDate(d.getDate() + i);
     const date = ymd(d);
     try {
+      const prev = loadSnapshot(date);
       const snap = await bookedFor(date);
+      const dif = diffSnapshots(prev, snap);
       saveSnapshot(snap);
-      if (i === 0) {
+      // ★캔슬 감지 — 찼던 칸이 다시 판매중으로 돌아왔다. 사람이 글로 알리기 전에 우리가 먼저 본다.
+      //  (카페·카톡의 "IN 12:18분 이하늘님 캔슬" 같은 글과 짝을 맞추면 확정이 된다.)
+      if (prev && dif.freed.length) {
+        console.warn(`⚠️ [카카오골프] ${date} 예약 취소로 보이는 칸 ${dif.freed.length}개: ${dif.freed.join(' ')}`);
+      }
+      if (prev && dif.booked.length && i <= 1) {
+        console.log(`·  [카카오골프] ${date} 새로 찬 칸 ${dif.booked.length}개: ${dif.booked.slice(0, 8).join(' ')}`);
+      }
+      if (i <= 1) {
         const p3 = snap.byPart['3'] || [];
         console.log(`[카카오골프] ${date} 여집합 — 찬 티오프 ${snap.bookedCount}/${snap.fixedCount}칸`
           + ` (3부 ${p3.length}칸${p3.length ? `: ${p3.slice(0, 6).map((x) => `${x.time}${x.course}`).join(' ')}${p3.length > 6 ? '…' : ''}` : ''})`
           + (snap.unknown.length ? ` ★기준표 밖 ${snap.unknown.length}칸: ${snap.unknown.slice(0, 5).join(' ')}` : ''));
       }
-      appendJSONL('kakao-golf.jsonl', { at: snap.at, date, booked: snap.bookedCount, open: snap.openCount,
-        fixed: snap.fixedCount, p3: (snap.byPart['3'] || []).length, unknown: snap.unknown });
+      // 변화가 있을 때만 남긴다 — 몇 분마다 도는 루프라 매번 적으면 로그가 사실을 덮는다.
+      if (!prev || dif.booked.length || dif.freed.length) {
+        appendJSONL('kakao-golf.jsonl', { at: snap.at, date, booked: snap.bookedCount, open: snap.openCount,
+          fixed: snap.fixedCount, p3: (snap.byPart['3'] || []).length,
+          newBooked: dif.booked, freed: dif.freed, unknown: snap.unknown });
+      }
     } catch (e) { console.error(`[카카오골프] ${date} 조회 실패:`, e.message); }
-    await sleep(1200);   // robots.txt Crawl-delay: 1 준수
+    await sleep(1500);   // robots.txt Crawl-delay: 1 — 넉넉히 지킨다
   }
 }
