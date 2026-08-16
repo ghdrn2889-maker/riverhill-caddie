@@ -5,6 +5,7 @@ loadEnv();
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { initPush, addSubscription, broadcast, flushDeferred } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './analyzer.mjs';
@@ -445,6 +446,44 @@ app.post('/api/simulate', async (req, res) => {
 //  근본 공백 해소: 카톡 인그레스가 텍스트만 받아 이미지 배치표(조하빈 티오프 등)를 못 읽던 문제.
 //  자동적용+사후검수: 기존 오케스트레이터(notifyForArticle) 재사용 → 프레임보호·검수·푸시·저널 전부 그대로.
 //  인증: 로그인(관리자) 또는 INGEST_TOKEN. body: { image: dataURL|base64, source?, comments?[], subject?, nopush? }
+//
+// ── 같은 그림 재판독 차단(이미지 지문) ──────────────────────────────────────────
+// 카톡 자동캡처는 화면이 안 바뀌어도 같은 사진을 주기적으로 다시 보낸다.
+// 실측(2026-08-16): 들어온 10장 중 8장이 바이트까지 동일한 파일(10:11~12:03, 645,070B 9회).
+// 한 장 판독이 ~30콜이라 이 중복만으로 일일 캡(150)을 두 배 넘겨 태웠고, 정작 저녁 정본
+// 배치표는 '예산 부족(0<6) → 재시도 중단' + '캡 도달 — 열경계 스킵'으로 반쪽 판독이 됐다.
+// 즉 중복 재판독이 우리가 쫓던 판독 오류의 원인 중 하나였다.
+// 진짜 바뀐 배치표는 바이트가 달라져 그대로 통과한다 — '같은 그림'과 '바뀐 그림'은 스스로 갈린다.
+const INGEST_SEEN_FILE = 'ingest-image-seen.json';
+const INGEST_SEEN_TTL = 18 * 3600 * 1000; // 배치표는 하루살이 — 다음 날 같은 그림이면 다시 읽는다
+const INGEST_SEEN_MAX_TRY = 2;            // 지난 판독이 실패였으면 딱 한 번 더 준다(복구 경로 보존)
+function ingestSeenAll() {
+  const all = loadJSON(INGEST_SEEN_FILE, {}) || {};
+  const cut = Date.now() - INGEST_SEEN_TTL;
+  let dirty = false;
+  for (const [k, v] of Object.entries(all)) if (!v || (v.at || 0) < cut) { delete all[k]; dirty = true; }
+  if (dirty) saveJSON(INGEST_SEEN_FILE, all);
+  return all;
+}
+// 이 그림을 또 읽어야 하나? — 성공 판독이 있으면 안 읽는다. 실패였으면 한 번은 더 준다.
+function ingestSeenBlocker(hash) {
+  const rec = ingestSeenAll()[hash];
+  if (!rec) return null;
+  if (rec.ok) return rec;
+  return (rec.tries || 1) >= INGEST_SEEN_MAX_TRY ? rec : null;
+}
+function ingestSeenPut(hash, patch) {
+  const all = ingestSeenAll();
+  const prev = all[hash] || {};
+  all[hash] = { ...prev, ...patch, tries: (prev.tries || 0) + 1, at: Date.now() };
+  saveJSON(INGEST_SEEN_FILE, all);
+}
+function ingestSeenBump(hash) { // 차단된 중복도 '방금 봤다'로 갱신 — 도배되는 동안 지문이 안 만료되게
+  const all = ingestSeenAll();
+  if (!all[hash]) return;
+  all[hash] = { ...all[hash], at: Date.now(), dups: (all[hash].dups || 0) + 1 };
+  saveJSON(INGEST_SEEN_FILE, all);
+}
 app.post('/api/ingest-image', async (req, res) => {
   const token = req.get('x-token') || req.query.token || req.body?.token;
   if (!req.user && process.env.INGEST_TOKEN && token !== process.env.INGEST_TOKEN) {
@@ -457,12 +496,24 @@ app.post('/api/ingest-image', async (req, res) => {
     if (!b64) return res.status(400).json({ error: 'image(dataURL 또는 base64) 필요' });
     const ext = (dm ? dm[1].split('/')[1] : 'png') || 'png';
     const ts = Date.now();
+    const noPush = ['1', 'true', 'yes'].includes(String(req.query.nopush || req.body?.nopush || '').toLowerCase());
+    const source = req.body?.source || '카톡';
+    // ★같은 그림이면 여기서 끝 — 파일도 안 쓰고 판독도 안 한다(관리자는 force=1로 강제 재판독).
+    const buf = Buffer.from(b64, 'base64');
+    const hash = crypto.createHash('sha1').update(buf).digest('hex');
+    const force = ['1', 'true', 'yes'].includes(String(req.query.force || req.body?.force || '').toLowerCase());
+    const dup = force ? null : ingestSeenBlocker(hash);
+    if (dup) {
+      const agoMin = Math.round((Date.now() - (dup.at || ts)) / 60000);
+      console.log(`🖼 [ingest-image] 같은 그림 재수신 → 판독 건너뜀(${hash.slice(0, 8)}, ${agoMin}분 전 #${dup.id || '?'} 판독분, 중복 ${(dup.dups || 0) + 1}회) — 약 30콜 절약`);
+      ingestSeenBump(hash);
+      appendJSONL('ingest-dedupe.jsonl', { at: ts, hash: hash.slice(0, 12), of: dup.id || '', agoMin, source, subject: String(req.body?.subject || '') });
+      return res.json({ ok: true, duplicate: true, of: dup.id || '', at: dup.at || 0, note: '같은 이미지 — 재판독 안 함' });
+    }
     const dir = path.join(DATA_DIR, 'ingest-images');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `img_${ts}.${ext}`);
-    fs.writeFileSync(file, Buffer.from(b64, 'base64'));
-    const noPush = ['1', 'true', 'yes'].includes(String(req.query.nopush || req.body?.nopush || '').toLowerCase());
-    const source = req.body?.source || '카톡';
+    fs.writeFileSync(file, buf);
     const comments = Array.isArray(req.body?.comments)
       ? req.body.comments.map((c) => ({ content: String(c || ''), nick: String(source), date: ts })).filter((c) => c.content) : [];
     // ★관리자가 올릴 때 '무슨 배치표인지' 골랐으면 그대로 제목에 못박는다.
@@ -477,8 +528,16 @@ app.post('/api/ingest-image', async (req, res) => {
       text: String(req.body?.text || ''), writer: String(req.body?.sender || source),
       menuId: '2', menuName: '배치 시간표', images: [file], writeDate: ts, url: '/', comments,
     };
-    console.log(`🖼 [ingest-image] 수신 ${path.basename(file)} (${Math.round(b64.length * 0.75 / 1024)}KB) noPush=${noPush}`);
-    const out = await notifyForArticle(full, { relevant: true, priority: 'high' }, { force: true, noPush });
+    console.log(`🖼 [ingest-image] 수신 ${path.basename(file)} (${Math.round(b64.length * 0.75 / 1024)}KB) 지문 ${hash.slice(0, 8)} noPush=${noPush}`);
+    let out;
+    try {
+      out = await notifyForArticle(full, { relevant: true, priority: 'high' }, { force: true, noPush });
+    } finally {
+      // 판독이 '구조까지 읽혔나'를 지문에 남긴다 — 성공이면 재수신 무시, 실패면 다음 장에 한 번 더 기회.
+      const v = out && out.rawVerdict;
+      const ok = !!(out && (out.standalonePart || (v && (Number(v.teamCount) > 0 || Number(v.cutoffPosition) > 0))));
+      ingestSeenPut(hash, { id: full.id, ok, subject: full.subject });
+    }
     res.json({ ok: true, id: full.id, file: path.basename(file), noPush, pushed: !!out.pushed, body: out.body, teamCount: out.teamCount, cutLine: out.cutLine });
   } catch (e) { console.error('[ingest-image]', e.message); res.status(500).json({ error: e.message }); }
 });
