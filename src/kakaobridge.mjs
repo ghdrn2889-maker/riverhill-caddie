@@ -141,9 +141,26 @@ export function augmentGrid({ teeGrid = [], roster = [], cut = 0, internTees = [
       promoted.push({ pos: p, name: t.name, tag: t.tag, cross: t.cross });
     }
   }
+  // ── ★인턴 앞에서 무엇이 살아남는가 ──────────────────────────────────────
+  //  인턴을 모르면 이 엔진이 통째로 틀릴 수 있다. 다만 '전부'가 틀리는 건 아니다. 나눠서 봐야 한다.
+  //   ① 팀 수(= 찬 칸 수)      — 인턴과 무관하게 맞다. 인턴도 한 팀을 맡으니까.
+  //   ② 정규 근무선(커트)      — 인턴 수만큼 줄어든다. 인턴 n명이면 커트가 n 낮다.
+  //   ③ 순번 ↔ 티오프 대응     — ★첫 인턴 칸 뒤로 전부 어긋난다. 여기가 제일 위험하다.
+  //  그래서 인턴을 모르는 상태에서는 ①만 말해야 하고, ②③은 '인턴 0명 가정'이라고 밝혀야 한다.
+  const firstIntern = full.findIndex((s) => s.intern);
+  const risk = {
+    teams: ks.length,                                    // ① 인턴과 무관하게 맞다
+    cutIfInterns: (n) => Math.max(0, ks.length - n),     // ② 인턴 n명이면 커트는 이만큼
+    // ③ 첫 인턴 칸부터 그 아래 순번은 전부 대응이 밀린다. 인턴을 모르면 '어디부터'조차 모른다.
+    shiftedFrom: firstIntern >= 0 ? (full[firstIntern].pos || 1) : 0,
+    internAssumed: internTees.length,
+    note: internTees.length
+      ? `인턴 ${internTees.length}칸 반영됨 — 그만큼 정규 근무선이 낮다`
+      : '인턴 0명 가정 — 실제로 있으면 그 칸 뒤 순번의 티오프가 전부 한 칸씩 어긋난다',
+  };
   return {
     mode: 'augment', teeGrid: merged, cut: newCut, prevCut: cut,
-    added: add.map((s) => s.k), moved, internUsed, promoted,
+    added: add.map((s) => s.k), moved, internUsed, promoted, risk,
     // 화면·기록용 — 태그를 지우지 않고 그대로 들고 간다(대조판이 이걸 버려서 '신규' 오해가 났다).
     slots: full.map((s) => ({ pos: s.pos, time: s.time, course: s.course, name: s.name, tag: s.tag,
       intern: s.intern, guaranteed: s.guaranteed, cross: s.cross, isNew: !bset.has(s.k) })),
@@ -178,7 +195,15 @@ export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid
   const r = boardOk
     ? augmentGrid({ teeGrid, roster, cut, internTees }, t.snap, part)
     : substituteTeamCount(t.snap, part);
-  const rec = { at: Date.now(), date, part, boardOk, applied: assistOn(), ...r };
+  // ★인턴 이력 — 지금까지 어디에도 안 남기고 있었다(판독 기록 3,505건에 인턴 항목 0).
+  //  그래서 '인턴이 얼마나 자주·몇 명인가'를 아무도 모른다. 이 엔진의 최대 오차원인데 크기를 모른다.
+  //  인턴 하나를 놓치면 그 뒤 전원의 티오프가 한 칸씩 어긋난다 — 조금 틀리는 게 아니라 아래가 다 틀린다.
+  //  오늘부터 남긴다. 며칠 쌓이면 '보정 없이 써도 되는가'를 추측이 아니라 숫자로 답할 수 있다.
+  appendJSONL('intern-history.jsonl', { at: Date.now(), date, part, boardOk,
+    internCount: (internTees || []).length, tees: (internTees || []).map((x) => `${x.time}|${x.course}`),
+    boardTees: (teeGrid || []).length, kakaoTees: kakaoSlots(t.snap, part).length });
+  const rec = { at: Date.now(), date, part, boardOk, applied: assistOn(),
+    internCount: (internTees || []).length, internKnown: boardOk, ...r };
   appendJSONL('kakao-assist.jsonl', rec);
 
   // ★어긋남은 무조건 사람에게 — 켜졌든 안 켜졌든. 이게 이 다리의 제일 큰 값어치다.

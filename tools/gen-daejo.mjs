@@ -8,6 +8,8 @@ const { tagOf, assignPositions } = await import('../src/kakaobridge.mjs');
 const src = process.argv[2];
 const out = process.argv[3] || 'daejo.html';
 const J = JSON.parse(fs.readFileSync(src, 'utf8'));
+// 편집기는 별도 파일 — 템플릿 문자열 안에 JS를 겹쳐 넣으면 백틱·${}가 서로를 먹는다.
+const CLIENT_JS = fs.readFileSync(new URL('./daejo-client.js', import.meta.url), 'utf8');
 const snap = J.snap || {};
 const sched = J.sched || {};
 
@@ -85,7 +87,9 @@ function cell(part, mins, course) {
   const partUnsure = unsureSet.has(`${part}|${course}`);
   const partIdle = idleSet.has(`${part}|${course}`);
   const r = rematch[part].get(key);
-  if (r?.intern) return '<td class="c intern"><span class="nm">인턴</span></td>';
+  // ★인턴 지정 클릭 대상 — 라이브 모드에서 이 칸을 눌러 인턴을 켜고 끈다.
+  const at = ` data-t="${toHM(mins)}" data-c="${course}" data-p="${part}"`;
+  if (r?.intern) return `<td class="c intern"${at}></td>`;   // 글자는 CSS ::after가 그린다
   const pos = r?.pos || bp;
   if (pos) {
     // ★태그를 지우지 않는다 — (54)=전 부 근무, (1,3)(2,3)=두 부 중복. 리버힐 규칙상 이들은 앞 순번을
@@ -97,11 +101,11 @@ function cell(part, mins, course) {
     const mark = isNew ? '<span class="tag" title="이 칸이 새로 찼습니다(사람이 새로 온 게 아닙니다)">＋</span>'
       : moved ? `<span class="tag">${bp}&rarr;</span>` : '';
     const tg = t.tag ? `<span class="dt">${esc(t.tag)}</span>` : '';
-    return `<td class="${cls}">${mark}<span class="pos">${pos}</span><span class="nm">${esc(t.name) || '&nbsp;'}</span>${tg}</td>`;
+    return `<td class="${cls}"${at}>${mark}<span class="pos">${pos}</span><span class="nm">${esc(t.name) || '&nbsp;'}</span>${tg}</td>`;
   }
-  if (partIdle) return '<td class="c idle">미운영</td>';
-  if (isBooked) return `<td class="c kakao-only"><span class="nm">${partUnsure ? '보류' : '예약'}</span></td>`;
-  return '<td class="c open"></td>';
+  if (partIdle) return `<td class="c idle"${at}>미운영</td>`;
+  if (isBooked) return `<td class="c kakao-only"${at}><span class="nm">${partUnsure ? '보류' : '예약'}</span></td>`;
+  return `<td class="c open"${at}></td>`;
 }
 
 function partTable(part) {
@@ -115,6 +119,7 @@ function partTable(part) {
   <table class="grid"><thead><tr><th>OUT</th><th class="t">시각</th><th>IN</th></tr></thead><tbody>
 ${body}
   </tbody></table>
+  <div class="spares" data-p="${part}" hidden></div>
 </section>`;
 }
 
@@ -179,13 +184,17 @@ td.c .dt{display:inline-block;font-size:9px;margin-left:3px;padding:0 3px;border
 td.c.gtd{font-weight:700}
 td.c.gtd .dt{background:var(--ok);color:var(--panel);opacity:1}
 td.c.crs .dt{outline:1px solid var(--ok);outline-offset:-1px}
-td.intern{background:var(--warn-bg);color:var(--warn);font-size:10.5px;font-style:italic}
 .promo-names i{font-style:normal;font-size:10px;opacity:.7;margin-left:4px}
 td.ok{background:var(--ok-bg);color:var(--ok)}
 td.board-only{background:var(--miss-bg);color:var(--miss)}
 td.kakao-only{background:var(--warn-bg);color:var(--warn)}
 td.open{background:var(--open)}
 td.idle,td.unsure{background:var(--idle);color:var(--dim);font-size:10.5px}
+/* ★인턴은 어떤 상태(일치·카카오만·빈칸) 위에도 보여야 한다 — 상태 규칙보다 뒤에, 더 강한 선택자로. */
+td.c.intern{background:var(--warn-bg);color:var(--warn);font-style:italic;
+  box-shadow:inset 0 0 0 2px var(--warn)}
+td.c.intern .pos,td.c.intern .nm,td.c.intern .dt,td.c.intern .tag{display:none}
+td.c.intern::after{content:'인턴';font-size:10.5px;font-weight:600}
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin:18px 0 8px;font-size:12px;color:var(--dim)}
 .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;border:1px solid var(--line);
   margin-right:5px;vertical-align:-1px}
@@ -195,6 +204,53 @@ td.idle,td.unsure{background:var(--idle);color:var(--dim);font-size:10.5px}
 .note code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--open);
   padding:1px 5px;border-radius:3px}
 .note.promo{border-left-color:var(--ok)}
+/* ★보기 전환을 눈에 보이게 — 화면 하나에 배치표가 둘이라 어느 쪽을 보고 있는지 항상 알려야 한다.
+   대조(카카오 예상)와 실제 배치표는 순번도 칸 수도 다르다. 말없이 바꾸면 반드시 헷갈린다. */
+.viewbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:18px 0 6px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{background:var(--panel);color:var(--dim);border:0;padding:8px 16px;font-size:13px;
+  font-family:inherit;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--ok);color:var(--panel);font-weight:600}
+.vnote{font-size:12px;color:var(--dim)}
+body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-radius:12px}
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin:10px 0 4px}
+.tools button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:7px;
+  padding:7px 15px;font-size:13px;font-family:inherit;cursor:pointer}
+.tools button:hover{border-color:var(--warn)}
+.tools button.on{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);font-weight:600}
+.tools button.save{background:var(--ok);color:var(--panel);border-color:var(--ok);font-weight:600}
+.tools button:disabled{opacity:.5;cursor:default}
+.tools .hint{font-size:12px;color:var(--dim)}
+body.editing td.c{cursor:pointer}
+body.editing td.c:hover{outline:2px solid var(--warn);outline-offset:-2px}
+td.c.picked{outline:2px solid var(--ok);outline-offset:-2px}
+td.c.edited{box-shadow:inset 3px 0 0 var(--ok)}
+td.c.moved{box-shadow:inset 3px 0 0 var(--warn)}
+/* ★끌어놓기 — 편집 모드일 때만 칸이 끌기를 잡는다. 평소엔 touch-action이 살아 있어야 폰에서 표를 스크롤한다. */
+body.editing td.c{touch-action:none;-webkit-user-select:none;user-select:none}
+body.dragging-now{cursor:grabbing}
+td.c.dragging{opacity:.4}
+td.c.drop-to{outline:2px dashed var(--warn);outline-offset:-2px;background:var(--warn-bg)}
+td.c.empty{background:var(--open)}
+/* 스페어 — 티오프가 없는 순번. 편집할 때만 보인다(대바 상대가 되려면 보여야 한다). */
+.spares{display:flex;flex-wrap:wrap;gap:5px;padding:9px 11px;border-top:1px solid var(--line);
+  background:var(--open)}
+.spares .lb{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;
+  width:100%;margin-bottom:1px}
+.sp{display:inline-flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;user-select:none}
+.sp b{font-size:10px;opacity:.65;font-weight:700}
+.sp .dt{font-size:9px;padding:0 3px;border-radius:3px;background:rgba(127,127,127,.16)}
+.sp.picked{outline:2px solid var(--ok);outline-offset:-2px}
+.sp.drop-to{outline:2px dashed var(--warn);outline-offset:-2px;background:var(--warn-bg)}
+.sp.dragging{opacity:.4}
+.sp.edited{box-shadow:inset 3px 0 0 var(--ok)}
+body.editing .sp{touch-action:none}
+
+.ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;
+  background:var(--ok);color:var(--panel);font-size:12px;font-weight:600;
+  padding:4px 10px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,.28);white-space:nowrap}
 table.cmp{border-collapse:collapse;margin:8px 0 12px;font-size:12.5px}
 table.cmp th,table.cmp td{border:1px solid var(--line);padding:4px 11px;text-align:right}
 table.cmp thead th{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;text-align:center}
@@ -223,6 +279,25 @@ table.cmp td.warn{color:var(--warn);font-weight:700}
 
 <div class="parts">
 ${['1', '2', '3'].map(partTable).join('\n')}
+</div>
+
+<div class="viewbar">
+  <div class="seg">
+    <button id="vProj" type="button" class="on">대조 &mdash; 카카오 예상</button>
+    <button id="vReal" type="button">실제 배치표</button>
+  </div>
+  <span id="viewNote" class="vnote">사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 고칠 수는 없습니다.</span>
+</div>
+
+<div class="tools" id="tools" hidden>
+  <button data-mode="intern" type="button">인턴 지정</button>
+  <button data-mode="name" type="button">이름 고치기</button>
+  <button data-mode="swap" type="button">맞바꾸기</button>
+  <button data-mode="move" type="button">순번 옮기기</button>
+  <button id="undoBtn" type="button" hidden>되돌리기</button>
+  <button id="saveBtn" type="button" class="save" hidden>저장</button>
+  <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
+  <span id="state" class="hint"></span>
 </div>
 
 <div class="legend">
@@ -264,6 +339,11 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
   전화&middot;회원 예약이라 카카오에 안 뜨는 칸을 '찼다'고 잘못 읽었다면 이 승격도 틀립니다.
   <b>최종 배치표의 커트가 ${c.newCut}이면 맞습니다.</b>
 </div>`; }).join('')}
+<script>
+window.__DAEJO_DATE = ${JSON.stringify(String(J.dateKey || ''))};
+window.__DAEJO_BOARD = ${JSON.stringify(J.parts || {})};
+${CLIENT_JS}
+</script>
 </div>`;
 
 fs.writeFileSync(out, html);

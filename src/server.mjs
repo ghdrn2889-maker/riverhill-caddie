@@ -31,6 +31,7 @@ import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
 import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { kakaoAssist, assistOn } from './kakaobridge.mjs';
+import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
@@ -299,6 +300,43 @@ async function broadcastAdmins(msg) {
 app.post('/api/test', requireAdmin, async (req, res) => {
   await broadcastAdmins({ title: '테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
   res.json({ ok: true });
+});
+
+// ── 인턴 티오프(관리자 전용) — 자동 판독(노란 칸)이 놓치면 손으로 지정한다 ──────────
+//  인턴은 티오프 칸을 차지하되 정규 순번을 안 먹는다. 하나만 틀려도 그 뒤 전원의 티오프가 밀린다.
+//  ★수동이 자동을 이긴다(관리자는 원본을 보고 있다). 빈 배열 저장 = '인턴 없음'을 명시한 것.
+function _autoInternTees(dateKey) {
+  // 그 날짜 배치표 판독이 잡은 노란 칸 — 수동 지정이 없을 때의 기본값이자, 편집 화면의 출발점.
+  try {
+    const lb = loadJSON('lastboard.json', {}) || {};
+    if (keyFromLabel(lb.dateLabel || '') === dateKey) return (lb.rawVerdict?.internTees) || [];
+  } catch { /* noop */ }
+  return [];
+}
+app.get('/api/admin/intern-tees', requireAdmin, (req, res) => {
+  const date = String(req.query.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  const auto = _autoInternTees(date);
+  const man = internManualFor(date);
+  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto),
+    source: man ? '수동' : '자동', at: man?.at || 0, by: man?.by || '' });
+});
+app.post('/api/admin/intern-tees', requireAdmin, (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  const by = String(req.user?.name || req.user?.id || '관리자');
+  try {
+    if (req.body?.clear) { clearInternTees(date, by); }
+    else if (req.body?.toggle) {
+      const { time, course } = req.body.toggle;
+      toggleInternTee(date, time, course, _autoInternTees(date), { by });
+    } else if (Array.isArray(req.body?.tees)) {
+      setInternTees(date, req.body.tees, { by, note: String(req.body?.note || '') });
+    } else return res.status(400).json({ ok: false, error: 'tees[] 또는 toggle{time,course} 또는 clear:true 필요' });
+  } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const auto = _autoInternTees(date);
+  const man = internManualFor(date);
+  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
 });
 
 // ── 회원 관리(관리자 전용) — 외부인 배제: 신규 가입은 pending, 관리자가 승인해야 active ──
@@ -1622,7 +1660,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         dateISO: dbISO, part: '3', boardOk: !_boardReadFailed,
         teeGrid: _v.teeGrid || [], roster: _v.part3Roster || [], cut: Number(_v.cutoffPosition) || 0,
         // ★인턴 칸은 티오프를 차지하되 정규 순번을 안 먹는다 — 안 넘기면 인턴 하나당 그 뒤 전원이 밀린다.
-        internTees: _v.internTees || [],
+        //  관리자가 손으로 지정했으면 그게 전부다(판독의 노란 칸 검출을 이긴다).
+        internTees: internTeesFor(dbISO, _v.internTees || []),
       });
       if (a.mode === 'augment') {
         const tag = a.applied ? '적용' : '관측만(끄면 이대로)';
