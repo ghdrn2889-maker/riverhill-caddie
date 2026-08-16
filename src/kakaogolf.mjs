@@ -10,8 +10,9 @@
 //
 //  한계(정직하게): 골프장이 전 물량을 카카오에 내놓지 않으면(회원·전화 보류분) 그 칸은
 //   '안 뜸 = 찬 것'으로 잘못 읽힌다. 그래서 당분간 판독을 고치지 않고 대조만 한다.
-import { loadJSON, appendJSONL, DATA_DIR } from './store.mjs';
+import { loadJSON, saveJSON, appendJSONL, DATA_DIR } from './store.mjs';
 import { ROOT_DIR } from './env.mjs';
+import { raiseBoardIssue } from './boardalert.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -55,22 +56,65 @@ export function fixedSlots() {
 }
 
 // ── 카카오골프: 그날 '아직 예약 가능한' 티오프 ────────────────────────
+//  ★우리가 만든 통로가 아니다. 저쪽이 주소나 응답 형태를 바꾸면 끊긴다.
+//   그런데 진짜 위험은 '에러'가 아니라 '조용한 거짓말'이다 —
+//   200 OK에 빈 목록이 오면 이 엔진은 "124칸 전부 예약 참"이라고 결론낸다. 그게 최악이다.
+//   그래서 값을 받는 즉시 형태를 검사하고, 이상하면 숫자를 만들지 않고 던진다.
+//   자주 두드리는 건 대비가 아니다. 검사가 대비다.
+const HEALTH_FILE = 'kakao-health.json';
+function health(patch) {
+  const h = loadJSON(HEALTH_FILE, { ok: 0, fail: 0, streak: 0 }) || {};
+  const next = { ...h, ...patch, at: Date.now() };
+  saveJSON(HEALTH_FILE, next);
+  return next;
+}
+export const kakaoHealth = () => loadJSON(HEALTH_FILE, null);
+
+export class KakaoShapeError extends Error {}
+
 export async function fetchOpen(dateYYYYMMDD) {
   const cfg = loadSchedule() || {};
   const seq = Number(process.env.KAKAO_GOLF_SEQ || cfg.golfInfoSeq || 266);
-  const res = await fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Accept: 'application/json',
-      Origin: 'https://www.kakao.golf', Referer: `https://www.kakao.golf/golf/${seq}` },
-    body: JSON.stringify({ golfInfoSeq: seq, date: String(dateYYYYMMDD), sigunguSeq: 0, weekType: 0 }),
-    signal: AbortSignal.timeout(25000),
-  });
-  if (!res.ok) throw new Error(`카카오골프 HTTP ${res.status}`);
-  const j = await res.json();
-  return (j.list || []).map((x) => {
+  let j;
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Accept: 'application/json',
+        Origin: 'https://www.kakao.golf', Referer: `https://www.kakao.golf/golf/${seq}` },
+      body: JSON.stringify({ golfInfoSeq: seq, date: String(dateYYYYMMDD), sigunguSeq: 0, weekType: 0 }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    j = await res.json();
+  } catch (e) {
+    const h = health({ fail: (loadJSON(HEALTH_FILE, {})?.fail || 0) + 1, streak: (loadJSON(HEALTH_FILE, {})?.streak || 0) + 1, lastErr: e.message });
+    throw new Error(`카카오골프 조회 실패(${e.message}, 연속 ${h.streak}회)`);
+  }
+  // ★형태 검사 — 우리가 아는 모양이 아니면 숫자를 만들지 않는다.
+  if (!j || typeof j !== 'object' || !Array.isArray(j.list)) {
+    health({ streak: (loadJSON(HEALTH_FILE, {})?.streak || 0) + 1, lastErr: 'list 배열 없음' });
+    throw new KakaoShapeError('카카오골프 응답에 list 배열이 없음 — 형식이 바뀌었을 수 있음');
+  }
+  const rows = j.list;
+  if (rows.length) {
+    const s = rows[0];
+    const missing = ['bookTime', 'CourseName'].filter((k) => s[k] == null);
+    if (missing.length) {
+      health({ streak: (loadJSON(HEALTH_FILE, {})?.streak || 0) + 1, lastErr: `필드 없음: ${missing.join(',')}` });
+      throw new KakaoShapeError(`카카오골프 응답에 ${missing.join('·')} 없음 — 필드 이름이 바뀌었을 수 있음`);
+    }
+  }
+  const out = rows.map((x) => {
     const mins = toMin(String(x.bookTime).padStart(4, '0').replace(/(\d{2})(\d{2})/, '$1:$2'));
     return { mins, time: toHM(mins), course: String(x.CourseName || '').toUpperCase(), band: x.digitTime, fee: Number(x.greenFeeDP) || 0 };
   }).filter((x) => x.mins != null && x.course);
+  // 목록은 왔는데 우리가 쓸 수 있는 줄이 하나도 안 남았다 = 값의 모양이 바뀌었다는 뜻.
+  if (rows.length && !out.length) {
+    health({ streak: (loadJSON(HEALTH_FILE, {})?.streak || 0) + 1, lastErr: '시각·코스 해석 실패' });
+    throw new KakaoShapeError(`카카오골프 ${rows.length}건을 받았지만 시각·코스를 하나도 못 읽음 — 값 형식이 바뀌었을 수 있음`);
+  }
+  health({ ok: (loadJSON(HEALTH_FILE, {})?.ok || 0) + 1, streak: 0, lastOk: Date.now(), lastCount: out.length });
+  return out;
 }
 
 // ── 여집합 = 그날 팀이 찬 티오프 ──────────────────────────────────────
@@ -92,6 +136,13 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   if (!fixed.length) throw new Error(`고정 티오프 시간표(${SCHEDULE_FILE}) 없음 — 엔진의 기준표다`);
   const open = await fetchOpen(dateYYYYMMDD);
   const openSet = new Set(open.map((o) => key(o.mins, o.course)));
+  // ★가장 위험한 경우 — 응답은 멀쩡한데 목록이 비었다. 그대로 두면 "그날 전 칸 만석"이 된다.
+  //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
+  //  그리고 예전에 열려 있던 걸 본 적이 있으면 하루아침에 0이 될 수 없다 — 그건 고장이다.
+  const dayGap = Math.round((new Date(`${String(dateYYYYMMDD).slice(0, 4)}-${String(dateYYYYMMDD).slice(4, 6)}-${String(dateYYYYMMDD).slice(6, 8)}T00:00:00`) - new Date(new Date().toDateString())) / 86400000);
+  if (!open.length && dayGap >= 0 && dayGap <= 3 && Number(prevSnap?.everOpenCount || 0) > 0) {
+    throw new KakaoShapeError(`카카오골프 ${dateYYYYMMDD} 판매중 0칸 — 직전엔 ${prevSnap.everOpenCount}칸 있었다. 만석보다 고장을 의심(전 칸 만석 처리 금지)`);
+  }
   // ★고정표에 없는데 카카오엔 뜨는 칸 = 우리 기준표가 틀렸다는 신호. 조용히 버리지 않고 남긴다.
   const fixedSet = new Set(fixed.map((f) => key(f.mins, f.course)));
   const unknown = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
@@ -151,6 +202,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, unknown,
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
+    everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
     skippedCount: skipped.length, judgeableFrom: isPast ? null : (isToday ? (JUDGE_TODAY ? toHM(nowMin + CUTOFF_MIN) : '판정안함(당일)') : '00:00'), cutoffMin: CUTOFF_MIN };
 }
 
@@ -256,7 +308,16 @@ export async function tick({ days = 3 } = {}) {
           fixed: snap.fixedCount, p3: (snap.byPart['3'] || []).length,
           newBooked: dif.booked, freed: dif.freed, unknown: snap.unknown });
       }
-    } catch (e) { console.error(`[카카오골프] ${date} 조회 실패:`, e.message); }
+    } catch (e) {
+      console.error(`[카카오골프] ${date} 조회 실패:`, e.message);
+      // ★끊긴 걸 모른 채 지나가는 게 제일 나쁘다 — 엔진이 죽었는데 화면은 멀쩡해 보인다.
+      //  연속 실패가 쌓이면 관리자에게 한 번 알린다(6시간 중복차단은 boardalert이 처리).
+      const h = kakaoHealth();
+      if (h && h.streak >= 6) {
+        raiseBoardIssue({ kind: 'kakao_down', part: 3,
+          note: `카카오골프 연속 ${h.streak}회 실패 — ${h.lastErr || ''}`.slice(0, 90) });
+      }
+    }
     await sleep(1500);   // robots.txt Crawl-delay: 1 — 넉넉히 지킨다
   }
 }
