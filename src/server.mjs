@@ -27,6 +27,8 @@ import { seedPrimaryUser, getProfile, setProfile, activeMembers, boardNameTaken,
 import { isKnownCaddie, seedOfficial, caddieStats } from './roster.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
+import { raiseBoardIssue } from './boardalert.mjs';
+import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
@@ -362,6 +364,9 @@ async function handleIngest(req, res) {
   if (/사진(을)?\s*보냈습니다|^\s*사진\s*$/.test(text) && (isScheduleWriter(sender) || isScheduleWriter(roomName) || /주임|번호표/.test(`${roomName} ${sender}`))) {
     flagStaleBoardPhoto(roomName || sender);
   }
+  // ★가배치 예고는 화이트리스트보다 먼저 잡는다 — 이건 '누가 말했나'보다 '말이 나왔나'가 중요하다.
+  //  놓치면 참고용 배치표가 정본을 덮는다. 발신자 필터에 걸려 버려지기 전에 신호부터 살린다.
+  try { noteProvisional(text, { source: `카톡${roomName ? `·${roomName}` : ''}`, id: String(q.id || '') }); } catch { /* noop */ }
   // 카톡 그룹 알림은 제목({not_title})에 '방 이름'이 아니라 '보낸 사람'이 담겨 오므로
   // 방 이름으로 거를 수 없다 → 내용 기반 판독기(judge)가 3부 관련성으로 거른다(무관 메시지는 피드에만·숨김).
   // (선택) ALLOWED_SENDERS 를 설정하면 그 발신자만 통과시키는 화이트리스트로 동작(사생활 강화).
@@ -1247,6 +1252,8 @@ async function rememberBoard(full, out) {
   const v = out && out.rawVerdict;
   const isBoardGrid = (full.images || []).length && v && Array.isArray(v.teeGrid) && v.teeGrid.length;
   if (!isBoardGrid) return; // 티오프표(teeGrid)를 실제로 읽은 '본배치표'만 감시 대상
+  // (가배치 보류는 notifyForArticle 한 곳에서만 판단한다 — 거기서 걸리면 여기까지 오지 않는다.
+  //  두 군데서 물어보면 '한 장만 붙잡는' 계수가 어긋난다.)
   const newImg = (full.images || [])[0] || '';
   // ★약한 변동 판독이 정본 배치표를 덮지 않도록 가드(board 스냅샷 보호 — 회원 처리·푸시엔 무관).
   //  기존이 정본이고 이번이 정본이 아니면 구조 데이터는 유지. 단, 날짜가 명백히 다른 '새 날짜 배치표'는 통과.
@@ -1501,6 +1508,12 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
 // 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
 async function notifyForArticle(full, result = {}, opts = {}) {
   const primary = envMember(); // 1번 회원(김홍구)
+  // ★가배치 예고 수집 — 카페 글·댓글도 같은 입구를 쓴다("내일가배치입니다 비가용67명…" 실측 8/16).
+  //  배치표 그림엔 가배치 표시가 없으므로, 이 말이 유일한 단서다.
+  try {
+    const t = [full.subject, full.text, ...((full.comments || []).map((c) => c.content))].filter(Boolean).join(' ');
+    noteProvisional(t, { source: isKakaoSource(full) ? '카톡' : '카페', id: String(full.id || ''), at: Number(full.writeDate) || Date.now() });
+  } catch { /* noop */ }
 
   // ★단독 부-배치표 라우팅(1·2부) — 3부 경로에 넣으면 오독·정본오염 → 감지 시 전용 처리 후 종료(3부 코드 미진입).
   const _declaredPart = detectDeclaredBoardPart(full);
@@ -1575,6 +1588,20 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   // ── 칠판(단일 진실원) 스위치 ── 회원 처리 '전에' 이 판독을 칠판에 먼저 기록(ingest)하고, 그 칠판(누적된
   //  텍스트·구두 컷/티오프 변동 포함)을 out.rawVerdict에 덧씌운다. 그러면 대시보드·알림이 검수와 '같은 칠판'에서
   //  파생돼 100% 동행한다. 단일 이미지 날은 칠판 teeGrid == 이미지 teeGrid 라 무변화(회귀 0).
+  // ★★가배치 차단선 — 여기서 막지 않으면 참고용 배치표가 회원 화면·알림·칠판에 그대로 나간다.
+  //  가배치표에는 아무 표시가 없다(사용자 확인). 사람이 남긴 "가배치" 한 마디가 유일한 단서라,
+  //  예고가 살아 있는 동안 그 날짜 배치표는 회원에게 반영하지 않는다.
+  //  ★같은 날짜의 '다음' 배치표는 본배치로 본다 — 가배치 뒤엔 반드시 본배치가 온다(provisional.mjs 참조).
+  {
+    const _v = out.rawVerdict || {};
+    const _isBoard = (full.images || []).length && Array.isArray(_v.teeGrid) && _v.teeGrid.length;
+    const _prov = _isBoard ? boardIsProvisional(_v.dateLabel || '', `${full.subject || ''} ${full.text || ''}`, String(full.id || '')) : null;
+    if (_prov) {
+      console.warn(`⚠️ [가배치] ${_v.dateLabel} 배치표 보류 — 회원 반영·알림 안 함(예고: "${_prov.text.slice(0, 30)}", #${full.id})`);
+      raiseBoardIssue({ kind: 'provisional_hold', part: 3, dateLabel: _v.dateLabel || '', notice: _prov.text.slice(0, 60) });
+      return { pushed: false, push: 'low', relevant: true, title: '', body: full.subject || '', provisionalHeld: true, rawVerdict: _v };
+    }
+  }
   const dbISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || new Date().toISOString().slice(0, 10);
   try { dayboardIngest(dbISO, full, out.rawVerdict || {}); } catch (e) { console.error('[칠판 피드]', e.message); }
   try { if (out.rawVerdict && !out.rawVerdict._adminCorrected) overlayDayboardOnVerdict(out.rawVerdict, dbISO); }
