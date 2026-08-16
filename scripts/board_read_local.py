@@ -509,6 +509,40 @@ def main():
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
+    # ── diff_bands: 직전 배치표 그림과 픽셀로 비교해 '구역별로 바뀐 픽셀 수'를 낸다(판독 호출 0회). ──
+    #  배치표가 바뀔 땐 통째로 바뀌지 않는다(이름 하나·티오프 하나). 그런데 우리는 매번 1·2·3부를
+    #  처음부터 전부 다시 읽어 호출을 태웠고, 멀쩡하던 부를 다시 읽다가 새 오독이 생길 여지도 있었다.
+    #  ★판정은 호출부가 한다. 여기선 '몇 픽셀이 달라졌나'만 정직하게 센다(임계값 추측 금지).
+    #  크기가 다르면 비교 불가 — 같은 캡처 파이프라인이 아니라는 뜻이므로 그냥 전부 다시 읽는다.
+    if cfg.get("diff_bands"):
+        from PIL import Image as _PIL, ImageChops as _CH
+        prev = load_image(cfg["diff_bands"])
+        if prev.size != im.size:
+            print(json.dumps({"compatible": False, "reason": "size",
+                              "prev": list(prev.size), "now": list(im.size)}))
+            return
+        thr = int(cfg.get("diff_thr", 28))   # 픽셀 밝기 차 — 이보다 크면 '달라진 픽셀'
+        a = prev.convert("L"); b = im.convert("L")
+        mask = _CH.difference(a, b).point(lambda v: 255 if v > thr else 0)
+        W, H = im.size
+        out = []
+        for bd in (cfg.get("bands") or [{"key": "all", "x0": 0.0, "x1": 1.0}]):
+            x0 = max(0, min(W - 1, int(float(bd.get("x0", 0.0)) * W)))
+            x1 = max(x0 + 1, min(W, int(float(bd.get("x1", 1.0)) * W)))
+            y0 = max(0, min(H - 1, int(float(bd.get("y0", 0.0)) * H)))
+            y1 = max(y0 + 1, min(H, int(float(bd.get("y1", 1.0)) * H)))
+            sub = mask.crop((x0, y0, x1, y1))
+            changed = sub.histogram()[255]
+            bb = sub.getbbox()   # 바뀐 곳의 위치 — 어디가 바뀌었는지 사람이 볼 수 있게 남긴다
+            out.append({
+                "key": bd.get("key", ""), "changed": changed, "area": (x1 - x0) * (y1 - y0),
+                "box": [round((bb[0] + x0) / W, 4), round((bb[1] + y0) / H, 4),
+                        round((bb[2] + x0) / W, 4), round((bb[3] + y0) / H, 4)] if bb else None,
+            })
+        print(json.dumps({"compatible": True, "w": W, "h": H, "thr": thr, "bands": out,
+                          "_ms": int((_time.time() - t0) * 1000)}, ensure_ascii=False))
+        return
+
     # ── crop_only: 경계로 잘라 업스케일 크롭만 저장(VLM 판독 안 함) — Claude가 그 크롭을 읽는다. 빠름. ──
     if cfg.get("crop_only"):
         from PIL import Image as _PIL

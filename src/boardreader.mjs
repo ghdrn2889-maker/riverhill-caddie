@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
-import { DATA_DIR, appendJSONL } from './store.mjs';
+import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -356,7 +356,7 @@ async function readOffByColumns(img) {
 //  ★알림은 여기서 쏘지 않는다 — 판독은 최대 3회 재시도하고 그중 하나만 채택된다. 버려질 시도의 손상까지
 //   알리면 오경보다(실측 8/15 22:15: 3부 구멍[1~20]이 떴지만 최종 채택본은 34명 멀쩡했다).
 //   명단 구멍·티오프 충돌은 채택이 끝난 뒤 '최종본으로 다시 세서' 쏜다(raiseAdoptedBoardIssues).
-async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0) {
+async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusable = {}) {
   const parts = {};
   // ★부3(현재 회원 전원의 부)를 '먼저' 판독 — 예산(캡)이 모자라도 우리 회원 부는 절대 굶지 않게.
   //  경계(x1)는 여전히 x0정렬 이웃으로 계산하므로 크롭 정확도는 그대로. 순서만 3부 우선.
@@ -367,6 +367,13 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0) {
   });
   for (const i of order) {
     const b = sorted[i];
+    // ★안 바뀐 부는 건너뛴다 — 이 부의 화면 구역이 직전 배치표와 픽셀 하나까지 같다는 게 증명된 경우뿐이다.
+    const cached = reusable && reusable[b.part];
+    if (cached) {
+      parts[b.part] = cached;
+      console.log(`[증분] ${b.part}부 그대로 → 판독 건너뜀(명단 ${(cached.roster || []).filter(Boolean).length}명·티 ${(cached.tee || []).length})`);
+      continue;
+    }
     try {
       // ★가운데 부는 '다음 부 경계'까지만(번짐 방지). 마지막 부만 우측 여유(margin)로 티오프 안 잘리게.
       const next = sorted[i + 1];
@@ -668,6 +675,83 @@ export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
   } catch (e) { console.error('[판독손상] 채택본 점검 오류:', e.message); }
 }
 
+// ── 증분 판독: 바뀐 구역만 다시 읽는다 ────────────────────────────────────────
+//  배치표가 바뀔 땐 통째로 바뀌지 않는다 — 이름 하나, 티오프 하나다. 그런데 지금까지는 수정본이 올 때마다
+//  1·2·3부와 조편성·당번을 처음부터 전부 다시 읽어 한 장에 ~30콜을 태웠다. 그 낭비가 일일 캡을 넘겨,
+//  정작 저녁 정본 배치표가 '예산 부족 → 열경계 스킵'으로 반쪽 판독되게 만들었다(8/16 실측).
+//
+//  ★판정 규칙은 '단 한 픽셀도 안 바뀐 구역만 건너뛴다'. 임계값을 추측하지 않는다.
+//   실측 근거(8/14 14:41→14:56 수정본): 좌 0 · 중 0 · 우 931픽셀 — 3분의 2가 비트까지 동일했다.
+//   반대로 JPEG 사진(화면을 찍은 것)은 재압축 잡음으로 전 구역이 수십만 픽셀 달라진다 → 전부 다시 읽는다.
+//   즉 애매하면 무조건 읽는 쪽으로 기운다. 건너뛴 구역은 '바뀌지 않았음이 증명된' 구역뿐이다.
+//
+//  롤백: BOARD_INCREMENTAL=0
+const INCR_FILE = 'board-incremental.json';
+const INCR_DIR = path.join(DATA_DIR, 'board-prev');
+const INCR_KEEP = 3;                       // 캡처 파이프라인이 여러 개(카톡 자동캡처·업로드·카페) — 최근 3장을 후보로
+const INCR_TTL = 30 * 3600 * 1000;
+const incrOn = () => String(process.env.BOARD_INCREMENTAL || '1') !== '0';
+
+function incrLoad() {
+  const list = loadJSON(INCR_FILE, []) || [];
+  const cut = Date.now() - INCR_TTL;
+  const live = list.filter((e) => e && (e.at || 0) > cut && e.img && fs.existsSync(e.img));
+  for (const e of list) if (!live.includes(e) && e && e.img) { try { fs.unlinkSync(e.img); } catch { /* noop */ } }
+  if (live.length !== list.length) saveJSON(INCR_FILE, live);
+  return live;
+}
+
+// 부 크롭과 '같은 기하'로 구역을 잡는다 — 크롭보다 좁으면 바뀐 걸 놓칠 수 있으니 절대 좁히지 않는다.
+function incrBands(bounds) {
+  const bands = [{ key: 'sum', x0: 0, x1: 1, y0: 0, y1: 0.07 },
+    { key: 'crew', x0: 0.62, x1: 1, y0: 0, y1: 0.93 },
+    { key: 'duty', x0: 0.26, x1: 0.76, y0: 0.75, y1: 1 }];
+  const sorted = (bounds || []).slice().sort((a, b) => a.x0 - b.x0);
+  sorted.forEach((b, i) => {
+    const next = sorted[i + 1];
+    bands.push({ key: `p${b.part}`, x0: Math.max(0, b.x0 - 0.03),
+      x1: Math.min(1, (next ? next.x0 : b.x1) + (next ? 0.0 : 0.06)), y0: 0, y1: 0.99 });
+  });
+  return bands;
+}
+
+// 직전 배치표들과 견줘 '안 바뀐 구역'을 찾는다. Claude 호출 0회(파이썬 픽셀 비교, 실측 ~20ms).
+//  export는 검증용 — 이 판단이 틀리면 멀쩡한 부를 안 읽고 넘어가므로 실이미지로 따로 돌려볼 수 있어야 한다.
+export async function incrPlan(img) {
+  for (const e of incrLoad()) {
+    let d;
+    try { d = await runPy({ image: img, diff_bands: e.img, bands: incrBands(e.bounds) }, 20000); }
+    catch (err) { console.warn('[증분] 픽셀 비교 실패 → 전체 판독:', err.message); return null; }
+    if (!d || !d.compatible) continue;                       // 크기가 다름 = 다른 캡처 파이프라인 → 다음 후보
+    const unchanged = new Set((d.bands || []).filter((b) => b.changed === 0).map((b) => b.key));
+    if (!unchanged.size) {                                   // 전부 바뀜(새 날짜 배치표·사진) → 전체 판독
+      console.log(`[증분] 직전 배치표와 전 구역이 달라짐 → 전체 판독(${(d.bands || []).map((b) => `${b.key}:${b.changed}`).join(' ')})`);
+      return null;
+    }
+    const changed = (d.bands || []).filter((b) => b.changed > 0);
+    console.log(`[증분] 직전 판독(${Math.round((Date.now() - e.at) / 60000)}분 전)과 비교 — 그대로: ${[...unchanged].join(',')}`
+      + (changed.length ? ` / 바뀜: ${changed.map((b) => `${b.key}(${b.changed}px)`).join(' ')}` : ' / 바뀐 곳 없음'));
+    return { entry: e, unchanged, diff: d };
+  }
+  return null;
+}
+
+// 이번 판독 결과를 다음 비교의 기준으로 남긴다. ★결함 있는 판독(_fault)은 재사용 금지 — 오독을 대물림한다.
+function incrRemember(img, { bounds, cuts, parts, offList, dutyList, clean }) {
+  if (!incrOn() || !clean || !bounds || !bounds.length) return;
+  try {
+    fs.mkdirSync(INCR_DIR, { recursive: true });
+    const dst = path.join(INCR_DIR, `prev_${Date.now()}${path.extname(img) || '.png'}`);
+    fs.copyFileSync(img, dst);
+    const prev = incrLoad();   // ★한 번만 읽는다 — 두 번 읽으면 객체가 달라져 '남길 것'까지 지운다
+    const list = [{ img: dst, at: Date.now(), bounds, cuts: cuts || {}, parts: parts || {},
+      offList: offList || null, dutyList: dutyList === undefined ? null : dutyList }, ...prev].slice(0, INCR_KEEP);
+    const keepImgs = new Set(list.map((e) => e.img));
+    for (const e of prev) if (!keepImgs.has(e.img)) { try { fs.unlinkSync(e.img); } catch { /* noop */ } }
+    saveJSON(INCR_FILE, list);
+  } catch (e) { console.error('[증분] 기준 저장 실패:', e.message); }
+}
+
 // ── 합본 배치표: Claude 경계 → 부별 크롭 → Claude 부 판독. 경계 흔들림 대비 검증+재시도(최대 3회). ──
 //  반환 { boundaries, parts: { '1': {roster,tee,cut}, ... }, _claudeCalls }
 export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies(), summaryCuts = {}, maxTries = 3 } = {}) {
@@ -677,10 +761,22 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   let cuts = { ...summaryCuts };
   let best = null, bestBounds = null, bestScore = -1, lastFault = '';
   let bestIssues = [];   // ★채택된 시도의 손상만 관리자에게 알린다(버려진 시도의 손상은 오경보).
+  // ★증분 판독 계획 — 직전 배치표와 픽셀로 견줘 '안 바뀐 구역'을 찾는다(Claude 호출 0회).
+  const plan = incrOn() ? await incrPlan(img) : null;
+  const keep = (k) => !!(plan && plan.unchanged.has(k));
+  // 안 바뀐 부는 직전 판독 결과를 그대로 쓴다. 비트까지 같은 그림이라 다시 읽어도 같은 답이거나 새 오독이거나 둘 중 하나다.
+  const reusableParts = {};
+  if (plan) for (const [p, v] of Object.entries(plan.entry.parts || {})) if (keep(`p${p}`) && v) reusableParts[p] = v;
+  if (keep('sum') && plan.entry.cuts && Object.keys(plan.entry.cuts).length && !Object.keys(cuts).length) {
+    cuts = { ...plan.entry.cuts };
+    console.log(`[증분] 상단 요약 그대로 → 커트 재사용: ${Object.entries(cuts).map(([p, n]) => `${p}부 ${n}`).join(', ')}`);
+  }
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (claudeBudgetLeft() <= 0) break;
     const toBefore = claudeTimeouts();
-    const bounds = await getPartBoundaries(img);
+    // 경계는 '레이아웃' 속성 — 안 바뀐 구역이 하나라도 있으면 그림이 직전과 정렬돼 있다는 뜻이라 그대로 쓴다.
+    //  단 재시도(attempt>0)는 경계 흔들림을 의심해 다시 도는 것이므로, 그때는 반드시 새로 추정한다.
+    const bounds = (attempt === 0 && plan) ? plan.entry.bounds : await getPartBoundaries(img);
     if (!bounds || !bounds.length) continue;
     const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
     // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
@@ -695,7 +791,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
     }
     const issues = [];
-    const parts = await readPartsOnce(img, sorted, cuts, issues, attempt);
+    const parts = await readPartsOnce(img, sorted, cuts, issues, attempt, reusableParts);
     const fault = boardReadFault(parts, cuts);
     if (!fault) { best = parts; bestBounds = bounds; bestIssues = issues; lastFault = ''; break; }   // 깨끗 → 채택
     lastFault = fault;
@@ -719,7 +815,15 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   //   조별 단일 크롭(8배)이면 이름·근태 안정(실측 박시윤·서동명 정확). 조 경계 실패 시 통짜 크루 크롭(6배)으로 폴백.
   //   ★로컬 VLM은 이 판독에 못 씀(qwen2.5vl 실측 2명만 뱉음) → Claude로만.
   let offList = [];
-  if (claudeBudgetLeft() > 0) {
+  // ★offOk — '근태를 실제로 읽었나'. 판독 실패·예산부족도 offList는 []라, 이 구분이 없으면 '아무도 근태 아님'을
+  //  다음 배치표의 기준으로 물려주게 된다(빈 근태가 조용히 전파). []는 진짜 0명일 때만 기준이 될 수 있다.
+  let offOk = false;
+  // ★조편성표 구역이 직전과 픽셀까지 같으면 근태도 그대로다 — 이 판독만 조 열분할까지 ~6콜이라 절약이 크다.
+  const crewCached = keep('crew') && Array.isArray(plan.entry.offList) ? plan.entry.offList : null;
+  if (crewCached) {
+    offList = crewCached; offOk = true;
+    console.log(`[증분] 조편성표 그대로 → 근태 판독 건너뜀(${offList.length}명)`);
+  } else if (claudeBudgetLeft() > 0) {
     try {
       let raw = await readOffByColumns(img);              // {off, crew} — 조 열분할(이름 안정)
       if (raw == null) {                                   // 조 경계 실패 → 통짜 크루 크롭 폴백(근태만)
@@ -730,6 +834,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       }
       const offRaw = Array.isArray(raw) ? raw : (raw.off || []);   // 배열형(옛) 호환
       offList = offRaw.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
+      offOk = true;
       console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
       // ★오늘 근무자 집합 → 애매 오독 티브레이크(이수련↔이수현 등). 근무태그만(근태·빈칸 제외), 정본 스냅 후 수집.
       const workingSet = new Set();
@@ -745,7 +850,10 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   //  조편성 근태칸에도 '당번' 태그는 찍히지만 거기엔 '몇 부'가 없어 시각을 못 정한다. 그래서 이 박스를 따로 읽는다.
   //  실패해도 판독 전체를 망치지 않게 완전 격리(당번만 비고 나머지는 정상).
   let dutyList = null;   // ★기본 null(반영 안 함) — 캡 초과로 판독을 아예 못 했을 때 '배정 0명'으로 오해하지 않게.
-  if (claudeBudgetLeft() > 0) {
+  if (keep('duty') && plan.entry.dutyList !== undefined && plan.entry.dutyList !== null) {
+    dutyList = plan.entry.dutyList;
+    console.log(`[증분] 당번·벌당 박스 그대로 → 판독 건너뜀(${dutyList.length}명)`);
+  } else if (claudeBudgetLeft() > 0) {
     try {
       const dPath = path.join(TMP, `duty_${Date.now()}.png`);
       // 하단 좌~중앙 띠: 공지사항 오른쪽의 주황 박스가 여기 있다. 우측 요약표(x>0.72)는 제외.
@@ -759,7 +867,17 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       else console.log('[boardreader] 당번·벌당 판독: 배정표 있음 · 오늘 배정 0명');
     } catch (e) { console.error('[boardreader] 당번·벌당 판독 실패:', e.message); }
   }
-  return { boundaries: bestBounds, parts: best, offList, dutyList, _claudeCalls: startBudget - claudeBudgetLeft(), _fault: lastFault };
+  const used = startBudget - claudeBudgetLeft();
+  // 다음 배치표가 왔을 때 견줄 기준으로 남긴다(결함 있는 판독은 안 남긴다 — 오독 대물림 방지).
+  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, dutyList, clean: !lastFault });
+  if (plan) {
+    console.log(`[증분] 이번 판독 ${used}콜 — 그대로 쓴 구역: ${[...plan.unchanged].join(',') || '없음'}`);
+    appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [...plan.unchanged],
+      bands: (plan.diff.bands || []).map((b) => ({ k: b.key, px: b.changed })), fault: lastFault || '' });
+  } else {
+    appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [], full: true, fault: lastFault || '' });
+  }
+  return { boundaries: bestBounds, parts: best, offList, dutyList, _claudeCalls: used, _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
