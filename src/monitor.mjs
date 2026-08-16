@@ -22,6 +22,7 @@ import { addNotice, listNotices } from './notices.mjs';
 import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
+import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
 
@@ -339,10 +340,7 @@ app.get('/api/corrections', gate, (req, res) => {
 
 // ── 배치표 검수: 시스템 판독을 표로 재구성 → 관리자가 원본과 대조해 틀린 칸만 교정 ──
 //  교정은 '근원(배치표 판독)' 한 곳에서 → 저장 시 전 회원을 다시 계산해 일관 반영(회원별 꼬임 원천 차단).
-function loadLastBoard() {
-  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'lastboard.json'), 'utf8')); } catch { return null; }
-}
-const nkey = (s) => String(s || '').replace(/\s/g, '');
+//  loadLastBoard·nkey·correctionMsg·correctPart3은 boardcorrect.mjs 한 곳에만 둔다(위 import).
 const dutyKind = (code) => { const c = String(code || ''); if (/병가/.test(c)) return '병가'; if (/휴가|연차|반차|월차/.test(c)) return '휴가'; if (/휴무|격리/.test(c)) return '휴무'; return ''; };
 // ★쌍둥이 이름 오독 플래그 — 명단 칸 이름이 '회원 본명과 한 글자 차이'인데 그 회원 본명은 명단에 아예 없으면,
 //  그 칸이 회원의 오독일 가능성이 큼(서동명↔서동환). 자동 개명은 안 하고(둘 다 실존 캐디) 관리자에게 콕 집어 표시만.
@@ -463,13 +461,6 @@ app.get('/api/board-review', gate, (req, res) => {
 // ★교정 정정알림 — 저장 시 '실제 바뀐 회원'만 골라 문구를 만들되, 즉시 발송하지 않고
 //  토큰에 담아 관리자에게 미리보기로 돌려준다. /api/board-notify 로 확인해야 실제 발송.
 const pendingNotify = {};
-function correctionMsg(partLabel, name, s) {
-  if (s.nowOff && !s.wasOff) return { title: `${partLabel} 휴무`, body: `${name}님, ${partLabel} 오늘은 휴무로 확인됐어요. 편히 쉬세요.` };
-  if ((s.wasWait || s.wasOff) && s.nowWork && s.pos > 0) return { title: `${partLabel} 근무 전환`, body: `${name}님, ${partLabel} 근무로 확정됐어요${s.newTee ? ` — 티오프 ${s.newTee}` : ''}. 배치표를 확인해주세요.` };
-  if (s.wasWork && s.nowSpare) return { title: `${partLabel} 스페어 전환`, body: `${name}님, ${partLabel} 스페어(대기)로 전환됐어요.` };
-  if (s.wasWork && s.nowWork && s.oldTee && s.newTee && s.oldTee !== s.newTee) return { title: `${partLabel} 티오프 변경!`, body: `${name}님, ${partLabel} 티오프가 ${s.oldTee} → ${s.newTee}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
-  return null;
-}
 // 사후(이미 저장된 교정) 정정 알림용 — 현재 배정 상태 그대로 안내하는 문구.
 function currentStateMsg(pl, name, today) {
   if (today.status === 'off') { const ot = today.offType; const w = ot === 'sick' ? '병가' : ot === 'vacation' ? '휴가' : '휴무'; return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 오늘은 ${w}예요.` }; }
@@ -629,82 +620,12 @@ app.post('/api/board-correct', gate, async (req, res) => {
     console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
     return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
   }
-  const lb = loadLastBoard();
-  if (!lb || !lb.rawVerdict) return res.status(400).json({ ok: false, error: '현재 배치표가 없어요.' });
-  const v = JSON.parse(JSON.stringify(lb.rawVerdict));
-  const origRoster = Array.isArray(v.part3Roster) ? v.part3Roster.slice() : [];
-  const origGrid = {}; (v.teeGrid || []).forEach((g) => { origGrid[Number(g.pos)] = (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0]; });
-  const crew = { ...(v.crewDuty || {}) };
-  const roster = []; const grid = []; const cellDiffs = [];
-  for (const r of rows) {
-    const p = Number(r.pos); if (!p) continue;
-    const nm = String(r.name || '').trim();
-    const teeM = String(r.tee || '').match(/\d{1,2}:\d{2}/); const tee = teeM ? teeM[0] : '';
-    const course = /IN/i.test(String(r.course || '')) ? 'IN' : (tee ? 'OUT' : '');
-    roster[p - 1] = nm;
-    if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
-    // ── 근태(휴무/병가/휴가) 오버라이드: crewDuty 반영. 54·1,3(타부 근무) 코드는 보존. ──
-    const d = String(r.duty || ''); const key = nkey(nm);
-    if (key) {
-      if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
-      else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) { cellDiffs.push({ pos: p, field: 'duty', model: crew[key], admin: '' }); crew[key] = ''; } // 배치표대로 → 잘못 읽은 off 해제
-    }
-    if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
-    if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
-  }
-  const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
-  v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
-  if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
-  v._adminCorrected = { at: Date.now(), by: 'admin' }; delete v._uncertain;
-  lb.rawVerdict = v;
-  try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
-  if (cellDiffs.length) {
-    const line = { at: Date.now(), type: 'board', boardArticleId: lb.id, date: v.dateLabel || '', cutLine, changes: cellDiffs };
-    try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
-  }
-  const rosterNk = new Set(roster.map(nkey).filter(Boolean));
-  const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
-  const dk = dayKey(v.dateLabel || lb.dateLabel || '');
-  let updated = 0; const pending = [];
-  for (const m of activeMembers()) {
-    const today = loadToday(m.id) || {};
-    // 이 배치표에 없는 휴무자(다른 근태로 쉬는 사람)는 건드리지 않음 — 배치표에 이름이 있으면 재계산.
-    if (today.status === 'off' && !rosterNk.has(nkey(m.board_name))) continue;
-    const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };
-    let next;
-    try {
-      const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, today);
-      next = applyVerdict(today, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
-    } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
-    const isOff = next.status === 'off'; // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정
-    const pos = Number(next.myPosition) || 0;
-    if (!isOff && pos > 0 && cutLine > 0) {
-      next.cutLine = cutLine;
-      const hasTee = next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime));
-      const inWork = pos <= cutLine;
-      next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
-      if (!inWork) { next.teeTime = ''; next.course = ''; }
-    }
-    // ★'실제 바뀐 회원만' 잠근다 — 전 회원 잠금은 이후 같은 배치표 변동(당추 등)까지 얼려버림(이수련 동결 사고).
-    //  판정: 이 교정으로 내 status/티오프/순번이 달라졌거나, 내 순번 칸이 직접 교정된(cellDiff) 경우만.
-    delete next._adminLock;
-    const _chg = today.status !== next.status || String(today.teeTime || '') !== String(next.teeTime || '') || Number(today.myPosition || 0) !== pos;
-    if (_chg || diffPositions.has(pos)) {
-      next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now() };
-    }
-    next.updatedAt = Date.now();
-    const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
-    const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
-    saveToday(next, m.id); updated++;
-    if (notify) {
-      const pl = `${member.part}부`;
-      const cm = correctionMsg(pl, m.board_name, { wasWait, wasOff, wasWork, nowWork, nowSpare, nowOff, pos, oldTee: today.teeTime || '', newTee: next.teeTime || '' });
-      if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });
-    }
-  }
-  const notifyToken = (notify && pushReady) ? stashNotify(pending) : null;
-  console.log(`📋 [monitor] 배치표 #${lb.id} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
-  res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
+  // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
+  let out;
+  try { out = correctPart3({ rows, interns, cutLine, notify }); }
+  catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const notifyToken = (notify && pushReady) ? stashNotify(out.pending) : null;
+  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pending: out.pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
 });
 
 // ★교정 정정알림 확정 발송 — board-correct가 돌려준 notifyToken을 관리자가 미리보기 후 확인하면 실제 발송.
