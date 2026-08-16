@@ -201,6 +201,36 @@ for (const p of ['1', '2', '3']) {
   console.log(`  ${p}부 ${targets.length}곳 검사 완료`);
 }
 }
+// ── ⑦ 칸의 출처가 색으로 구분돼야 한다 ──────────────────────────────────
+//  이 화면의 존재 이유가 '두 경로 대조'다. 그린 직후 paint()가 className을 밀어버려
+//  사진이 읽은 칸과 카카오가 찼다고 본 칸이 똑같이 보이던 적이 있다.
+if (HAS_KAKAO) {
+  console.log('\n칸 출처 구분\n');
+  const K2 = (t, c) => t.replace(/^(\d):/, '0$1:') + '|' + (/IN/i.test(c) ? 'IN' : 'OUT');
+  for (const VIEW of ['proj', 'real']) {
+    doc._ids[VIEW === 'real' ? 'vReal' : 'vProj']._ev.click();
+    for (const p of ['1', '2', '3']) {
+      const real = new Set((J.parts[p]?.teeGrid || []).map((g) => K2(g.time, g.course)));
+      (J.parts[p]?.internTees || []).forEach((t) => real.add(K2(t.time, t.course)));
+      if (!real.size) continue;
+      let fresh = 0, boardOnly = 0, wrong = 0;
+      for (const td of doc.querySelectorAll('td.c[data-p="' + p + '"]')) {
+        const cls = String(td._cls || '');
+        if (cls.includes('empty') || cls.includes('intern') || cls.includes('open') || cls.includes('idle')) continue;
+        if (!cls.includes('ok') && !cls.includes('board-only')) continue;
+        const inReal = real.has(K2(td.dataset.t, td.dataset.c));
+        if (cls.includes('fresh')) { fresh++; if (inReal) wrong++; }
+        else if (cls.includes('board-only')) { boardOnly++; }
+        else if (!inReal) wrong++;      // 카카오만인데 fresh 표시가 없다 = 구분 안 됨
+      }
+      chk(wrong === 0, `[${VIEW}] ${p}부 — 출처 표시가 틀린 칸 ${wrong}개`);
+      if (VIEW === 'real') chk(fresh === 0, `[${VIEW}] ${p}부 — 실제 배치표인데 '새로 찬 칸(＋)'이 ${fresh}개 남아 있다`);
+      console.log(`  [${VIEW === 'real' ? '실제' : '예상'}] ${p}부 — 카카오만 ${fresh} · 배치표만 ${boardOnly}`);
+    }
+  }
+}
+function x_cls(td) { return td._cls || ''; }
+
 // ── ⑥ 저장하면 '저장 버튼이 사라진다' ────────────────────────────────────
 //  저장 버튼이 남아 있으면 관리자는 저장이 안 됐다고 읽는다. 실제로 예상 보기에서 저장하면
 //  기준선이 실제 축과 어긋나 버튼이 계속 남았다 — 어느 보기에서 저장하든 사라져야 한다.

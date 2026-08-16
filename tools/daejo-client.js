@@ -144,6 +144,15 @@
   }
   const anyChanged = () => PARTS.some(changed);
 
+  // ── 칸의 출처 ── 이 화면은 두 경로를 대조하는 곳이다. 어느 쪽이 말한 칸인지 늘 보여야 한다.
+  //  실제 = 사진이 읽은 팀(인턴 칸 포함) · 카카오 = 예약 API가 '찼다'고 본 칸.
+  //  origOcc.real은 저장할 때마다 갱신되므로(setBaseline) 매번 여기서 다시 만든다.
+  const realSet = (p) => new Set((origOcc.real[p] || []).map((s) => K(s.time, s.course)));
+  const kakaoSet = (p) => new Set(((BOARD[p] || {}).kakaoSlots || []).map((s) => K(s.time, s.course)));
+  // 근무태그 — (54)·(찾근)은 커트 밖에서도 근무, (1,3)·(2,3)은 부 중복(앞 순번 차지). kakaobridge와 같은 규칙.
+  const GUARANTEED_RE = /(^|[^0-9])(54|찾근)([^0-9]|$)/;
+  const CROSS_RE = /(^|[^0-9])(54|1[,、]\s*3|2[,、]\s*3)([^0-9]|$)/;
+
   function paint(part) {
     // 티오프 칸 → 순번 지도를 매번 새로 만든다(옮기기로 대응이 바뀌므로).
     const at = new Map();
@@ -162,16 +171,27 @@
         td.className = 'c empty';
         return;
       }
-      // 투영에서 온 색(fresh 등)을 걷어내고 실제 배치표 기준으로 다시 칠한다.
-      td.className = 'c ok';
+      // ★칸의 출처를 색으로 남긴다 — 이게 이 화면의 존재 이유다.
+      //  한때 여기서 className을 'c ok'로 밀어버려 생성기가 칠해둔 구분이 통째로 지워졌다.
+      //  그러면 사진이 읽은 칸과 카카오가 찼다고 본 칸이 똑같은 초록으로 보인다.
+      const inReal = realSet(part).has(key);
+      const inKakao = kakaoSet(part).has(key);
       const cell = roster[part][pos - 1] || '';
+      const tg0 = tagOf(cell);
+      td.className = 'c ' + (inReal ? (inKakao ? 'ok' : 'board-only') : 'ok fresh')
+        + (GUARANTEED_RE.test(tg0) ? ' gtd' : (CROSS_RE.test(tg0) ? ' crs' : ''));
+      // ＋ = 이 칸이 새로 찬 것이지 사람이 새로 온 게 아니다.
+      let mk = td.querySelector('.tag');
+      if (!inReal && inKakao) {
+        if (!mk) { mk = document.createElement('span'); mk.className = 'tag'; mk.title = '이 칸이 새로 찼습니다(사람이 새로 온 게 아닙니다)'; td.insertBefore(mk, td.firstChild); }
+        mk.textContent = '＋';
+      } else if (mk) mk.remove();
       if (!pe) { pe = document.createElement('span'); pe.className = 'pos'; td.appendChild(pe); }
       if (!nm) { nm = document.createElement('span'); nm.className = 'nm'; td.appendChild(nm); }
       pe.textContent = String(pos);
       nm.textContent = bare(cell);
-      const tg = tagOf(cell);
-      if (tg && !dt) { dt = document.createElement('span'); dt.className = 'dt'; td.appendChild(dt); }
-      if (dt) { dt.textContent = tg; dt.style.display = tg ? '' : 'none'; }
+      if (tg0 && !dt) { dt = document.createElement('span'); dt.className = 'dt'; td.appendChild(dt); }
+      if (dt) { dt.textContent = tg0; dt.style.display = tg0 ? '' : 'none'; }
       const nameChanged = cell !== (rosterOrig[part][pos - 1] || '');
       const teeChanged = !sameTee(tee[part][pos - 1], teeOrig[part][pos - 1]);
       td.classList.toggle('edited', nameChanged);
