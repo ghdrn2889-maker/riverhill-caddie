@@ -74,18 +74,38 @@ async function recoverSubstitutes(imagePath, names) {
     const vb = await readRosterVerbatim(imagePath);
     if (!vb || !vb.length) return names;
     const out = names.slice();
-    let n = 0;
+    const CONF = new Set(confirmedCaddies());
+    let n = 0, sn = 0;
     for (const it of vb) {
       const pos = Number(it.pos) || 0; if (pos < 1 || pos > out.length) continue;
       const vbRaw = String(it.name || '').trim();
       const hol = String(out[pos - 1] || '').trim();
       if (!hol) continue;                                    // 홀리스틱이 안 읽은 자리는 안 건드림(구조 보존)
+
+      // ★성(姓) 복원(두 번째 눈) — 홀리스틱이 성을 흘려 '이름 2글자'만 읽은 자리를, 같은 verbatim 판독으로 메운다.
+      //  실증 2026-08-17: 33명 중 '진수'·'하늘' 둘만 성이 빠졌다(둘 다 신입이라 정본 명단에 없었다).
+      //  정본 대조 복원(restoreSurname)은 이 둘을 못 고친다 —
+      //   '진수'는 후보가 0개(명단에 없음), '하늘'은 후보가 2개가 된다(이하늘이 같은 배치표 8번에 이미 있다).
+      //  그래서 사전이 아니라 '두 번째 판독'으로 푼다. 받아들이는 조건은 하나뿐이다:
+      //   verbatim이 읽은 3글자의 끝 2글자가 홀리스틱이 읽은 2글자와 정확히 같을 것.
+      //   서로 다른 두 판독이 이름에 합의했고 한쪽만 성을 더 봤다는 뜻이라, 새 사람을 지어내지 않는다.
+      const holBare = hol.replace(/\([^)]*\)/g, '').trim();
+      if (/^[가-힣]{2}$/.test(holBare) && !CONF.has(holBare)) {
+        const vbBare = vbRaw.replace(/\([^)]*\)/g, '').trim();
+        if (/^[가-힣]{3}$/.test(vbBare) && vbBare.slice(1) === holBare) {
+          out[pos - 1] = vbRaw; sn += 1;
+          console.log(`[boardreader] 성 복원: ${pos}번 "${hol}" → "${vbRaw}" (명단전용 재판독 일치)`);
+          continue;
+        }
+      }
+
       const { owner, sub } = _ownerSubOf(vbRaw);
       if (!sub) continue;                                    // verbatim에도 대체자 없으면 스킵
       const holOwner = (hol.match(/^([가-힣]{2,4})/) || [])[1] || '';
       if (owner && holOwner && owner === holOwner && vbRaw !== hol) { out[pos - 1] = vbRaw; n += 1; }
     }
     if (n) console.log(`[boardreader] 대바 복구: ${n}건 오버레이(명단 전용 재판독)`);
+    if (sn) console.log(`[boardreader] 성 복원 ${sn}건 — 추가 호출 0(대바 복구와 같은 판독 재사용)`);
     return out;
   } catch (e) { console.error('[boardreader] 대바 복구 오류:', e.message); return names; }
 }
