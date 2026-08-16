@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
@@ -149,6 +149,90 @@ function _teeConflicts(tees) {
     if (arr.length > 2 || arr.filter((c) => /IN/.test(c)).length > 1 || arr.filter((c) => /OUT/.test(c)).length > 1) bad.push(tm);
   }
   return bad;
+}
+
+// ── ★티오프 사다리 — 줄 단위 판독을 순번↔시각으로 조립하고 '기계적으로' 검증한다 ──
+//  기존 검사(_teeConflicts)는 한 시각에 3명 이상일 때만 잡는다. 그런데 실제 손해의 대부분인
+//  '통째 밀림'은 각 시각에 OUT 1·IN 1을 유지하므로 그 그물을 그대로 빠져나간다.
+//  여기서는 표 자체의 성질로 검증한다 — 티오프는 일정 간격(리버힐 7분)으로 인쇄되므로,
+//  줄 간격이 그 배수가 아니면 줄을 빠뜨린 것이고, 같은 순번이 두 번 나오면 번호를 잘못 붙인 것이다.
+const _mins = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1] * 60 + +m[2]) : null; };
+//  cut을 주면 '커트 안 순번은 모두 티오프가 있어야 한다'까지 본다. 줄을 통째로 빠뜨린 판독은
+//  간격이 여전히 cadence의 배수라 간격 검사로는 안 걸리고, 대신 그 줄의 순번이 통째로 사라진다.
+export function teeLadderFromRows(rows, cut = 0) {
+  const issues = [];
+  const list = (rows || []).map((r) => ({ ...r, m: _mins(r.time) })).filter((r) => r.m != null);
+  if (list.length < 2) return { tee: [], cadence: 0, issues: ['줄이 너무 적음'] };
+  // 간격(cadence) = 연속한 줄 시각차 중 가장 흔한 값. 판독이 아니라 표의 성질에서 얻는다.
+  const gaps = [];
+  for (let i = 1; i < list.length; i++) { const d = list[i].m - list[i - 1].m; if (d > 0) gaps.push(d); }
+  const freq = {};
+  for (const g of gaps) freq[g] = (freq[g] || 0) + 1;
+  const cadence = Number(Object.keys(freq).sort((a, b) => freq[b] - freq[a])[0]) || 0;
+  // 시각이 거꾸로 가거나, 간격이 cadence의 배수가 아니면 줄을 잘못 읽은 것.
+  for (let i = 1; i < list.length; i++) {
+    const d = list[i].m - list[i - 1].m;
+    if (d <= 0) { issues.push(`시각 역행 ${list[i - 1].time}→${list[i].time}`); continue; }
+    if (cadence > 0 && d % cadence !== 0) issues.push(`간격 어긋남 ${list[i - 1].time}→${list[i].time}(${d}분)`);
+  }
+  const tee = [];
+  const seen = new Map();
+  for (const r of list) {
+    for (const [k, course] of [['out', 'OUT'], ['in', 'IN']]) {
+      const p = Number(r[k]); if (!(p > 0)) continue;
+      if (seen.has(p)) issues.push(`순번 ${p} 중복(${seen.get(p)}·${r.time})`);
+      else seen.set(p, r.time);
+      tee.push({ pos: p, time: r.time, course });
+    }
+  }
+  // 커트 안인데 티오프가 없는 순번 = 그 줄을 못 읽었다는 뜻(줄 누락의 유일한 확실한 신호).
+  const n = Number(cut) || 0;
+  if (n > 0) {
+    const miss = [];
+    for (let p = 1; p <= n; p++) if (!seen.has(p)) miss.push(p);
+    if (miss.length) issues.push(`티오프 없는 순번 ${miss.slice(0, 12).join(',')}${miss.length > 12 ? '…' : ''}(${miss.length}개)`);
+  }
+  return { tee, cadence, issues };
+}
+// 티오프 표만 잘라 줄 단위로 다시 읽고, 기존 판독과 대조해 기록만 남긴다(교체는 결과를 보고).
+//  crop: 이 부의 이미지. rcols: 명단 열 경계(이 이미지 기준) — 티오프 표는 그 오른쪽이다.
+//  ★예산 보호: 남은 호출이 빠듯하면 건너뛴다. 섀도우 때문에 본 판독이 굶으면 본말전도다.
+const TEE_SHADOW_MIN_BUDGET = 12;
+async function teeShadow(crop, rcols, part, oldTee, cut) {
+  if (String(process.env.TEE_SHADOW || '1') === '0') return;
+  try {
+    if (!crop || !fs.existsSync(crop)) return;
+    if (!Array.isArray(rcols) || !rcols.length) return;            // 표 위치를 모르면 자를 수 없다
+    if (claudeBudgetLeft() < TEE_SHADOW_MIN_BUDGET) { console.log(`·  [티오프 섀도우] 예산 부족(${claudeBudgetLeft()}) — 건너뜀`); return; }
+    const x0 = Math.min(0.97, Math.max(...rcols.map((c) => Number(c.x1) || 0)) + 0.005);
+    if (!(x0 > 0 && x0 < 0.97)) return;
+    const p = path.join(TMP, `teerows_${part}_${Date.now()}.png`);
+    try { await runPy({ image: crop, crop_only: p, slice: { x0, x1: 1, y0: 0, y1: 1, lmargin: 0 }, scale: 3 }, 30000); }
+    catch (e) { console.error('[티오프 섀도우] 크롭 실패:', e.message); return; }
+    const rows = await readTeeRows(p);
+    try { fs.unlinkSync(p); } catch { /* noop */ }
+    if (!rows) return;
+    const { tee, cadence, issues } = teeLadderFromRows(rows, cut);
+    const d = teeDiff(oldTee, tee);
+    const rec = { at: Date.now(), part: Number(part), cut: Number(cut) || 0, cadence,
+      rows: rows.length, oldN: (oldTee || []).length, newN: tee.length,
+      same: d.same, diffN: d.diff.length, diff: d.diff.slice(0, 20),
+      onlyOld: d.onlyOld, onlyNew: d.onlyNew, issues: issues.slice(0, 8) };
+    appendJSONL('tee-shadow.jsonl', rec);
+    console.log(`·  [티오프 섀도우] 부${part} 줄${rows.length}·간격${cadence}분 | 일치 ${d.same} · 불일치 ${d.diff.length}`
+      + `${d.diff.length ? ' (' + d.diff.slice(0, 4).join(', ') + ')' : ''}`
+      + `${issues.length ? ' | 새 판독 자체 이상: ' + issues.slice(0, 2).join(', ') : ''}`);
+  } catch (e) { console.error('[티오프 섀도우] 오류:', e.message); }
+}
+
+// 두 사다리 비교 — 같은 순번에 붙은 시각이 다른 곳을 센다(섀도우 판정의 근거).
+export function teeDiff(a, b) {
+  const A = new Map((a || []).filter((x) => Number(x.pos) > 0).map((x) => [Number(x.pos), String(x.time || '')]));
+  const B = new Map((b || []).filter((x) => Number(x.pos) > 0).map((x) => [Number(x.pos), String(x.time || '')]));
+  const diff = [];
+  let same = 0;
+  for (const [p, ta] of A) { if (!B.has(p)) continue; const tb = B.get(p); if (ta === tb) same++; else diff.push(`${p}번 ${ta}→${tb}`); }
+  return { same, diff, onlyOld: [...A.keys()].filter((p) => !B.has(p)).length, onlyNew: [...B.keys()].filter((p) => !A.has(p)).length };
 }
 
 // ★명단 구멍 — 채워진 마지막 순번 이전의 빈 자리들. 3부의 '티오프 누락 자가검증'과 같은 원리를 명단에 적용한다.
@@ -417,6 +501,10 @@ async function readPartsOnce(img, sorted, cuts, issues = []) {
       }
       // ★대바 복구 — 부 프롬프트가 버린 마젠타 '주인(태그)대체자' 셀을 명단전용 재판독으로 순번별 오버레이.
       roster = await recoverSubstitutes(cropPath, roster);
+      // ★티오프 줄판독 섀도우 — 새 방식을 나란히 돌려 결과만 기록한다(아직 교체 안 함).
+      //  손해의 63%가 티오프였고 그중 98.9%가 '줄 밀림'이었다. 바꾸기 전에 새 방식이 정말 나은지
+      //  같은 배치표에서 숫자로 확인한다("고쳐봤습니다"로 끝내지 않기 위한 장치).
+      await teeShadow(cropPath, rcols, b.part, r.tee, cut);
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       // ★자가검증(3부 교정 원리 이식) — 1·2부는 그동안 어떤 완전성 검사도 없이 조용히 통과했다.
       //  고치지는 못해도(고치려면 재판독=비용) '이상하다'를 남겨 모니터·사람이 잡게 한다. 3부의 grid_short와 같은 취지.

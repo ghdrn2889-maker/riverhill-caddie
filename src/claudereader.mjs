@@ -242,6 +242,49 @@ export async function readColumnRoster(imagePath) {
   } catch { return null; }
 }
 
+// ── ★티오프 표 '줄 단위' 판독 ────────────────────────────────────
+//  왜 따로 만드나 — 교정 기록 분석 결과(2026-08-16): 사장님이 손으로 고친 티오프 182칸 중
+//  **98.9%가 7분(=한 줄 간격)의 배수**였다. 즉 판독기가 시각 자체를 잘못 읽은 적은 사실상 없고,
+//  전부 "그 숫자를 어느 줄에 붙이나"에서 틀렸다. 한 배치표 안에서도 7·14·21·42분씩 제각각 밀렸는데,
+//  이는 성긴 표(OUT만 또는 IN만 채워진 줄)를 아래로 훑으며 줄을 점점 놓친 모양이다.
+//  ★그런데 이 오류는 기존 검사(_teeConflicts: 한 시각에 3명↑)를 통과한다 — 통째로 밀리면 충돌이
+//   안 생기고 순번↔시각 순서도 그대로 오름차순이라 '틀렸는데 멀쩡해 보이는' 상태가 된다.
+//  해법: 숫자를 찾아다니게 하지 말고 **줄을 세게** 한다. 한 줄에서 시각·OUT·IN을 함께 읽으면
+//   시각과 번호가 같은 시선 안에 있어 밀릴 수가 없다. 빈 줄까지 세어 간격 검증에 쓴다.
+const TEE_ROWS_PROMPT = (
+  'Read the given local image with the Read tool. It is the tee-time table of a Korean golf caddie board: '
+  + 'three columns [OUT | time | IN]. Each row has one printed tee time (e.g. 17:07). '
+  + 'The OUT cell and/or the IN cell of that row may contain a 순번 (caddie order number); either or both may be empty.\n'
+  + '★Work ROW BY ROW from the very top to the very bottom. For each row, read its time first, then look LEFT '
+  + '(OUT cell) and RIGHT (IN cell) of THAT SAME ROW. Never take a number from the row above or below.\n'
+  + '★Report EVERY row that has a printed time — including rows where both cells are empty, and including the '
+  + 'sparse rows near the bottom. Do not skip a row just because it looks empty; those empty rows matter.\n'
+  + 'Use null for an empty cell. Do not invent numbers.\n'
+  + 'Output STRICT JSON only, no prose: '
+  + '{"rows":[{"time":"17:00","out":7,"in":null},{"time":"17:07","out":8,"in":9},{"time":"17:14","out":null,"in":11}, ... every printed time row ...]}'
+);
+export async function readTeeRows(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 티오프 줄판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${TEE_ROWS_PROMPT}\nImage path: ${imagePath}`); }
+  catch (e) { console.error('[claude] 티오프 줄판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    const rows = (Array.isArray(j.rows) ? j.rows : [])
+      .map((r) => ({
+        time: (String(r?.time || '').match(/\d{1,2}:\d{2}/) || [''])[0],
+        out: Number(r?.out) > 0 ? Number(r.out) : null,
+        in: Number(r?.in) > 0 ? Number(r.in) : null,
+      }))
+      .filter((r) => r.time);
+    return rows.length ? rows : null;
+  } catch { return null; }
+}
+
 // ── ★당번·벌당 배정표 판독 ─────────────────────────────────────────
 //  배치표 하단의 주황 박스. 5개 슬롯(1·2·3부 당번 / 1·3부 벌당)이 '항상' 인쇄되고,
 //  그날 배정된 슬롯의 왼쪽 칸에만 이름이 적힌다. 이름이 빈 행 = 오늘 그 슬롯은 없음.
