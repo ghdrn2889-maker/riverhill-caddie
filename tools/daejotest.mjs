@@ -65,7 +65,9 @@ const doc = {
     return m ? doc._spares[m[1]] : null;
   },
   addEventListener: (t, fn) => { (doc._ev ||= {})[t] = fn; },
-  elementFromPoint: () => null,
+  // 끌어놓기는 좌표로 대상을 찾는다 — 흉내에서는 '지금 무엇 위에 있는지'를 직접 정해준다.
+  elementFromPoint: () => doc._over,
+  _over: null,
   _ids: {}, _spares: {},
 };
 for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'resetBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
@@ -123,6 +125,19 @@ const readSpares = (p) => doc._spares[p].children.filter((c) => c.classList.cont
   .map((c) => ({ pos: Number(c.dataset.pos), name: c.querySelector('.nm').textContent }));
 const clickMode = (m) => doc._modes.find((b) => b.dataset.mode === m)._ev.click();
 const clickCell = (td) => doc._ev.click({ target: td });
+// ★끌어놓기 — 누르기와 다른 길이다. 여기를 안 눌러보면 '드래그는 되는데 저장이 안 된다' 같은
+//  버그를 통째로 못 본다(실제로 그랬다). 손가락이 지나가는 경로까지 그대로 흉내낸다.
+function dragTo(fromEl, toEl) {
+  doc._over = fromEl;
+  doc._ev.pointerdown({ target: fromEl, clientX: 0, clientY: 0, button: 0, pointerId: 1 });
+  doc._over = toEl;
+  doc._ev.pointermove({ clientX: 40, clientY: 40, pointerId: 1, preventDefault() {} });
+  doc._ev.pointerup({ clientX: 40, clientY: 40, pointerId: 1 });
+  // 브라우저는 끌어놓기 끝에 click을 한 번 더 흘려보낸다(누른 곳과 뗀 곳이 달라도 문서까지 온다).
+  //  그걸 안 흘리면 '누르기 무시' 표시가 남아 다음 검사의 첫 탭이 먹힌다 — 실제 폰에서 나던 증상과 같다.
+  doc._ev.click({ target: toEl });
+  doc._over = null;
+}
 const allSlotCount = (p) => all.filter((e) => e.dataset.p === p).length;
 
 // ── 불변식 ────────────────────────────────────────────────────────────
@@ -232,6 +247,48 @@ for (const p of ['1', '2', '3']) {
     console.log(`  [${first === 'spare' ? '스페어' : '근무자'} 먼저] ${s.name}(${s.pos}번) ↔ ${w.name}(${w.pos}번) — ${w.slot} 배치 확인`);
     doc._ids.undoBtn._ev.click();
   }
+}
+
+// ── ⑩ 끌어놓기 → 저장까지. 그리고 '화면과 저장 내용이 같아야 한다' ──────────
+//  '드래그는 되는데 저장이 안 된다'의 정체: 되돌리기가 tee를 새 배열로 갈아끼워
+//  화면이 보는 배치와 저장이 보는 배치가 갈라졌다(화면 15팀 / 저장 14팀).
+//  그래서 조작 결과만 보지 않고 '무엇을 보냈는가'를 화면과 대조한다.
+{
+  console.log('\n끌어놓기 → 저장 (화면 = 보낸 내용)\n');
+  doc._ids.vReal._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length && readSpares(x).length);
+  if (p) {
+    for (const md of ['move', 'swap']) {
+      const g0 = readGrid(p).filter((x) => !x.intern);
+      const s = readSpares(p)[0];
+      const w = g0[Math.floor(g0.length / 2)];
+      const chip = doc._spares[p].children.find((c) => Number(c.dataset.pos) === s.pos);
+      clickMode(md);
+      dragTo(chip, cellOf(p, w.slot.split(' ')[0], w.slot.split(' ')[1]));
+      clickMode(md);
+      const g1 = readGrid(p).filter((x) => !x.intern);
+      const now = g1.find((x) => x.slot === w.slot);
+      chk(now && now.name === s.name, `[${md}] 끌어놓기 — ${s.name}가 ${w.slot}에 안 들어갔다(지금 ${now ? now.name : '빈칸'})`);
+      chk(g1.length === g0.length, `[${md}] 끌어놓기로 근무선이 ${g0.length}→${g1.length} (맞바꾸기는 팀 수를 안 바꾼다)`);
+      chk(doc._ids.saveBtn.hidden === false, `[${md}] 끌어놓기로 바꿨는데 저장 버튼이 안 나온다`);
+      globalThis.__SENT.length = 0;
+      await doc._ids.saveBtn._ev.click();
+      const sent = globalThis.__SENT.find((x) => x.url.endsWith('/api/daejo-save'));
+      chk(!!sent, `[${md}] 끌어놓기 뒤 저장이 서버로 안 갔다`);
+      const rp = sent?.body?.parts?.[p];
+      chk(!!rp, `[${md}] 저장 몸통에 ${p}부가 없다`);
+      if (rp) {
+        // ★핵심 — 화면에 보이는 배치와 서버로 보낸 배치가 글자 하나까지 같아야 한다.
+        const onScreen = g1.map((x) => `${x.slot.replace(' ', '')}=${x.name}`).join(' ');
+        const inBody = (rp.teeGrid || []).map((g) => `${g.time}${g.course}=${bare(rp.roster[g.pos - 1])}`).join(' ');
+        chk(onScreen === inBody, `[${md}] 화면과 보낸 내용이 다르다\n        화면: ${onScreen}\n        저장: ${inBody}`);
+      }
+      chk(doc._ids.saveBtn.hidden === true, `[${md}] 저장했는데 저장 버튼이 안 사라진다`);
+      const g2 = readGrid(p).filter((x) => !x.intern);
+      chk(g2.length === g1.length, `[${md}] 저장하고 나니 근무선이 ${g1.length}→${g2.length}로 줄었다`);
+      console.log(`  [${md === 'move' ? '순번 옮기기' : '맞바꾸기'}] ${s.name} → ${w.slot} · 팀 ${g1.length} 유지 · 화면=저장 확인`);
+    }
+  } else console.log('  스페어가 있는 부가 없어 건너뜁니다');
 }
 
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────

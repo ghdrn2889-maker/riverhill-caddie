@@ -38,14 +38,13 @@
 
   // 두 축을 따로 들고 다닌다.
   const roster = {}, rosterOrig = {};      // 순번 → 이름(태그 포함)
-  const tee = {}, teeOrig = {};            // 순번 → {time, course}  (없으면 null = 스페어)
+  const teeOrig = {};                      // 순번 → {time, course}  (없으면 null = 스페어)
   for (const p of PARTS) {
     const B = BOARD[p] || {};
     roster[p] = (B.roster || []).slice();
     rosterOrig[p] = roster[p].slice();
     const t = [];
     (B.teeGrid || []).forEach((g) => { t[Number(g.pos) - 1] = { time: g.time, course: /IN/i.test(g.course) ? 'IN' : 'OUT' }; });
-    tee[p] = t;
     teeOrig[p] = t.map((x) => (x ? { time: x.time, course: x.course } : x));
   }
   // 인턴이 차지한 티오프(부별). 이 칸은 순번을 안 먹는다.
@@ -107,6 +106,18 @@
       .sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
   }
   const teeV = { real: {}, proj: {} };
+  // ★tee는 '지금 보고 있는 보기의 배치' 그 자체다 — 따로 들고 있으면 안 된다.
+  //  전에는 tee[p]가 teeV[view][p]를 가리키는 별칭이었는데, 되돌리기가 tee[p]에 새 배열을
+  //  통째로 대입하는 순간 별칭이 끊겼다. 그 뒤로 화면은 tee를, 저장은 teeV.real을 봐서
+  //  '화면엔 15팀인데 저장은 14팀'이 됐다 — 드래그는 되는데 저장이 안 되는 것처럼 보인 이유다.
+  //  대입이 곧 teeV에 쓰이도록 만들어 갈라질 여지 자체를 없앤다.
+  const tee = new Proxy({}, {
+    get: (_, p) => teeV[view][p],
+    set: (_, p, v) => { teeV[view][p] = v; return true; },
+    has: (_, p) => p in teeV[view],
+    ownKeys: () => Reflect.ownKeys(teeV[view]),
+    getOwnPropertyDescriptor: (_, p) => ({ configurable: true, enumerable: true, value: teeV[view][p] }),
+  });
   // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
   //  ★팀 수는 고정이다. 예약이 있는 티오프에만 팀이 있고, 빈 티오프에는 팀이 없다 —
   //   그래서 인턴이 한 팀을 맡으면 정규 캐디가 설 자리가 정확히 하나 줄고,
@@ -116,7 +127,6 @@
     const view0 = v || view;
     const occ = origOcc[view0][part];                       // 팀이 있는 칸 — 늘지도 줄지도 않는다
     teeV[view0][part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
-    if (view0 === view) tee[part] = teeV[view0][part];
     return { teams: occ.length, work: teeV[view0][part].length };
   }
   function internOn(part, time, course) {
@@ -301,6 +311,10 @@
     if (cancel) suppressClick = false;
   }
   document.addEventListener('pointerdown', (e) => {
+    // ★새 동작이 시작됐다 — 지난 끌어놓기의 '누르기 무시' 표시가 남아 있으면 안 된다.
+    //  폰에서는 끌어놓기 뒤 click이 안 따라오는 경우가 있어, 그 표시가 남으면 다음 탭 한 번이
+    //  통째로 먹힌다(아무 반응 없음). 여기서 반드시 지운다.
+    suppressClick = false;
     if (mode !== 'swap' && mode !== 'move') return;
     if (e.button != null && e.button > 0) return;
     const td = unit(e.target);
