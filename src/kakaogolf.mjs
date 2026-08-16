@@ -85,7 +85,9 @@ export async function fetchOpen(dateYYYYMMDD) {
 const CUTOFF_MIN = Number(process.env.KAKAO_CUTOFF_MIN || 240);
 const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '0') === '1';
 
-export async function bookedFor(dateYYYYMMDD) {
+export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
+  // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
+  if (!prevSnap) prevSnap = loadSnapshot(String(dateYYYYMMDD));
   const fixed = fixedSlots();
   if (!fixed.length) throw new Error(`고정 티오프 시간표(${SCHEDULE_FILE}) 없음 — 엔진의 기준표다`);
   const open = await fetchOpen(dateYYYYMMDD);
@@ -102,34 +104,53 @@ export async function bookedFor(dateYYYYMMDD) {
   // 판단 가능한가 — 미래 날짜면 전부 가능, 지난 날짜와 당일은 불가(당일은 KAKAO_TODAY=1일 때만 참고용).
   const judgeable = (f) => (isPast ? false : (!isToday || (JUDGE_TODAY && f.mins > nowMin + CUTOFF_MIN)));
 
-  // ★그날 아예 안 도는 코스 걸러내기 — 이게 이 엔진의 가장 큰 함정이다.
-  //  실측: 8/18 3부는 OUT 10칸 열림·IN 0칸, 8/19는 OUT 0칸·IN 17칸. IN이 다 팔린 게 아니라 그날 안 돈다
-  //  (야간은 한 코스만 도는 날이 있다). 모르고 지나가면 안 도는 코스 21칸이 통째로 '만석'이 된다.
-  //  판정: 한 부에서 어떤 코스가 열린 칸 0인데 반대 코스는 넉넉히 열려 있으면 → 그 코스는 미운영.
-  const idle = new Set();
+  // ★'그날 안 도는 코스'와 '다 팔린 코스'를 가려낸다 — 이게 이 엔진의 가장 큰 함정이다.
+  //  둘 다 판매중 0칸으로 똑같이 보이지만 뜻은 정반대다:
+  //   · 안 도는 코스(8/18 3부 IN, 8/19 3부 OUT — 야간은 한 코스만 도는 날이 있다) → 팀 0
+  //   · 다 팔린 코스(8/17 1부 OUT 44칸 완판) → 팀 만석
+  //  처음엔 '반대 코스가 여유로운데 이쪽만 0'을 미운영으로 봤다. 틀렸다 — 완판도 똑같이 0이라,
+  //  8/17에 멀쩡한 1부 OUT 22칸이 통째로 판단에서 빠졌다(사용자가 06:44 OUT으로 잡아냄).
+  //
+  //  ★가르는 건 '역사'다. 한 번이라도 팔린 적(=열린 적) 있으면 그 코스는 돈다. 그 뒤의 0은 완판이다.
+  //  안 도는 코스는 처음 볼 때부터 끝까지 0이다. 그래서 며칠 앞부터 봐두면 저절로 갈린다.
+  const ever = (prevSnap?.everOpen && typeof prevSnap.everOpen === 'object') ? { ...prevSnap.everOpen } : {};
+  const seenCount = Number(prevSnap?.seenCount || 0) + 1;
   const partsOf = new Set(fixed.map((f) => f.part));
+  for (const f of fixed) if (openSet.has(key(f.mins, f.course))) ever[`${f.part}|${f.course}`] = true;
+
+  const idle = new Set(), unsure = new Set();
   for (const p of partsOf) {
     const cnt = {};
     for (const f of fixed) if (f.part === p) cnt[f.course] = (cnt[f.course] || 0) + (openSet.has(key(f.mins, f.course)) ? 1 : 0);
     const cs = Object.keys(cnt);
     if (cs.length < 2) continue;
     for (const c of cs) {
+      if (cnt[c] > 0) continue;                       // 팔리는 중 = 돈다
+      if (ever[`${p}|${c}`]) continue;                // 예전에 열린 적 있다 = 돌고, 지금은 완판 → '참'으로 센다
       const other = Math.max(...cs.filter((x) => x !== c).map((x) => cnt[x]));
-      if (cnt[c] === 0 && other >= 3) idle.add(`${p}|${c}`);     // 반대 코스가 여유로운데 이쪽만 0 = 안 도는 것
+      if (other < 3) continue;                        // 반대 코스도 거의 없으면 판단 근거 부족
+      // 한 번도 열린 걸 못 봤다. 관측이 충분히 쌓였을 때만 미운영으로 보고, 아니면 판단을 미룬다.
+      //  ★관측을 늦게 시작하면 '이미 완판된 코스'도 한 번도 안 열린 것처럼 보인다. 그때는 모른다고 하는 게 맞다 —
+      //   미운영이라 우기면 그 부의 팀이 통째로 사라지고, 완판이라 우기면 없는 팀이 생긴다. 둘 다 나쁘다.
+      //   5분마다 도는 관측이 며칠 앞 날짜부터 쌓이므로, 정작 필요한 시점엔 거의 항상 답이 있다.
+      (seenCount >= 3 ? idle : unsure).add(`${p}|${c}`);
     }
   }
-  if (idle.size) console.log(`[카카오골프] ${dateYYYYMMDD} 미운영 코스: ${[...idle].map((k) => k.replace('|', '부 ')).join(', ')} — 만석 아님`);
+  if (idle.size) console.log(`[카카오골프] ${dateYYYYMMDD} 미운영 코스: ${[...idle].map((k) => k.replace('|', '부 ')).join(', ')} — 만석 아님(한 번도 안 열림)`);
+  if (unsure.size) console.warn(`[카카오골프] ${dateYYYYMMDD} 판단보류: ${[...unsure].map((k) => k.replace('|', '부 ')).join(', ')} — 완판인지 미운영인지 아직 모름(관측 1회차)`);
 
   const booked = [], skipped = [];
   for (const f of fixed) {
-    if (openSet.has(key(f.mins, f.course))) continue;            // 아직 팔리는 중 = 안 참
-    if (idle.has(`${f.part}|${f.course}`)) { skipped.push(f); continue; }   // 그날 안 도는 코스 = 판단 대상 아님
-    (judgeable(f) ? booked : skipped).push(f);                   // 안 뜸 → 찬 것. 단 판단 가능한 칸만.
+    const ck = `${f.part}|${f.course}`;
+    if (openSet.has(key(f.mins, f.course))) continue;                      // 아직 팔리는 중 = 안 참
+    if (idle.has(ck) || unsure.has(ck)) { skipped.push(f); continue; }      // 안 도는 코스·판단보류
+    (judgeable(f) ? booked : skipped).push(f);                             // 안 뜸 → 찬 것. 단 판단 가능한 칸만.
   }
   const byPart = {};
   for (const b of booked) (byPart[b.part] ||= []).push({ time: b.time, mins: b.mins, course: b.course });
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, unknown,
+    everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
     skippedCount: skipped.length, judgeableFrom: isPast ? null : (isToday ? (JUDGE_TODAY ? toHM(nowMin + CUTOFF_MIN) : '판정안함(당일)') : '00:00'), cutoffMin: CUTOFF_MIN };
 }
 
