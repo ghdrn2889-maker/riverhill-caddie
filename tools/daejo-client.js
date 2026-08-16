@@ -452,10 +452,22 @@
     //    ★이미 다른 순번이 서 있는 칸으로도 옮길 수 있다. 그 칸 주인과 사이 순번들의 티오프가
     //     한 칸씩 따라 이동한다(티오프 배열을 splice). 명단(순번↔이름)은 손대지 않는다.
     if (mode === 'move') {
-      // 스페어는 옮길 티오프가 없다 — 맞바꾸기로 안내한다.
+      // ★스페어가 끼면 맞바꾸기로 처리한다 — 어느 쪽을 먼저 누르든 똑같이 동작해야 한다.
+      //  스페어에겐 옮길 티오프가 없으니 '티오프 옮기기'는 성립하지 않는다. 대신 그 사람이
+      //  근무 순번을 넘겨받는 것(대바)이 실제로 일어나는 일이다.
+      //  전에는 스페어를 먼저 누르면 안내문만 뜨고 아무것도 안 집혀서, 스페어를 근무로
+      //  끌어올리는 조작이 한 방향으로만 됐다(근무자를 먼저 눌렀을 때만).
       if (isSpare(td) || (pick && isSpare(pick))) {
-        if (!pick) { state.textContent = '스페어는 티오프가 없어 옮길 수 없습니다 — 맞바꾸기를 쓰세요.'; return; }
+        if (!pick) {
+          if (!pos) { state.textContent = '사람이 있는 자리를 눌러주세요.'; return; }
+          pick = td; td.classList.add('picked');
+          state.textContent = part + '부 ' + pos + '번 ' + bare(roster[part][pos - 1])
+            + ' 선택 — 들어갈 자리를 누르세요 (스페어라 맞바꾸기로 처리됩니다)';
+          return;
+        }
+        if (pick.dataset.p !== part) { state.textContent = '같은 부 안에서만 됩니다.'; clearPick(); return; }
         const from0 = posAt(part, pick); clearPick();
+        if (!pos) { state.textContent = '사람이 있는 자리에 놓아주세요 — 빈 티오프로는 맞바꿀 수 없습니다.'; return; }
         const msg = applySwap(part, from0, pos);
         state.textContent = msg ? msg + ' (스페어라 맞바꾸기로 처리했습니다)' : '';
         return;

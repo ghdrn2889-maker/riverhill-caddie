@@ -204,6 +204,36 @@ for (const p of ['1', '2', '3']) {
   console.log(`  ${p}부 ${targets.length}곳 검사 완료`);
 }
 }
+// ── ⑨ 스페어를 근무로 올리는 건 어느 쪽을 먼저 눌러도 된다 ────────────────
+//  순번 옮기기 모드에서 스페어를 먼저 누르면 안내문만 뜨고 아무것도 안 집혀서,
+//  스페어 → 근무가 한 방향으로만 됐다(근무자를 먼저 눌렀을 때만).
+{
+  console.log('\n스페어 ↔ 근무 (순번 옮기기 모드)\n');
+  doc._ids.vReal._ev.click();
+  for (const first of ['spare', 'work']) {
+    const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length && readSpares(x).length);
+    if (!p) { console.log('  스페어가 있는 부가 없어 건너뜁니다'); break; }
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    const sp0 = readSpares(p);
+    const w = g0[Math.floor(g0.length / 2)];          // 근무 중인 사람
+    const s = sp0[0];                                  // 스페어 첫 사람
+    const wCell = () => cellOf(p, w.slot.split(' ')[0], w.slot.split(' ')[1]);
+    const sChip = () => doc._spares[p].children.find((c) => Number(c.dataset.pos) === s.pos);
+    clickMode('move');
+    if (first === 'spare') { clickCell(sChip()); clickCell(wCell()); }
+    else { clickCell(wCell()); clickCell(sChip()); }
+    clickMode('move');
+    const g1 = readGrid(p).filter((x) => !x.intern);
+    const sp1 = readSpares(p).map((x) => x.name);
+    const nowWorking = g1.find((x) => x.slot === w.slot);
+    chk(nowWorking && nowWorking.name === s.name, `[${first} 먼저] 스페어 ${s.name}가 ${w.slot}에 안 들어갔다(지금 ${nowWorking ? nowWorking.name : '빈칸'})`);
+    chk(sp1.includes(w.name), `[${first} 먼저] 자리를 내준 ${w.name}가 스페어 줄에 없다`);
+    chk(g1.length === g0.length, `[${first} 먼저] 근무선이 ${g0.length}→${g1.length}로 바뀌었다(맞바꾸기는 팀 수를 안 바꾼다)`);
+    console.log(`  [${first === 'spare' ? '스페어' : '근무자'} 먼저] ${s.name}(${s.pos}번) ↔ ${w.name}(${w.pos}번) — ${w.slot} 배치 확인`);
+    doc._ids.undoBtn._ev.click();
+  }
+}
+
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
 //  카카오 예상 칸에만 찍은 인턴(예: 본배치표에 팀이 없는 17:07)이 실제 보기의 팀 수를 바꾸면 안 된다.
 //  바뀌면 없는 팀이 유령으로 끼어 밀림이 어긋나고, 화면에선 '밀림'이 아니라 '교체'로 보인다.
