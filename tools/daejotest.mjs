@@ -35,6 +35,8 @@ class El {
   set innerHTML(v) { this._text = String(v || '').replace(/<[^>]*>/g, ''); this.children = []; }
   get innerHTML() { return this._text; }
   appendChild(c) { c.parent = this; this.children.push(c); return c; }
+  get firstChild() { return this.children[0] || null; }
+  insertBefore(c, ref) { c.parent = this; const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(c); else this.children.splice(i, 0, c); return c; }
   querySelector(sel) {
     const cls = sel.replace(/^\./, '');
     for (const c of this.children) { if (c.classList.contains(cls) || c.tag === cls) return c; const d = c.querySelector(sel); if (d) return d; }
