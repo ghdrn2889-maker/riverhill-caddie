@@ -45,11 +45,74 @@
     tee[p] = t;
     teeOrig[p] = t.map((x) => (x ? { time: x.time, course: x.course } : x));
   }
+  // 인턴이 차지한 티오프(부별). 이 칸은 순번을 안 먹는다.
+  const interns = {}, internsOrig = {};
+  for (const p of PARTS) {
+    const s = new Set(((BOARD[p] || {}).internTees || []).map((t) => K(t.time, t.course)));
+    interns[p] = s; internsOrig[p] = new Set(s);
+  }
   const stack = [];
   const sameTee = (a, b) => (!a && !b) || (!!a && !!b && K(a.time, a.course) === K(b.time, b.course));
+
+  // ── ★인턴은 '자리를 빼앗는 것'이 아니라 '한 칸씩 뒤로 미는 것' ─────────────────
+  //  처음엔 인턴이 먹은 칸을 정규 배열에서 splice로 빼버렸다. 그러면 자리가 하나 줄어
+  //  맨 뒤 한 명이 티오프를 잃고 스페어로 떨어졌다 — 틀렸다.
+  //  리버힐에선 뒤 시간대가 비어 있다(3부는 18:45까지 있고 지금 17:35까지만 찼다).
+  //  그러니 인턴이 한 칸을 가져가면 그 뒤 사람들이 각자 '다음 티오프 매칭 시간'으로 밀리고,
+  //  맨 뒤 사람은 여태 비어 있던 다음 칸으로 간다. 아무도 잘리지 않는다.
+  //
+  //  ★그리고 배열을 손으로 잘라 붙이는 방식 자체를 버렸다. 켜기/끄기를 각각 구현하면
+  //   둘이 서로의 정확한 역연산이 아니게 되어(실측: 끄면 원래대로 안 돌아옴) 상태가 어긋난다.
+  //   지금은 '인턴 집합'만 토글하고 배치는 매번 처음부터 다시 계산한다 — 구조적으로 대칭이다.
+  const allSlots = {}, origOcc = {};
+  for (const p of PARTS) {
+    allSlots[p] = [...document.querySelectorAll('td.c[data-p="' + p + '"]')]
+      .map((td) => ({ time: toHM(toMin(td.dataset.t)), course: /IN/i.test(td.dataset.c) ? 'IN' : 'OUT' }))
+      .sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
+    // 배치표가 준 '팀이 있는 칸' — 정규 티오프 + 판독된 인턴 칸.
+    const occ = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
+    internsOrig[p].forEach((k) => occ.push({ time: k.split('|')[0], course: k.split('|')[1] }));
+    occ.sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
+    origOcc[p] = occ;
+  }
+  // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
+  function recompute(part) {
+    const A = allSlots[part];
+    const occ = origOcc[part].map((s) => ({ time: s.time, course: s.course }));
+    const used = new Set(occ.map((s) => K(s.time, s.course)));
+    // 원래 팀이 있던 칸을 인턴이 가져간 만큼, 뒤쪽 빈 칸을 그 수만큼 새로 연다(아무도 안 잘리게).
+    let need = [...interns[part]].filter((k) => used.has(k)).length;
+    let i = occ.length ? A.findIndex((s) => K(s.time, s.course) === K(occ[occ.length - 1].time, occ[occ.length - 1].course)) + 1 : 0;
+    while (need > 0 && i < A.length) {
+      const k = K(A[i].time, A[i].course);
+      if (!used.has(k) && !interns[part].has(k)) { occ.push({ time: A[i].time, course: A[i].course }); used.add(k); need -= 1; }
+      i += 1;
+    }
+    // 인턴 칸을 빼면 남는 게 정규 캐디의 티오프 — 시각 순서대로 1번부터 붙는다.
+    tee[part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
+    return { full: occ.length, work: tee[part].length, short: need };
+  }
+  function internOn(part, time, course) {
+    const key = K(time, course);
+    const before = tee[part].filter(Boolean).length;
+    const wasPos = tee[part].findIndex((t) => t && K(t.time, t.course) === key) + 1;
+    interns[part].add(key);
+    const r = recompute(part);
+    // 뒤에 빈 티오프가 없으면(격자가 꽉 참) 한 명은 갈 데가 없어 스페어로 내려간다 — 그 사실을 말한다.
+    const dropped = before - tee[part].filter(Boolean).length;
+    const who = dropped > 0 ? bare(roster[part][before - 1] || '') : '';
+    return { fromPos: wasPos, short: r.short, dropped: dropped, who: who };
+  }
+  function internOff(part, time, course) {
+    interns[part].delete(K(time, course));
+    const r = recompute(part);
+    return { toPos: tee[part].findIndex((t) => t && K(t.time, t.course) === K(time, course)) + 1, short: r.short };
+  }
+  const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
     || tee[p].some((x, i) => !sameTee(x, teeOrig[p][i]))
-    || tee[p].length !== teeOrig[p].length;
+    || tee[p].length !== teeOrig[p].length
+    || !setEq(interns[p], internsOrig[p]);
 
   // ★보기와 편집은 서로 다른 배치표를 보여준다 — 이걸 안 나누면 편집이 아예 안 먹는다.
   //   보기(대조) = 카카오 투영. 예약이 찬 칸까지 포함해 순번을 다시 매긴 '예상' 배치표(3부 14칸).
@@ -69,8 +132,13 @@
     const at = new Map();
     tee[part].forEach((t, i) => { if (t) at.set(K(t.time, t.course), i + 1); });
     document.querySelectorAll('td.c[data-p="' + part + '"]').forEach((td) => {
-      if (td.classList.contains('intern')) return;              // 인턴 칸은 순번을 안 먹는다
-      const pos = at.get(K(td.dataset.t, td.dataset.c)) || 0;
+      const key = K(td.dataset.t, td.dataset.c);
+      if (interns[part].has(key)) {                             // 인턴 칸 — 순번을 안 먹는다
+        td.innerHTML = '';
+        td.className = 'c intern' + (internsOrig[part].has(key) ? '' : ' edited');
+        return;
+      }
+      const pos = at.get(key) || 0;
       let pe = td.querySelector('.pos'), nm = td.querySelector('.nm'), dt = td.querySelector('.dt');
       if (!pos) {                                               // 이 칸엔 아무도 없다(빈 티오프)
         if (pe) pe.textContent = ''; if (nm) nm.textContent = ''; if (dt) dt.style.display = 'none';
@@ -114,10 +182,9 @@
       const ch = document.createElement('span');
       ch.className = 'sp' + (cell !== (rosterOrig[part][p - 1] || '') ? ' edited' : '');
       ch.dataset.p = part; ch.dataset.pos = String(p);
-      ch.innerHTML = '<b></b><span class="nm"></span>' + (tg ? '<span class="dt"></span>' : '');
-      ch.querySelector('b').textContent = p + '번';
-      ch.querySelector('.nm').textContent = bare(cell);
-      if (tg) ch.querySelector('.dt').textContent = tg;
+      const b = document.createElement('b'); b.textContent = p + '번'; ch.appendChild(b);
+      const n = document.createElement('span'); n.className = 'nm'; n.textContent = bare(cell); ch.appendChild(n);
+      if (tg) { const d = document.createElement('span'); d.className = 'dt'; d.textContent = tg; ch.appendChild(d); }
       out.push(ch);
     }
     box.innerHTML = '';
@@ -129,7 +196,9 @@
     box.hidden = false;
   }
   const push = (part) => {
-    stack.push({ part: part, roster: roster[part].slice(), tee: tee[part].map((x) => (x ? { time: x.time, course: x.course } : x)) });
+    stack.push({ part: part, roster: roster[part].slice(),
+      tee: tee[part].map((x) => (x ? { time: x.time, course: x.course } : x)),
+      interns: new Set(interns[part]) });
   };
 
   let mode = '', pick = null;
@@ -280,7 +349,7 @@
   });
   undoBtn.addEventListener('click', () => {
     const s = stack.pop(); if (!s) return;
-    roster[s.part] = s.roster; tee[s.part] = s.tee; paint(s.part);
+    roster[s.part] = s.roster; tee[s.part] = s.tee; interns[s.part] = s.interns; paint(s.part);
     state.textContent = '되돌렸습니다.';
   });
 
@@ -291,17 +360,25 @@
     if (!isSpare(td) && !td.dataset.t) return;
 
     if (mode === 'intern') {
-      const on = !td.classList.contains('intern');
-      td.classList.toggle('intern', on);
-      if (!live) { state.textContent = '샘플 — 저장은 모니터에서 됩니다'; return; }
-      try {
-        const r = await fetch('/api/admin/intern-tees', {
-          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ date: DATE, toggle: { time: td.dataset.t, course: td.dataset.c } }),
-        });
-        const j = await r.json(); if (!j.ok) throw new Error(j.error || '저장 실패');
-        state.textContent = '인턴 ' + j.effective.length + '칸 — 저장됨(새로고침하면 순번이 다시 매겨집니다)';
-      } catch (err) { td.classList.toggle('intern', !on); state.textContent = '저장 실패: ' + err.message; }
+      const part0 = td.dataset.p;
+      const key0 = K(td.dataset.t, td.dataset.c);
+      const turningOn = !interns[part0].has(key0);
+      push(part0);
+      const where = td.dataset.t + ' ' + td.dataset.c;
+      if (turningOn) {
+        const r = internOn(part0, td.dataset.t, td.dataset.c);
+        paint(part0);
+        state.textContent = r.fromPos
+          ? (where + ' 인턴 — ' + r.fromPos + '번부터 각자 다음 티오프로 밀렸습니다'
+             + (r.dropped > 0
+               ? ' · ★' + (r.who || '맨 뒤 한 명') + '은(는) 뒤에 빈 티오프가 없어 스페어로 내려갔습니다'
+               : ''))
+          : (where + ' 인턴 (원래 빈 칸이라 밀린 사람 없음)');
+      } else {
+        const r = internOff(part0, td.dataset.t, td.dataset.c);
+        paint(part0);
+        state.textContent = where + ' 인턴 해제 — 뒤 순번들이 앞으로 당겨졌습니다';
+      }
       return;
     }
 
@@ -374,13 +451,23 @@
           const t = tee[part][i];
           return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
         });
+        // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
+        const iTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
         const r = await fetch('/api/board-correct', {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ part: part, rows: rows, cutLine: Number(P.cut) || 0 }),
+          body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: tee[part].filter(Boolean).length }),
         });
         const j = await r.json(); if (!j.ok) throw new Error(j.error || (part + '부 저장 실패'));
+        // 3부 인턴은 별도 저장소에도 남긴다 — 카카오 재매칭이 이걸 본다(사진 판독과 무관하게 유지).
+        if (part === '3' && DATE) {
+          await fetch('/api/admin/intern-tees', {
+            method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ date: DATE, tees: iTees }),
+          }).catch(() => {});
+        }
         rosterOrig[part] = roster[part].slice();
         teeOrig[part] = tee[part].map((x) => (x ? { time: x.time, course: x.course } : x));
+        internsOrig[part] = new Set(interns[part]);
       }
       stack.length = 0;
       PARTS.forEach(paint);
