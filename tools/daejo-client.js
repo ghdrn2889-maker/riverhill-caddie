@@ -19,7 +19,7 @@
   const saveBtn = document.getElementById('saveBtn');
   const undoBtn = document.getElementById('undoBtn');
   const HINTS = {
-    intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴은 티오프를 차지하되 순번을 먹지 않아 그 뒤가 한 칸씩 밀립니다.',
+    intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
     name: '칸을 눌러 그 순번의 이름을 고칩니다.',
     swap: '두 칸을 차례로 눌러 두 사람을 맞바꿉니다(대바). 순번↔이름만 바뀌고 티오프는 그대로입니다.',
     move: '옮길 사람을 누르고, 갈 티오프를 누르세요. 순번은 그대로고 티오프만 옮겨가며, 사이 순번들이 한 칸씩 따라 이동합니다.',
@@ -54,22 +54,20 @@
   const stack = [];
   const sameTee = (a, b) => (!a && !b) || (!!a && !!b && K(a.time, a.course) === K(b.time, b.course));
 
-  // ── ★인턴은 '자리를 빼앗는 것'이 아니라 '한 칸씩 뒤로 미는 것' ─────────────────
-  //  처음엔 인턴이 먹은 칸을 정규 배열에서 splice로 빼버렸다. 그러면 자리가 하나 줄어
-  //  맨 뒤 한 명이 티오프를 잃고 스페어로 떨어졌다 — 틀렸다.
-  //  리버힐에선 뒤 시간대가 비어 있다(3부는 18:45까지 있고 지금 17:35까지만 찼다).
-  //  그러니 인턴이 한 칸을 가져가면 그 뒤 사람들이 각자 '다음 티오프 매칭 시간'으로 밀리고,
-  //  맨 뒤 사람은 여태 비어 있던 다음 칸으로 간다. 아무도 잘리지 않는다.
+  // ── ★인턴 = 팀 하나를 인턴이 맡는 것 ─────────────────────────────────────
+  //  팀 수는 고정이다. 예약이 있는 티오프에만 팀이 있고, 빈 티오프에는 팀이 없다.
+  //  그래서 인턴이 한 팀을 맡으면 정규 캐디가 설 자리가 정확히 하나 준다 —
+  //  그 뒤 사람들은 각자 '다음 팀'으로 밀리고, 맨 뒤 한 명이 스페어로 내려간다.
+  //  (한때 빈 티오프를 새로 열어 밀어넣게 했는데, 그건 없는 팀을 지어내는 짓이었다.)
   //
-  //  ★그리고 배열을 손으로 잘라 붙이는 방식 자체를 버렸다. 켜기/끄기를 각각 구현하면
-  //   둘이 서로의 정확한 역연산이 아니게 되어(실측: 끄면 원래대로 안 돌아옴) 상태가 어긋난다.
-  //   지금은 '인턴 집합'만 토글하고 배치는 매번 처음부터 다시 계산한다 — 구조적으로 대칭이다.
+  //  ★그리고 켜기/끄기를 각각 구현하지 않는다. 따로 짜면 둘이 서로의 정확한 역연산이
+  //   아니게 되어 상태가 어긋난다(실측: 끄면 원래대로 안 돌아옴).
+  //   인턴 집합만 토글하고 배치는 매번 처음부터 다시 계산한다 — 구조적으로 대칭이다.
+  //
   // ★두 보기 모두에서 편집한다(사용자 확정).
-  //   실제 배치표 = 사진이 읽은 칸.
-  //   카카오 예상 = 거기에 카카오가 '찼다'고 본 칸까지 더한 것. 내일 배치표를 미리 짜는 자리라
-  //   여기서 고치는 게 오히려 자연스럽다.
-  //  명단(순번↔이름)과 인턴 집합은 두 보기가 '같은 것'을 가리키므로 공유한다.
-  //  티오프 배치만 보기별로 다르다(예상은 칸이 더 많다).
+  //   실제 배치표 = 사진이 읽은 칸. 카카오 예상 = 거기에 카카오가 '찼다'고 본 칸까지 더한 것.
+  //  명단(순번↔이름)과 인턴 집합은 두 보기가 '같은 것'을 가리키므로 공유하고,
+  //  티오프 배치만 보기별로 다르다(예상은 팀이 더 많다).
   const VIEWS = ['real', 'proj'];
   const allSlots = {}, origOcc = { real: {}, proj: {} };
   for (const p of PARTS) {
@@ -92,23 +90,16 @@
   }
   const teeV = { real: {}, proj: {} };
   // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
+  //  ★팀 수는 고정이다. 예약이 있는 티오프에만 팀이 있고, 빈 티오프에는 팀이 없다 —
+  //   그래서 인턴이 한 팀을 맡으면 정규 캐디가 설 자리가 정확히 하나 줄고,
+  //   뒤 사람들은 각자 '다음 팀'으로 밀리다가 맨 뒤 한 명이 스페어로 내려간다.
+  //  (한때 빈 티오프를 새로 열어 밀어넣게 만들었는데, 그건 없는 팀을 지어내는 짓이었다.)
   function recompute(part, v) {
     const view0 = v || view;
-    const A = allSlots[part];
-    const occ = origOcc[view0][part].map((s) => ({ time: s.time, course: s.course }));
-    const used = new Set(occ.map((s) => K(s.time, s.course)));
-    // 원래 팀이 있던 칸을 인턴이 가져간 만큼, 뒤쪽 빈 칸을 그 수만큼 새로 연다(아무도 안 잘리게).
-    let need = [...interns[part]].filter((k) => used.has(k)).length;
-    let i = occ.length ? A.findIndex((s) => K(s.time, s.course) === K(occ[occ.length - 1].time, occ[occ.length - 1].course)) + 1 : 0;
-    while (need > 0 && i < A.length) {
-      const k = K(A[i].time, A[i].course);
-      if (!used.has(k) && !interns[part].has(k)) { occ.push({ time: A[i].time, course: A[i].course }); used.add(k); need -= 1; }
-      i += 1;
-    }
-    // 인턴 칸을 빼면 남는 게 정규 캐디의 티오프 — 시각 순서대로 1번부터 붙는다.
+    const occ = origOcc[view0][part];                       // 팀이 있는 칸 — 늘지도 줄지도 않는다
     teeV[view0][part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
     if (view0 === view) tee[part] = teeV[view0][part];
-    return { full: occ.length, work: teeV[view0][part].length, short: need };
+    return { teams: occ.length, work: teeV[view0][part].length };
   }
   function internOn(part, time, course) {
     const key = K(time, course);
@@ -116,15 +107,15 @@
     const wasPos = tee[part].findIndex((t) => t && K(t.time, t.course) === key) + 1;
     interns[part].add(key);
     const r = recompute(part);
-    // 뒤에 빈 티오프가 없으면(격자가 꽉 참) 한 명은 갈 데가 없어 스페어로 내려간다 — 그 사실을 말한다.
+    // 팀 하나를 인턴이 맡았으니 정규 자리가 하나 준다 — 맨 뒤 한 명이 스페어로 내려간다.
     const dropped = before - tee[part].filter(Boolean).length;
     const who = dropped > 0 ? bare(roster[part][before - 1] || '') : '';
-    return { fromPos: wasPos, short: r.short, dropped: dropped, who: who };
+    return { fromPos: wasPos, dropped: dropped, who: who };
   }
   function internOff(part, time, course) {
     interns[part].delete(K(time, course));
-    const r = recompute(part);
-    return { toPos: tee[part].findIndex((t) => t && K(t.time, t.course) === K(time, course)) + 1, short: r.short };
+    recompute(part);
+    return { toPos: tee[part].findIndex((t) => t && K(t.time, t.course) === K(time, course)) + 1 };
   }
   const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
@@ -132,12 +123,6 @@
     || (teeV.real[p] || []).some((x, i) => !sameTee(x, teeOrig[p][i]))
     || (teeV.real[p] || []).length !== (teeOrig[p] || []).filter(Boolean).length;
 
-  // ★보기와 편집은 서로 다른 배치표를 보여준다 — 이걸 안 나누면 편집이 아예 안 먹는다.
-  //   보기(대조) = 카카오 투영. 예약이 찬 칸까지 포함해 순번을 다시 매긴 '예상' 배치표(3부 14칸).
-  //   편집       = 실제 배치표. 사진이 실제로 읽은 것(3부 10칸).
-  //  처음엔 하나로 그렸다가, 화면의 '1번 연승준(16:25)'을 눌러도 실제 배치표엔 그 칸이 없어
-  //  순번을 못 찾고 아무 일도 안 일어났다. 카카오가 짐작한 칸을 진짜 배치표에 저장할 수도 없다.
-  //  그래서 편집 모드로 들어가면 실제 배치표로 화면을 바꾸고, 나가면 투영으로 되돌린다.
   const shot = new Map();
   document.querySelectorAll('td.c').forEach((td) => { shot.set(td, { html: td.innerHTML, cls: td.className }); });
   function restoreView() {
@@ -387,10 +372,8 @@
         paint(part0);
         state.textContent = r.fromPos
           ? (where + ' 인턴 — ' + r.fromPos + '번부터 각자 다음 티오프로 밀렸습니다'
-             + (r.dropped > 0
-               ? ' · ★' + (r.who || '맨 뒤 한 명') + '은(는) 뒤에 빈 티오프가 없어 스페어로 내려갔습니다'
-               : ''))
-          : (where + ' 인턴 (원래 빈 칸이라 밀린 사람 없음)');
+             + (r.dropped > 0 ? ' · ' + (r.who || '맨 뒤 한 명') + '은(는) 스페어로 내려갔습니다(팀이 하나 줄었으니까)' : ''))
+          : (where + ' 인턴 (팀이 없던 칸이라 밀린 사람 없음)');
       } else {
         const r = internOff(part0, td.dataset.t, td.dataset.c);
         paint(part0);

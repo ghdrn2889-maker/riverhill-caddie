@@ -166,23 +166,17 @@ for (const p of ['1', '2', '3']) {
     clickCell(td);
     const after = readGrid(p).filter((x) => !x.intern);
     const { } = invariants(p, `${p}부 ${s.slot}(${s.pos}번 ${s.name}) 인턴`);
-    // ★규칙: 뒤에 빈 티오프가 있으면 아무도 안 잘리고 전부 한 칸씩 밀린다.
-    //   없으면(격자가 이미 꽉 참) 정확히 한 명이 스페어로 내려가고, 그 사람은 스페어 줄에 보여야 한다.
+    // ★규칙(사용자 확정): 팀 수는 고정이다. 예약이 있는 티오프에만 팀이 있다.
+    //  인턴이 한 팀을 맡으면 정규 자리가 정확히 하나 줄고, 뒤 사람들은 각자 다음 팀으로
+    //  밀리다가 맨 뒤 한 명이 스페어로 내려간다. 그 사람은 스페어 줄에 보여야 한다.
     const spNow = readSpares(p).map((x) => x.name);
     const dropped = grid0.filter((x) => !after.some((a) => a.name === x.name)).map((x) => x.name);
-    // ★'자리가 있다'는 건 마지막 팀 '뒤에' 빈 티오프가 있다는 뜻이다.
-    //  중간에 빈 칸이 있어도 소용없다 — 팀이 없는 티오프에는 캐디가 설 수 없다.
-    const lastSlot = grid0[grid0.length - 1].slot;
-    const order = all.filter((e) => e.dataset.p === p).map((e) => e.dataset.t + ' ' + e.dataset.c)
-      .sort((a, b) => toMin(a) - toMin(b) || (a.endsWith('OUT') ? -1 : 1));
-    const roomLeft = order.indexOf(lastSlot) < order.length - 1;
-    if (dropped.length) {
-      chk(dropped.length === 1, `${p}부 ${s.slot} 인턴 — ${dropped.length}명이 한꺼번에 잘렸다(최대 1명이어야)`);
-      chk(dropped.every((n) => spNow.includes(n)), `${p}부 ${s.slot} 인턴 — 잘린 ${dropped.join(',')}이(가) 스페어 줄에도 없다`);
-      chk(!roomLeft, `${p}부 ${s.slot} 인턴 — 뒤에 빈 티오프가 있는데도 ${dropped.join(',')}을(를) 잘랐다`);
-    } else {
-      chk(after.length === grid0.length, `${p}부 ${s.slot} 인턴 — 아무도 안 잘렸는데 근무선이 ${grid0.length}→${after.length}`);
-    }
+    chk(dropped.length === 1, `${p}부 ${s.slot} 인턴 — 스페어로 내려간 사람이 ${dropped.length}명(1명이어야)`);
+    chk(dropped.every((n) => spNow.includes(n)), `${p}부 ${s.slot} 인턴 — 내려간 ${dropped.join(',')}이(가) 스페어 줄에 없다`);
+    chk(after.length === grid0.length - 1, `${p}부 ${s.slot} 인턴 — 근무선 ${grid0.length}→${after.length}(1만 줄어야)`);
+    // 인턴보다 앞 순번은 티오프가 그대로여야 한다
+    const keptOk = grid0.slice(0, idx).every((x, i) => after[i] && after[i].slot === x.slot && after[i].name === x.name);
+    chk(keptOk, `${p}부 ${s.slot} 인턴 — 인턴보다 앞 순번의 티오프가 바뀌었다`);
     // 되돌리기
     doc._ids.undoBtn._ev.click();
     chk(JSON.stringify(readGrid(p).filter((x) => !x.intern)) === base, `${p}부 ${s.slot} — 되돌리기가 화면을 복구 못 함`);
