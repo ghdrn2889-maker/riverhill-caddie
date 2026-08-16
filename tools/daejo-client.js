@@ -73,6 +73,7 @@
   //  티오프 배치만 보기별로 다르다(예상은 팀이 더 많다).
   const VIEWS = ['real', 'proj'];
   const allSlots = {}, origOcc = { real: {}, proj: {} };
+  const teeOrigV = { real: {}, proj: {} };   // 보기별 기준 배치 — 변경 판정의 기준
   const sortOcc = (a) => a.sort((x, y) => toMin(x.time) - toMin(y.time) || (x.course === 'OUT' ? -1 : 1));
 
   // ★기준선을 세우는 곳은 여기 하나뿐이다.
@@ -107,8 +108,9 @@
       teeV[v][p] = (assign && assign[v]) ? assign[v].map(cp) : defaultAssign(v, p);
     });
     idxMemo.real[p] = new Map(); idxMemo.proj[p] = new Map();
-    // 변경 판정은 항상 실제 배치표 기준 — 기준선도 같은 축으로 저장해야 비교가 성립한다.
-    teeOrig[p] = (teeV.real[p] || []).map(cp);
+    // 기준선은 두 보기 모두 잡는다 — 어느 쪽에서 고쳐도 '바뀌었다'를 알아채야 한다.
+    VIEWS.forEach((v) => { teeOrigV[v][p] = (teeV[v][p] || []).map(cp); });
+    teeOrig[p] = teeOrigV.real[p];
   }
 
   for (const p of PARTS) {
@@ -174,10 +176,14 @@
     return { toPos: slotAt(tee[part], key) + 1 };
   }
   const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
+  // ★두 보기 모두를 본다. 전에는 실제 배치표 축만 봐서, 기본 화면(카카오 예상)에서 옮긴 것은
+  //  저장 버튼조차 안 나왔다 — 화면에선 옮겨졌는데 저장할 방법이 없었다(실브라우저 확인).
+  //  두 보기 모두 편집할 수 있게 한 이상, 변경 판정도 두 보기를 다 봐야 한다.
+  const teeMoved = (v, p) => (teeV[v][p] || []).some((x, i) => !sameTee(x, (teeOrigV[v][p] || [])[i]))
+    || (teeV[v][p] || []).length !== (teeOrigV[v][p] || []).length;
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
     || !setEq(interns[p], internsOrig[p])
-    || (teeV.real[p] || []).some((x, i) => !sameTee(x, teeOrig[p][i]))
-    || (teeV.real[p] || []).length !== (teeOrig[p] || []).filter(Boolean).length;
+    || VIEWS.some((v) => teeMoved(v, p));
 
   const shot = new Map();
   document.querySelectorAll('td.c').forEach((td) => { shot.set(td, { html: td.innerHTML, cls: td.className }); });
@@ -560,6 +566,9 @@
         payload[part] = {
           roster: roster[part].slice(),
           teeGrid: real.map((t, i) => ({ pos: i + 1, time: t.time, course: t.course })),
+          // 예상 보기의 배치도 함께 담는다 — 여기서도 편집하니 저장될 곳이 있어야 한다.
+          //  실제 배치표와는 별개의 축이고, 테스트판 안에만 산다.
+          projGrid: (teeV.proj[part] || []).map((t, i) => ({ pos: i + 1, time: t.time, course: t.course })),
           boardInternTees: split([...interns[part]].filter((k) => teamSet.has(k))),
           internTees: split([...interns[part]]),
           cut: real.length,
@@ -610,7 +619,14 @@
   PARTS.forEach((p) => {
     const teams = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
     ((BOARD[p] || {}).boardInternTees || []).forEach((t) => teams.push({ time: toHM(toMin(t.time)), course: /IN/i.test(t.course) ? 'IN' : 'OUT' }));
-    setBaseline(p, teams);
+    // 테스트판에 저장해둔 배치가 있으면 그걸 깐다(실제 축 = teeGrid, 예상 축 = projGrid).
+    const norm = (arr) => arr.slice().sort((x, y) => Number(x.pos) - Number(y.pos))
+      .map((g) => ({ time: toHM(toMin(g.time)), course: /IN/i.test(g.course) ? 'IN' : 'OUT' }));
+    const pg = (BOARD[p] || {}).projGrid;
+    setBaseline(p, teams, {
+      real: (teeOrig[p] || []).filter(Boolean).map(cp),
+      proj: (pg && pg.length) ? norm(pg) : null,
+    });
   });
   tools.hidden = false;
   PARTS.forEach(paint);

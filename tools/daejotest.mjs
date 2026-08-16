@@ -334,6 +334,38 @@ for (const p of ['1', '2', '3']) {
   } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
 }
 
+// ── ⑫ 기본 화면(카카오 예상)에서 한 편집도 저장돼야 한다 ─────────────────────
+//  화면이 처음 열릴 때의 보기가 '카카오 예상'이다. 검사를 매번 '실제 배치표'로 바꿔서 하면
+//  사용자가 실제로 쓰는 화면을 한 번도 안 눌러보게 된다 — 그래서 '옮겨는 지는데 저장 버튼이
+//  아예 안 나오는' 상태를 오래 못 봤다(실브라우저 확인).
+if (HAS_KAKAO) {
+  console.log('\n기본 화면(카카오 예상)에서 편집 → 저장\n');
+  doc._ids.vProj._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length >= 5);
+  if (p) {
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    const a = g0[1], b = g0[4];
+    clickMode('move');
+    clickCell(cellOf(p, a.slot.split(' ')[0], a.slot.split(' ')[1]));
+    clickCell(cellOf(p, b.slot.split(' ')[0], b.slot.split(' ')[1]));
+    clickMode('move');
+    const at = (pos) => (readGrid(p).filter((x) => !x.intern).find((x) => x.pos === pos) || {}).slot;
+    chk(at(a.pos) === b.slot, `[예상] ${a.pos}번이 ${b.slot}로 안 갔다(지금 ${at(a.pos)})`);
+    chk(doc._ids.saveBtn.hidden === false, '[예상] 옮겼는데 저장 버튼이 안 나온다 — 저장할 방법이 없다');
+    globalThis.__SENT.length = 0;
+    await doc._ids.saveBtn._ev.click();
+    const rp = globalThis.__SENT.find((x) => x.url.endsWith('/api/daejo-save'))?.body?.parts?.[p];
+    chk(!!rp, '[예상] 저장이 서버로 안 갔다');
+    if (rp) {
+      const g = (rp.projGrid || []).find((x) => x.pos === a.pos);
+      chk(g && `${g.time} ${g.course}` === b.slot, `[예상] 저장한 예상 배치에서 ${a.pos}번이 ${b.slot}가 아니다(${g ? g.time + ' ' + g.course : '없음'})`);
+    }
+    chk(at(a.pos) === b.slot, `[예상] 저장하고 나니 ${a.pos}번이 되돌아갔다(지금 ${at(a.pos)})`);
+    chk(doc._ids.saveBtn.hidden === true, '[예상] 저장했는데 저장 버튼이 안 사라진다');
+    console.log(`  ${a.pos}번 ${a.name}: ${a.slot} → ${b.slot} · 저장·유지 확인`);
+  } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
+}
+
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
 //  카카오 예상 칸에만 찍은 인턴(예: 본배치표에 팀이 없는 17:07)이 실제 보기의 팀 수를 바꾸면 안 된다.
 //  바뀌면 없는 팀이 유령으로 끼어 밀림이 어긋나고, 화면에선 '밀림'이 아니라 '교체'로 보인다.

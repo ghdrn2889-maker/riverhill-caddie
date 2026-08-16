@@ -41,6 +41,8 @@ export function saveSandbox(date, parts, { by = '관리자' } = {}) {
     cur.parts[p] = {
       roster: (v.roster || []).map((x) => String(x || '')),
       teeGrid: (v.teeGrid || []).map((g) => ({ pos: Number(g.pos), time: String(g.time || ''), course: /IN/i.test(g.course) ? 'IN' : 'OUT' })).filter((g) => g.pos && g.time),
+      // 예상 보기의 배치 — 실제 배치표와 별개 축이고 여기(테스트판) 안에서만 산다.
+      projGrid: (v.projGrid || []).map((g) => ({ pos: Number(g.pos), time: String(g.time || ''), course: /IN/i.test(g.course) ? 'IN' : 'OUT' })).filter((g) => g.pos && g.time),
       boardInternTees: (v.boardInternTees || []).map((t) => ({ time: String(t.time || ''), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
       internTees: (v.internTees || []).map((t) => ({ time: String(t.time || ''), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
       cut: Number(v.cut) || 0,
@@ -76,7 +78,7 @@ export function applySandbox(parts, date) {
   if (!sb) return { parts, edited, at: 0 };
   for (const [p, v] of Object.entries(sb.parts || {})) {
     if (!parts[p]) continue;                     // 판독이 없는 부는 테스트판도 의미가 없다
-    parts[p] = { ...parts[p], roster: v.roster, teeGrid: v.teeGrid, boardInternTees: v.boardInternTees, internTees: v.internTees, cut: v.cut || parts[p].cut };
+    parts[p] = { ...parts[p], roster: v.roster, teeGrid: v.teeGrid, projGrid: v.projGrid || [], boardInternTees: v.boardInternTees, internTees: v.internTees, cut: v.cut || parts[p].cut };
     edited.push(p);
   }
   return { parts, edited, at: sb.at || 0, by: sb.by || '' };
