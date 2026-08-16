@@ -2201,6 +2201,98 @@
     @media (prefers-reduced-motion:reduce){
       #loginOv.dl-play .dl-sunwrap,#loginOv.dl-play .dl-sun,#loginOv.dl-play .dl-land,#loginOv.dl-play .dl-in>*{animation:none;opacity:1;transform:none;}
     }
+
+    /* ══ 햄버거 메뉴(전체화면) — 맨 위 이름줄=프로필 수정, 그 아래 바로가기 그리드 ══
+       ★C안(타일 없는 글리프): 타일을 걷어냈으므로 '눌리는 자리'를 다른 것으로 보여줘야 한다.
+        → 누르는 순간 글리프 뒤에 민트 원이 깔리고 살짝 줄어든다. 평소엔 여백만 남아 가볍다. */
+    .mnu{position:fixed;inset:0;z-index:150;background:#f3f4f8;display:flex;flex-direction:column;
+         opacity:0;transform:translateY(12px);transition:opacity .2s ease,transform .28s cubic-bezier(.32,.72,0,1);}
+    .mnu.on{opacity:1;transform:none;}
+    .mnu[hidden]{display:none;}
+    .mnu-hd{display:flex;align-items:center;flex:0 0 auto;
+            padding:calc(14px + env(safe-area-inset-top,0)) 12px 0;max-width:600px;width:100%;margin:0 auto;}
+    .mnu-who{display:flex;align-items:center;gap:2px;border:0;background:transparent;padding:6px 6px 6px 6px;
+             font-family:inherit;cursor:pointer;color:#17231d;-webkit-tap-highlight-color:transparent;}
+    .mnu-who:active{opacity:.55;}
+    .mnu-who b{font-size:22px;font-weight:880;letter-spacing:-.045em;}
+    .mnu-who i{font-size:14.5px;font-weight:750;color:#5c6b64;font-style:normal;margin-left:2px;}
+    .mnu-who svg{width:17px;height:17px;stroke:#8b9791;stroke-width:2.4;fill:none;stroke-linecap:round;
+                 stroke-linejoin:round;margin-left:2px;}
+    .mnu-sp{flex:1 1 auto;}
+    .mnu-b{width:40px;height:40px;border:0;background:transparent;display:flex;align-items:center;
+           justify-content:center;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+    .mnu-b:active{opacity:.5;}
+    .mnu-b svg{width:22px;height:22px;stroke:#3d4a44;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+    /* 좌측 정렬선은 이름줄(12+6)·바로가기(14+4)와 똑같이 18px — 2px만 어긋나도 눈에 걸린다. */
+    .mnu-tag{font-size:11px;font-weight:800;color:#5b7e70;padding:0 18px 8px;flex:0 0 auto;
+             max-width:600px;width:100%;margin:0 auto;}
+    .mnu-sc{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
+            padding:8px 14px calc(24px + env(safe-area-inset-bottom,0));max-width:600px;width:100%;margin:0 auto;}
+    .mnu-sech{display:flex;align-items:baseline;padding:0 4px 14px;}
+    .mnu-sech h4{font-size:16.5px;font-weight:880;letter-spacing:-.035em;margin:0;}
+    .mnu-g{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 6px;}
+    .mnu-q{border:0;background:transparent;padding:6px 2px;font-family:inherit;cursor:pointer;
+           display:flex;flex-direction:column;align-items:center;gap:9px;-webkit-tap-highlight-color:transparent;}
+    .mnu-q .g{position:relative;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;
+              justify-content:center;background:transparent;transition:background .13s ease,transform .09s ease;}
+    .mnu-q:active .g{background:#dcefe7;transform:scale(.9);}
+    .mnu-q .g svg{width:29px;height:29px;stroke:#0f3d2e;stroke-width:1.7;fill:none;
+                  stroke-linecap:round;stroke-linejoin:round;}
+    /* ★word-break:keep-all — 좁은 폰(가로 360px)에서 4열이면 한 칸이 ≈83px이라 긴 이름이 넘친다.
+       그냥 두면 '전체 배치'/'표'처럼 낱말 한가운데서 잘린다. 낱말 단위로만 줄을 바꾼다. */
+    .mnu-q .lb{font-size:12px;font-weight:780;letter-spacing:-.025em;color:#4b5a52;text-align:center;
+               line-height:1.25;word-break:keep-all;}
+    .mnu-q .bg{position:absolute;top:-1px;right:-3px;min-width:19px;height:19px;border-radius:99px;
+               background:#12bf94;color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;
+               justify-content:center;padding:0 6px;border:2px solid #f3f4f8;font-variant-numeric:tabular-nums;}
+    .mnu-q .bg.warn{background:#e2574c;}
+    .mnu-q.off{opacity:.42;}
+    .mnu-q.off .bg{background:#fff;color:#a8b3ae;border-color:#e2e7e4;font-weight:850;font-size:9px;}
+    @media (prefers-reduced-motion:reduce){ .mnu{transition:none;} .mnu-q .g{transition:none;} }
+
+    /* ══ 메뉴 하위 페이지(캐디 보험 · 근무 수칙) — 읽는 화면 ══ */
+    .mpg{position:fixed;inset:0;z-index:151;background:#f3f4f8;display:flex;flex-direction:column;
+         transform:translateX(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);}
+    .mpg.on{transform:none;}
+    .mpg[hidden]{display:none;}
+    .mpg-hd{display:flex;align-items:center;gap:2px;flex:0 0 auto;background:#f3f4f8;
+            padding:calc(10px + env(safe-area-inset-top,0)) 8px 10px;max-width:600px;width:100%;margin:0 auto;
+            border-bottom:1px solid #e6ebe8;}
+    .mpg-bk{width:40px;height:40px;border:0;background:transparent;display:flex;align-items:center;
+            justify-content:center;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+    .mpg-bk:active{opacity:.5;}
+    .mpg-bk svg{width:23px;height:23px;stroke:#2b3a33;stroke-width:2.2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+    .mpg-t{font-size:16px;font-weight:850;letter-spacing:-.03em;}
+    .mpg-sc{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
+            padding:16px 16px calc(34px + env(safe-area-inset-bottom,0));max-width:600px;width:100%;margin:0 auto;}
+    /* 첫 화면에서 가장 중요한 한 문장 — 이 페이지를 왜 보는지 */
+    .mpg-lead{background:linear-gradient(160deg,#e9f6f1,#ddefe7);border-radius:18px;padding:17px 17px 16px;}
+    .mpg-lead b{display:block;font-size:17px;font-weight:880;letter-spacing:-.04em;line-height:1.35;color:#0f3d2e;}
+    .mpg-lead p{font-size:12.5px;line-height:1.65;color:#3f6355;margin:9px 0 0;word-break:keep-all;}
+    .mpg-h{font-size:9px;font-weight:900;letter-spacing:.14em;color:#77837c;margin:24px 0 10px 2px;}
+    .mpg-c{background:#fff;border:1px solid #e7ece9;border-radius:16px;padding:15px 16px;}
+    .mpg-c+.mpg-c{margin-top:9px;}
+    .mpg-c h5{font-size:13.5px;font-weight:850;letter-spacing:-.028em;margin:0 0 7px;color:#17231d;}
+    .mpg-c p{font-size:12.5px;line-height:1.7;color:#556158;margin:0;word-break:keep-all;}
+    .mpg-c p+p{margin-top:8px;}
+    .mpg-c b{color:#0c8f6a;font-weight:850;}
+    /* 준비할 것 목록(번호 매김이 뜻을 갖는 자리 — 순서대로 하는 일) */
+    .mpg-steps{counter-reset:s;margin:0;padding:0;list-style:none;}
+    .mpg-steps li{counter-increment:s;position:relative;padding:0 0 0 30px;font-size:12.5px;
+                  line-height:1.65;color:#556158;word-break:keep-all;}
+    .mpg-steps li+li{margin-top:11px;}
+    .mpg-steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:20px;height:20px;
+                          border-radius:50%;background:#0f3d2e;color:#fff;font-size:10.5px;font-weight:900;
+                          display:flex;align-items:center;justify-content:center;}
+    .mpg-steps li b{color:#17231d;font-weight:850;}
+    /* 아직 안 채운 자리 — '준비 중'인 척이 아니라 뭐가 필요한지 분명히 적는다 */
+    .mpg-todo{background:#fffdf6;border:1px dashed #e0d3ae;border-radius:16px;padding:15px 16px;}
+    .mpg-todo h5{font-size:13px;font-weight:850;margin:0 0 6px;color:#8a6d28;}
+    .mpg-todo p{font-size:12px;line-height:1.65;color:#7a6a4a;margin:0;word-break:keep-all;}
+    .mpg-todo ul{margin:9px 0 0;padding-left:17px;}
+    .mpg-todo li{font-size:12px;line-height:1.75;color:#7a6a4a;}
+    .mpg-note{font-size:11px;line-height:1.65;color:#8b9791;margin:14px 2px 0;word-break:keep-all;}
+    @media (prefers-reduced-motion:reduce){ .mpg{transition:none;} }
   </style>
 </head>
 <body>
@@ -2242,6 +2334,39 @@
       </div>
       <a class="ov-switch" id="obSwitch" href="/api/auth/google?switch=1" hidden>다른 계정으로 로그인</a>
     </div>
+  </div>
+
+  <!-- 햄버거 메뉴(전체화면) — 이름줄을 누르면 프로필 수정, 그 아래는 바로가기 그리드(JS가 그림) -->
+  <div class="mnu" id="menuOv" hidden>
+    <div class="mnu-hd">
+      <button class="mnu-who" id="mnuWho" type="button">
+        <b id="mnuName">회원</b><i>님</i>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
+      </button>
+      <span class="mnu-sp"></span>
+      <button class="mnu-b" id="mnuLogout" type="button" aria-label="로그아웃">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+      <button class="mnu-b" id="mnuClose" type="button" aria-label="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="mnu-tag" id="mnuTag"></div>
+    <div class="mnu-sc">
+      <div class="mnu-sech"><h4>바로가기</h4></div>
+      <div class="mnu-g" id="mnuGrid"></div>
+    </div>
+  </div>
+
+  <!-- 메뉴 하위 페이지(캐디 보험 · 근무 수칙) — 본문은 JS가 채운다 -->
+  <div class="mpg" id="mpgOv" hidden>
+    <div class="mpg-hd">
+      <button class="mpg-bk" id="mpgBack" type="button" aria-label="뒤로">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <div class="mpg-t" id="mpgTitle"></div>
+    </div>
+    <div class="mpg-sc" id="mpgBody"></div>
   </div>
 
   <!-- 가입(온보딩) · 가입 신청서 출력 연출 -->

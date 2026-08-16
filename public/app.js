@@ -4518,6 +4518,7 @@ function initAccount() {
     });
   });
   $('ovEnableBtn').onclick = enableNotifications;
+  initMenu();
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
@@ -4553,6 +4554,177 @@ async function main() {
     if (document.body.classList.contains('on-board')) applyBoardSky();
   }, 20000);
   startHeartbeat();
+}
+
+/* ══ 햄버거 메뉴(전체화면) ══
+   맨 위 이름줄 = 프로필 수정(기존 계정 팝업 재사용), 오른쪽 두 아이콘 = 로그아웃·닫기.
+   그 아래는 바로가기 — 하단 탭만으로는 몇 단계 들어가야 닿는 곳(목표·정산서·지출)을 한 번에 연다.
+   ★아이콘은 타일 없이 글리프만(C안). 타일이 없으니 '눌리는 자리'는 누르는 순간 깔리는 민트 원이 대신한다. */
+const MENU_ICONS = {
+  shield: '<path d="M12 2.6 20 6v5.6c0 4.9-3.3 8.5-8 9.8-4.7-1.3-8-4.9-8-9.8V6z"/><polyline points="9 12 11.2 14.2 15.4 10"/>',
+  rules: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/>',
+};
+// ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
+//  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리). 지금은 앱 어디에도 없는 두 가지만.
+const MENU_ITEMS = [
+  { k: 'shield', t: '캐디 보험', page: 'ins' },
+  { k: 'rules', t: '근무 수칙', page: 'rule' },
+];
+function renderMenu() {
+  const p = (meState && meState.profile) || {};
+  $('mnuName').textContent = p.boardName || '회원';
+  $('mnuTag').textContent = (caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디') + ' · 리버힐';
+  $('mnuGrid').innerHTML = MENU_ITEMS.map((x, i) =>
+    `<button class="mnu-q" type="button" data-i="${i}">`
+    + `<span class="g"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[x.k]}</svg></span>`
+    + `<span class="lb">${esc(x.t)}</span></button>`).join('');
+}
+
+/* ── 하위 페이지 본문 ──
+   ★캐디 보험: 사장님이 준 도메인 지식 그대로. 이 페이지의 원칙은 하나 —
+    산재를 '가입할까 말까'로 묻지 않는다. 예/아니오 토글로 두면 캐디가 자기 권리를 스스로 접게 된다.
+    캐디는 이미 법적 적용 대상이고, 문제는 '가입 여부'가 아니라 '어떻게 청구하느냐'다. */
+const MENU_PAGES = {
+  ins: {
+    t: '캐디 보험',
+    html: `
+      <div class="mpg-lead">
+        <b>산재보험은 고르는 상품이 아닙니다.<br>이미 적용받고 있습니다.</b>
+        <p>골프장이 신고를 안 했더라도, 일하다 다쳤다면 <b>본인이 근로복지공단에 직접 신청</b>할 수 있습니다.
+           가입 여부를 확인하느라 시간을 보낼 이유가 없습니다.</p>
+      </div>
+
+      <div class="mpg-h">왜 그런가</div>
+      <div class="mpg-c">
+        <h5>법이 캐디를 "근로자로 본다"고 못 박아 뒀습니다</h5>
+        <p>캐디는 근로기준법상 근로자는 아닙니다(노무제공자). 그런데 <b>산재보험법은 별도로 "근로자로 본다"</b>고
+           규정합니다. 그래서 산재 영역에서만큼은 일반 근로자와 똑같이 보호받습니다.</p>
+        <p>2021년 7월부터 특고는 원칙적으로 의무가입이 됐고, 2023년 7월 개정으로 '노무제공자'로 다시 정의되면서
+           전속성 요건도 없어졌습니다.</p>
+      </div>
+      <div class="mpg-c">
+        <h5>골프장이 미가입이면 내가 손해인가</h5>
+        <p><b>아닙니다.</b> 공단이 먼저 요양급여·휴업급여를 지급하고, 그 뒤에 사업주에게 청구합니다.
+           미가입 상태에서 재해가 나면 골프장이 지급액의 50%와 과태료, 밀린 보험료를 부담합니다.</p>
+        <p>캐디가 손해 보는 구조가 아닙니다. 신청을 망설일 이유로 삼지 마세요.</p>
+      </div>
+
+      <div class="mpg-h">다쳤다면 — 무엇부터</div>
+      <div class="mpg-c">
+        <p style="margin-bottom:13px">미가입 상태라면 <b>"업무 중에 다쳤다"는 것을 내가 보여야 하는 부담</b>이 큽니다.
+           기억은 흐려지고 기록은 지워지니, 다친 그날 모아두는 게 가장 확실합니다.</p>
+        <ol class="mpg-steps">
+          <li><b>그날 배정 기록</b> — 몇 부 몇 번, 어느 팀이었는지. 앱의 그날 화면을 캡처해 두면 됩니다.</li>
+          <li><b>같이 있던 사람</b> — 동료·마샬 등 상황을 본 사람의 진술.</li>
+          <li><b>경위서</b> — 몇 시에 어디서 무엇을 하다 어떻게 다쳤는지, 짧아도 구체적으로.</li>
+          <li><b>진단서</b> — 병원에서 받은 진단명과 소견.</li>
+          <li><b>공제 내역</b> — 캐디피에서 무엇이 얼마나 빠졌는지 캡처.</li>
+        </ol>
+      </div>
+
+      <div class="mpg-h">돈 문제</div>
+      <div class="mpg-c">
+        <h5>병원비</h5>
+        <p>산재로 승인되면 공단이 병원과 직접 정산합니다. 내가 영수증을 챙겨 필요경비로 넣을 일이 줄어듭니다.</p>
+        <p>본인부담분은 <b>사업에 쓴 치료비가 아니라</b> 개인 의료비입니다. 필요경비가 아니라
+           종합소득세 <b>의료비 세액공제</b>로 처리하세요.</p>
+      </div>
+      <div class="mpg-c">
+        <h5>다른 보험과 겹치나</h5>
+        <p><b>실손</b>은 원칙적으로 중복 청구가 안 됩니다(비급여 부분만 따로).
+           <b>정액형</b>(진단비·수술비·입원일당)은 산재와 별개로 받을 수 있습니다.</p>
+      </div>
+      <div class="mpg-c">
+        <h5>보험료는 누가 내나</h5>
+        <p>산재보험료는 <b>사업주 부담</b>입니다. 내 월 비용에 넣어 계산하지 마세요.</p>
+      </div>
+
+      <p class="mpg-note">이 내용은 제도의 큰 줄기입니다. 실제 신청은 사안마다 다르니
+        근로복지공단(1588-0075)에 확인하세요.</p>`,
+  },
+  rule: {
+    t: '근무 수칙',
+    html: `
+      <div class="mpg-lead">
+        <b>리버힐에서 지켜야 할 것</b>
+        <p>출근부터 반납까지, 알아둬야 할 규칙을 한곳에 모읍니다.
+           새로 온 캐디가 물어보지 않고도 알 수 있게요.</p>
+      </div>
+      <div class="mpg-h">채울 내용</div>
+      <div class="mpg-todo">
+        <h5>실제 수칙을 알려주세요</h5>
+        <p>근무 수칙은 골프장마다 다릅니다. 제가 그럴듯하게 지어내면
+          그걸 믿고 따르는 사람이 생기므로 비워 뒀습니다. 아래 뼈대에 실제 내용을 채우겠습니다.</p>
+        <ul>
+          <li>출근 · 복장 — 몇 분 전 도착, 복장 규정</li>
+          <li>카트 운행 — 속도, 진입 금지 구역, 주차</li>
+          <li>라운드 중 — 고객 응대, 진행 속도, 안전</li>
+          <li>반납 · 마감 — 카트·장비 점검, 분실물 처리</li>
+          <li>당번 · 벌당 — 기준과 순서</li>
+          <li>지각 · 결근 — 연락 방법과 절차</li>
+        </ul>
+      </div>
+      <p class="mpg-note">항목을 더하거나 빼도 됩니다. 순서도 편하신 대로 바꾸세요.</p>`,
+  },
+};
+let mpgPushed = false;
+function openMenuPage(key) {
+  const p = MENU_PAGES[key]; if (!p) return;
+  $('mpgTitle').textContent = p.t;
+  $('mpgBody').innerHTML = p.html;
+  $('mpgBody').scrollTop = 0;
+  const el = $('mpgOv');
+  el.hidden = false;
+  void el.offsetWidth;
+  el.classList.add('on');
+  if (!(history.state && history.state.mpg)) { history.pushState({ mpg: 1 }, ''); mpgPushed = true; }
+}
+function closeMenuPageUI() {
+  const el = $('mpgOv');
+  el.classList.remove('on');
+  setTimeout(() => { if (!el.classList.contains('on')) el.hidden = true; }, 280);
+}
+function closeMenuPage() {
+  closeMenuPageUI();
+  if (mpgPushed && history.state && history.state.mpg) { mpgPushed = false; history.back(); }
+}
+let menuPushed = false;
+function menuOpen() {
+  if (!(meState && meState.authed)) return;      // 로그인 전에는 열지 않음
+  renderMenu();
+  const el = $('menuOv');
+  el.hidden = false;
+  void el.offsetWidth;                            // 리플로우 → 페이드인 재생 보장
+  el.classList.add('on');
+  if (!(history.state && history.state.mnu)) { history.pushState({ mnu: 1 }, ''); menuPushed = true; }
+}
+function menuCloseUI() {                          // 화면만 닫기(히스토리 조작 없음) — popstate에서 호출
+  const el = $('menuOv');
+  el.classList.remove('on');
+  setTimeout(() => { if (!el.classList.contains('on')) el.hidden = true; }, 220);
+}
+function menuClose() {                            // 사용자가 닫기 → 쌓아둔 히스토리 정리
+  menuCloseUI();
+  if (menuPushed && history.state && history.state.mnu) { menuPushed = false; history.back(); }
+}
+function initMenu() {
+  const mb = $('menuBtn'); if (mb) mb.onclick = menuOpen;
+  $('mnuClose').onclick = menuClose;
+  $('mnuWho').onclick = () => { menuClose(); openAccount(); };
+  $('mnuLogout').onclick = () => { menuClose(); doLogout(); };
+  $('mnuGrid').onclick = (e) => {
+    const b = e.target.closest('.mnu-q'); if (!b) return;
+    const it = MENU_ITEMS[Number(b.dataset.i)];
+    if (!it) return;
+    if (it.page) openMenuPage(it.page);
+    else if (typeof it.go === 'function') it.go();
+  };
+  $('mpgBack').onclick = closeMenuPage;
+  // 폰 뒤로가기: 하위 페이지가 열려 있으면 그것부터, 아니면 메뉴를 닫는다(앱은 안 나감).
+  window.addEventListener('popstate', () => {
+    if (!$('mpgOv').hidden) { mpgPushed = false; closeMenuPageUI(); return; }
+    if (!$('menuOv').hidden) { menuPushed = false; menuCloseUI(); }
+  });
 }
 
 // 접속 하트비트 — 앱이 화면에 떠 있는 동안 30초마다 핑(운영 모니터의 접속중/나감 표시).
