@@ -33,6 +33,12 @@ function describe(it) {
       return { title: `${p}에 옆 부 명단 유입`, body: `${it.purged || 0}명을 제거했습니다. 이 부 명단이 불완전할 수 있으니 검수해주세요.` };
     case 'grid_short':
       return { title: `${p} 티오프 하단 누락`, body: `재판독 후에도 커트(${it.cut || '-'})에 못 미칩니다. 원본 아래쪽이 잘렸는지 확인해주세요.` };
+    // ★끝점 검사 — '배치표를 봤는데 반영이 안 됐다'. 원인은 몰라도 이 사실만으로 사람이 움직여야 한다.
+    //  2026-08-16: 8/17 배치표가 6번 판독 실패하고 조용히 넘어갔고, 사흘을 아무도 몰랐다.
+    case 'board_not_reflected':
+      return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
+    case 'kakao_down':
+      return { title: '카카오골프 예약 관측 중단', body: String(it.note || '연속 실패 — 예약 현황이 갱신되지 않습니다.').slice(0, 200) };
     default:
       return { title: `${p} 판독 이상`, body: String(it.note || it.kind || '').slice(0, 120) };
   }
@@ -57,9 +63,11 @@ export async function raiseBoardIssue(it) {
     if (String(process.env.BOARD_ALERT || '') === '0') return false;
     const now = Date.now();
     // 서명: 종류+부+구체값. 같은 구멍이면 같은 서명, 구멍이 늘면 새 서명(=다시 알림).
+    // ★서명에 글 번호를 반드시 섞는다 — 안 그러면 첫 배치표 알림 하나가 6시간 동안 다음 배치표
+    //  알림까지 삼킨다(중복차단은 '같은 손상'을 막으려는 것이지 '다음 사고'를 막으려는 게 아니다).
     const detail = it.kind === 'roster_holes' ? (it.holes || []).join(',')
       : it.kind === 'tee_conflict' ? (it.times || []).join(',')
-        : String(it.purged || it.cut || '');
+        : String(it.articleId || it.purged || it.cut || '');
     const sig = `${it.kind}|${it.part || ''}|${detail}`;
     if (seenRecently(sig, now)) return false;
     const { title, body } = describe(it);

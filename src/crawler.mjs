@@ -3,6 +3,7 @@
 import { fetchLatestArticles } from './naverCafe.mjs';
 import { analyze } from './analyzer.mjs';
 import { loadJSON, saveJSON, appendJSONL } from './store.mjs';
+import { notePending, clearPending, keyFromLabel } from './boardpending.mjs';
 
 const SEEN_FILE = 'seen.json';
 const MAX_SEEN = 800;
@@ -74,6 +75,15 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
         //   (기존엔 판독 실패해도 onMatch가 throw만 안 하면 seen 확정 → 새 배치표가 영구 미반영되던 재발 버그.)
         try {
           const r = await onMatch(a, result);
+          // ★대기표 — '봤는데 반영이 안 됐다'를 기록한다. seen 처리와 무관하게 남아서,
+          //  끝점 검사(boardpending.checkPending)가 유예시간 뒤 관리자 폰으로 보낸다.
+          //  2026-08-16 사고의 핵심: 여기서 로그만 남기고 넘어가면 아무도 모른다. 사흘을 몰랐다.
+          if (r && r.boardReadFailed) {
+            try { notePending({ articleId: a.id, subject: a.subject, dateKey: keyFromLabel(r.dateLabel || a.subject), reason: r.boardReadReason || '' }); }
+            catch (e) { console.error('[대기표] 기록 실패:', e.message); }
+          } else if (r && r.rawVerdict) {
+            try { clearPending(a.id, '판독 성공'); } catch { /* noop */ }
+          }
           if (r && r.boardReadFailed && (boardRetries[a.id] || 0) < MAX_BOARD_RETRIES) {
             boardRetries[a.id] = (boardRetries[a.id] || 0) + 1;
             saveJSON('board-retries.json', boardRetries);
@@ -81,9 +91,11 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
           } else {
             if (boardRetries[a.id]) { delete boardRetries[a.id]; saveJSON('board-retries.json', boardRetries); }
             if (r && r.boardReadFailed) {
-              // ★재시도 소진 = 최신 배치표를 못 읽고 옛 배치표에 동결될 위험 — 조용히 넘기지 않고 이상 기록.
-              //  감시 클로드가 이 신호를 잡아 관리자에게 '최신 배치표 판독 실패(수동 확인)'를 에스컬레이션한다.
-              console.warn(`⚠️ 배치표 판독 재시도 ${MAX_BOARD_RETRIES}회 소진 — seen 처리(수동 확인 필요): ${a.subject}`);
+              // ★재시도 소진 = 최신 배치표를 못 읽고 옛 배치표에 동결될 위험.
+              //  seen 은 찍는다(안 찍으면 매 폴링마다 같은 글을 다시 판독해 예산을 태운다 —
+              //  8/16에 한 글을 13번 다시 읽어 캡 150을 소진시킨 게 정확히 그 모양이었다).
+              //  대신 대기표에 남아 있으므로 끝점 검사가 반드시 관리자를 부른다. 포기가 아니라 인계다.
+              console.warn(`⚠️ 배치표 판독 재시도 ${MAX_BOARD_RETRIES}회 소진 — seen 처리(대기표에 남김, 관리자 알림 예정): ${a.subject}`);
               appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'board_read_exhausted', articleId: String(a.id), subject: String(a.subject || ''), retries: MAX_BOARD_RETRIES, note: '최신 배치표 판독 반복 실패 — 옛 배치표 동결 위험, 관리자 확인 필요' });
             }
             markSeen(a.id);

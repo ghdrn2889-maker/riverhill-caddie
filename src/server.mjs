@@ -29,6 +29,7 @@ import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './notices.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
+import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
@@ -1610,7 +1611,17 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
-  if (primaryRet && typeof primaryRet === 'object') primaryRet.boardReadFailed = _boardReadFailed;
+  if (primaryRet && typeof primaryRet === 'object') {
+    primaryRet.boardReadFailed = _boardReadFailed;
+    // ★대기표가 '어느 날짜 배치표인가'를 알아야 반영 확인이 된다. 판독이 실패해 날짜조차 못 읽었으면
+    //  제목에서 뽑는다("2026년 8월 17일 월요일 배치표입니다.") — 실패했을 때일수록 이 값이 필요하다.
+    primaryRet.dateLabel = out.rawVerdict?.dateLabel || full.subject || '';
+    if (_boardReadFailed) {
+      const _v = out.rawVerdict || {};
+      primaryRet.boardReadReason = _v.rosterReliable === false ? '명단 신뢰 불가'
+        : !Array.isArray(_v.teeGrid) || !_v.teeGrid.length ? '티오프표를 못 읽음' : '판독 불완전';
+    }
+  }
 
   // 다른 활성 회원들 — Gemini 재호출 없이 공유 rawVerdict(칠판 오버레이된)를 코드로 재해석.
   for (const m of activeMembers()) {
@@ -2589,3 +2600,32 @@ if (kakaoOn()) {
 
 setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
 console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 3부+1·2부 이미지 변경 시에만 재판독)`);
+
+// ── 끝점 검사 ────────────────────────────────────────────────────────────
+//  ★이 시스템에 없던 단 하나 — "그래서 배치표가 회원에게 갔나?"를 묻는 곳.
+//   2026-08-16: 8/17 배치표가 6번 판독 실패하고 조용히 seen 처리됐다. 사흘 동안 아무도 몰랐다.
+//   가드는 부분마다 많았지만(캡·재시도·중복차단·심각부족) 전부 '멈추고 성공한 척'으로 끝났고,
+//   끝에서 결과를 확인하는 곳이 없어 그 침묵이 그대로 사흘이 됐다.
+//
+//  판독기가 왜 실패했는지는 여기서 안 따진다. '봤다'와 '반영됐다'가 어긋난 사실만 본다 —
+//  원인을 몰라도 사람은 움직일 수 있고, 원인을 따지려 들면 또 판단자가 끼어 또 놓친다.
+const PENDING_CHECK_MS = Number(process.env.PENDING_CHECK_MS || 5 * 60 * 1000);
+// 지금 시스템이 실제로 들고 있는 배치표 날짜들 — 여기 있으면 목적이 이뤄진 것이다.
+function reflectedBoardKeys() {
+  const keys = new Set();
+  try { const k = keyFromLabel(loadJSON('lastboard.json', {})?.dateLabel || ''); if (k) keys.add(k); } catch { /* noop */ }
+  try {
+    const store = loadBoardPartsStore() || {};
+    for (const v of Object.values(store)) { const k = keyFromLabel(v?.dateLabel || ''); if (k) keys.add(k); }
+  } catch { /* noop */ }
+  return [...keys];
+}
+async function checkBoardPending() {
+  try {
+    const r = await checkPending(reflectedBoardKeys());
+    if (r.alerted) console.warn(`📵 [끝점검사] 반영 안 된 배치표 ${r.alerted}건 → 관리자 알림 발송(대기 ${r.pending}건)`);
+  } catch (e) { console.error('[끝점검사] 오류:', e.message); }
+}
+setTimeout(checkBoardPending, 90 * 1000);            // 부팅 직후에도 한 번(재시작 중에 놓친 건 없나)
+setInterval(checkBoardPending, PENDING_CHECK_MS);
+console.log(`📵 끝점 검사: ${PENDING_CHECK_MS / 60000}분 간격 — '배치표를 봤는데 반영 안 됨'이면 관리자 폰으로(조용한 실패 금지)`);
