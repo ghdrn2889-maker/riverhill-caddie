@@ -20,6 +20,7 @@
   const state = document.getElementById('state');
   const saveBtn = document.getElementById('saveBtn');
   const undoBtn = document.getElementById('undoBtn');
+  const resetBtn = document.getElementById('resetBtn');
   const HINTS = {
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
     name: '칸을 눌러 그 순번의 이름을 고칩니다.',
@@ -480,59 +481,63 @@
     saveBtn.disabled = true;
     state.textContent = '저장 중…';
     const saved = [];
+    // ★저장은 관리자 테스트판(daejo-sandbox)으로만 간다. 회원 앱·알림·엔진은 이걸 보지 않는다.
+    //  이 화면의 '실제 배치표'는 아직 기능이 덜 여물었다 — 덜 여문 화면이 살아 있는 데이터를
+    //  직접 만지던 구조가 8/17 사고(3부 10팀 → 예상 13팀, 커트 10→13)의 뿌리였다.
+    //  실제 배치표 교정은 모니터의 '배치표 검수' 탭에서만 한다.
+    const payload = {};
     try {
       for (const part of PARTS) {
         if (!changed(part)) continue;
-        // ★저장은 '실제 배치표'만 한다 — 어느 보기에서 저장하든 teeV.real이다.
-        //  카카오 예상은 아직 따로 도는 엔진이고(사용자 확정), 예상 격자를 본배치표로 밀어넣으면
-        //  카카오가 찼다고 본 칸이 그대로 '팀'이 되어 커트가 올라가고 앱이 없는 근무를 보여준다.
-        //  실제로 그랬다(8/17: 3부 10팀 → 예상 13팀으로 덮임).
-        //  명단(이름)·인턴은 두 보기가 같은 것을 가리키므로 어느 쪽에서 고쳐도 저장된다.
-        // ★전체 rows를 보낸다 — board-correct는 받은 rows로 명단·격자를 재구성하므로
-        //  일부만 보내면 나머지가 사라진다.
+        // 실제 배치표 축만 담는다 — 카카오 예상 칸은 예상일 뿐 팀이 아니다.
         const real = teeV.real[part] || [];
-        const rows = roster[part].map((cell, i) => {
-          const t = real[i];
-          return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
-        });
-        // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
-        //  ★단, 본배치표에 팀이 있는 칸만 보낸다. 카카오 예상 칸에만 찍은 인턴을 배치표에 쓰면
-        //   배치표가 '없는 팀에 인턴이 있다'고 말하게 된다(예상 엔진은 따로 돈다).
         const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
-        const boardInterns = [...interns[part]].filter((k) => teamSet.has(k));
-        const iTees = boardInterns.map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
-        // 카카오 예상 저장소(intern-tees.json)에는 지정한 전부를 남긴다 — 예상 엔진이 그걸 본다.
-        const allTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
-        const r = await fetch(apiUrl('/api/board-correct'), {
-          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: real.filter(Boolean).length }),
-        });
-        const j = await r.json(); if (!j.ok) throw new Error(j.error || (part + '부 저장 실패'));
-        // 3부 인턴은 별도 저장소에도 남긴다 — 카카오 재매칭이 이걸 본다(사진 판독과 무관하게 유지).
-        if (part === '3' && DATE) {
-          // ★조용히 실패하지 않는다 — 여기가 안 저장되면 카카오 재매칭이 옛 인턴 칸을 계속 쓴다.
-          const ri = await fetch(apiUrl('/api/admin/intern-tees'), {
-            method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ date: DATE, tees: allTees }),
-          }).catch((e) => ({ ok: false, json: async () => ({ error: e.message }) }));
-          const ji = await ri.json().catch(() => ({}));
-          if (!ji.ok) throw new Error('인턴 칸 저장 실패: ' + (ji.error || '응답 없음'));
-        }
-        // ★방금 보낸 것이 이제 '실제 배치표'다 — 기준선을 거기에 다시 세운다.
-        //  안 그러면 저장은 됐는데 화면은 계속 '안 저장됨'으로 남아 저장 버튼이 사라지지 않는다.
+        const split = (ks) => ks.map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
+        payload[part] = {
+          roster: roster[part].slice(),
+          teeGrid: real.map((t, i) => ({ pos: i + 1, time: t.time, course: t.course })),
+          boardInternTees: split([...interns[part]].filter((k) => teamSet.has(k))),
+          internTees: split([...interns[part]]),
+          cut: real.length,
+        };
         saved.push(part);
-        // 저장한 것이 이제 실제 배치표다 — 팀 = 방금 보낸 근무 칸 + 방금 보낸 인턴 칸.
-        setBaseline(part, (teeV.real[part] || []).concat(iTees));
+      }
+      if (saved.length) {
+        const r = await fetch(apiUrl('/api/daejo-save'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ date: DATE, parts: payload }),
+        });
+        const j = await r.json(); if (!j.ok) throw new Error(j.error || '저장 실패');
+        for (const part of saved) {
+          setBaseline(part, (teeV.real[part] || []).concat(payload[part].boardInternTees));
+        }
+        resetBtn.hidden = false;
       }
       stack.length = 0;
       PARTS.forEach(paint);
       // ★저장 버튼이 사라지는 것이 곧 '저장됐다'는 신호다. 남아 있으면 아직 안 된 것이다.
       state.textContent = saved.length
-        ? `저장됐습니다 — ${saved.map((p) => p + '부').join('·')}${anyChanged() ? ' (아직 안 된 게 남았습니다)' : ''}`
-          + (view === 'proj' ? ' · 카카오 예상 칸은 저장하지 않았습니다(예상 엔진은 따로 돕니다)' : '')
+        ? `테스트판에 저장됐습니다 — ${saved.map((p) => p + '부').join('·')} (앱에는 반영되지 않습니다)`
+          + (view === 'proj' ? ' · 카카오 예상 칸은 팀으로 세지 않았습니다' : '')
         : '바뀐 게 없습니다.';
     } catch (err) { state.textContent = '저장 실패: ' + err.message; }
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }
+  });
+
+  // 실제 판독으로 되돌리기 — 테스트판을 버린다.
+  resetBtn.addEventListener('click', async () => {
+    if (!live) { state.textContent = '샘플에서는 초기화할 수 없습니다.'; return; }
+    if (!confirm('테스트판을 버리고 실제 판독 그대로 되돌립니다. 계속할까요?')) return;
+    resetBtn.disabled = true;
+    try {
+      const r = await fetch(apiUrl('/api/daejo-reset'), {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date: DATE }),
+      });
+      const j = await r.json(); if (!j.ok) throw new Error(j.error || '초기화 실패');
+      state.textContent = '초기화했습니다 — 새로고침합니다.';
+      location.reload();
+    } catch (err) { state.textContent = '초기화 실패: ' + err.message; resetBtn.disabled = false; }
   });
 
   // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.

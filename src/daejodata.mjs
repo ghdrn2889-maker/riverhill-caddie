@@ -9,6 +9,7 @@ import { effectivePart3Verdict } from './analytics.mjs';
 import { loadSnapshot, kakaoHealth, fixedSlots } from './kakaogolf.mjs';
 import { keyFromLabel } from './boardpending.mjs';
 import { internTeesFor } from './interns.mjs';
+import { applySandbox } from './daejosandbox.mjs';
 
 const norm = (t) => (String(t || '').match(/\d{1,2}:\d{2}/) || [''])[0];
 
@@ -82,11 +83,14 @@ export function buildDaejoData(date = '') {
     delete parts['3']._autoInterns;
   }
   for (const p of ['1', '2']) if (parts[p]) parts[p].boardInternTees = parts[p].internTees.slice();
+  // ★관리자 테스트판을 마지막에 덮는다 — 이 값은 대조판 밖으로 나가지 않는다(회원 앱·알림·엔진 무관).
+  const sb = applySandbox(parts, dateKey);
   const snap = (dateKey && loadSnapshot(dateKey)) || {};
   return {
     dateKey,
     dateLabel: dateLabel || dateKey,
-    parts,
+    parts: sb.parts,
+    sandbox: { edited: sb.edited, at: sb.at, by: sb.by || '' },
     snap,
     sched: schedShape(),
     health: kakaoHealth() || {},

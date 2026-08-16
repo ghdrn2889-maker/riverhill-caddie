@@ -22,6 +22,7 @@ import { addNotice, listNotices } from './notices.mjs';
 import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
+import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
@@ -807,6 +808,25 @@ app.get('/daejo', gate, (req, res) => {
 app.get('/api/daejo-data', gate, (req, res) => {
   try { res.json({ ok: true, ...buildDaejoData(String(req.query.date || '')) }); }
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ★대조판 저장은 테스트판으로만 간다 — 회원 앱·알림·엔진은 이 값을 보지 않는다.
+//  실제 배치표 교정은 '배치표 검수' 탭(/api/board-correct)에서만 한다.
+//  덜 여문 화면이 살아 있는 데이터를 직접 만지던 구조가 8/17 사고의 뿌리였다.
+app.post('/api/daejo-save', gate, (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  if (!req.body?.parts || typeof req.body.parts !== 'object') return res.status(400).json({ ok: false, error: 'parts 필요' });
+  try {
+    const rec = saveSandbox(date, req.body.parts, { by: '모니터' });
+    res.json({ ok: true, date, edited: Object.keys(rec.parts || {}), at: rec.at });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+app.post('/api/daejo-reset', gate, (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  const cleared = clearSandbox(date, String(req.body?.part || ''));
+  res.json({ ok: true, date, cleared });
 });
 
 // 인턴 티오프 수동 지정 — 앱 서버(3000)에도 같은 API가 있지만, 대조판은 모니터에서 뜨므로 여기에도 둔다.

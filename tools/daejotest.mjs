@@ -68,7 +68,7 @@ const doc = {
   elementFromPoint: () => null,
   _ids: {}, _spares: {},
 };
-for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
+for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'resetBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
 doc._ids.tools.hidden = true;   // 실제 HTML과 동일하게 — 대조 보기에서 편집 도구는 숨어 있다
 for (const p of ['1', '2', '3']) doc._spares[p] = new El('div');
 doc._modes = ['intern', 'name', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
@@ -97,6 +97,7 @@ const BOARD = Object.fromEntries(['1', '2', '3'].map((p) => [p, {
 }]));
 globalThis.window = { __DAEJO_DATE: J.dateKey || '', __DAEJO_BOARD: BOARD };
 globalThis.prompt = () => null;
+globalThis.confirm = () => true;
 // 보낸 몸통을 기록해둔다 — '무엇을 저장했는가'가 불변식이다(예상 격자가 새어나가면 안 된다).
 globalThis.__SENT = [];
 globalThis.fetch = async (url, opt) => {
@@ -296,11 +297,20 @@ for (const VIEW of (HAS_KAKAO ? ['real', 'proj'] : ['real'])) {
   // ★카카오 예상은 따로 도는 엔진이다(사용자 확정). 예상 격자가 본배치표로 새어나가면
   //  카카오가 찼다고 본 칸이 '팀'이 되어 커트가 올라가고 앱이 없는 근무를 보여준다.
   //  저장한 팀 수는 어느 보기에서 눌렀든 '실제 배치표의 팀 수'여야 한다.
+  // ★대조판은 앱과 끊겨 있어야 한다(사용자 확정). 회원 데이터를 만지는 어떤 API도 부르면 안 된다.
+  const LIVE_APIS = ['/api/board-correct', '/api/admin/intern-tees', '/api/board-notify', '/api/simulate'];
+  for (const s of globalThis.__SENT) {
+    chk(!LIVE_APIS.some((a) => s.url.endsWith(a)), `[${VIEW}] 대조판이 앱 데이터를 만지는 ${s.url}을 불렀다`);
+  }
+  const sent = globalThis.__SENT.filter((x) => x.url.endsWith('/api/daejo-save'));
+  chk(sent.length === 1, `[${VIEW}] 테스트판 저장이 ${sent.length}번 불렸다(1번이어야)`);
   const realTeams = (J.parts[p].teeGrid || []).length;   // 사진이 읽은 팀 수(인턴 지정 전)
-  for (const s of globalThis.__SENT.filter((x) => x.url.endsWith('/api/board-correct'))) {
-    const teams = s.body.rows.filter((r) => r.tee).length;
-    chk(teams <= realTeams, `[${VIEW}] ${s.body.part}부 — 실제 ${realTeams}팀인데 ${teams}팀을 저장했다(예상 격자가 샜다)`);
-    chk(s.body.cutLine === teams, `[${VIEW}] ${s.body.part}부 — 커트(${s.body.cutLine})와 보낸 팀 수(${teams})가 다르다`);
+  for (const s of sent) {
+    for (const [pt, v] of Object.entries(s.body.parts || {})) {
+      const teams = (v.teeGrid || []).length;
+      if (pt === p) chk(teams <= realTeams, `[${VIEW}] ${pt}부 — 실제 ${realTeams}팀인데 ${teams}팀을 저장했다(예상 격자가 샜다)`);
+      chk(v.cut === teams, `[${VIEW}] ${pt}부 — 커트(${v.cut})와 보낸 팀 수(${teams})가 다르다`);
+    }
   }
   chk(doc._ids.saveBtn.hidden === true, `[${VIEW}] 저장했는데 저장 버튼이 안 사라진다`);
   chk(doc._ids.undoBtn.hidden === true, `[${VIEW}] 저장했는데 되돌리기 버튼이 남아 있다`);

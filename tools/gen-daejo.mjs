@@ -208,6 +208,12 @@ td.c.intern::after{content:'인턴';font-size:10.5px;font-weight:600}
 .note code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--open);
   padding:1px 5px;border-radius:3px}
 .note.promo{border-left-color:var(--ok)}
+/* 테스트판 띠 — 이 화면이 무엇인지 첫 화면에서 오해할 수 없게. 색은 경고색을 쓰되 요란하지 않게. */
+.sandbox{background:var(--warn-bg);border:1px solid var(--warn);border-radius:10px;
+  padding:11px 14px;margin:0 0 16px;font-size:13px;line-height:1.65;color:var(--warn)}
+.sandbox b{font-weight:800}
+.sandbox>b:first-child{display:block;font-size:14px;margin-bottom:2px;letter-spacing:-.01em}
+.sandbox .sbon{display:block;margin-top:5px;font-weight:700}
 /* ★보기 전환을 눈에 보이게 — 화면 하나에 배치표가 둘이라 어느 쪽을 보고 있는지 항상 알려야 한다.
    대조(카카오 예상)와 실제 배치표는 순번도 칸 수도 다르다. 말없이 바꾸면 반드시 헷갈린다. */
 .viewbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:18px 0 6px}
@@ -271,6 +277,14 @@ table.cmp td.warn{color:var(--warn);font-weight:700}
 <h1>대조판 &mdash; ${esc(J.dateLabel || '')}</h1>
 <p class="sub">고정 티오프 격자 위에 <b>카카오골프 예약</b>과 <b>배치표 순번</b>을 겹쳐 놓은 것. 두 경로는 서로 완전히 독립이다.</p>
 
+<div class="sandbox">
+  <b>관리자 테스트판</b>
+  여기서 고치고 저장하는 값은 <b>회원 앱에 반영되지 않습니다</b> &mdash; 알림도 나가지 않고, 카카오 엔진도 보지 않습니다.
+  이 화면의 &lsquo;실제 배치표&rsquo;는 아직 기능이 덜 여물었기 때문입니다.
+  회원에게 실제로 반영되는 교정은 모니터의 <b>배치표 검수</b> 탭에서만 합니다.
+  ${(J.sandbox?.edited || []).length ? `<span class="sbon">지금 ${J.sandbox.edited.map((p) => p + '부').join('·')}는 테스트판이 덮여 있습니다${J.sandbox.at ? ` (${esc(new Date(J.sandbox.at).toLocaleString('ko-KR'))})` : ''}.</span>` : ''}
+</div>
+
 <div class="bar">
   <div class="stat ${engineOk ? 'live' : 'dead'}"><b>${engineOk ? '가동' : '중단'}</b><span>카카오 엔진</span></div>
   <div class="stat"><b>${h.ok || 0}<small style="font-size:12px;color:var(--dim)"> / ${(h.ok || 0) + (h.fail || 0)}</small></b><span>조회 성공 ${okRate}%</span></div>
@@ -299,7 +313,8 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button data-mode="swap" type="button">맞바꾸기</button>
   <button data-mode="move" type="button">순번 옮기기</button>
   <button id="undoBtn" type="button" hidden>되돌리기</button>
-  <button id="saveBtn" type="button" class="save" hidden>저장</button>
+  <button id="saveBtn" type="button" class="save" hidden>테스트판에 저장</button>
+  <button id="resetBtn" type="button" ${(J.sandbox?.edited || []).length ? '' : 'hidden'}>실제 판독으로 초기화</button>
   <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
   <span id="state" class="hint"></span>
 </div>
