@@ -1007,23 +1007,62 @@ function readBoardByClaudeCached(img, opts = {}) {
   return pr;
 }
 
+// ★판독 결과는 셋이다 — 성공 / 이 부 없음(정상) / 고장.
+//  지금까지 셋 다 null 하나였다. 그 뭉뚱그림이 2026-08-16 하루를 통째로 날렸다:
+//   캡이 막아 아무것도 못 읽은 상태가 "이 부 판독 없음 → 스킵(기존 유지)"으로 찍혔고,
+//   로그는 정상처럼 보였고, 옆에 켜져 있던 공짜 로컬 VLM으로 내려가지도 않았다.
+//   '이 크롭에 3부 표가 없다'와 '판독기가 죽었다'는 대응이 정반대인데 같은 값이었다.
+//  그래서 고장은 이미지별로 따로 기록해 호출부가 물어볼 수 있게 한다(반환형은 그대로 — 회귀 0).
+const _readFaults = new Map();      // img → { reason, at }
+function _noteReadFault(img, reason) {
+  if (!img) return;
+  _readFaults.set(img, { reason, at: Date.now() });
+  if (_readFaults.size > 8) { const k = _readFaults.keys().next().value; _readFaults.delete(k); }
+}
+function _clearReadFault(img) { if (img) _readFaults.delete(img); }
+// '' 이면 고장이 아니다(성공했거나, 이 배치표에 그 부가 없는 정상 상황).
+export function claudeReadFault(article) {
+  const img = article?.images?.[0] || article?.image || '';
+  return (img && _readFaults.get(img)?.reason) || '';
+}
+
 // judge() 진입점 — article(회원 기준) → 그 회원 부(部) verdict. 합본은 캐시로 1회 판독 후 해당 부만 변환.
 //  해당 부가 판독에 없으면(예: 다른 부만 잘라 올린 변동) null → judge가 로컬/Gemini 폴백.
 export async function readBoardClaudeVerdict(article, member) {
   const img = article?.images?.[0] || article?.image || '';
-  if (!img) return null;
+  if (!img) return null;                                   // 읽을 그림이 없다 — 고장이 아니다
+  const budgetBefore = claudeBudgetLeft();
+  const toBefore = claudeTimeouts();
   let board;
   try { board = await readBoardByClaudeCached(img); }
-  catch (e) { console.error('[claude] board 판독 오류:', e.message); return null; }
-  if (!board || !board.parts) return null;
+  catch (e) {
+    console.error('[claude] board 판독 오류:', e.message);
+    _noteReadFault(img, `판독 오류(${String(e.message || '').slice(0, 60)})`);
+    return null;
+  }
+  if (!board || !board.parts) {
+    // 왜 못 읽었는지까지 남긴다 — 사람이 로그만 보고 '캡을 풀까/기다릴까'를 정할 수 있어야 한다.
+    const why = budgetBefore <= 0 ? '일일 캡 소진'
+      : claudeTimeouts() > toBefore ? '판독 타임아웃'
+        : claudeBudgetLeft() <= 0 ? '판독 중 캡 소진' : '판독 실패';
+    console.error(`[claude] 배치표를 못 읽었습니다 — ${why}`);
+    _noteReadFault(img, why);
+    return null;
+  }
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
   const pd = board.parts[part];
-  if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) return null;
+  // ★여기부터가 '정상'이다 — 판독은 됐고 이 배치표에 그 부가 없을 뿐. 고장 기록을 지운다.
+  if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) { _clearReadFault(img); return null; }
   // ★안전 게이트: 이 부 명단이 커트를 '심각' 미달(순번열 누락)이면 회원 발송에 쓰지 않는다 → null로 폴백.
   //  경계 흔들림 잔여가 회원에게 잘못된 '근무 없음' 알림을 내는 것을 차단. (인턴발 1~3 부족은 정상 허용.)
   const cut = Number(pd.cut) || 0;
   const rl = pd.roster.filter(Boolean).length;
-  if (cut > 0 && rl < _rosterFloor(cut)) { console.warn(`[claude] ${part}부 명단 심각부족(${rl}<${_rosterFloor(cut)}, 커트 ${cut}) — 발송용 판독 보류(폴백)`); return null; }
+  if (cut > 0 && rl < _rosterFloor(cut)) {
+    console.warn(`[claude] ${part}부 명단 심각부족(${rl}<${_rosterFloor(cut)}, 커트 ${cut}) — 발송용 판독 보류(폴백)`);
+    _noteReadFault(img, `${part}부 명단 심각부족(${rl}/${cut})`);   // 이건 고장이다 — 폴백이 반드시 붙어야 한다
+    return null;
+  }
+  _clearReadFault(img);
   return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList);
 }
 

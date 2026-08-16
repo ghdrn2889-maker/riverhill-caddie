@@ -7,7 +7,7 @@ import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 import { loadJSON } from './store.mjs';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
-import { readBoardClaudeVerdict, useClaudeReader } from './boardreader.mjs';
+import { readBoardClaudeVerdict, useClaudeReader, claudeReadFault } from './boardreader.mjs';
 import { looksLikeBoardPost } from './analyzer.mjs';
 
 // ★Gemini 판독 폴백 스위치 — 기본 OFF(더 이상 사용 안 함). Claude(주)+로컬VLM만 사용.
@@ -1262,10 +1262,19 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     verdict = await readBoardClaudeVerdict(article, member);
     if (verdict) console.log(`[claude] 판독 채택(${member.part}부 명단 ${verdict.part3Roster.length}·컷 ${verdict.cutoffPosition || '-'}·티 ${verdict.teeGrid.length})`);
     else {
-      // ★'해당부 없음'(부분 크롭에 이 부 미포함)은 실패가 아님 — 조용히 스킵/기존상태 유지. Gemini는 기본 미사용(GEMINI_FALLBACK=1일 때만).
-      console.log(`[claude] 이 부(${member.part}) 판독 없음 → ${useLocalVLM() ? '로컬VLM' : (useGeminiFallback() ? 'Gemini' : '스킵(기존 유지)')}`);
+      // ★고장과 정상을 가른다(2026-08-16 사고의 원인).
+      //  '해당부 없음' = 부분 크롭에 이 부가 안 담긴 정상 상황 → 기존 상태 유지가 옳다.
+      //  '고장'(캡 소진·타임아웃·판독 오류·명단 심각부족) = 아무것도 못 읽은 것 → 반드시 다음 판독기로 내려가야 한다.
+      //   전에는 둘이 같은 문장으로 찍혀 로그가 거짓말을 했고, 옆에 켜둔 공짜 로컬 VLM으로도 안 갔다.
+      const fault = claudeReadFault(article);
+      const next = useLocalVLM() ? '로컬VLM' : (useGeminiFallback() ? 'Gemini' : '');
+      if (fault) console.warn(`[claude] ★판독 고장(${fault}) — ${member.part}부 → ${next || '폴백 없음(로컬VLM을 켜세요: touch data/use-local-vlm)'}`);
+      else console.log(`[claude] 이 부(${member.part}) 판독 없음(정상 — 이 배치표엔 ${member.part}부 표가 없음) → ${next || '스킵(기존 유지)'}`);
       if (useLocalVLM()) verdict = await readBoardLocalVerdict(article, member);
       if (!verdict && useGeminiFallback()) verdict = await readBoardConsensus(article, member);
+      // 고장인데 폴백도 실패 = 이 배치표는 아무도 못 읽었다. 조용히 넘기지 않는다 —
+      //  대기표·끝점 검사가 이 사실을 사람에게 전달한다(boardReadFailed 신호는 server.mjs가 붙인다).
+      if (fault && !verdict) console.error(`[claude] ${member.part}부 판독 전부 실패(${fault}) — 대기표에 남깁니다`);
     }
   } else if (isBoard && useLocalVLM()) {
     verdict = await readBoardLocalVerdict(article, member);
