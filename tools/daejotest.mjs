@@ -203,6 +203,28 @@ for (const p of ['1', '2', '3']) {
   console.log(`  ${p}부 ${targets.length}곳 검사 완료`);
 }
 }
+// ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
+//  카카오 예상 칸에만 찍은 인턴(예: 본배치표에 팀이 없는 17:07)이 실제 보기의 팀 수를 바꾸면 안 된다.
+//  바뀌면 없는 팀이 유령으로 끼어 밀림이 어긋나고, 화면에선 '밀림'이 아니라 '교체'로 보인다.
+{
+  console.log('\n실제 배치표 팀 수 고정\n');
+  doc._ids.vReal._ev.click();
+  for (const p of ['1', '2', '3']) {
+    const board = J.parts[p];
+    if (!board || !(board.teeGrid || []).length) continue;
+    const teams = (board.teeGrid || []).length + (board.boardInternTees || []).length;
+    const work = readGrid(p).filter((x) => !x.intern).length;
+    const ghost = (board.internTees || []).filter((t) => {
+      const k = String(t.time).replace(/^(\d):/, '0$1:') + '|' + (/IN/i.test(t.course) ? 'IN' : 'OUT');
+      return !(board.teeGrid || []).some((g) => (String(g.time).replace(/^(\d):/, '0$1:') + '|' + g.course) === k)
+        && !(board.boardInternTees || []).some((b) => (String(b.time).replace(/^(\d):/, '0$1:') + '|' + b.course) === k);
+    }).length;
+    const boardInt = (board.internTees || []).length - ghost;   // 실제 팀을 맡은 인턴만 근무선을 깎는다
+    chk(work === teams - boardInt, `${p}부 — 실제 근무선 ${work}, 팀 ${teams}−인턴 ${boardInt}=${teams - boardInt} (예상 전용 인턴 ${ghost}칸이 새어 들어갔다)`);
+    console.log(`  ${p}부 — 팀 ${teams} · 배치표 인턴 ${boardInt} · 근무선 ${work}${ghost ? ` (예상 전용 인턴 ${ghost}칸은 무시됨 ✓)` : ''}`);
+  }
+}
+
 // ── ⑦ 칸의 출처가 색으로 구분돼야 한다 ──────────────────────────────────
 //  이 화면의 존재 이유가 '두 경로 대조'다. 그린 직후 paint()가 className을 밀어버려
 //  사진이 읽은 칸과 카카오가 찼다고 본 칸이 똑같이 보이던 적이 있다.

@@ -73,10 +73,15 @@ export function buildDaejoData(date = '') {
   const { parts, dateLabel } = partsOf();
   const dateKey = String(date || '').replace(/\D/g, '').slice(0, 8) || keyFromLabel(dateLabel) || '';
   // ★인턴은 수동이 자동을 이긴다(interns.mjs) — 화면에도 실제로 쓰는 값이 그려져야 한다.
+  //  ★단, 사진이 읽은 인턴 칸(boardInternTees)은 따로 남긴다 — 그게 '실제 배치표의 팀'이다.
+  //   수동 인턴은 카카오 예상 칸에 찍힐 수도 있는데(17:07처럼 본배치표엔 팀이 없는 시각),
+  //   그걸 실제 팀 목록에 더하면 없는 팀이 유령으로 생겨 밀림이 통째로 어긋난다.
   if (parts['3']) {
+    parts['3'].boardInternTees = (parts['3']._autoInterns || []).map((t) => ({ time: t.time, course: t.course }));
     parts['3'].internTees = internTeesFor(dateKey, parts['3']._autoInterns || []).map((t) => ({ time: t.time, course: t.course }));
     delete parts['3']._autoInterns;
   }
+  for (const p of ['1', '2']) if (parts[p]) parts[p].boardInternTees = parts[p].internTees.slice();
   const snap = (dateKey && loadSnapshot(dateKey)) || {};
   return {
     dateKey,

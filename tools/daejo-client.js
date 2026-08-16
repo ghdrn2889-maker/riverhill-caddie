@@ -77,11 +77,14 @@
   // ★기준선을 세우는 곳은 여기 하나뿐이다.
   //  처음 그릴 때와 저장한 뒤가 각각 따로 기준선을 만들면 둘이 어긋나고, 그러면
   //  저장이 됐는데도 '아직 안 됐다'고 남는다(실측: 예상 보기에서 저장하면 저장 버튼이 안 사라짐).
-  //  occWork = 지금 정규 캐디가 서는 칸들. 여기에 인턴 칸을 더한 게 '팀이 있는 칸' 전부다.
-  function setBaseline(p, occWork) {
-    const occR = (occWork || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
-    interns[p].forEach((k) => occR.push({ time: k.split('|')[0], course: k.split('|')[1] }));
-    origOcc.real[p] = sortOcc(occR);
+  //  teams = 실제 배치표에 팀이 있는 칸 전부(정규가 서는 칸 + 사진이 읽은 인턴 칸).
+  //
+  //  ★인턴 집합으로 팀 목록을 만들지 않는다. 수동 인턴은 카카오 예상 칸에 찍힐 수 있는데
+  //   (17:07처럼 본배치표엔 팀이 없는 시각), 그걸 팀으로 세면 없는 팀이 유령으로 생겨
+  //   실제 보기의 밀림이 통째로 어긋난다 — 화면에선 '밀림'이 아니라 '교체'로 보인다.
+  //   팀 목록은 배치표가 정하고, 인턴은 그중 어느 팀을 인턴이 맡는지를 고를 뿐이다.
+  function setBaseline(p, teams) {
+    origOcc.real[p] = sortOcc((teams || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course })));
     // 예상 — 카카오가 찼다고 본 칸까지 합집합.
     const seen = new Set(origOcc.real[p].map((s) => K(s.time, s.course)));
     const occP = origOcc.real[p].map((s) => ({ time: s.time, course: s.course }));
@@ -493,7 +496,13 @@
           return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
         });
         // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
-        const iTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
+        //  ★단, 본배치표에 팀이 있는 칸만 보낸다. 카카오 예상 칸에만 찍은 인턴을 배치표에 쓰면
+        //   배치표가 '없는 팀에 인턴이 있다'고 말하게 된다(예상 엔진은 따로 돈다).
+        const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
+        const boardInterns = [...interns[part]].filter((k) => teamSet.has(k));
+        const iTees = boardInterns.map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
+        // 카카오 예상 저장소(intern-tees.json)에는 지정한 전부를 남긴다 — 예상 엔진이 그걸 본다.
+        const allTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
         const r = await fetch(apiUrl('/api/board-correct'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: real.filter(Boolean).length }),
@@ -504,7 +513,7 @@
           // ★조용히 실패하지 않는다 — 여기가 안 저장되면 카카오 재매칭이 옛 인턴 칸을 계속 쓴다.
           const ri = await fetch(apiUrl('/api/admin/intern-tees'), {
             method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ date: DATE, tees: iTees }),
+            body: JSON.stringify({ date: DATE, tees: allTees }),
           }).catch((e) => ({ ok: false, json: async () => ({ error: e.message }) }));
           const ji = await ri.json().catch(() => ({}));
           if (!ji.ok) throw new Error('인턴 칸 저장 실패: ' + (ji.error || '응답 없음'));
@@ -512,7 +521,8 @@
         // ★방금 보낸 것이 이제 '실제 배치표'다 — 기준선을 거기에 다시 세운다.
         //  안 그러면 저장은 됐는데 화면은 계속 '안 저장됨'으로 남아 저장 버튼이 사라지지 않는다.
         saved.push(part);
-        setBaseline(part, teeV.real[part]);
+        // 저장한 것이 이제 실제 배치표다 — 팀 = 방금 보낸 근무 칸 + 방금 보낸 인턴 칸.
+        setBaseline(part, (teeV.real[part] || []).concat(iTees));
       }
       stack.length = 0;
       PARTS.forEach(paint);
@@ -525,8 +535,12 @@
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }
   });
 
-  // 시작 — 기준선을 세우면 두 보기가 함께 계산된다. 도구는 처음부터 쓸 수 있다.
-  PARTS.forEach((p) => setBaseline(p, (teeOrig[p] || []).filter(Boolean)));
+  // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.
+  PARTS.forEach((p) => {
+    const teams = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
+    ((BOARD[p] || {}).boardInternTees || []).forEach((t) => teams.push({ time: toHM(toMin(t.time)), course: /IN/i.test(t.course) ? 'IN' : 'OUT' }));
+    setBaseline(p, teams);
+  });
   tools.hidden = false;
   PARTS.forEach(paint);
   if (!live) state.textContent = '샘플(파일) — 눌러서 동작만 보실 수 있고 저장은 안 됩니다. 실제 저장은 모니터 /daejo.';
