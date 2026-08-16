@@ -86,7 +86,8 @@ for (const p of ['1', '2', '3']) {
   }
 }
 globalThis.document = doc;
-globalThis.location = { protocol: 'file:' };
+// http: 라야 저장 경로가 실제로 돈다(file:이면 '샘플'로 빠진다) — 저장 후 상태도 검증 대상이다.
+globalThis.location = { protocol: 'http:', search: '?k=test' };
 // ★생성기와 '똑같은 모양'으로 넘긴다 — 여기가 다르면 하네스가 통과해도 실제 화면은 다르게 돈다.
 const BOARD = Object.fromEntries(['1', '2', '3'].map((p) => [p, {
   ...(J.parts?.[p] || {}),
@@ -192,6 +193,26 @@ for (const p of ['1', '2', '3']) {
   console.log(`  ${p}부 ${targets.length}곳 검사 완료`);
 }
 }
+// ── ⑥ 저장하면 '저장 버튼이 사라진다' ────────────────────────────────────
+//  저장 버튼이 남아 있으면 관리자는 저장이 안 됐다고 읽는다. 실제로 예상 보기에서 저장하면
+//  기준선이 실제 축과 어긋나 버튼이 계속 남았다 — 어느 보기에서 저장하든 사라져야 한다.
+console.log('\n저장 후 상태\n');
+for (const VIEW of (HAS_KAKAO ? ['real', 'proj'] : ['real'])) {
+  doc._ids[VIEW === 'real' ? 'vReal' : 'vProj']._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length) || '3';
+  const g = readGrid(p).filter((x) => !x.intern);
+  const [t, c] = g[Math.floor(g.length / 2)].slot.split(' ');
+  clickMode('intern');
+  clickCell(cellOf(p, t, c));
+  clickMode('intern');
+  chk(doc._ids.saveBtn.hidden === false, `[${VIEW}] 바꿨는데 저장 버튼이 안 보인다`);
+  await doc._ids.saveBtn._ev.click();
+  chk(doc._ids.saveBtn.hidden === true, `[${VIEW}] 저장했는데 저장 버튼이 안 사라진다`);
+  chk(doc._ids.undoBtn.hidden === true, `[${VIEW}] 저장했는데 되돌리기 버튼이 남아 있다`);
+  chk(/저장됐습니다/.test(doc._ids.state.textContent), `[${VIEW}] 저장 완료 문구가 안 뜬다`);
+  console.log(`  [${VIEW === 'real' ? '실제 배치표' : '카카오 예상'}] 저장 → 버튼 사라짐 확인`);
+}
+
 console.log('');
 console.log(fails ? `★ 실패 ${fails}건` : '★ 전부 통과');
 process.exit(fails ? 1 : 0);

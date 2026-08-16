@@ -72,14 +72,15 @@
   //  티오프 배치만 보기별로 다르다(예상은 팀이 더 많다).
   const VIEWS = ['real', 'proj'];
   const allSlots = {}, origOcc = { real: {}, proj: {} };
-  for (const p of PARTS) {
-    allSlots[p] = [...document.querySelectorAll('td.c[data-p="' + p + '"]')]
-      .map((td) => ({ time: toHM(toMin(td.dataset.t)), course: /IN/i.test(td.dataset.c) ? 'IN' : 'OUT' }))
-      .sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
-    const sortOcc = (a) => a.sort((x, y) => toMin(x.time) - toMin(y.time) || (x.course === 'OUT' ? -1 : 1));
-    // 실제 — 배치표가 준 '팀이 있는 칸'(정규 + 판독된 인턴).
-    const occR = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
-    internsOrig[p].forEach((k) => occR.push({ time: k.split('|')[0], course: k.split('|')[1] }));
+  const sortOcc = (a) => a.sort((x, y) => toMin(x.time) - toMin(y.time) || (x.course === 'OUT' ? -1 : 1));
+
+  // ★기준선을 세우는 곳은 여기 하나뿐이다.
+  //  처음 그릴 때와 저장한 뒤가 각각 따로 기준선을 만들면 둘이 어긋나고, 그러면
+  //  저장이 됐는데도 '아직 안 됐다'고 남는다(실측: 예상 보기에서 저장하면 저장 버튼이 안 사라짐).
+  //  occWork = 지금 정규 캐디가 서는 칸들. 여기에 인턴 칸을 더한 게 '팀이 있는 칸' 전부다.
+  function setBaseline(p, occWork) {
+    const occR = (occWork || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
+    interns[p].forEach((k) => occR.push({ time: k.split('|')[0], course: k.split('|')[1] }));
     origOcc.real[p] = sortOcc(occR);
     // 예상 — 카카오가 찼다고 본 칸까지 합집합.
     const seen = new Set(origOcc.real[p].map((s) => K(s.time, s.course)));
@@ -89,6 +90,17 @@
       if (!seen.has(k)) { seen.add(k); occP.push({ time: toHM(toMin(s.time)), course: /IN/i.test(s.course) ? 'IN' : 'OUT' }); }
     });
     origOcc.proj[p] = sortOcc(occP);
+    rosterOrig[p] = roster[p].slice();
+    internsOrig[p] = new Set(interns[p]);
+    VIEWS.forEach((v) => recompute(p, v));
+    // 변경 판정은 항상 실제 배치표 기준 — 기준선도 같은 축으로 저장해야 비교가 성립한다.
+    teeOrig[p] = (teeV.real[p] || []).map((x) => (x ? { time: x.time, course: x.course } : x));
+  }
+
+  for (const p of PARTS) {
+    allSlots[p] = [...document.querySelectorAll('td.c[data-p="' + p + '"]')]
+      .map((td) => ({ time: toHM(toMin(td.dataset.t)), course: /IN/i.test(td.dataset.c) ? 'IN' : 'OUT' }))
+      .sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
   }
   const teeV = { real: {}, proj: {} };
   // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
@@ -443,6 +455,8 @@
   saveBtn.addEventListener('click', async () => {
     if (!live) { state.textContent = '이 화면은 파일로 뽑은 샘플이라 저장이 안 됩니다 — 모니터의 /daejo 에서 열어주세요.'; return; }
     saveBtn.disabled = true;
+    state.textContent = '저장 중…';
+    const saved = [];
     try {
       for (const part of PARTS) {
         if (!changed(part)) continue;
@@ -470,19 +484,23 @@
           const ji = await ri.json().catch(() => ({}));
           if (!ji.ok) throw new Error('인턴 칸 저장 실패: ' + (ji.error || '응답 없음'));
         }
-        rosterOrig[part] = roster[part].slice();
-        teeOrig[part] = tee[part].map((x) => (x ? { time: x.time, course: x.course } : x));
-        internsOrig[part] = new Set(interns[part]);
+        // ★방금 보낸 것이 이제 '실제 배치표'다 — 기준선을 거기에 다시 세운다.
+        //  안 그러면 저장은 됐는데 화면은 계속 '안 저장됨'으로 남아 저장 버튼이 사라지지 않는다.
+        saved.push(part);
+        setBaseline(part, teeV[view][part]);
       }
       stack.length = 0;
       PARTS.forEach(paint);
-      state.textContent = '저장됐습니다 — 새로고침하면 반영됩니다';
+      // ★저장 버튼이 사라지는 것이 곧 '저장됐다'는 신호다. 남아 있으면 아직 안 된 것이다.
+      state.textContent = saved.length
+        ? `저장됐습니다 — ${saved.map((p) => p + '부').join('·')}${anyChanged() ? ' (아직 안 된 게 남았습니다)' : ''}`
+        : '바뀐 게 없습니다.';
     } catch (err) { state.textContent = '저장 실패: ' + err.message; }
-    finally { saveBtn.disabled = false; }
+    finally { saveBtn.disabled = false; PARTS.forEach(paint); }
   });
 
-  // 시작 — 두 보기 모두 계산해두고 현재 보기(대조)를 그린다. 도구는 처음부터 쓸 수 있다.
-  PARTS.forEach((p) => { VIEWS.forEach((v) => recompute(p, v)); });
+  // 시작 — 기준선을 세우면 두 보기가 함께 계산된다. 도구는 처음부터 쓸 수 있다.
+  PARTS.forEach((p) => setBaseline(p, (teeOrig[p] || []).filter(Boolean)));
   tools.hidden = false;
   PARTS.forEach(paint);
   if (!live) state.textContent = '샘플(파일) — 눌러서 동작만 보실 수 있고 저장은 안 됩니다. 실제 저장은 모니터 /daejo.';
