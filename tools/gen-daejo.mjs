@@ -150,6 +150,9 @@ const html = `<title>8/17 대조판</title>
   --miss:#e88b8b; --miss-bg:#341a1a; --open:#1f2427; --idle:#202427;
 }
 *{box-sizing:border-box}
+/* ★[hidden]을 display 규칙이 이기지 못하게. .tools{display:flex}가 hidden을 무력화해서
+   대조 보기에서도 편집 버튼이 보였고, 거기서 인턴을 지정하면 화면이 실제 배치표로 튀었다. */
+[hidden]{display:none !important}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:system-ui,-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
   font-variant-numeric:tabular-nums;line-height:1.45;padding:22px}

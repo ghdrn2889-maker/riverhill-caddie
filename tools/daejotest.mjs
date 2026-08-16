@@ -64,6 +64,7 @@ const doc = {
   _ids: {}, _spares: {},
 };
 for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
+doc._ids.tools.hidden = true;   // 실제 HTML과 동일하게 — 대조 보기에서 편집 도구는 숨어 있다
 for (const p of ['1', '2', '3']) doc._spares[p] = new El('div');
 doc._modes = ['intern', 'name', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
 
@@ -123,6 +124,23 @@ function invariants(p, label) {
   chk(new Set(poss).size === poss.length, `${label} ③ 같은 순번이 두 칸에`);
   // 순번 순서 = 시각 순서여야 한다(옮기기를 안 했다면)
   return { g, sp };
+}
+
+// ── 보기 분리 — 대조에서는 편집이 아예 불가능해야 한다 ──────────────────────
+//  ★hidden 속성이 CSS display 규칙에 지면 대조 보기에서도 편집 버튼이 보이고,
+//   거기서 칸을 누르면 화면이 실제 배치표로 튀어버린다(실측). 생성기 CSS까지 함께 검사한다.
+{
+  const css = fs.readFileSync(new URL('./gen-daejo.mjs', import.meta.url), 'utf8');
+  chk(css.includes('[hidden]{display:none !important}'), '보기분리 — [hidden]을 이기는 display 규칙 방지가 없다');
+  chk(doc._ids.tools.hidden === true, '보기분리 — 대조 보기에서 편집 도구가 hidden이 아니다');
+  // 대조 상태에서 칸을 눌러도 아무 일도 없어야 한다.
+  const p0 = '3';
+  const snap0 = JSON.stringify(readGrid(p0));
+  clickMode('intern');
+  const anyCell = all.find((e) => e.dataset.p === p0);
+  clickCell(anyCell);
+  chk(JSON.stringify(readGrid(p0)) === snap0, '보기분리 — 대조 보기에서 칸을 눌렀는데 화면이 바뀌었다');
+  clickMode('intern');
 }
 
 // ── 시나리오 ──────────────────────────────────────────────────────────

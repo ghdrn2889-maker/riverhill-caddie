@@ -201,7 +201,7 @@
       interns: new Set(interns[part]) });
   };
 
-  let mode = '', pick = null;
+  let mode = '', pick = null, view = 'proj';
   const clearPick = () => { if (pick) pick.classList.remove('picked'); pick = null; };
   // 칸(td.c)이든 스페어 칩(span.sp)이든 '어느 부 몇 번인가'를 같은 식으로 답한다.
   const posAt = (part, el) => {
@@ -260,6 +260,7 @@
     if (cancel) suppressClick = false;
   }
   document.addEventListener('pointerdown', (e) => {
+    if (view !== 'real') return;
     if (mode !== 'swap' && mode !== 'move') return;
     if (e.button != null && e.button > 0) return;
     const td = unit(e.target);
@@ -320,7 +321,6 @@
   const tools = document.getElementById('tools');
   const NOTE_PROJ = '사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 고칠 수는 없습니다.';
   const NOTE_REAL = '사진이 <b>실제로 읽은</b> 배치표입니다. 카카오 예상 칸은 빠지고 순번도 원래대로예요. 여기서 고치고 저장합니다.';
-  let view = 'proj';
   function setView(v) {
     if (v === view) return;
     if (v === 'proj' && anyChanged()) { state.textContent = '저장 안 한 수정이 있습니다 — 저장하거나 되돌린 뒤 옮겨주세요.'; return; }
@@ -355,6 +355,9 @@
 
   document.addEventListener('click', async (e) => {
     if (suppressClick) { suppressClick = false; return; }   // 방금 끌어놓았다 — 누르기로 두 번 처리하지 않는다
+    // ★대조(카카오 예상) 보기에서는 어떤 편집도 안 먹는다. CSS로 버튼을 숨기는 것만 믿지 않는다 —
+    //  display 규칙 하나가 hidden을 이기는 순간 편집이 새어 나가 화면이 실제 배치표로 튀었다(실측).
+    if (view !== 'real') return;
     if (!mode) return;
     const td = unit(e.target); if (!td) return;
     if (!isSpare(td) && !td.dataset.t) return;
