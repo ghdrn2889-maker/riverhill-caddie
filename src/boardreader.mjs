@@ -356,7 +356,7 @@ async function readOffByColumns(img) {
 //  ★알림은 여기서 쏘지 않는다 — 판독은 최대 3회 재시도하고 그중 하나만 채택된다. 버려질 시도의 손상까지
 //   알리면 오경보다(실측 8/15 22:15: 3부 구멍[1~20]이 떴지만 최종 채택본은 34명 멀쩡했다).
 //   명단 구멍·티오프 충돌은 채택이 끝난 뒤 '최종본으로 다시 세서' 쏜다(raiseAdoptedBoardIssues).
-async function readPartsOnce(img, sorted, cuts, issues = []) {
+async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0) {
   const parts = {};
   // ★부3(현재 회원 전원의 부)를 '먼저' 판독 — 예산(캡)이 모자라도 우리 회원 부는 절대 굶지 않게.
   //  경계(x1)는 여전히 x0정렬 이웃으로 계산하므로 크롭 정확도는 그대로. 순서만 3부 우선.
@@ -504,7 +504,7 @@ async function readPartsOnce(img, sorted, cuts, issues = []) {
       // ★티오프 줄판독 섀도우 — 새 방식을 나란히 돌려 결과만 기록한다(아직 교체 안 함).
       //  손해의 63%가 티오프였고 그중 98.9%가 '줄 밀림'이었다. 바꾸기 전에 새 방식이 정말 나은지
       //  같은 배치표에서 숫자로 확인한다("고쳐봤습니다"로 끝내지 않기 위한 장치).
-      await teeShadow(cropPath, rcols, b.part, r.tee, cut);
+      if (attempt === 0) await teeShadow(cropPath, rcols, b.part, r.tee, cut);   // ★첫 시도에만 — 재시도마다 따라 돌면 호출만 태운다
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
       // ★자가검증(3부 교정 원리 이식) — 1·2부는 그동안 어떤 완전성 검사도 없이 조용히 통과했다.
       //  고치지는 못해도(고치려면 재판독=비용) '이상하다'를 남겨 모니터·사람이 잡게 한다. 3부의 grid_short와 같은 취지.
@@ -695,7 +695,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
     }
     const issues = [];
-    const parts = await readPartsOnce(img, sorted, cuts, issues);
+    const parts = await readPartsOnce(img, sorted, cuts, issues, attempt);
     const fault = boardReadFault(parts, cuts);
     if (!fault) { best = parts; bestBounds = bounds; bestIssues = issues; lastFault = ''; break; }   // 깨끗 → 채택
     lastFault = fault;
