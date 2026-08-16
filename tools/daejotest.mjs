@@ -225,6 +225,29 @@ for (const p of ['1', '2', '3']) {
   }
 }
 
+// ── 확인용 ── PROBE=3:17:00:OUT 이면 그 칸을 인턴으로 찍었을 때의 전/후를 표로 찍는다.
+//  '왜 이렇게 움직이냐'는 질문에 말로 답하지 않기 위해서다. 화면과 같은 코드가 답한다.
+if (process.env.PROBE) {
+  const [pp, hh, mm, cc] = String(process.env.PROBE).split(':');
+  doc._ids.vReal._ev.click();
+  const before = readGrid(pp).filter((x) => !x.intern);
+  const sp0 = readSpares(pp).map((x) => x.name);
+  clickMode('intern');
+  clickCell(cellOf(pp, `${hh}:${mm}`, cc));
+  clickMode('intern');
+  const after = readGrid(pp).filter((x) => !x.intern);
+  const sp1 = readSpares(pp).map((x) => x.name);
+  console.log(`\n[확인] ${pp}부 실제 배치표 — ${hh}:${mm} ${cc}를 인턴으로\n`);
+  const byName = new Map(after.map((x) => [x.name, x.slot]));
+  for (const b of before) {
+    const to = byName.get(b.name);
+    console.log(`  ${String(b.pos).padStart(2)}번 ${b.name.padEnd(10)} ${b.slot.padEnd(10)} → ${to || '스페어로 내려감'}`);
+  }
+  const dropped = sp1.filter((n) => !sp0.includes(n));
+  console.log(`  근무선 ${before.length} → ${after.length}${dropped.length ? ` · 스페어로: ${dropped.join(', ')}` : ''}`);
+  doc._ids.undoBtn._ev.click();
+}
+
 // ── ⑦ 칸의 출처가 색으로 구분돼야 한다 ──────────────────────────────────
 //  이 화면의 존재 이유가 '두 경로 대조'다. 그린 직후 paint()가 className을 밀어버려
 //  사진이 읽은 칸과 카카오가 찼다고 본 칸이 똑같이 보이던 적이 있다.
