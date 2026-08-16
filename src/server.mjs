@@ -30,6 +30,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
 import { checkPending, keyFromLabel } from './boardpending.mjs';
+import { kakaoAssist, assistOn } from './kakaobridge.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
@@ -1608,6 +1609,39 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   try { dayboardIngest(dbISO, full, out.rawVerdict || {}); } catch (e) { console.error('[칠판 피드]', e.message); }
   try { if (out.rawVerdict && !out.rawVerdict._adminCorrected) overlayDayboardOnVerdict(out.rawVerdict, dbISO); }
   catch (e) { console.error('[칠판 오버레이]', e.message); }
+
+  // ── 카카오골프 보조 판독 다리 ────────────────────────────────────────────
+  //  사용자 확정 경계: 메인은 네이버(사진 판독), 카카오는 보조.
+  //   사진이 읽었으면 → 빠진 칸만 채운다(당추 보강). 사진이 실패했으면 → 팀 수만 준다(대체).
+  //   ★기본은 관측이다. 회원에게 반영하려면 관리자가 켜야 한다(touch data/use-kakao-assist).
+  //   켜지 않아도 '켰다면 무엇을 했을지'는 전부 기록되고, 어긋남은 무조건 관리자에게 간다.
+  if ((full.images || []).length) {
+    try {
+      const _v = out.rawVerdict || {};
+      const a = await kakaoAssist({
+        dateISO: dbISO, part: '3', boardOk: !_boardReadFailed,
+        teeGrid: _v.teeGrid || [], roster: _v.part3Roster || [], cut: Number(_v.cutoffPosition) || 0,
+      });
+      if (a.mode === 'augment') {
+        const tag = a.applied ? '적용' : '관측만(끄면 이대로)';
+        console.log(`⛳ [보조] ${a.why} — ${tag}${a.promoted?.length ? ` · 승격 ${a.promoted.map((p) => `${p.pos}번 ${p.name}`).join(', ')}` : ''}`);
+        if (a.applied && out.rawVerdict) {
+          out.rawVerdict.teeGrid = a.teeGrid;
+          out.rawVerdict.cutoffPosition = a.cut;
+          out.rawVerdict.teamCount = a.cut;
+          out.rawVerdict._kakaoAssist = { added: a.added, prevCut: a.prevCut, cut: a.cut };
+        }
+      } else if (a.mode === 'substitute') {
+        console.warn(`⛳ [보조] ${a.why} — ${a.applied ? '적용(이름 없음·팀 수만)' : '관측만'}`);
+        if (a.applied && out.rawVerdict && !(out.rawVerdict.teeGrid || []).length) {
+          out.rawVerdict.teamCount = a.teamCount;   // 이름은 못 만든다 — 팀 수만 넣는다
+          out.rawVerdict._kakaoAssist = { substitute: true, teamCount: a.teamCount };
+        }
+      } else if (a.mode === 'conflict' || a.mode === 'refuse') {
+        console.warn(`⛳ [보조] 손대지 않음 — ${a.why}`);
+      }
+    } catch (e) { console.error('[보조] 오류:', e.message); }
+  }
 
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
