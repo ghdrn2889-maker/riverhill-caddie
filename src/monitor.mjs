@@ -21,6 +21,9 @@ import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './cro
 import { addNotice, listNotices } from './notices.mjs';
 import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
+import { buildDaejoData } from './daejodata.mjs';
+import { renderDaejo } from '../tools/gen-daejo.mjs';
+import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
 
 loadEnv();
 const PORT = Number(process.env.MONITOR_PORT || 3100);
@@ -869,6 +872,51 @@ app.post('/api/upload-board', gate, async (req, res) => {
     const j = await r.json().catch(() => ({ ok: false, error: `앱 응답 파싱 실패(HTTP ${r.status})` }));
     res.status(r.ok ? 200 : r.status).json(j);
   } catch (e) { console.error('upload-board 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── 대조판 ── 사진 판독과 카카오 예약을 겹쳐 보고, 그 자리에서 인턴·이름·순번을 고친다.
+//  ★샘플이 아니라 여기서 그린다. 저장(/api/board-correct·/api/admin/intern-tees)이 같은 출처라야 동작한다.
+app.get('/daejo', gate, (req, res) => {
+  try {
+    const J = buildDaejoData(String(req.query.date || ''));
+    if (!J.parts || !Object.keys(J.parts).length) return res.status(503).send('아직 판독된 배치표가 없습니다.');
+    res.set('Cache-Control', 'no-cache').type('html').send(renderDaejo(J));
+  } catch (e) { console.error('대조판 오류:', e.message); res.status(500).send('대조판 생성 실패: ' + e.message); }
+});
+app.get('/api/daejo-data', gate, (req, res) => {
+  try { res.json({ ok: true, ...buildDaejoData(String(req.query.date || '')) }); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// 인턴 티오프 수동 지정 — 앱 서버(3000)에도 같은 API가 있지만, 대조판은 모니터에서 뜨므로 여기에도 둔다.
+//  같은 interns.mjs·같은 data/를 쓰니 어느 쪽으로 저장해도 결과는 하나다.
+function _autoInternTees(dateKey) {
+  try {
+    const lb = loadJSON('lastboard.json', {}) || {};
+    const v = lb.rawVerdict ? effectivePart3Verdict(lb) : null;
+    if (v && String(v.dateLabel || lb.dateLabel || '').replace(/\D/g, '').slice(0, 8) === dateKey) return v.internTees || [];
+    return (lb.rawVerdict?.internTees) || [];
+  } catch { return []; }
+}
+app.get('/api/admin/intern-tees', gate, (req, res) => {
+  const date = String(req.query.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  const auto = _autoInternTees(date);
+  const man = internManualFor(date);
+  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
+});
+app.post('/api/admin/intern-tees', gate, (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  try {
+    if (req.body?.clear) clearInternTees(date, '모니터');
+    else if (req.body?.toggle) { const { time, course } = req.body.toggle; toggleInternTee(date, time, course, _autoInternTees(date), { by: '모니터' }); }
+    else if (Array.isArray(req.body?.tees)) setInternTees(date, req.body.tees, { by: '모니터', note: String(req.body?.note || '') });
+    else return res.status(400).json({ ok: false, error: 'tees[] 또는 toggle{time,course} 또는 clear:true 필요' });
+  } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const auto = _autoInternTees(date);
+  const man = internManualFor(date);
+  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
 });
 
 app.get('/', gate, (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')); });

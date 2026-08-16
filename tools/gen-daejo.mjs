@@ -5,11 +5,12 @@
 import fs from 'node:fs';
 const { tagOf, assignPositions } = await import('../src/kakaobridge.mjs');
 
-const src = process.argv[2];
-const out = process.argv[3] || 'daejo.html';
-const J = JSON.parse(fs.readFileSync(src, 'utf8'));
 // 편집기는 별도 파일 — 템플릿 문자열 안에 JS를 겹쳐 넣으면 백틱·${}가 서로를 먹는다.
 const CLIENT_JS = fs.readFileSync(new URL('./daejo-client.js', import.meta.url), 'utf8');
+
+// ★렌더러는 함수다 — 파일로 뽑을 때(CLI)와 모니터가 띄울 때가 같은 코드를 써야 한다.
+//  샘플만 예뻐지고 실제 화면은 다른 코드를 쓰는 구조라 '샘플에선 되는데 저장이 안 되는' 일이 났다.
+export function renderDaejo(J) {
 const snap = J.snap || {};
 const sched = J.sched || {};
 
@@ -132,7 +133,7 @@ const TOT = ['1', '2', '3'].reduce((a, p) => ({
   boardOnly: a.boardOnly + CMP[p].boardOnly.length, kakaoOnly: a.kakaoOnly + CMP[p].kakaoOnly.length,
 }), { board: 0, agree: 0, boardOnly: 0, kakaoOnly: 0 });
 
-const html = `<title>8/17 대조판</title>
+const html = `<title>${esc(J.dateLabel || '')} 대조판</title>
 <style>
 :root{
   --bg:#f7f8f6; --panel:#fff; --ink:#16191c; --dim:#61696b; --line:#dde2dd;
@@ -353,7 +354,16 @@ ${CLIENT_JS}
 </script>
 </div>`;
 
-fs.writeFileSync(out, html);
-console.log(`대조판 생성: ${out}`);
 for (const p of ['1', '2', '3']) { const c = CMP[p];
   console.log(`  ${p}부 일치 ${c.agree.length}/${c.boardCount} · 배치표만 ${c.boardOnly.length} · 카카오만 ${c.kakaoOnly.length} · 커트 ${c.cut}${c.newCut !== c.cut ? ` → ${c.newCut}` : ''}`); }
+return html;
+}
+
+// CLI — 파일로 뽑기.  node tools/gen-daejo.mjs <src.json> [out.html]
+if (process.argv[1] && /gen-daejo\.mjs$/.test(process.argv[1].replace(/\\/g, '/'))) {
+  const src = process.argv[2];
+  const out = process.argv[3] || 'daejo.html';
+  if (!src) { console.error('사용법: node tools/gen-daejo.mjs <src.json> [out.html]'); process.exit(1); }
+  fs.writeFileSync(out, renderDaejo(JSON.parse(fs.readFileSync(src, 'utf8'))));
+  console.log(`대조판 → ${out}`);
+}

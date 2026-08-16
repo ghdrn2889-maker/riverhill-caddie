@@ -10,8 +10,11 @@
 //     ④ 되돌리기는 직전 상태를 화면까지 정확히 되돌린다.
 //     ⑤ 인턴 지정/해제는 서로의 역연산이다.
 import fs from 'node:fs';
+import { buildDaejoData } from '../src/daejodata.mjs';
 
-const J = JSON.parse(fs.readFileSync(process.env.SRC, 'utf8'));
+// 입력은 서버가 실제로 쓰는 것과 같은 함수에서 나온다 — 손으로 뽑은 JSON에 매달리면
+//  그 파일이 사라지는 순간 테스트가 통째로 못 돈다(실제로 그랬다). SRC를 주면 그 파일로 돈다.
+const J = process.env.SRC ? JSON.parse(fs.readFileSync(process.env.SRC, 'utf8')) : buildDaejoData();
 
 // ── 최소 DOM ──────────────────────────────────────────────────────────
 class CL {
@@ -132,7 +135,9 @@ function invariants(p, label) {
 }
 
 // ── 두 보기 모두 편집 가능해야 한다(사용자 확정) ─────────────────────────
-{
+const HAS_KAKAO = ['1', '2', '3'].some((p) => (BOARD[p].kakaoSlots || []).length);
+if (!HAS_KAKAO) console.log('  ⚠️ 카카오 스냅이 없습니다 — 대조(예상) 보기는 검증하지 못합니다. 서버(스냅이 있는 곳)에서 돌리세요.');
+if (HAS_KAKAO) {
   chk(doc._ids.tools.hidden === false, '편집도구 — 대조(카카오 예상) 보기에서 도구가 숨겨져 있다');
   const p0 = '3';
   const g = readGrid(p0).filter((x) => !x.intern);
@@ -150,11 +155,12 @@ function invariants(p, label) {
 
 // ── 시나리오 — 두 보기 모두 ────────────────────────────────────────────
 console.log('\n불변식 검증 — 두 보기 × 각 부의 첫/중간/마지막 티오프\n');
-for (const VIEW of ['real', 'proj']) {
+for (const VIEW of (HAS_KAKAO ? ['real', 'proj'] : ['real'])) {
 doc._ids[VIEW === 'real' ? 'vReal' : 'vProj']._ev.click();
 console.log(' [' + (VIEW === 'real' ? '실제 배치표' : '카카오 예상') + ']');
 for (const p of ['1', '2', '3']) {
   const grid0 = readGrid(p).filter((x) => !x.intern);
+  if (!grid0.length) { console.log(`  ${p}부 — 이 보기에 칸이 없습니다(판독된 배치표 없음), 건너뜁니다`); continue; }
   const base = JSON.stringify(grid0);
   const spares0 = JSON.stringify(readSpares(p));
   const targets = [0, Math.floor(grid0.length / 2), grid0.length - 1].filter((i, k, a) => a.indexOf(i) === k);

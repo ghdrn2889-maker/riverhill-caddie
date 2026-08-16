@@ -14,6 +14,8 @@
   const DATE = window.__DAEJO_DATE || '';
   const BOARD = window.__DAEJO_BOARD || {};
   const live = location.protocol.startsWith('http');
+  // 모니터는 ?k=토큰 게이트다 — 저장 요청에도 그대로 붙여야 401이 안 난다(모니터 index.html과 같은 방식).
+  const apiUrl = (p) => { const k = new URLSearchParams(location.search).get('k') || ''; return p + (k ? '?k=' + encodeURIComponent(k) : ''); };
   const hint = document.getElementById('hint');
   const state = document.getElementById('state');
   const saveBtn = document.getElementById('saveBtn');
@@ -439,7 +441,7 @@
   });
 
   saveBtn.addEventListener('click', async () => {
-    if (!live) { state.textContent = '샘플 — 저장은 모니터에서 됩니다'; return; }
+    if (!live) { state.textContent = '이 화면은 파일로 뽑은 샘플이라 저장이 안 됩니다 — 모니터의 /daejo 에서 열어주세요.'; return; }
     saveBtn.disabled = true;
     try {
       for (const part of PARTS) {
@@ -453,17 +455,20 @@
         });
         // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
         const iTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
-        const r = await fetch('/api/board-correct', {
+        const r = await fetch(apiUrl('/api/board-correct'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: tee[part].filter(Boolean).length }),
         });
         const j = await r.json(); if (!j.ok) throw new Error(j.error || (part + '부 저장 실패'));
         // 3부 인턴은 별도 저장소에도 남긴다 — 카카오 재매칭이 이걸 본다(사진 판독과 무관하게 유지).
         if (part === '3' && DATE) {
-          await fetch('/api/admin/intern-tees', {
+          // ★조용히 실패하지 않는다 — 여기가 안 저장되면 카카오 재매칭이 옛 인턴 칸을 계속 쓴다.
+          const ri = await fetch(apiUrl('/api/admin/intern-tees'), {
             method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ date: DATE, tees: iTees }),
-          }).catch(() => {});
+          }).catch((e) => ({ ok: false, json: async () => ({ error: e.message }) }));
+          const ji = await ri.json().catch(() => ({}));
+          if (!ji.ok) throw new Error('인턴 칸 저장 실패: ' + (ji.error || '응답 없음'));
         }
         rosterOrig[part] = roster[part].slice();
         teeOrig[part] = tee[part].map((x) => (x ? { time: x.time, course: x.course } : x));
@@ -480,5 +485,5 @@
   PARTS.forEach((p) => { VIEWS.forEach((v) => recompute(p, v)); });
   tools.hidden = false;
   PARTS.forEach(paint);
-  if (!live) state.textContent = '샘플 — 눌러서 동작만 보실 수 있습니다';
+  if (!live) state.textContent = '샘플(파일) — 눌러서 동작만 보실 수 있고 저장은 안 됩니다. 실제 저장은 모니터 /daejo.';
 })();
