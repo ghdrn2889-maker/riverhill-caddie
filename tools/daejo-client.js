@@ -54,6 +54,7 @@
     interns[p] = s; internsOrig[p] = new Set(s);
   }
   const stack = [];
+  const cp = (x) => (x ? { time: x.time, course: x.course } : x);
   const sameTee = (a, b) => (!a && !b) || (!!a && !!b && K(a.time, a.course) === K(b.time, b.course));
 
   // ── ★인턴 = 팀 하나를 인턴이 맡는 것 ─────────────────────────────────────
@@ -83,7 +84,14 @@
   //   (17:07처럼 본배치표엔 팀이 없는 시각), 그걸 팀으로 세면 없는 팀이 유령으로 생겨
   //   실제 보기의 밀림이 통째로 어긋난다 — 화면에선 '밀림'이 아니라 '교체'로 보인다.
   //   팀 목록은 배치표가 정하고, 인턴은 그중 어느 팀을 인턴이 맡는지를 고를 뿐이다.
-  function setBaseline(p, teams) {
+  //
+  //  ★배치(누가 어느 티오프에 서는가)는 팀 목록에서 매번 다시 만들지 않는다.
+  //   전에는 여기서 팀을 시각 순으로 정렬해 배치를 처음부터 새로 짰는데, 그러면
+  //   '순번 옮기기'로 손수 옮긴 결과가 저장하는 순간 통째로 지워졌다(실측: 2번을 16:53 IN으로
+  //   옮겨도 저장 후 16:39 OUT로 복귀). 순번 옮기기는 순번↔시각이 시각 순서와 어긋나게
+  //   만드는 조작이므로, 시각 순 재생성과는 애초에 같이 설 수 없다. 배치가 진실이다.
+  //   assign을 주면 그 배치를 그대로 쓰고, 안 주면 시각 순 기본 배치를 깐다.
+  function setBaseline(p, teams, assign) {
     origOcc.real[p] = sortOcc((teams || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course })));
     // 예상 — 카카오가 찼다고 본 칸까지 합집합.
     const seen = new Set(origOcc.real[p].map((s) => K(s.time, s.course)));
@@ -95,9 +103,12 @@
     origOcc.proj[p] = sortOcc(occP);
     rosterOrig[p] = roster[p].slice();
     internsOrig[p] = new Set(interns[p]);
-    VIEWS.forEach((v) => recompute(p, v));
+    VIEWS.forEach((v) => {
+      teeV[v][p] = (assign && assign[v]) ? assign[v].map(cp) : defaultAssign(v, p);
+    });
+    idxMemo.real[p] = new Map(); idxMemo.proj[p] = new Map();
     // 변경 판정은 항상 실제 배치표 기준 — 기준선도 같은 축으로 저장해야 비교가 성립한다.
-    teeOrig[p] = (teeV.real[p] || []).map((x) => (x ? { time: x.time, course: x.course } : x));
+    teeOrig[p] = (teeV.real[p] || []).map(cp);
   }
 
   for (const p of PARTS) {
@@ -118,32 +129,49 @@
     ownKeys: () => Reflect.ownKeys(teeV[view]),
     getOwnPropertyDescriptor: (_, p) => ({ configurable: true, enumerable: true, value: teeV[view][p] }),
   });
-  // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
-  //  ★팀 수는 고정이다. 예약이 있는 티오프에만 팀이 있고, 빈 티오프에는 팀이 없다 —
-  //   그래서 인턴이 한 팀을 맡으면 정규 캐디가 설 자리가 정확히 하나 줄고,
-  //   뒤 사람들은 각자 '다음 팀'으로 밀리다가 맨 뒤 한 명이 스페어로 내려간다.
-  //  (한때 빈 티오프를 새로 열어 밀어넣게 만들었는데, 그건 없는 팀을 지어내는 짓이었다.)
-  function recompute(part, v) {
-    const view0 = v || view;
-    const occ = origOcc[view0][part];                       // 팀이 있는 칸 — 늘지도 줄지도 않는다
-    teeV[view0][part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
-    return { teams: occ.length, work: teeV[view0][part].length };
+  // 시각 순 기본 배치 — 팀이 있는 칸에서 인턴 칸을 뺀 것. 판독 직후의 배치표가 늘 이 모양이다.
+  const defaultAssign = (v, p) => origOcc[v][p].filter((s) => !interns[p].has(K(s.time, s.course))).map(cp);
+  // 인턴을 켤 때 '몇 번째 자리가 빠졌는지'를 기억해둔다 — 끄면 정확히 그 자리에 되돌린다.
+  //  기억이 없으면(불러온 데이터의 인턴) 시각 순서에 맞는 자리에 끼운다.
+  const idxMemo = { real: {}, proj: {} };
+  const slotAt = (T, key) => T.findIndex((t) => t && K(t.time, t.course) === key);
+  const sortedIdx = (T, key) => {
+    const m = toMin(key.split('|')[0]), c = key.split('|')[1];
+    const i = T.findIndex((t) => toMin(t.time) > m || (toMin(t.time) === m && c === 'OUT' && t.course === 'IN'));
+    return i < 0 ? T.length : i;
+  };
+  // ★인턴 = 팀 하나를 인턴이 맡는 것. 팀 수는 고정이므로 정규 자리가 정확히 하나 줄고,
+  //  뒤 사람들은 각자 '다음 팀'으로 밀리다가 맨 뒤 한 명이 스페어로 내려간다.
+  //  ★배치를 통째로 다시 만들지 않고 그 한 자리만 빼고 넣는다 — 그래야 손수 옮긴 배치가 안 지워진다.
+  function setIntern(part, key, on) {
+    if (on) interns[part].add(key); else interns[part].delete(key);
+    for (const v of VIEWS) {
+      if (!origOcc[v][part].some((s) => K(s.time, s.course) === key)) continue;   // 이 보기엔 그 팀이 없다
+      const T = teeV[v][part];
+      const at = slotAt(T, key);
+      if (on) {
+        if (at >= 0) { (idxMemo[v][part] ||= new Map()).set(key, at); T.splice(at, 1); }
+      } else if (at < 0) {
+        const memo = idxMemo[v][part]?.get(key);
+        const i = memo != null ? Math.min(memo, T.length) : sortedIdx(T, key);
+        T.splice(i, 0, { time: key.split('|')[0], course: key.split('|')[1] });
+        idxMemo[v][part]?.delete(key);
+      }
+    }
   }
   function internOn(part, time, course) {
     const key = K(time, course);
-    const before = tee[part].filter(Boolean).length;
-    const wasPos = tee[part].findIndex((t) => t && K(t.time, t.course) === key) + 1;
-    interns[part].add(key);
-    const r = recompute(part);
-    // 팀 하나를 인턴이 맡았으니 정규 자리가 하나 준다 — 맨 뒤 한 명이 스페어로 내려간다.
-    const dropped = before - tee[part].filter(Boolean).length;
+    const before = tee[part].length;
+    const wasPos = slotAt(tee[part], key) + 1;
+    setIntern(part, key, true);
+    const dropped = before - tee[part].length;
     const who = dropped > 0 ? bare(roster[part][before - 1] || '') : '';
     return { fromPos: wasPos, dropped: dropped, who: who };
   }
   function internOff(part, time, course) {
-    interns[part].delete(K(time, course));
-    recompute(part);
-    return { toPos: tee[part].findIndex((t) => t && K(t.time, t.course) === K(time, course)) + 1 };
+    const key = K(time, course);
+    setIntern(part, key, false);
+    return { toPos: slotAt(tee[part], key) + 1 };
   }
   const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
@@ -385,7 +413,9 @@
     // ★두 보기 모두 편집한다 — 도구는 항상 나온다. 고친 명단·인턴은 두 보기가 공유하므로
     //  어느 쪽에서 고쳐도 반대편에 그대로 반영된다.
     tools.hidden = false;
-    PARTS.forEach((p) => { recompute(p, v); paint(p); });
+    // ★보기를 바꿀 때 배치를 다시 만들지 않는다 — 각 보기의 배치는 이미 들고 있고,
+    //  다시 만들면 그 보기에서 손수 옮긴 결과가 지워진다.
+    PARTS.forEach(paint);
     clearPick();
   }
   vProj.addEventListener('click', () => setView('proj'));
@@ -535,7 +565,9 @@
         });
         const j = await r.json(); if (!j.ok) throw new Error(j.error || '저장 실패');
         for (const part of saved) {
-          setBaseline(part, (teeV.real[part] || []).concat(payload[part].boardInternTees));
+          // ★배치를 그대로 넘긴다 — 안 넘기면 시각 순으로 다시 짜여 손수 옮긴 결과가 사라진다.
+          setBaseline(part, (teeV.real[part] || []).concat(payload[part].boardInternTees),
+            { real: teeV.real[part], proj: teeV.proj[part] });
         }
         resetBtn.hidden = false;
       }

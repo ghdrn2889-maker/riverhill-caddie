@@ -291,6 +291,49 @@ for (const p of ['1', '2', '3']) {
   } else console.log('  스페어가 있는 부가 없어 건너뜁니다');
 }
 
+// ── ⑪ 순번 옮기기 — 그 사람의 순번은 그대로, 티오프만 옮겨간다 ────────────────
+//  사이 순번들의 티오프가 한 칸씩 따라 움직이고, 명단(순번↔이름)은 아무도 안 바뀐다.
+//  그리고 그 결과가 저장까지 살아남아야 한다.
+{
+  console.log('\n순번 옮기기 (근무 → 근무)\n');
+  doc._ids.vReal._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length >= 5);
+  if (p) {
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    // 순번→이름 지도로 비교한다. 화면 읽기는 시각 순이라, 옮기고 나면 줄 순서 자체가 달라진다
+    //  — 줄 순서로 비교하면 명단이 안 바뀌었는데도 바뀐 것처럼 보인다.
+    const nameAt0 = new Map(g0.map((x) => [x.pos, x.name]));
+    const fromIdx = 1, toIdx = 4;                   // 2번째 사람을 5번째 티오프로
+    const a = g0[fromIdx], b = g0[toIdx];
+    clickMode('move');
+    clickCell(cellOf(p, a.slot.split(' ')[0], a.slot.split(' ')[1]));
+    clickCell(cellOf(p, b.slot.split(' ')[0], b.slot.split(' ')[1]));
+    clickMode('move');
+    const g1 = readGrid(p).filter((x) => !x.intern);
+    const at = (pos) => (g1.find((x) => x.pos === pos) || {}).slot;
+    console.log(`  ${a.pos}번 ${a.name}: ${a.slot} → ${at(a.pos)}  (목표 ${b.slot})`);
+    chk(at(a.pos) === b.slot, `순번 옮기기 — ${a.pos}번이 ${b.slot}로 안 갔다(지금 ${at(a.pos)})`);
+    const nameAt1 = new Map(g1.map((x) => [x.pos, x.name]));
+    chk([...nameAt0].every(([k, v]) => nameAt1.get(k) === v), '순번 옮기기인데 명단(순번↔이름)이 바뀌었다');
+    chk(g1.length === g0.length, `순번 옮기기로 근무선이 ${g0.length}→${g1.length}`);
+    // ★사이 순번은 '앞사람 자리'를 물려받는다 — 뒤로 보낸 사람이 비운 칸부터 한 칸씩 당겨진다.
+    for (let i = fromIdx + 1; i <= toIdx; i++) {
+      chk(at(g0[i].pos) === g0[i - 1].slot, `사이 순번 ${g0[i].pos}번이 ${g0[i - 1].slot}를 못 받았다(지금 ${at(g0[i].pos)})`);
+    }
+    // ★저장까지 살아남는가 — 저장하고 다시 그려도 그대로여야 한다
+    globalThis.__SENT.length = 0;
+    await doc._ids.saveBtn._ev.click();
+    const rp = globalThis.__SENT.find((x) => x.url.endsWith('/api/daejo-save'))?.body?.parts?.[p];
+    chk(!!rp, '순번 옮기기 뒤 저장이 안 갔다');
+    if (rp) chk((rp.teeGrid.find((g) => g.pos === a.pos) || {}) && `${rp.teeGrid.find((g) => g.pos === a.pos)?.time} ${rp.teeGrid.find((g) => g.pos === a.pos)?.course}` === b.slot,
+      `저장한 내용에서 ${a.pos}번이 ${b.slot}가 아니다`);
+    const g2 = readGrid(p).filter((x) => !x.intern);
+    const at2 = (pos) => (g2.find((x) => x.pos === pos) || {}).slot;
+    chk(at2(a.pos) === b.slot, `저장하고 나니 ${a.pos}번이 ${b.slot}에서 ${at2(a.pos)}로 되돌아갔다`);
+    console.log(`  저장 후: ${a.pos}번 ${at2(a.pos)}`);
+  } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
+}
+
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
 //  카카오 예상 칸에만 찍은 인턴(예: 본배치표에 팀이 없는 17:07)이 실제 보기의 팀 수를 바꾸면 안 된다.
 //  바뀌면 없는 팀이 유령으로 끼어 밀림이 어긋나고, 화면에선 '밀림'이 아니라 '교체'로 보인다.
