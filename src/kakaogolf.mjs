@@ -78,7 +78,12 @@ export async function fetchOpen(dateYYYYMMDD) {
 //   ①지난 시각 — 오늘 오전 티오프는 예약이 찼든 비었든 목록에 없다(실측 8/16: 1부 44칸이 전부 '찼음'으로 잘못 셈)
 //   ②마감 임박 — 티오프 직전엔 판매를 닫는다
 //   그래서 판단 가능한 칸만 센다. 배치표는 전날 저녁에 나오므로 '내일치'를 보면 전부 미래라 이 문제가 없다.
-const CUTOFF_MIN = Number(process.env.KAKAO_CUTOFF_MIN || 120);   // 티오프 몇 분 전부터 판매를 닫는가(관측으로 보정)
+//  ★당일은 아예 판정하지 않는다(실측 8/16 16시: 18:03~18:45 칸이 한꺼번에 사라졌다 — 팔린 게 아니라
+//   당일 판매를 닫은 것이다. 한 시간 전만 해도 판매중이었다). 마감선이 언제인지 아직 모르므로 추측하지 않는다.
+//   본배치표는 전날 저녁에 나오니 '내일치'만 봐도 충분하다 — 아쉬울 게 없다.
+//   KAKAO_TODAY=1 로 켜면 당일도 CUTOFF_MIN 기준으로 판정하되, 그 결과는 참고용이다.
+const CUTOFF_MIN = Number(process.env.KAKAO_CUTOFF_MIN || 240);
+const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '0') === '1';
 
 export async function bookedFor(dateYYYYMMDD) {
   const fixed = fixedSlots();
@@ -94,8 +99,8 @@ export async function bookedFor(dateYYYYMMDD) {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const isToday = String(dateYYYYMMDD) === todayStr;
   const isPast = String(dateYYYYMMDD) < todayStr;
-  // 판단 가능한가 — 미래 날짜면 전부 가능, 오늘이면 마감선 이후 칸만 가능, 지난 날짜면 전부 불가.
-  const judgeable = (f) => (isPast ? false : !isToday || f.mins > nowMin + CUTOFF_MIN);
+  // 판단 가능한가 — 미래 날짜면 전부 가능, 지난 날짜와 당일은 불가(당일은 KAKAO_TODAY=1일 때만 참고용).
+  const judgeable = (f) => (isPast ? false : (!isToday || (JUDGE_TODAY && f.mins > nowMin + CUTOFF_MIN)));
 
   // ★그날 아예 안 도는 코스 걸러내기 — 이게 이 엔진의 가장 큰 함정이다.
   //  실측: 8/18 3부는 OUT 10칸 열림·IN 0칸, 8/19는 OUT 0칸·IN 17칸. IN이 다 팔린 게 아니라 그날 안 돈다
@@ -125,7 +130,7 @@ export async function bookedFor(dateYYYYMMDD) {
   for (const b of booked) (byPart[b.part] ||= []).push({ time: b.time, mins: b.mins, course: b.course });
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, unknown,
-    skippedCount: skipped.length, judgeableFrom: isPast ? null : (isToday ? toHM(nowMin + CUTOFF_MIN) : '00:00'), cutoffMin: CUTOFF_MIN };
+    skippedCount: skipped.length, judgeableFrom: isPast ? null : (isToday ? (JUDGE_TODAY ? toHM(nowMin + CUTOFF_MIN) : '판정안함(당일)') : '00:00'), cutoffMin: CUTOFF_MIN };
 }
 
 // ── 스냅샷 저장 — 시간에 따라 예약이 차는 과정을 남긴다(취소·추가 추적) ──
