@@ -319,9 +319,14 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   if (!freshGrid && addedTees.length && Array.isArray(next.teeGrid) && next.teeGrid.length) {
     const base = next.teeGrid.map((g) => ({ time: g.time, course: g.course || 'OUT' }));
     let inserted = 0;
+    // ★시각은 분으로 환산해 비교한다 — 글자로 맞추면 "6:23"과 "06:23"이 다른 자리가 된다.
+    //  실측 2026-08-17: 1부 판독은 앞자리 0 없이("6:23"), 카카오·텍스트는 붙여서("06:23") 쓴다.
+    //  대조판에서 1부 42칸이 통째로 '안 맞는다'고 나온 게 이 한 글자 때문이었다.
+    //  여기서 어긋나면 같은 티오프가 두 번 들어가 그 뒤 순번이 통째로 한 칸씩 밀린다.
+    const _tm = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : NaN; };
     for (const a of addedTees) {
       // 같은 (시각·코스) 슬롯이 이미 있으면 중복 삽입 금지(재처리 멱등).
-      if (!base.some((b) => b.time === a.time && b.course === a.course)) { base.push(a); inserted++; }
+      if (!base.some((b) => _tm(b.time) === _tm(a.time) && b.course === a.course)) { base.push(a); inserted++; }
     }
     if (inserted) next.teeGrid = renumberGrid(base);
   }
