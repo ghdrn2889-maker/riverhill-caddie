@@ -344,7 +344,11 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
 </div>`; }).join('')}
 <script>
 window.__DAEJO_DATE = ${JSON.stringify(String(J.dateKey || ''))};
-window.__DAEJO_BOARD = ${JSON.stringify(J.parts || {})};
+window.__DAEJO_BOARD = ${JSON.stringify(Object.fromEntries(['1', '2', '3'].map((p) => [p, {
+  ...(J.parts?.[p] || {}),
+  // 예상 보기에서도 편집하려면 카카오가 '찼다'고 본 칸을 클라이언트가 알아야 한다.
+  kakaoSlots: (snap.byPart?.[p] || []).map((x) => ({ time: x.time, course: x.course })),
+}])))};
 ${CLIENT_JS}
 </script>
 </div>`;

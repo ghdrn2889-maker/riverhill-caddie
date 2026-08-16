@@ -64,21 +64,38 @@
   //  ★그리고 배열을 손으로 잘라 붙이는 방식 자체를 버렸다. 켜기/끄기를 각각 구현하면
   //   둘이 서로의 정확한 역연산이 아니게 되어(실측: 끄면 원래대로 안 돌아옴) 상태가 어긋난다.
   //   지금은 '인턴 집합'만 토글하고 배치는 매번 처음부터 다시 계산한다 — 구조적으로 대칭이다.
-  const allSlots = {}, origOcc = {};
+  // ★두 보기 모두에서 편집한다(사용자 확정).
+  //   실제 배치표 = 사진이 읽은 칸.
+  //   카카오 예상 = 거기에 카카오가 '찼다'고 본 칸까지 더한 것. 내일 배치표를 미리 짜는 자리라
+  //   여기서 고치는 게 오히려 자연스럽다.
+  //  명단(순번↔이름)과 인턴 집합은 두 보기가 '같은 것'을 가리키므로 공유한다.
+  //  티오프 배치만 보기별로 다르다(예상은 칸이 더 많다).
+  const VIEWS = ['real', 'proj'];
+  const allSlots = {}, origOcc = { real: {}, proj: {} };
   for (const p of PARTS) {
     allSlots[p] = [...document.querySelectorAll('td.c[data-p="' + p + '"]')]
       .map((td) => ({ time: toHM(toMin(td.dataset.t)), course: /IN/i.test(td.dataset.c) ? 'IN' : 'OUT' }))
       .sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
-    // 배치표가 준 '팀이 있는 칸' — 정규 티오프 + 판독된 인턴 칸.
-    const occ = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
-    internsOrig[p].forEach((k) => occ.push({ time: k.split('|')[0], course: k.split('|')[1] }));
-    occ.sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
-    origOcc[p] = occ;
+    const sortOcc = (a) => a.sort((x, y) => toMin(x.time) - toMin(y.time) || (x.course === 'OUT' ? -1 : 1));
+    // 실제 — 배치표가 준 '팀이 있는 칸'(정규 + 판독된 인턴).
+    const occR = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
+    internsOrig[p].forEach((k) => occR.push({ time: k.split('|')[0], course: k.split('|')[1] }));
+    origOcc.real[p] = sortOcc(occR);
+    // 예상 — 카카오가 찼다고 본 칸까지 합집합.
+    const seen = new Set(origOcc.real[p].map((s) => K(s.time, s.course)));
+    const occP = origOcc.real[p].map((s) => ({ time: s.time, course: s.course }));
+    ((BOARD[p] || {}).kakaoSlots || []).forEach((s) => {
+      const k = K(s.time, s.course);
+      if (!seen.has(k)) { seen.add(k); occP.push({ time: toHM(toMin(s.time)), course: /IN/i.test(s.course) ? 'IN' : 'OUT' }); }
+    });
+    origOcc.proj[p] = sortOcc(occP);
   }
+  const teeV = { real: {}, proj: {} };
   // 인턴 집합 → 정규 캐디의 티오프 배치. 항상 여기서 다시 만든다.
-  function recompute(part) {
+  function recompute(part, v) {
+    const view0 = v || view;
     const A = allSlots[part];
-    const occ = origOcc[part].map((s) => ({ time: s.time, course: s.course }));
+    const occ = origOcc[view0][part].map((s) => ({ time: s.time, course: s.course }));
     const used = new Set(occ.map((s) => K(s.time, s.course)));
     // 원래 팀이 있던 칸을 인턴이 가져간 만큼, 뒤쪽 빈 칸을 그 수만큼 새로 연다(아무도 안 잘리게).
     let need = [...interns[part]].filter((k) => used.has(k)).length;
@@ -89,8 +106,9 @@
       i += 1;
     }
     // 인턴 칸을 빼면 남는 게 정규 캐디의 티오프 — 시각 순서대로 1번부터 붙는다.
-    tee[part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
-    return { full: occ.length, work: tee[part].length, short: need };
+    teeV[view0][part] = occ.filter((s) => !interns[part].has(K(s.time, s.course)));
+    if (view0 === view) tee[part] = teeV[view0][part];
+    return { full: occ.length, work: teeV[view0][part].length, short: need };
   }
   function internOn(part, time, course) {
     const key = K(time, course);
@@ -110,9 +128,9 @@
   }
   const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
-    || tee[p].some((x, i) => !sameTee(x, teeOrig[p][i]))
-    || tee[p].length !== teeOrig[p].length
-    || !setEq(interns[p], internsOrig[p]);
+    || !setEq(interns[p], internsOrig[p])
+    || (teeV.real[p] || []).some((x, i) => !sameTee(x, teeOrig[p][i]))
+    || (teeV.real[p] || []).length !== (teeOrig[p] || []).filter(Boolean).length;
 
   // ★보기와 편집은 서로 다른 배치표를 보여준다 — 이걸 안 나누면 편집이 아예 안 먹는다.
   //   보기(대조) = 카카오 투영. 예약이 찬 칸까지 포함해 순번을 다시 매긴 '예상' 배치표(3부 14칸).
@@ -260,7 +278,6 @@
     if (cancel) suppressClick = false;
   }
   document.addEventListener('pointerdown', (e) => {
-    if (view !== 'real') return;
     if (mode !== 'swap' && mode !== 'move') return;
     if (e.button != null && e.button > 0) return;
     const td = unit(e.target);
@@ -319,19 +336,19 @@
   const vReal = document.getElementById('vReal');
   const viewNote = document.getElementById('viewNote');
   const tools = document.getElementById('tools');
-  const NOTE_PROJ = '사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 고칠 수는 없습니다.';
-  const NOTE_REAL = '사진이 <b>실제로 읽은</b> 배치표입니다. 카카오 예상 칸은 빠지고 순번도 원래대로예요. 여기서 고치고 저장합니다.';
+  const NOTE_PROJ = '사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 여기서도 고칠 수 있습니다.';
+  const NOTE_REAL = '사진이 <b>실제로 읽은</b> 배치표입니다. 카카오 예상 칸은 빠지고 순번도 원래대로예요.';
   function setView(v) {
     if (v === view) return;
-    if (v === 'proj' && anyChanged()) { state.textContent = '저장 안 한 수정이 있습니다 — 저장하거나 되돌린 뒤 옮겨주세요.'; return; }
     view = v;
     vProj.classList.toggle('on', v === 'proj');
     vReal.classList.toggle('on', v === 'real');
     document.body.classList.toggle('realview', v === 'real');
     viewNote.innerHTML = v === 'real' ? NOTE_REAL : NOTE_PROJ;
-    tools.hidden = v !== 'real';
-    if (v === 'real') { PARTS.forEach(paint); }
-    else { restoreView(); setMode(''); saveBtn.hidden = true; }
+    // ★두 보기 모두 편집한다 — 도구는 항상 나온다. 고친 명단·인턴은 두 보기가 공유하므로
+    //  어느 쪽에서 고쳐도 반대편에 그대로 반영된다.
+    tools.hidden = false;
+    PARTS.forEach((p) => { recompute(p, v); paint(p); });
     clearPick();
   }
   vProj.addEventListener('click', () => setView('proj'));
@@ -355,9 +372,6 @@
 
   document.addEventListener('click', async (e) => {
     if (suppressClick) { suppressClick = false; return; }   // 방금 끌어놓았다 — 누르기로 두 번 처리하지 않는다
-    // ★대조(카카오 예상) 보기에서는 어떤 편집도 안 먹는다. CSS로 버튼을 숨기는 것만 믿지 않는다 —
-    //  display 규칙 하나가 hidden을 이기는 순간 편집이 새어 나가 화면이 실제 배치표로 튀었다(실측).
-    if (view !== 'real') return;
     if (!mode) return;
     const td = unit(e.target); if (!td) return;
     if (!isSpare(td) && !td.dataset.t) return;
@@ -451,7 +465,7 @@
         // ★전체 rows를 보낸다 — board-correct는 받은 rows로 명단·격자를 재구성하므로
         //  일부만 보내면 나머지가 사라진다.
         const rows = roster[part].map((cell, i) => {
-          const t = tee[part][i];
+          const t = teeV[view][part][i];
           return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
         });
         // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
@@ -479,5 +493,9 @@
     finally { saveBtn.disabled = false; }
   });
 
+  // 시작 — 두 보기 모두 계산해두고 현재 보기(대조)를 그린다. 도구는 처음부터 쓸 수 있다.
+  PARTS.forEach((p) => { VIEWS.forEach((v) => recompute(p, v)); });
+  tools.hidden = false;
+  PARTS.forEach(paint);
   if (!live) state.textContent = '샘플 — 눌러서 동작만 보실 수 있습니다';
 })();

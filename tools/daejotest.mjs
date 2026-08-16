@@ -84,7 +84,12 @@ for (const p of ['1', '2', '3']) {
 }
 globalThis.document = doc;
 globalThis.location = { protocol: 'file:' };
-globalThis.window = { __DAEJO_DATE: J.dateKey || '', __DAEJO_BOARD: J.parts || {} };
+// ★생성기와 '똑같은 모양'으로 넘긴다 — 여기가 다르면 하네스가 통과해도 실제 화면은 다르게 돈다.
+const BOARD = Object.fromEntries(['1', '2', '3'].map((p) => [p, {
+  ...(J.parts?.[p] || {}),
+  kakaoSlots: (J.snap?.byPart?.[p] || []).map((x) => ({ time: x.time, course: x.course })),
+}]));
+globalThis.window = { __DAEJO_DATE: J.dateKey || '', __DAEJO_BOARD: BOARD };
 globalThis.prompt = () => null;
 globalThis.fetch = async () => ({ json: async () => ({ ok: true, effective: [] }) });
 await import('../tools/daejo-client.js');
@@ -126,26 +131,28 @@ function invariants(p, label) {
   return { g, sp };
 }
 
-// ── 보기 분리 — 대조에서는 편집이 아예 불가능해야 한다 ──────────────────────
-//  ★hidden 속성이 CSS display 규칙에 지면 대조 보기에서도 편집 버튼이 보이고,
-//   거기서 칸을 누르면 화면이 실제 배치표로 튀어버린다(실측). 생성기 CSS까지 함께 검사한다.
+// ── 두 보기 모두 편집 가능해야 한다(사용자 확정) ─────────────────────────
 {
-  const css = fs.readFileSync(new URL('./gen-daejo.mjs', import.meta.url), 'utf8');
-  chk(css.includes('[hidden]{display:none !important}'), '보기분리 — [hidden]을 이기는 display 규칙 방지가 없다');
-  chk(doc._ids.tools.hidden === true, '보기분리 — 대조 보기에서 편집 도구가 hidden이 아니다');
-  // 대조 상태에서 칸을 눌러도 아무 일도 없어야 한다.
+  chk(doc._ids.tools.hidden === false, '편집도구 — 대조(카카오 예상) 보기에서 도구가 숨겨져 있다');
   const p0 = '3';
-  const snap0 = JSON.stringify(readGrid(p0));
+  const g = readGrid(p0).filter((x) => !x.intern);
+  chk(g.length === (BOARD[p0].kakaoSlots || []).length,
+    `대조 보기 격자가 카카오 칸 수와 다르다(${g.length} vs ${(BOARD[p0].kakaoSlots || []).length})`);
+  const snap0 = JSON.stringify(g);
   clickMode('intern');
-  const anyCell = all.find((e) => e.dataset.p === p0);
-  clickCell(anyCell);
-  chk(JSON.stringify(readGrid(p0)) === snap0, '보기분리 — 대조 보기에서 칸을 눌렀는데 화면이 바뀌었다');
+  clickCell(cellOf(p0, g[1].slot.split(' ')[0], g[1].slot.split(' ')[1]));
+  chk(JSON.stringify(readGrid(p0).filter((x) => !x.intern)) !== snap0, '대조 보기에서 인턴 지정이 안 먹는다');
+  doc._ids.undoBtn._ev.click();
+  chk(JSON.stringify(readGrid(p0).filter((x) => !x.intern)) === snap0, '대조 보기 되돌리기가 복구 못 함');
   clickMode('intern');
+  console.log('  대조 보기 편집 확인');
 }
 
-// ── 시나리오 ──────────────────────────────────────────────────────────
-doc._ids.vReal._ev.click();
-console.log('불변식 검증 — 각 부의 첫/중간/마지막 티오프에 인턴을 넣었다 빼본다\n');
+// ── 시나리오 — 두 보기 모두 ────────────────────────────────────────────
+console.log('\n불변식 검증 — 두 보기 × 각 부의 첫/중간/마지막 티오프\n');
+for (const VIEW of ['real', 'proj']) {
+doc._ids[VIEW === 'real' ? 'vReal' : 'vProj']._ev.click();
+console.log(' [' + (VIEW === 'real' ? '실제 배치표' : '카카오 예상') + ']');
 for (const p of ['1', '2', '3']) {
   const grid0 = readGrid(p).filter((x) => !x.intern);
   const base = JSON.stringify(grid0);
@@ -183,6 +190,7 @@ for (const p of ['1', '2', '3']) {
     clickMode('intern');   // 모드 끄기
   }
   console.log(`  ${p}부 ${targets.length}곳 검사 완료`);
+}
 }
 console.log('');
 console.log(fails ? `★ 실패 ${fails}건` : '★ 전부 통과');
