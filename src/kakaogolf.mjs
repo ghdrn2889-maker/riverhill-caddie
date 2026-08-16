@@ -18,10 +18,22 @@ import path from 'node:path';
 
 // 기준표는 저장소 기본값(config/)을 쓰되, data/에 두면 그쪽이 이긴다 —
 //  data/는 깃에 안 올라가므로(회원 개인정보 보호) 관리자가 서버에서 바로 고쳐 쓰는 자리다.
+//  ★그래서 위험하다: data/ 사본이 낡으면 config/를 아무리 고쳐도 반영이 안 되는데 아무 표시가 없다.
+//   실제로 그랬다(2026-08-16) — config/에서 잘못된 예외 3칸을 지웠는데 data/의 옛 사본이 계속 이겨서
+//   16:25 OUT·16:32 OUT·11:50 IN 세 칸이 엔진 시야에서 통째로 빠져 있었다. 셋 다 실제로 팀이 차는 칸이다.
+//   조용히 이기지 못하게, 덮어쓸 때는 반드시 부팅 로그에 남긴다.
 const SCHEDULE_FILE = 'riverhill-tee-schedule.json';
+let schedWarned = false;
 function loadSchedule() {
   const own = loadJSON(SCHEDULE_FILE, null);
-  if (own && own.parts) return own;
+  if (own && own.parts) {
+    if (!schedWarned) {
+      schedWarned = true;
+      const ex = Array.isArray(own.exceptions) ? own.exceptions.length : 0;
+      console.warn(`⚠️ [카카오골프] 기준표를 data/${SCHEDULE_FILE}로 덮어씁니다(config/ 무시). 예외 ${ex}칸 — 낡았으면 지우세요.`);
+    }
+    return own;
+  }
   try { return JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'config', SCHEDULE_FILE), 'utf8')); } catch { return null; }
 }
 const SNAP_DIR = path.join(DATA_DIR, 'kakao-board');
