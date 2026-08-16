@@ -274,10 +274,14 @@
     out.forEach((x) => box.appendChild(x));
     box.hidden = false;
   }
+  // ★두 보기의 배치를 모두 담는다. 인턴 하나를 켜면 양쪽 배치가 같이 움직이는데
+  //  보고 있던 쪽만 되돌리면 반대편에 인턴이 남아 근무선이 조용히 줄어든다(실측: 1부 42→39).
+  //  배치가 진실이 된 이상, 되돌리기도 진실 전부를 되돌려야 한다.
   const push = (part) => {
     stack.push({ part: part, roster: roster[part].slice(),
-      tee: tee[part].map((x) => (x ? { time: x.time, course: x.course } : x)),
-      interns: new Set(interns[part]) });
+      tee: { real: (teeV.real[part] || []).map(cp), proj: (teeV.proj[part] || []).map(cp) },
+      interns: new Set(interns[part]),
+      memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
   };
 
   let mode = '', pick = null, view = 'proj';
@@ -433,7 +437,11 @@
   });
   undoBtn.addEventListener('click', () => {
     const s = stack.pop(); if (!s) return;
-    roster[s.part] = s.roster; tee[s.part] = s.tee; interns[s.part] = s.interns; paint(s.part);
+    roster[s.part] = s.roster;
+    teeV.real[s.part] = s.tee.real; teeV.proj[s.part] = s.tee.proj;
+    interns[s.part] = s.interns;
+    idxMemo.real[s.part] = s.memo.real; idxMemo.proj[s.part] = s.memo.proj;
+    paint(s.part);
     state.textContent = '되돌렸습니다.';
   });
 
