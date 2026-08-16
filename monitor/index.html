@@ -483,6 +483,8 @@
     <button class="tb" data-tab="review">🔍 배치표 검수</button>
     <button class="tb" data-tab="watchdog">🐕 감시 <span class="tb-badge" id="badgeWatch" hidden>0</span></button>
     <button class="tb" data-tab="notice">📢 공지</button>
+    <!-- 대조판은 탭이 아니라 별도 페이지(/daejo)다 — 토큰을 그대로 물려줘야 401이 안 난다. -->
+    <a class="tb" id="daejoLink" href="/daejo" target="_blank" rel="noopener" style="text-decoration:none">⚖ 대조판</a>
   </nav>
 </header>
 
@@ -904,7 +906,7 @@
 
   // ── 상단 탭 전환 ──
   function switchTab(name){
-    Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.classList.toggle('on', b.getAttribute('data-tab')===name); });
+    Array.prototype.forEach.call(document.querySelectorAll('.tb[data-tab]'), function(b){ b.classList.toggle('on', b.getAttribute('data-tab')===name); });
     Array.prototype.forEach.call(document.querySelectorAll('.tab-page'), function(p){ p.classList.toggle('on', p.id==='page-'+name); });
     try{ localStorage.setItem('monTab', name); }catch(e){}
     if(name==='userdash') loadUserDash();
@@ -943,7 +945,7 @@
       }).join('');
     }catch(e){ list.innerHTML='<div class="muted">불러오기 실패: '+esc(e.message)+'</div>'; }
   }
-  Array.prototype.forEach.call(document.querySelectorAll('.tb'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tb[data-tab]'), function(b){ b.addEventListener('click', function(){ switchTab(b.getAttribute('data-tab')); }); });
 
   // ── 공지(팩스 출력지) 작성·발송 ──
   (function(){
@@ -1014,6 +1016,7 @@
   var BLOCK_KO = { roster:'명부에 없는 이름', other:'기타' };
   var MEMBERS_MS = 5000, mTimer = null, membersBusy = false;
   function apiUrl(pth){ var k = new URLSearchParams(location.search).get('k') || ''; return pth + (k?('?k='+encodeURIComponent(k)):''); }
+  (function(){ var a = document.getElementById('daejoLink'); if (a) a.href = apiUrl('/daejo'); })();
   function memberCard(m, pend){
     var known = m.boardName ? (m.nameKnown ? '<span class="mc-known ok">✅ 명부일치</span>' : '<span class="mc-known no">⚠️ 명부없음</span>') : '<span style="color:var(--tx3)">이름 미입력</span>';
     var blocked = (m.status==='disabled' && m.blockReason) ? '<span style="color:var(--bad);font-weight:700">차단: '+(BLOCK_KO[m.blockReason]||'기타')+'</span>' : '';
