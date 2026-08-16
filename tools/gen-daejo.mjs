@@ -3,6 +3,7 @@
 //  입력: 서버에서 뽑은 JSON(배치표 + 카카오 스냅 + 고정 시간표 + 엔진 건강).
 //  출력: 단일 HTML(외부 자원 0).
 import fs from 'node:fs';
+const { tagOf, assignPositions } = await import('../src/kakaobridge.mjs');
 
 const src = process.argv[2];
 const out = process.argv[3] || 'daejo.html';
@@ -44,20 +45,24 @@ const posMapOf = (p) => {
   return m;
 };
 const boardPos = { 1: posMapOf('1'), 2: posMapOf('2'), 3: posMapOf('3') };
+const internOf = (p) => (P[p]?.internTees || []).map((t) => K(t.time, t.course));
 
 // ★재매칭 — 순번은 사람에게 붙어 고정이고, 티오프는 '찬 칸을 시각 순으로 늘어놓은 순서'다.
 //  중간에 예약이 하나 끼면(당추) 그 뒤 순번이 통째로 한 칸씩 밀린다.
 //  우리가 따로 구현했던 '순번↔시각 재매칭'이 이 모델에선 그냥 다시 정렬한 결과다.
 //  규칙: 시각 순, 같은 시각이면 OUT 먼저(실증 8/16 본배치 1번 16:25 OUT, 2번 16:25 IN, 3번 16:32 OUT).
+// ★인턴 칸은 티오프를 차지하되 정규 순번을 안 먹는다 — 빼고 번호를 매긴다(judge.mjs:509 규칙).
 function rematchOf(p) {
+  const slots = (snap.byPart?.[p] || [])
+    .map((x) => ({ k: K(x.time, x.course), time: x.time, course: x.course, t: toMin(x.time) }))
+    .sort((a, b) => a.t - b.t || (a.course === 'OUT' ? -1 : 1));
+  const full = assignPositions(slots, { roster: rosterOf(p), internTees: P[p]?.internTees || [] });
   const m = new Map();
-  (snap.byPart?.[p] || [])
-    .map((x) => ({ k: K(x.time, x.course), t: toMin(x.time), c: x.course }))
-    .sort((a, b) => a.t - b.t || (a.c === 'OUT' ? -1 : 1))
-    .forEach((s2, i) => m.set(s2.k, i + 1));
+  for (const s2 of full) m.set(s2.k, s2);
   return m;
 }
 const rematch = { 1: rematchOf('1'), 2: rematchOf('2'), 3: rematchOf('3') };
+const regularCount = (p) => [...rematch[p].values()].filter((s2) => !s2.intern).length;
 
 // 부별 대조 — 배치표가 말한 칸 vs 카카오가 본 칸
 function compareOf(p) {
@@ -74,21 +79,25 @@ function compareOf(p) {
 const CMP = { 1: compareOf('1'), 2: compareOf('2'), 3: compareOf('3') };
 
 function cell(part, mins, course) {
-  const key = `${toHM(mins)}|${course}`;
+  const key = K(toHM(mins), course);
   const bp = boardPos[part].get(key);
   const isBooked = bookedSet.has(key);
   const partUnsure = unsureSet.has(`${part}|${course}`);
   const partIdle = idleSet.has(`${part}|${course}`);
-  const R = rosterOf(part);
-  const pos = rematch[part].get(key) || bp;
+  const r = rematch[part].get(key);
+  if (r?.intern) return '<td class="c intern"><span class="nm">인턴</span></td>';
+  const pos = r?.pos || bp;
   if (pos) {
-    const nm = bare(R[pos - 1] || '');
-    const isNew = isBooked && !bp;                        // 배치표엔 없던 자리 = 당추 후보
+    // ★태그를 지우지 않는다 — (54)=전 부 근무, (1,3)(2,3)=두 부 중복. 리버힐 규칙상 이들은 앞 순번을
+    //  차지하게 돼 있다. 이 정보를 버리면 '원래 앞에 설 사람'이 '새로 생긴 사람'처럼 보인다.
+    const t = r?.name != null ? r : tagOf(rosterOf(part)[pos - 1] || '');
+    const isNew = isBooked && !bp;                        // ★칸이 새로 찬 것이지 사람이 새로 온 게 아니다
     const moved = bp && bp !== pos;
-    const cls = isNew ? 'c kakao-only' : (isBooked ? 'c ok' : 'c board-only');
-    const mark = isNew ? '<span class="tag">신규</span>'
+    const cls = [isBooked ? 'c ok' : 'c board-only', isNew ? 'fresh' : '', t.guaranteed ? 'gtd' : (t.cross ? 'crs' : '')].filter(Boolean).join(' ');
+    const mark = isNew ? '<span class="tag" title="이 칸이 새로 찼습니다(사람이 새로 온 게 아닙니다)">＋</span>'
       : moved ? `<span class="tag">${bp}&rarr;</span>` : '';
-    return `<td class="${cls}">${mark}<span class="pos">${pos}</span><span class="nm">${esc(nm) || '&nbsp;'}</span></td>`;
+    const tg = t.tag ? `<span class="dt">${esc(t.tag)}</span>` : '';
+    return `<td class="${cls}">${mark}<span class="pos">${pos}</span><span class="nm">${esc(t.name) || '&nbsp;'}</span>${tg}</td>`;
   }
   if (partIdle) return '<td class="c idle">미운영</td>';
   if (isBooked) return `<td class="c kakao-only"><span class="nm">${partUnsure ? '보류' : '예약'}</span></td>`;
@@ -165,6 +174,13 @@ td.c .pos{display:inline-block;min-width:16px;font-weight:700;font-size:11px;opa
 td.c .nm{font-size:12px}
 td.c .tag{display:inline-block;font-size:9px;opacity:.6;margin-right:3px;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums}
+td.c .dt{display:inline-block;font-size:9px;margin-left:3px;padding:0 3px;border-radius:3px;
+  background:rgba(127,127,127,.16);opacity:.85;letter-spacing:-.02em}
+td.c.gtd{font-weight:700}
+td.c.gtd .dt{background:var(--ok);color:var(--panel);opacity:1}
+td.c.crs .dt{outline:1px solid var(--ok);outline-offset:-1px}
+td.intern{background:var(--warn-bg);color:var(--warn);font-size:10.5px;font-style:italic}
+.promo-names i{font-style:normal;font-size:10px;opacity:.7;margin-left:4px}
 td.ok{background:var(--ok-bg);color:var(--ok)}
 td.board-only{background:var(--miss-bg);color:var(--miss)}
 td.kakao-only{background:var(--warn-bg);color:var(--warn)}
@@ -212,6 +228,8 @@ ${['1', '2', '3'].map(partTable).join('\n')}
 <div class="legend">
   <span><i style="background:var(--ok-bg);border-color:var(--ok)"></i>배치표와 카카오 일치</span>
   <span><i style="background:var(--warn-bg);border-color:var(--warn)"></i>카카오만 &mdash; 예약은 찼는데 배치표엔 없음</span>
+  <span><b style="color:var(--warn)">＋</b> 이 <b>칸</b>이 새로 찼음(사람이 새로 온 게 아님)</span>
+  <span><i style="background:var(--ok-bg);border-color:var(--ok)"></i><b>54</b> 전 부 근무 &middot; <b>1,3</b>/<b>2,3</b> 두 부 중복 &mdash; 리버힐 규칙상 앞 순번</span>
   <span><i style="background:var(--miss-bg);border-color:var(--miss)"></i>배치표만 &mdash; 카카오는 비었다고 봄</span>
   <span><i style="background:var(--open)"></i>판매중(빈 칸)</span>
   <span><i style="background:var(--idle)"></i>미운영 · 보류</span>
@@ -238,8 +256,11 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
   const c = CMP[p]; const R = rosterOf(p); const n = c.newCut - c.cut;
   return `<div class="note promo">
   <h3>${p}부 커트가 ${c.cut} &rarr; ${c.newCut}로 올라갑니다 &mdash; 승격 ${n}명</h3>
-  <p class="promo-names">${R.slice(c.cut, c.newCut).map((x, i) => `<span><b>${c.cut + i + 1}번</b> ${esc(bare(x))}</span>`).join('')}</p>
-  스페어였던 이 ${n}명이 근무로 바뀝니다. 카카오가 본 예약이 전부 진짜 팀일 때의 이야기고,
+  <p class="promo-names">${R.slice(c.cut, c.newCut).map((x, i) => ({ p: c.cut + i + 1, ...tagOf(x) }))
+    .filter((t) => t.name && !t.guaranteed).map((t) => `<span><b>${t.p}번</b> ${esc(t.name)}${t.tag ? `<i>${esc(t.tag)}</i>` : ''}</span>`).join('')
+    || '<span>(승격 없음 &mdash; 늘어난 자리가 전부 무조건근무자였습니다)</span>'}</p>
+  스페어였던 사람이 근무로 바뀝니다. <b>(54)&middot;(찾근)</b>은 커트 밖에서도 근무하는 사람이라 승격에서 뺐습니다 &mdash;
+  원래 나가기로 돼 있던 사람을 승격이라 부르면 없던 소식을 지어내는 셈입니다. 카카오가 본 예약이 전부 진짜 팀일 때의 이야기고,
   전화&middot;회원 예약이라 카카오에 안 뜨는 칸을 '찼다'고 잘못 읽었다면 이 승격도 틀립니다.
   <b>최종 배치표의 커트가 ${c.newCut}이면 맞습니다.</b>
 </div>`; }).join('')}

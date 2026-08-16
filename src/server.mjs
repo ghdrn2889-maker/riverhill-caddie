@@ -1621,6 +1621,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       const a = await kakaoAssist({
         dateISO: dbISO, part: '3', boardOk: !_boardReadFailed,
         teeGrid: _v.teeGrid || [], roster: _v.part3Roster || [], cut: Number(_v.cutoffPosition) || 0,
+        // ★인턴 칸은 티오프를 차지하되 정규 순번을 안 먹는다 — 안 넘기면 인턴 하나당 그 뒤 전원이 밀린다.
+        internTees: _v.internTees || [],
       });
       if (a.mode === 'augment') {
         const tag = a.applied ? '적용' : '관측만(끄면 이대로)';

@@ -56,6 +56,47 @@ export function kakaoSlots(snap, part) {
     .map((s) => ({ time: s.time, course: s.course, k: K(s.time, s.course) }));
 }
 
+// ── 리버힐 근무 태그 ────────────────────────────────────────────────────────
+//  배치표 명단 셀의 괄호가 그 사람의 그날 성격을 말한다. 카카오는 이걸 절대 모른다 —
+//  사진에서만 나오고, 재매칭의 의미가 여기서 갈린다.
+//   (54)      전 부 근무. ★커트 밖이어도 근무다(judge.mjs의 guaranteedWork와 같은 규칙).
+//   (1,3)(2,3) 두 부 중복근무. 앞 순번을 차지하지만 커트는 따른다.
+//   (조출)(후출) 시간대 지정.
+//  ★리버힐 규칙(사용자 확정, boardreader.mjs:584에도 같은 문장): 중복근무자는 각 부의 앞 순번을
+//   '같은 순서로' 차지한다(대바 없을 때). 그래서 명단 머리에 몰려 있는 게 정상이고,
+//   그 사람들이 앞 티오프에 배정되는 건 '새로 생긴 일'이 아니라 원래 그렇게 되기로 돼 있던 일이다.
+//   대조판이 이들을 '신규'라고 부른 건 칸(slot)에 붙일 말을 사람에게 붙인 것이라 틀렸다.
+const GUARANTEED_RE = /(^|[^0-9])(54|찾근)([^0-9]|$)/;      // 커트 무관 근무
+const CROSS_RE = /(^|[^0-9])(54|1[,、]\s*3|2[,、]\s*3)([^0-9]|$)/; // 부 중복근무
+export function tagOf(cell) {
+  const s = String(cell || '');
+  const m = s.match(/\(([^)]*)\)/);
+  const tag = m ? m[1].trim() : '';
+  const name = s.replace(/\([^)]*\)/g, '').trim();
+  return {
+    name, tag,
+    guaranteed: GUARANTEED_RE.test(tag),                  // 54·찾근 — 커트 밖이어도 근무
+    cross: CROSS_RE.test(tag),                            // 54·1,3·2,3 — 앞 순번 차지
+    early: /조출/.test(tag), late: /후출/.test(tag),
+  };
+}
+
+// ── 인턴 보정 — 카카오 격자에 순번을 얹을 때 반드시 거쳐야 하는 단계 ─────────────────
+//  ★인턴 캐디는 티오프 칸을 차지하지만 '정규 순번을 소비하지 않는다'(judge.mjs:509-511, 노란 칸).
+//   카카오는 그 칸이 찼다는 것만 알지 인턴인지 정규인지 모른다 — 인턴 여부는 배치표에만 있다.
+//   그래서 인턴 칸을 빼고 순번을 매겨야 한다. 안 그러면 인턴 하나당 그 뒤 전원이 한 칸씩 밀린다.
+//   (인턴은 그날그날 섭외돼 중간에 끼기 때문에 밀림이 꼬리가 아니라 중간부터 시작된다.)
+export function assignPositions(slots, { roster = [], internTees = [] } = {}) {
+  const internSet = new Set((internTees || []).map((t) => K(t.time, t.course)));
+  let pos = 0;
+  return slots.map((s) => {
+    if (internSet.has(s.k)) return { ...s, pos: 0, intern: true, name: '인턴', tag: '', guaranteed: false, cross: false };
+    pos += 1;
+    const t = tagOf(roster[pos - 1] || '');
+    return { ...s, pos, intern: false, ...t };
+  });
+}
+
 // ── 보강(augment) — 사진이 읽은 격자에 카카오가 본 빠진 칸을 채운다 ────────────────
 //  ★받아들이는 조건이 핵심이다. 하나라도 어긋나면 손대지 않고 사람을 부른다.
 //   ① 사진이 읽은 칸이 카카오에 '전부' 있어야 한다.
@@ -63,7 +104,7 @@ export function kakaoSlots(snap, part) {
 //   ② 채울 칸이 있어야 한다(없으면 할 일 없음).
 //   ③ 너무 많이 늘면 거부한다. 격자가 갑자기 배로 늘어나는 건 당추가 아니라 고장이다.
 const MAX_ADD = Number(process.env.KAKAO_ASSIST_MAX_ADD || 8);
-export function augmentGrid({ teeGrid = [], roster = [], cut = 0 }, snap, part) {
+export function augmentGrid({ teeGrid = [], roster = [], cut = 0, internTees = [] }, snap, part) {
   const ks = kakaoSlots(snap, part);
   if (!ks.length) return { mode: 'none', why: '카카오가 본 찬 칸 없음' };
   const kset = new Set(ks.map((s) => s.k));
@@ -79,20 +120,34 @@ export function augmentGrid({ teeGrid = [], roster = [], cut = 0 }, snap, part) 
   if (add.length > MAX_ADD) {
     return { mode: 'refuse', why: `채울 칸이 ${add.length}개(상한 ${MAX_ADD}) — 당추라기엔 너무 많다. 고장을 의심`, add: add.map((s) => s.k) };
   }
-  // 순번 재부여 = 그냥 다시 정렬한 결과다. 순번은 사람에게 붙어 고정이고 티오프가 밀린다.
-  const merged = ks.map((s, i) => ({ pos: i + 1, time: s.time, course: s.course }));
+  // ★순번 재부여 = 다시 정렬한 결과다. 다만 인턴 칸은 건너뛴다 — 티오프는 차지하되 순번은 안 먹는다.
+  const full = assignPositions(ks, { roster, internTees });
+  const merged = full.filter((s) => !s.intern).map((s) => ({ pos: s.pos, time: s.time, course: s.course }));
+  const internUsed = full.filter((s) => s.intern).length;
+  const newCut = merged.length;                      // 정규 근무선 — 인턴은 안 센다
+  const byKey = new Map(full.map((s) => [s.k, s]));
   const moved = board.map((g) => {
-    const to = merged.find((m) => K(m.time, m.course) === g.k)?.pos || 0;
+    const to = byKey.get(g.k)?.pos || 0;
     return { from: Number(g.pos), to };
   }).filter((x) => x.from && x.to && x.from !== x.to);
+  // ★커트가 올라가도 '(54)·찾근'은 승격이 아니다 — 원래 커트 밖에서도 근무하기로 돼 있던 사람들이다.
+  //  이들을 승격이라고 알리면 없던 좋은 소식을 지어내는 셈이라, 정말 바뀌는 사람만 남긴다.
+  const promoted = [];
+  if (cut > 0 && newCut > cut) {
+    for (let p = cut + 1; p <= newCut; p++) {
+      const t = tagOf(roster[p - 1] || '');
+      if (!t.name) continue;
+      if (t.guaranteed) continue;                    // 54·찾근 — 커트와 무관하게 이미 근무였다
+      promoted.push({ pos: p, name: t.name, tag: t.tag, cross: t.cross });
+    }
+  }
   return {
-    mode: 'augment', teeGrid: merged, cut: merged.length, prevCut: cut,
-    added: add.map((s) => s.k), moved,
-    // 커트가 올라가면 그 사이 순번이 스페어→근무로 승격된다. 이름은 기존 명단에서 그대로 따라온다.
-    promoted: (cut > 0 && merged.length > cut)
-      ? roster.slice(cut, merged.length).map((n, i) => ({ pos: cut + i + 1, name: String(n).replace(/\([^)]*\)/g, '').trim() }))
-      : [],
-    why: `카카오가 ${add.length}칸 더 봄 — 커트 ${cut} → ${merged.length}`,
+    mode: 'augment', teeGrid: merged, cut: newCut, prevCut: cut,
+    added: add.map((s) => s.k), moved, internUsed, promoted,
+    // 화면·기록용 — 태그를 지우지 않고 그대로 들고 간다(대조판이 이걸 버려서 '신규' 오해가 났다).
+    slots: full.map((s) => ({ pos: s.pos, time: s.time, course: s.course, name: s.name, tag: s.tag,
+      intern: s.intern, guaranteed: s.guaranteed, cross: s.cross, isNew: !bset.has(s.k) })),
+    why: `카카오가 ${add.length}칸 더 봄 — 커트 ${cut} → ${newCut}${internUsed ? ` (인턴 ${internUsed}칸 제외)` : ''}`,
   };
 }
 
@@ -100,24 +155,28 @@ export function augmentGrid({ teeGrid = [], roster = [], cut = 0 }, snap, part) 
 //  ★카카오는 이름을 만들 수 없다. 줄 수 있는 건 '몇 팀인가'뿐이다.
 //   그래도 이게 작지 않다 — 자기 순번을 아는 회원에겐 '근무냐 스페어냐'가 이 숫자 하나로 정해진다.
 //   (시스템은 이미 텍스트 글의 "현재 3부 N팀"을 teamCount로 받아 같은 계산을 한다. 같은 입구를 쓴다.)
+//  ★그리고 이 팀 수는 '인턴 보정이 안 된' 수다. 인턴은 티오프를 차지하되 정규 순번을 안 먹는데,
+//   인턴 여부는 배치표에만 있고 사진이 실패한 상황이라 알 길이 없다. 인턴이 있는 날이면 이 수가
+//   그만큼 부풀어 있다 — 그래서 대체는 늘 '상한'으로 읽어야 하고, 이 한계를 값에 붙여 내보낸다.
 export function substituteTeamCount(snap, part) {
   const ks = kakaoSlots(snap, part);
   if (!ks.length) return { mode: 'none', why: '카카오가 본 찬 칸 없음' };
-  return { mode: 'substitute', teamCount: ks.length, teeGrid: ks.map((s, i) => ({ pos: i + 1, time: s.time, course: s.course })),
-    why: `사진 판독 없음 — 카카오 예약으로 ${part}부 ${ks.length}팀` };
+  return { mode: 'substitute', teamCount: ks.length, internUnknown: true,
+    teeGrid: ks.map((s, i) => ({ pos: i + 1, time: s.time, course: s.course })),
+    why: `사진 판독 없음 — 카카오 예약으로 ${part}부 ${ks.length}팀(인턴 보정 불가 · 상한값)` };
 }
 
 // ── 바깥 입구 ────────────────────────────────────────────────────────────────
 //  boardOk=false(사진 판독 실패)면 대체, true면 보강을 시도한다.
 //  ★반환만 하고 아무것도 안 바꾼다. 적용 여부는 호출부가 assistOn()으로 정한다 —
 //   이 파일이 스스로 상태를 바꾸면, 켜지지 않은 줄 알았던 장치가 조용히 일하는 그 사고가 또 난다.
-export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid = [], roster = [], cut = 0 }) {
+export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid = [], roster = [], cut = 0, internTees = [] }) {
   const date = ymdOf(dateISO);
   if (!date) return { mode: 'none', why: '날짜 없음' };
   const t = kakaoTrustworthy(date);
   if (!t.ok) return { mode: 'none', why: `카카오 신뢰 불가 — ${t.why}` };
   const r = boardOk
-    ? augmentGrid({ teeGrid, roster, cut }, t.snap, part)
+    ? augmentGrid({ teeGrid, roster, cut, internTees }, t.snap, part)
     : substituteTeamCount(t.snap, part);
   const rec = { at: Date.now(), date, part, boardOk, applied: assistOn(), ...r };
   appendJSONL('kakao-assist.jsonl', rec);
