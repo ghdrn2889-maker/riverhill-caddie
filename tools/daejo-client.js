@@ -460,18 +460,23 @@
     try {
       for (const part of PARTS) {
         if (!changed(part)) continue;
-        const P = BOARD[part] || {};
+        // ★저장은 '실제 배치표'만 한다 — 어느 보기에서 저장하든 teeV.real이다.
+        //  카카오 예상은 아직 따로 도는 엔진이고(사용자 확정), 예상 격자를 본배치표로 밀어넣으면
+        //  카카오가 찼다고 본 칸이 그대로 '팀'이 되어 커트가 올라가고 앱이 없는 근무를 보여준다.
+        //  실제로 그랬다(8/17: 3부 10팀 → 예상 13팀으로 덮임).
+        //  명단(이름)·인턴은 두 보기가 같은 것을 가리키므로 어느 쪽에서 고쳐도 저장된다.
         // ★전체 rows를 보낸다 — board-correct는 받은 rows로 명단·격자를 재구성하므로
         //  일부만 보내면 나머지가 사라진다.
+        const real = teeV.real[part] || [];
         const rows = roster[part].map((cell, i) => {
-          const t = teeV[view][part][i];
+          const t = real[i];
           return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
         });
         // 인턴 칸도 함께 — board-correct가 interns[]를 받아 internTees/internCount에 반영한다.
         const iTees = [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] }));
         const r = await fetch(apiUrl('/api/board-correct'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: tee[part].filter(Boolean).length }),
+          body: JSON.stringify({ part: part, rows: rows, interns: iTees, cutLine: real.filter(Boolean).length }),
         });
         const j = await r.json(); if (!j.ok) throw new Error(j.error || (part + '부 저장 실패'));
         // 3부 인턴은 별도 저장소에도 남긴다 — 카카오 재매칭이 이걸 본다(사진 판독과 무관하게 유지).
@@ -487,13 +492,14 @@
         // ★방금 보낸 것이 이제 '실제 배치표'다 — 기준선을 거기에 다시 세운다.
         //  안 그러면 저장은 됐는데 화면은 계속 '안 저장됨'으로 남아 저장 버튼이 사라지지 않는다.
         saved.push(part);
-        setBaseline(part, teeV[view][part]);
+        setBaseline(part, teeV.real[part]);
       }
       stack.length = 0;
       PARTS.forEach(paint);
       // ★저장 버튼이 사라지는 것이 곧 '저장됐다'는 신호다. 남아 있으면 아직 안 된 것이다.
       state.textContent = saved.length
         ? `저장됐습니다 — ${saved.map((p) => p + '부').join('·')}${anyChanged() ? ' (아직 안 된 게 남았습니다)' : ''}`
+          + (view === 'proj' ? ' · 카카오 예상 칸은 저장하지 않았습니다(예상 엔진은 따로 돕니다)' : '')
         : '바뀐 게 없습니다.';
     } catch (err) { state.textContent = '저장 실패: ' + err.message; }
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }

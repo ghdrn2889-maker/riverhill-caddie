@@ -95,7 +95,12 @@ const BOARD = Object.fromEntries(['1', '2', '3'].map((p) => [p, {
 }]));
 globalThis.window = { __DAEJO_DATE: J.dateKey || '', __DAEJO_BOARD: BOARD };
 globalThis.prompt = () => null;
-globalThis.fetch = async () => ({ json: async () => ({ ok: true, effective: [] }) });
+// 보낸 몸통을 기록해둔다 — '무엇을 저장했는가'가 불변식이다(예상 격자가 새어나가면 안 된다).
+globalThis.__SENT = [];
+globalThis.fetch = async (url, opt) => {
+  try { globalThis.__SENT.push({ url: String(url).split('?')[0], body: JSON.parse(opt.body) }); } catch { /* noop */ }
+  return { ok: true, json: async () => ({ ok: true, effective: [] }) };
+};
 await import('../tools/daejo-client.js');
 
 // ── 화면에서 상태 읽기 ────────────────────────────────────────────────
@@ -142,8 +147,11 @@ if (HAS_KAKAO) {
   chk(doc._ids.tools.hidden === false, '편집도구 — 대조(카카오 예상) 보기에서 도구가 숨겨져 있다');
   const p0 = '3';
   const g = readGrid(p0).filter((x) => !x.intern);
-  chk(g.length === (BOARD[p0].kakaoSlots || []).length,
-    `대조 보기 격자가 카카오 칸 수와 다르다(${g.length} vs ${(BOARD[p0].kakaoSlots || []).length})`);
+  // 인턴이 이미 지정돼 있으면 그만큼 정규 칸이 줄어 있다 — 그걸 빼고 비교한다.
+  const kakaoN = (BOARD[p0].kakaoSlots || []).length;
+  const internN = (BOARD[p0].internTees || []).length;
+  chk(g.length === kakaoN - internN,
+    `대조 보기 격자가 카카오 칸 수와 다르다(${g.length} vs ${kakaoN}-${internN})`);
   const snap0 = JSON.stringify(g);
   clickMode('intern');
   clickCell(cellOf(p0, g[1].slot.split(' ')[0], g[1].slot.split(' ')[1]));
@@ -206,7 +214,17 @@ for (const VIEW of (HAS_KAKAO ? ['real', 'proj'] : ['real'])) {
   clickCell(cellOf(p, t, c));
   clickMode('intern');
   chk(doc._ids.saveBtn.hidden === false, `[${VIEW}] 바꿨는데 저장 버튼이 안 보인다`);
+  globalThis.__SENT.length = 0;
   await doc._ids.saveBtn._ev.click();
+  // ★카카오 예상은 따로 도는 엔진이다(사용자 확정). 예상 격자가 본배치표로 새어나가면
+  //  카카오가 찼다고 본 칸이 '팀'이 되어 커트가 올라가고 앱이 없는 근무를 보여준다.
+  //  저장한 팀 수는 어느 보기에서 눌렀든 '실제 배치표의 팀 수'여야 한다.
+  const realTeams = (J.parts[p].teeGrid || []).length;   // 사진이 읽은 팀 수(인턴 지정 전)
+  for (const s of globalThis.__SENT.filter((x) => x.url.endsWith('/api/board-correct'))) {
+    const teams = s.body.rows.filter((r) => r.tee).length;
+    chk(teams <= realTeams, `[${VIEW}] ${s.body.part}부 — 실제 ${realTeams}팀인데 ${teams}팀을 저장했다(예상 격자가 샜다)`);
+    chk(s.body.cutLine === teams, `[${VIEW}] ${s.body.part}부 — 커트(${s.body.cutLine})와 보낸 팀 수(${teams})가 다르다`);
+  }
   chk(doc._ids.saveBtn.hidden === true, `[${VIEW}] 저장했는데 저장 버튼이 안 사라진다`);
   chk(doc._ids.undoBtn.hidden === true, `[${VIEW}] 저장했는데 되돌리기 버튼이 남아 있다`);
   chk(/저장됐습니다/.test(doc._ids.state.textContent), `[${VIEW}] 저장 완료 문구가 안 뜬다`);
