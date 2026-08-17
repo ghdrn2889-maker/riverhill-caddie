@@ -447,6 +447,14 @@ if (HAS_KAKAO) {
       chk(teams !== projTeams || projTeams === realTeams, `${s.body.part}부 — 예상 팀 수(${projTeams})가 그대로 넘어갔다`);
       chk(s.body.cutLine === teams, `${s.body.part}부 — 커트(${s.body.cutLine})와 보낸 팀 수(${teams})가 다르다`);
       chk(s.body.notify === false, `${s.body.part}부 — 알림이 켜진 채로 넘어갔다`);
+      // ★넘길 수 없는 인턴도 '전부' 목록에는 실려야 한다 — 안 실으면 서버가 그걸 '오늘 인턴의 전부'로
+      //  알아듣고 관리자 수동 지정을 통째로 지운다(반영했더니 인턴이 날아간 실사고).
+      const onScreen = doc.querySelectorAll('td.c[data-p="' + s.body.part + '"]').filter((e) => String(e._cls || '').includes('intern')).length;
+      chk(Array.isArray(s.body.allInterns), `${s.body.part}부 — 인턴 전체 목록이 안 실렸다`);
+      chk((s.body.allInterns || []).length === onScreen,
+        `${s.body.part}부 — 화면 인턴 ${onScreen}칸인데 보낸 전체 목록은 ${(s.body.allInterns || []).length}칸`);
+      chk((s.body.interns || []).length <= (s.body.allInterns || []).length,
+        `${s.body.part}부 — 배치표로 넘기는 인턴이 전체보다 많다`);
       const bd = (J.parts[s.body.part]?.teeGrid || []).length;
       chk(teams <= Math.max(bd, realTeams), `${s.body.part}부 — 실제 ${bd}팀인데 ${teams}팀을 보냈다`);
     }

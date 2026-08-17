@@ -535,6 +535,8 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
   const interns = Array.isArray(req.body?.interns) ? req.body.interns : [];
+  // 화면이 들고 있는 인턴 전부(배치표에 팀이 없는 칸 포함) — 수동 지정을 통째로 지우지 않기 위해.
+  const allInterns = Array.isArray(req.body?.allInterns) ? req.body.allInterns : null;
   const cutLine = Number(req.body?.cutLine) || 0;
   const notify = !!req.body?.notify;
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
@@ -625,7 +627,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
   let out;
-  try { out = correctPart3({ rows, interns, cutLine, notify }); }
+  try { out = correctPart3({ rows, interns, allInterns, cutLine, notify }); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const notifyToken = (notify && pushReady) ? stashNotify(out.pending) : null;
   res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pending: out.pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });

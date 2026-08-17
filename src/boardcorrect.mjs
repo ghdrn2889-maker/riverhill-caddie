@@ -30,7 +30,10 @@ export function correctionMsg(partLabel, name, s) {
 
 // rows: [{pos, name, tee, course, duty?}] — 명단 전체. 일부만 주면 나머지가 사라진다.
 // interns: [{time, course}] · cutLine: 근무선 · notify: 정정 문구를 만들지 여부(발송은 호출자 몫)
-export function correctPart3({ rows, interns = [], cutLine = 0, notify = false, by = 'admin' }) {
+// allInterns: 화면이 들고 있는 인턴 '전부'. interns는 그중 실제 배치표에 팀이 있는 칸만이다.
+//  배치표(lastboard)에는 팀이 있는 칸만 넣고, 관리자 수동 지정에는 전부를 남긴다 —
+//  둘을 같은 목록으로 취급하면 넘길 수 없는 인턴이 지정 자체에서 지워진다(실사고).
+export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 0, notify = false, by = 'admin' }) {
   if (!Array.isArray(rows)) throw new Error('rows 필요');
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) throw new Error('현재 배치표가 없어요.');
@@ -66,10 +69,14 @@ export function correctPart3({ rows, interns = [], cutLine = 0, notify = false, 
   //   그 뒤 새 배치표의 노란 칸 판독이 조용히 무시된다.
   const ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
   const sig = (a) => (a || []).map((t) => teeKey({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).sort().join(' ');
+  // 수동 지정에는 '전부'를 남긴다 — 안 주면(검수 탭 등 옛 호출) 넘어온 것이 곧 전부다.
+  const manTees = Array.isArray(allInterns)
+    ? allInterns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean)
+    : iTees;
   if (ikey) {
     const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : []));
-    if (before !== sig(iTees)) {
-      try { setManual(ikey, iTees, { by, note: '배치표 교정' }); }
+    if (before !== sig(manTees)) {
+      try { setManual(ikey, manTees, { by, note: '배치표 교정' }); }
       catch (e) { console.error('인턴 수동 지정 저장 실패:', e.message); }
     }
   }

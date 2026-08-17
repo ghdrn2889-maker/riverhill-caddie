@@ -704,6 +704,11 @@
         return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
       }),
       interns: [...interns[part]].filter((k) => teamSet.has(k)).map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
+      // ★배치표에 못 넘기는 인턴도 '없던 일'이 되면 안 된다.
+      //  실사고: 카카오 예상에만 있는 칸(17:07 OUT)의 인턴은 위 목록에서 걸러지는데,
+      //  서버가 그 걸러진 목록을 '오늘 인턴의 전부'로 알아듣고 수동 지정을 통째로 지웠다.
+      //  반영했더니 인턴이 날아간 이유다. 전체 목록을 따로 보내 그 판단을 서버가 안 하게 한다.
+      allInterns: [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
       cutLine: real.length,
       notify: false,   // 알림은 여기서 안 보낸다 — 정정 알림은 '배치표 검수' 탭에서 미리보기 후 발송.
     };
@@ -725,7 +730,7 @@
       const drop = interns[part].size - p.interns.length;
       lines.push(`${part}부 — 근무 ${base} → ${p.cutLine}` + (nameFix ? ` · 이름 ${nameFix}칸` : '')
         + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : '')
-        + (drop > 0 ? ` · 인턴 ${drop}칸은 못 넘깁니다(실제 배치표에 그 시각 팀이 없어요)` : ''));
+        + (drop > 0 ? ` · 인턴 ${drop}칸은 배치표에 못 넘어갑니다(그 시각 팀이 없어요 — 지정은 여기 그대로 남습니다)` : ''));
     }
     return lines;
   }
