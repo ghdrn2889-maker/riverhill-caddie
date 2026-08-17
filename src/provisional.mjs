@@ -7,6 +7,17 @@
 //  그래서 규칙이 뒤집힌다. 지금까지는 못 알아보면 '진짜'로 보고 조용히 덮어썼다.
 //  앞으로는 예고가 살아 있는 동안 그 날짜 배치표를 '참고용'으로 세워둔다 —
 //  틀려서 본배치를 늦게 반영하는 건 되돌릴 수 있지만, 가배치를 진짜로 내보내면 되돌릴 수 없다.
+//
+// ── ★2026-08-17: 보류를 기본으로 끈다(사용자 결정). ──────────────────────────
+//  이 장치는 '예고를 받으면 그 다음 배치표 한 장을 가배치로 본다'는 전제로 서 있다.
+//  그 전제가 이 환경에서는 성립하지 않는다:
+//    · 가배치 예고는 카톡 '텍스트'로 온다 → 서버가 받는다.
+//    · 가배치 배치표는 카톡 '사진'으로 온다 → PC 캡처가 24시간 못 돌아 거의 안 들어온다.
+//  즉 붙잡을 가배치표가 영영 안 오므로, 예고가 붙잡는 건 언제나 '본배치 한 장'이다.
+//  우연이 아니라 필연이다 — 실제로 8/18 본배치(#27394)가 통째로 막혔다.
+//  가배치를 내보내는 것도 나쁘지만, 본배치를 매번 막는 건 확실히 더 나쁘다.
+//  ★탐지·기록은 그대로 둔다(무슨 일이 있었는지는 남아야 한다). 막지만 않는다.
+//  ★카톡 캡처가 24시간 도는 환경이 되면 PROVISIONAL_HOLD=1 로 되살린다.
 import { loadJSON, saveJSON, appendJSONL } from './store.mjs';
 
 const FILE = 'provisional-notice.json';
@@ -19,6 +30,9 @@ const CONFIRMED_RE = /본\s*배\s*[치지]|확정\s*배\s*[치지]|정식\s*배\
 
 export const looksProvisional = (t) => PROVISIONAL_RE.test(String(t || ''));
 export const looksConfirmed = (t) => CONFIRMED_RE.test(String(t || ''));
+
+// 보류를 실제로 걸 것인가 — 기본 꺼짐. 위 주석의 이유 참조.
+export const holdOn = () => ['1', 'true', 'yes'].includes(String(process.env.PROVISIONAL_HOLD || '').toLowerCase());
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
@@ -96,6 +110,14 @@ export function boardIsProvisional(dateLabel, articleText = '', boardId = '') {
   if (looksConfirmed(articleText)) { clearFor(date, '본배치 명시'); return null; }
   const n = noticeFor(date);
   if (!n) return null;
+  // ★기본 경로 — 예고는 남기고 알리되, 배치표를 막지는 않는다.
+  //  막는 판단은 '가배치표가 실제로 들어온다'는 전제 위에서만 옳은데 이 환경에선 그 전제가 없다(위 주석).
+  if (!holdOn()) {
+    console.warn(`·  [가배치] ${date} 예고가 있지만 보류하지 않습니다(PROVISIONAL_HOLD 꺼짐)`
+      + ` — 가배치표가 서버에 안 들어오는 환경이라 붙잡으면 본배치가 막힌다: "${n.text.slice(0, 40)}"`);
+    appendJSONL('provisional.jsonl', { at: Date.now(), kind: 'note-only', date, boardId, notice: n.text });
+    return null;
+  }
   if (n.heldId && boardId && n.heldId !== boardId) {   // 이미 한 장 붙잡았는데 다른 배치표가 왔다 = 본배치
     clearFor(date, `다음 배치표 도착(#${boardId})`);
     return null;
