@@ -168,11 +168,16 @@ if (HAS_KAKAO) {
   doc._ids.vProj._ev.click();   // 기본 보기는 실제 배치표다 — 대조를 보려면 눌러야 한다
   const p0 = '3';
   const g = readGrid(p0).filter((x) => !x.intern);
-  // 인턴이 이미 지정돼 있으면 그만큼 정규 칸이 줄어 있다 — 그걸 빼고 비교한다.
-  const kakaoN = (BOARD[p0].kakaoSlots || []).length;
-  const internN = (BOARD[p0].internTees || []).length;
-  chk(g.length === kakaoN - internN,
-    `대조 보기 격자가 카카오 칸 수와 다르다(${g.length} vs ${kakaoN}-${internN})`);
+  // 대조 보기 = 실제 배치표 ∪ 카카오. 인턴이 맡은 칸만큼 정규 자리가 줄어 있다.
+  //  ★'카카오 칸 수'와 같다고 단정하면 안 된다 — 배치표가 카카오보다 많을 수 있다
+  //   (카카오가 못 잡은 당추, 관리자가 손으로 살린 팀). 실측으로 21 vs 18이 나왔고
+  //   그때 틀린 건 제품이 아니라 이 단정이었다.
+  const KU = (t, c) => t.replace(/^(\d):/, '0$1:') + '|' + (/IN/i.test(c) ? 'IN' : 'OUT');
+  const union = new Set([...(BOARD[p0].teeGrid || []).map((x) => KU(x.time, x.course)),
+    ...(BOARD[p0].kakaoSlots || []).map((x) => KU(x.time, x.course))]);
+  const internN = (BOARD[p0].internTees || []).filter((t) => union.has(KU(t.time, t.course))).length;
+  chk(g.length === union.size - internN,
+    `대조 보기 격자가 '배치표 ∪ 카카오'와 다르다(${g.length} vs ${union.size}-${internN})`);
   const snap0 = JSON.stringify(g);
   clickMode('intern');
   clickCell(cellOf(p0, g[1].slot.split(' ')[0], g[1].slot.split(' ')[1]));
