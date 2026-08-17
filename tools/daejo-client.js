@@ -114,7 +114,11 @@
     rosterOrig[p] = roster[p].slice();
     internsOrig[p] = new Set(interns[p]);
     VIEWS.forEach((v) => {
-      teeV[v][p] = (assign && assign[v]) ? reseat(v, p, assign[v]) : defaultAssign(v, p);
+      // ★실제 축은 지킨다 — 지각·인턴처럼 사진에 없는 사실을 사람이 손으로 넣은 결과다.
+      //  ★예상 축은 지키지 않는다 — 매번 지금의 실제 배치표 ∪ 지금의 카카오로 새로 깐다.
+      //   예상은 저작물이 아니라 계산 결과다. 한 번 옮겨둔 걸 붙잡으면 그 뒤의 변동을 못 따라간다
+      //   (실사고: 2부 예상이 10시 2분에 얼어붙어, 카카오가 잡은 12:46·13:42·13:49를 손으로 넣어야 했다).
+      teeV[v][p] = (v === 'real' && assign && assign.real) ? reseat('real', p, assign.real) : defaultAssign(v, p);
     });
     idxMemo.real[p] = new Map(); idxMemo.proj[p] = new Map();
     // 기준선은 두 보기 모두 잡는다 — 어느 쪽에서 고쳐도 '바뀌었다'를 알아채야 한다.
@@ -142,11 +146,8 @@
   });
   // 시각 순 기본 배치 — 팀이 있는 칸에서 인턴 칸을 뺀 것. 판독 직후의 배치표가 늘 이 모양이다.
   const defaultAssign = (v, p) => origOcc[v][p].filter((s) => !interns[p].has(K(s.time, s.course))).map(cp);
-  // ★저장해둔 배치를 다시 깔되, 그 사이에 생기거나 사라진 칸을 반영한다.
-  //  실사고: 2부 예상 보기가 10시 2분의 모습에 얼어붙었다. 카카오가 그 뒤로 12:46·13:42·13:49를
-  //  새로 잡았는데도 화면은 33자리 그대로였고, 관리자가 티오프를 손으로 하나씩 넣어야 했다.
-  //  (3부는 저장해둔 예상 배치가 없어 매번 새로 깔리니 저절로 따라갔다 — 부마다 다르게 보인 이유다.)
-  //  배치는 여전히 진실이다. 손수 옮긴 자리는 그대로 두고, 모르는 칸만 제자리에 끼우고 뺀다.
+  // ★실제 축 전용 — 저장해둔 배치를 다시 깔되, 그 사이에 배치표가 얻거나 잃은 칸을 반영한다.
+  //  (예상 축은 저장하지 않는다. 아래 setBaseline 주석 참고.)
   const reseat = (v, p, saved) => {
     const occ = origOcc[v][p].filter((s) => !interns[p].has(K(s.time, s.course)));
     const want = new Set(occ.map((s) => K(s.time, s.course)));
@@ -235,9 +236,13 @@
   //  두 보기 모두 편집할 수 있게 한 이상, 변경 판정도 두 보기를 다 봐야 한다.
   const teeMoved = (v, p) => (teeV[v][p] || []).some((x, i) => !sameTee(x, (teeOrigV[v][p] || [])[i]))
     || (teeV[v][p] || []).length !== (teeOrigV[v][p] || []).length;
+  // 예상 보기에서 옮긴 건 저장되지 않는다 — 조용히 사라지면 속은 기분이 든다. 그 자리에서 말한다.
+  const projNote = () => (view === 'proj' ? ' · 예상 보기라 저장되지 않습니다(카카오를 따라 다시 계산됩니다)' : '');
+  //  ★단, 예상 축의 배치는 저장 대상이 아니다(계산 결과다). 예상에서 옮긴 것만으로는
+  //   '저장할 게 있다'가 되지 않는다 — 저장해봐야 다음에 켤 때 다시 계산되어 사라진다.
   const changed = (p) => roster[p].some((x, i) => (x || '') !== (rosterOrig[p][i] || ''))
     || !setEq(interns[p], internsOrig[p])
-    || VIEWS.some((v) => teeMoved(v, p));
+    || teeMoved('real', p);
 
   const shot = new Map();
   document.querySelectorAll('td.c').forEach((td) => { shot.set(td, { html: td.innerHTML, cls: td.className }); });
@@ -456,7 +461,7 @@
       return;
     }
     const msg = applyMove(d.part, d.from, to, { time: toHM(toMin(over.dataset.t)), course: over.dataset.c });
-    if (msg) state.textContent = msg;
+    if (msg) state.textContent = msg + projNote();
   });
   document.addEventListener('pointercancel', () => dragEnd(true));
 
@@ -580,7 +585,7 @@
       const from = posAt(part, pick);
       clearPick();
       const msg = applySwap(part, from, pos);
-      if (msg) state.textContent = msg;
+      if (msg) state.textContent = msg + projNote();
       return;
     }
 
@@ -619,7 +624,7 @@
       clearPick();
       const target = { time: toHM(toMin(td.dataset.t)), course: td.dataset.c };
       const msg = applyMove(part, from, pos, target);   // pos가 0이면 빈 티오프
-      if (msg) state.textContent = msg;
+      if (msg) state.textContent = msg + projNote();
       return;
     }
   });
@@ -644,9 +649,9 @@
         payload[part] = {
           roster: roster[part].slice(),
           teeGrid: real.map((t, i) => ({ pos: i + 1, time: t.time, course: t.course })),
-          // 예상 보기의 배치도 함께 담는다 — 여기서도 편집하니 저장될 곳이 있어야 한다.
-          //  실제 배치표와는 별개의 축이고, 테스트판 안에만 산다.
-          projGrid: (teeV.proj[part] || []).map((t, i) => ({ pos: i + 1, time: t.time, course: t.course })),
+          // ★예상 보기의 배치는 저장하지 않는다 — 저장하면 그 순간에 얼어붙어 그 뒤의 카카오 변동을
+          //  못 따라간다. 예상은 켤 때마다 지금의 실제 배치표 ∪ 지금의 카카오로 다시 계산한다.
+          projGrid: [],
           boardInternTees: split([...interns[part]].filter((k) => teamSet.has(k))),
           internTees: split([...interns[part]]),
           cut: real.length,
@@ -662,7 +667,7 @@
         for (const part of saved) {
           // ★배치를 그대로 넘긴다 — 안 넘기면 시각 순으로 다시 짜여 손수 옮긴 결과가 사라진다.
           setBaseline(part, (teeV.real[part] || []).concat(payload[part].boardInternTees),
-            { real: teeV.real[part], proj: teeV.proj[part] });
+            { real: teeV.real[part] });
           markEdited(part);   // 이제 테스트판이 이 부를 덮고 있다 — 반영 버튼이 살아 있어야 한다.
         }
         resetBtn.hidden = false;
@@ -744,7 +749,7 @@
         // 이제 이 부는 배치표가 곧 화면이다 — 기준선을 여기로 옮겨 두 번 보내지 않게 한다.
         unmarkEdited(part);
         setBaseline(part, (teeV.real[part] || []).concat(p.interns.map((t) => ({ time: t.time, course: t.course }))),
-          { real: teeV.real[part], proj: teeV.proj[part] });
+          { real: teeV.real[part] });
       }
       state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} (알림은 안 나갔습니다)`;
     } catch (err) { state.textContent = '반영 실패: ' + err.message; }
@@ -771,14 +776,9 @@
   PARTS.forEach((p) => {
     const teams = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
     ((BOARD[p] || {}).boardInternTees || []).forEach((t) => teams.push({ time: toHM(toMin(t.time)), course: /IN/i.test(t.course) ? 'IN' : 'OUT' }));
-    // 테스트판에 저장해둔 배치가 있으면 그걸 깐다(실제 축 = teeGrid, 예상 축 = projGrid).
-    const norm = (arr) => arr.slice().sort((x, y) => Number(x.pos) - Number(y.pos))
-      .map((g) => ({ time: toHM(toMin(g.time)), course: /IN/i.test(g.course) ? 'IN' : 'OUT' }));
-    const pg = (BOARD[p] || {}).projGrid;
-    setBaseline(p, teams, {
-      real: (teeOrig[p] || []).filter(Boolean).map(cp),
-      proj: (pg && pg.length) ? norm(pg) : null,
-    });
+    // 실제 축만 깔아준다 — 테스트판에 저장해둔 배치가 있으면 그게 기준선이다.
+    //  예상 축은 넘기지 않는다: 켤 때마다 지금의 실제 배치표 ∪ 지금의 카카오로 새로 계산한다.
+    setBaseline(p, teams, { real: (teeOrig[p] || []).filter(Boolean).map(cp) });
   });
   tools.hidden = false;
   PARTS.forEach(paint);

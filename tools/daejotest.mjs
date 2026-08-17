@@ -468,6 +468,30 @@ if (HAS_KAKAO) {
   }
 }
 
+// ── ⑰ 예상 배치는 저장물이 아니다 ────────────────────────────────────────
+//  예상은 계산 결과다. 한 번 옮겨둔 걸 붙잡으면 그 뒤의 카카오 변동을 못 따라간다.
+//  그러니 예상에서만 옮긴 것은 '저장할 거리'가 되어선 안 된다 — 저장해봐야 다시 계산되어 사라진다.
+{
+  console.log('\n예상 배치는 저장물이 아니다\n');
+  doc._ids.vProj._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length >= 4);
+  if (p) {
+    const was = doc._ids.saveBtn.hidden;
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    const before = g0.map((x) => x.pos + ':' + x.slot).join(' ');
+    clickMode('move');
+    clickCell(cellOf(p, g0[0].slot.split(' ')[0], g0[0].slot.split(' ')[1]));
+    clickCell(cellOf(p, g0[3].slot.split(' ')[0], g0[3].slot.split(' ')[1]));
+    clickMode('move');
+    const after = readGrid(p).filter((x) => !x.intern).map((x) => x.pos + ':' + x.slot).join(' ');
+    chk(after !== before, `${p}부 예상에서 옮겼는데 화면이 그대로다`);
+    chk(doc._ids.saveBtn.hidden === was, '예상 배치만 바꿨는데 저장 상태가 생겼다 — 저장해도 다시 계산되어 사라진다');
+    // 되돌려 다음 시험에 영향을 주지 않게 한다.
+    if (!doc._ids.undoBtn.hidden) doc._ids.undoBtn._ev.click();
+    console.log(`  ${p}부 예상에서 옮김 → 화면은 바뀌고, 저장 상태는 안 생김`);
+  } else console.log('  근무 4명 이상인 부가 없어 건너뜁니다');
+}
+
 // ── ⑮ 저장한 뒤에도 반영할 수 있어야 한다 ────────────────────────────────
 //  실사고: 고치고 '테스트판에 저장'을 누르면 반영 버튼이 스스로 사라졌다.
 //   저장이 기준선을 옮겨 changed()가 false가 되는데, '테스트판이 덮은 부' 목록은
@@ -484,7 +508,12 @@ if (HAS_KAKAO) {
     clickMode('move');
     globalThis.__SENT.length = 0;
     await doc._ids.saveBtn._ev.click();
-    chk(globalThis.__SENT.some((x) => x.url.endsWith('/api/daejo-save')), '저장이 안 나갔다');
+    const savedBody = globalThis.__SENT.find((x) => x.url.endsWith('/api/daejo-save'))?.body;
+    chk(!!savedBody, '저장이 안 나갔다');
+    // 예상 배치는 실려 나가면 안 된다 — 저장되는 순간 그 시점에 얼어붙는다.
+    for (const [pp, v] of Object.entries(savedBody?.parts || {})) {
+      chk(!(v.projGrid || []).length, `${pp}부 — 예상 배치가 저장에 실려 나갔다(${(v.projGrid || []).length}칸)`);
+    }
     chk(doc._ids.saveBtn.hidden === true, '저장했는데 저장 버튼이 남아 있다');
     chk(doc._ids.applyBtn.hidden === false, '저장했더니 반영 버튼이 사라졌다 — 앱에 보낼 방법이 없다');
     globalThis.__SENT.length = 0;
