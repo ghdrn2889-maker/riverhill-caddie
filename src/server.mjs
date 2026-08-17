@@ -2664,6 +2664,28 @@ if (kakaoOn()) {
 setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
 console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 3부+1·2부 이미지 변경 시에만 재판독)`);
 
+// ── 부 날짜 엇갈림 감시 ──────────────────────────────────────────────────
+//  ★3부(lastboard)와 1·2부(board-parts-store)는 저장 시점이 다르다(rememberBoard 뒤에 setBoardPart).
+//   그 사이에서 멈추면 한쪽만 새 날짜가 되고, 화면은 어제와 내일을 아무 표시 없이 나란히 띄운다.
+//   실제로 8/18에 그렇게 됐다 — 가배치 보류가 3부만 막았고, 사용자가 눈으로 찾아냈다.
+//   갈라지는 걸 막을 수는 없다(단독 부-배치표는 그 부만 갱신하는 게 옳다). 모르는 걸 막는다.
+const PARTS_DATE_CHECK_MS = Number(process.env.PARTS_DATE_CHECK_MS || 10 * 60 * 1000);
+function checkPartsDateSkew() {
+  try {
+    const parts = buildBoardsView({ labelToISO: worklog.labelToISO });
+    const stale = parts.filter((b) => b.stale);
+    if (!stale.length) return;
+    const desc = stale.map((b) => `${b.part}부 ${b.targetISO}`).join(', ');
+    const newest = stale[0].staleVs;
+    console.warn(`⚠️ [부 날짜 엇갈림] ${desc} — 다른 부는 ${newest}. 낡은 부가 화면에 그대로 나갑니다.`);
+    raiseBoardIssue({ kind: 'parts_date_skew', part: Number(stale[0].part) || 3,
+      note: `${desc} (다른 부 ${newest}) — 그 부만 배치표가 안 바뀌었습니다`.slice(0, 90) });
+  } catch (e) { console.error('[부 날짜 엇갈림 검사]', e.message); }
+}
+setTimeout(checkPartsDateSkew, 45000);
+setInterval(checkPartsDateSkew, PARTS_DATE_CHECK_MS);
+console.log(`📅 부 날짜 엇갈림 감시: ${PARTS_DATE_CHECK_MS / 60000}분 간격 — 한 부만 낡은 배치표면 관리자에게`);
+
 // ── 끝점 검사 ────────────────────────────────────────────────────────────
 //  ★이 시스템에 없던 단 하나 — "그래서 배치표가 회원에게 갔나?"를 묻는 곳.
 //   2026-08-16: 8/17 배치표가 6번 판독 실패하고 조용히 seen 처리됐다. 사흘 동안 아무도 몰랐다.

@@ -12,6 +12,14 @@ const parts = buildBoardsView();
 if (!parts.length) { console.log('배치표가 아직 없습니다 — 검사할 게 없어요.'); process.exit(0); }
 
 console.log('\n앱 배치표 — 스스로 모순되지 않는가\n');
+// ⑤부끼리 같은 날짜인가 — 3부는 lastboard, 1·2부는 board-parts-store로 저장 시점이 달라
+//  한쪽만 갱신될 수 있다(8/18 실사고). 서로 다른 날짜를 나란히 띄우면 캐디가 어제 티오프를 보고 출근한다.
+{
+  const days = [...new Set(parts.map((b) => b.targetISO).filter(Boolean))];
+  console.log(`  근무일 — ${parts.map((b) => `${b.part}부 ${b.targetISO || '?'}${b.stale ? '(낡음★)' : ''}`).join(' · ')}`);
+  chk(days.length <= 1, `부끼리 배치표 날짜가 다르다: ${days.sort().join(' vs ')} — 한쪽만 갱신됐다`);
+}
+console.log('');
 for (const b of parts) {
   const maxPos = Math.max(0, ...b.teeGrid.map((g) => Number(g.pos) || 0));
   console.log(`  ${b.part}부 — 팀 편성 ${b.teamCount} · 확정선 ${b.cut}번${b.cutoffName ? ' ' + b.cutoffName : ''}`

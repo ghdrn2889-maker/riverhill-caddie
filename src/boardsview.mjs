@@ -18,6 +18,25 @@ const isoToLabel = (iso) => {
   return m ? `${m[1]}년 ${Number(m[2])}월 ${Number(m[3])}일` : '';
 };
 
+// ★부마다 배치표 날짜가 엇갈릴 수 있다 — 그리고 지금까지는 아무도 몰랐다.
+//  왜 엇갈리나(둘 다 실제로 일어난다):
+//   ①저장 시점이 다르다 — 3부는 rememberBoard(server.mjs), 1·2부는 setBoardPart로 그 뒤에 저장된다.
+//     사이에서 멈추면 한쪽만 새 날짜가 된다(8/18: 가배치 보류가 3부만 막고 1·2부는 낮 판독본 그대로).
+//   ②단독 부-배치표(2부만 올라온 글)는 설계상 그 부만 갱신한다 — 이건 정상이지만 화면은 구분을 못 한다.
+//  화면이 서로 다른 날짜를 아무 표시 없이 나란히 보여주면, 캐디는 어제 티오프를 보고 출근한다.
+//  그래서 여기서 한 번 비교해 낡은 부에 도장을 찍는다. 고치지는 않는다 — 숨기는 게 더 나쁘다.
+export function markStaleParts(list) {
+  const days = list.map((b) => String(b.targetISO || '')).filter(Boolean);
+  if (days.length < 2) return list;
+  const newest = days.slice().sort().pop();
+  for (const b of list) {
+    const iso = String(b.targetISO || '');
+    b.stale = !!(iso && iso < newest);
+    if (b.stale) b.staleVs = newest;
+  }
+  return list;
+}
+
 export function buildBoardsView({ labelToISO = () => '' } = {}) {
   const out = [];
   const push = (part, roster, teeGrid, cut, cutoffName, teamCount, dateLabel, at) => {
@@ -48,5 +67,6 @@ export function buildBoardsView({ labelToISO = () => '' } = {}) {
     if (v) push('3', v.part3Roster, v.teeGrid, cutOf(v), v.cutoffName, teamsOf(v), lb.dateLabel || v.dateLabel || '', lb.at);
   } catch (e) { console.error('[boards 3부 오류]', e.message); }
   out.sort((a, b) => Number(a.part) - Number(b.part));
+  markStaleParts(out);
   return out;
 }
