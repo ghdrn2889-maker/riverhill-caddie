@@ -247,8 +247,15 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   }
   const byPart = {};
   for (const b of booked) (byPart[b.part] ||= []).push({ time: b.time, mins: b.mins, course: b.course });
+  // ★그 부에서 가장 많이 찼다고 본 순간을 따로 남긴다.
+  //  byPart는 '지금 판정 가능한 칸'이라 시각이 지나면 줄어든다 — 오후에 보면 1·2부가 0칸이다.
+  //  그래서 하루가 끝난 뒤 사람 경로와 맞대려면 이 최대치가 있어야 한다(없으면 '카카오가 못 봤다'로 오독된다).
+  const peakByPart = { ...(prevSnap?.peakByPart || {}) };
+  for (const [p, arr] of Object.entries(byPart)) {
+    if (!peakByPart[p] || arr.length > peakByPart[p].length) peakByPart[p] = arr.map((x) => ({ time: x.time, course: x.course }));
+  }
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
-    openCount: open.length, bookedCount: booked.length, byPart, unknown,
+    openCount: open.length, bookedCount: booked.length, byPart, peakByPart, unknown,
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
     // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
     openKeys: open.map((o) => key(o.mins, o.course)),

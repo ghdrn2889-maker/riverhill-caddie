@@ -72,9 +72,14 @@ export function compareDay(date) {
   // ★맞기는 델타를 누적해서 세지 않는다 — 마지막 스냅샷이 정본이다.
   //  실사고: 당일 판정이 꺼져 있던 아침엔 전 칸이 한 번에 '풀림'으로 기록됐고,
   //  그걸 누적해서 빼자 카카오가 멀쩡히 보고 있던 2·3부까지 '못 봤다'로 집계됐다(배치표만 90칸).
+  //  ★byPart가 아니라 peakByPart를 본다. byPart는 '지금 판정 가능한 칸'이라 시각이 지나면 줄어든다 —
+  //   오후에 집계하면 1·2부가 0칸이 되어 '카카오가 그 부를 못 봤다'로 오독된다(실제로 그랬다).
+  //   ★peak에는 나중에 취소된 칸도 남는다. 일부러 안 뺀다 — 취소와 '판매 마감/시각 지남'을
+  //    지금은 확실히 못 가르기 때문이다. 그래서 '헛것'이 실제보다 많게 나온다.
+  //    카카오에 불리한 쪽으로 치우치게 두는 게 맞다. 넘어갈지 말지를 정하는 저울이니까.
   const snap = loadJSON(`kakao-board/${d}.json`, null);
   const kNow = new Map();                                  // 부 → Set(칸)
-  for (const [p, arr] of Object.entries((snap && snap.byPart) || {})) {
+  for (const [p, arr] of Object.entries((snap && (snap.peakByPart || snap.byPart)) || {})) {
     kNow.set(String(p), new Set((arr || []).map((x) => slotKey(x.time, x.course)).filter(Boolean)));
   }
   // 배치표 — 그 칸을 실제로 갖게 된 시각. base(처음 본 상태)는 따로 표시한다.
