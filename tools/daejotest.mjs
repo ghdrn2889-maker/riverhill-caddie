@@ -430,7 +430,10 @@ if (HAS_KAKAO) {
     const sent = globalThis.__SENT.filter((x) => x.url.endsWith('/api/board-correct'));
     chk(sent.length > 0, '반영 버튼을 눌렀는데 board-correct를 안 불렀다');
     // ★손 안 댄 부는 보내면 안 된다 — 그 부 회원까지 다시 계산되고 잠금이 걸린다.
-    chk(sent.every((s) => s.body.part === p), `손 안 댄 부까지 보냈다: ${sent.map((s) => s.body.part + '부').join(',')} (고친 건 ${p}부뿐)`);
+    //  '손댄 부' = 지금 이 시험이 고친 부 + 서버 테스트판이 이미 덮고 있던 부(그것도 관리자가 고쳐둔 것이다).
+    const preEdited = (J.sandbox && J.sandbox.edited) || [];
+    chk(sent.every((s) => s.body.part === p || preEdited.includes(s.body.part)),
+      `손 안 댄 부까지 보냈다: ${sent.map((s) => s.body.part + '부').join(',')} (고친 건 ${p}부 + 테스트판 ${preEdited.join('·') || '없음'})`);
     for (const s of sent) {
       const teams = s.body.rows.filter((r) => r.tee).length;
       chk(teams !== projTeams || projTeams === realTeams, `${s.body.part}부 — 예상 팀 수(${projTeams})가 그대로 넘어갔다`);
