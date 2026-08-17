@@ -1858,7 +1858,8 @@ async function processForMember(userId, member, out, full, opts = {}) {
       const grid = Array.isArray(v.teeGrid) ? v.teeGrid : [];
       // 티오프표가 '신뢰 가능': 행번호 오독(1,2,3…같은코스)이 아니고 충분한 행 → 표(순번→시각) 자체는 안정.
       //  이때 불확실은 색/경계 투표만 갈린 것 → 정상 판독 결과(merged.next)를 그대로 반영해 '판독=대시보드' 일치.
-      const gridReliable = grid.length >= 3 && !gridLooksRownumbered(grid);
+      const gridReliable = grid.length >= 3
+        && !gridLooksRownumbered(grid, Number(v.cutLine) || Number(v.cutoffPosition) || Number(v.teamCount) || 0);
       const mypN = Number(merged?.next?.myPosition) || 0;
       if (gridReliable && merged && merged.next && mypN > 0 && today.status !== 'off') {
         const next = { ...merged.next };

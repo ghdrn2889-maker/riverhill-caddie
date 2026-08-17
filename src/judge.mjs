@@ -870,7 +870,15 @@ export function extractBareTeamCount(subject, text, member = memberFromEnv()) {
   return (n >= 1 && n <= 40) ? n : null;
 }
 
-export function gridLooksRownumbered(grid) {
+// 표를 못 읽고 '줄 번호'를 매겨버린 오독인가.
+//  ★한 코스만 도는 날은 이 검사에 그대로 걸린다 — 그건 오독이 아니라 그날의 사실이다.
+//   야간 3부는 OUT만 도는 날이 잦다(2026-08-18 실측: 3부 12팀 전부 OUT, 카카오도 IN 미운영 확인).
+//   그런 날은 순번이 자연히 1,2,3…이고 코스도 하나뿐이라 두 조건이 동시에 참이 된다.
+//   실제로 8/18 배치표가 이 경고에 걸려 알림이 낮은 등급으로 나갔는데, 판독은 정확했다.
+//  ★가르는 건 '확정선'이다 — 표와 무관하게 요약 글에서 따로 읽은 숫자라 서로를 검증할 수 있다.
+//   표가 근무선 끝까지 덮고 있으면 표를 통째로 읽은 것이다.
+//   두 열짜리 표에서 한 열만 잘못 읽은 오독이면 근무선 한참 앞에서 끊긴다.
+export function gridLooksRownumbered(grid, cut = 0) {
   if (!Array.isArray(grid) || grid.length < 4) return false;
   const pos = grid.map((g) => Number(g?.pos)).filter((n) => n > 0);
   if (pos.length < 4) return false;
@@ -879,7 +887,11 @@ export function gridLooksRownumbered(grid) {
   let sequential = 0;
   for (let i = 1; i < pos.length; i++) if (pos[i] === pos[i - 1] + 1) sequential++;
   const mostlySequential = sequential >= pos.length - 2;    // 거의 1,2,3,4…
-  return allSameCourse && mostlySequential;
+  if (!(allSameCourse && mostlySequential)) return false;
+  // 근무선까지 덮었나 — 덮었으면 한 코스만 도는 날이다(인턴 칸만큼은 비어 있을 수 있다).
+  const n = Number(cut) || 0;
+  if (n > 0 && Math.max(...pos) === n && pos.length >= n - 2) return false;
+  return true;
 }
 
 function resolveTeeByGrid(verdict, member = memberFromEnv()) {
@@ -888,7 +900,7 @@ function resolveTeeByGrid(verdict, member = memberFromEnv()) {
   const mp = Number(verdict.myPosition);
   if (!(mp > 0) || grid.length < 3) return; // 표를 제대로 못 옮겼으면 기존 판독 유지
   // ★표를 순서대로 번호 매긴 오독이면 티오프를 신뢰하지 않음(근무확정 색은 유지, 시간만 '확인 필요').
-  if (gridLooksRownumbered(grid)) {
+  if (gridLooksRownumbered(grid, Number(verdict.cutLine) || Number(verdict.cutoffPosition) || Number(verdict.teamCount) || 0)) {
     const color0 = String(verdict.myCellColor || '').toLowerCase();
     const work0 = /white|흰|colored|색칠|녹|하늘|green|blue/.test(color0);
     verdict.teeTime = null;
