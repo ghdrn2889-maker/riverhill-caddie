@@ -353,7 +353,11 @@
       memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
   };
 
-  let mode = '', pick = null, view = 'proj';
+  // ★기본 화면은 '실제 배치표'다 — 고치는 곳이 기본이어야 한다.
+  //  예전엔 예상이 기본이었는데, 예상 배치를 저장하지 않기로 한 뒤로는
+  //  기본 화면에서 옮겨도 저장할 수가 없다(사용자가 겪은 그 상태 그대로다).
+  //  앱에 가는 것도, 사람이 고치는 것도 실제 배치표다. 예상은 눌러서 본다.
+  let mode = '', pick = null, view = 'real';
   const clearPick = () => { if (pick) pick.classList.remove('picked'); pick = null; };
   // 칸(td.c)이든 스페어 칩(span.sp)이든 '어느 부 몇 번인가'를 같은 식으로 답한다.
   const posAt = (part, el) => {
@@ -474,8 +478,8 @@
   const vReal = document.getElementById('vReal');
   const viewNote = document.getElementById('viewNote');
   const tools = document.getElementById('tools');
-  const NOTE_PROJ = '사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 여기서도 고칠 수 있습니다.';
-  const NOTE_REAL = '사진이 <b>실제로 읽은</b> 배치표입니다. 카카오 예상 칸은 빠지고 순번도 원래대로예요.';
+  const NOTE_PROJ = '사진 판독 위에 카카오 예약을 겹친 <b>예상</b>입니다. 카카오를 따라 <b>매번 새로 계산</b>되므로 여기서 옮긴 건 저장되지 않습니다.';
+  const NOTE_REAL = '사진이 <b>실제로 읽은</b> 배치표입니다. 고치는 곳이자 앱으로 넘어가는 곳입니다.';
   function setView(v) {
     if (v === view) return;
     view = v;
@@ -537,6 +541,7 @@
       state.textContent = r.on
         ? `${where}에 팀을 추가했습니다 — 뒤 순번이 한 칸씩 밀렸고 ${gained > 0 ? '스페어 맨 앞이 근무로 올라왔습니다' : '올라올 스페어가 없습니다'} (근무선 ${before}→${r.work})`
         : `${where} 팀을 없앴습니다 — 뒤 순번이 당겨지고 맨 뒤 한 명이 스페어로 내려갔습니다 (근무선 ${before}→${r.work})`;
+      state.textContent += projNote();
       return;
     }
 

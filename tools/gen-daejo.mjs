@@ -325,10 +325,10 @@ ${['1', '2', '3'].map(partTable).join('\n')}
 
 <div class="viewbar">
   <div class="seg">
-    <button id="vProj" type="button" class="on">대조 &mdash; 카카오 예상</button>
-    <button id="vReal" type="button">실제 배치표</button>
+    <button id="vProj" type="button">대조 &mdash; 카카오 예상</button>
+    <button id="vReal" type="button" class="on">실제 배치표</button>
   </div>
-  <span id="viewNote" class="vnote">사진 판독 위에 카카오 예약을 겹친 <b>예상</b> 배치표입니다. 여기서도 고칠 수 있습니다.</span>
+  <span id="viewNote" class="vnote">사진이 <b>실제로 읽은</b> 배치표입니다. 고치는 곳이자 앱으로 넘어가는 곳입니다.</span>
 </div>
 
 <div class="tools" id="tools" hidden>
