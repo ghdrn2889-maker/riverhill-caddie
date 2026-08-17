@@ -138,8 +138,21 @@ export async function fetchOpen(dateYYYYMMDD) {
 //   당일 판매를 닫은 것이다. 한 시간 전만 해도 판매중이었다). 마감선이 언제인지 아직 모르므로 추측하지 않는다.
 //   본배치표는 전날 저녁에 나오니 '내일치'만 봐도 충분하다 — 아쉬울 게 없다.
 //   KAKAO_TODAY=1 로 켜면 당일도 CUTOFF_MIN 기준으로 판정하되, 그 결과는 참고용이다.
-const CUTOFF_MIN = Number(process.env.KAKAO_CUTOFF_MIN || 240);
-const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '0') === '1';
+//  ★2026-08-17 방침 변경: 당일을 통째로 버리지 않는다. 지나간 칸만 못 세는 것이지,
+//   앞으로 남은 칸이 판매중에서 사라지는 건 당일에도 진짜 예약(당추) 신호다.
+//   위험한 건 '판매 마감선'뿐이므로, 마감선 바깥(CUTOFF_MIN보다 먼 미래)만 센다.
+//   그리고 마감선을 추측만 하지 않고 실제로 잰다 — 아래 noteCloseLead()가 사라진 칸의
+//   '티오프까지 남은 시간'을 남기므로, 며칠이면 진짜 마감선이 데이터로 나온다.
+//   (관측 8/16 16:00 — 18:03~18:45 칸이 한꺼번에 사라짐 = 티오프 123분 전. 그래서 240분은 바깥.)
+//  ★가르는 건 시간이 아니라 '모양'이다.
+//   한 칸만 사라졌다 = 그 한 팀이 예약된 것(당추). 즉시 반영해야 하는 진짜 신호다.
+//   여러 칸이 한꺼번에 사라졌다 = 그 시간대 판매를 닫은 것. 이건 예약이 아니다.
+//   시간으로 뭉뚱그려 끊으면(예: 4시간 전부터 무시) 방금 예약된 12:39 같은 칸까지 같이 버린다.
+//   마감선은 추측하지 않고 관측해서 쓴다 — 뭉텅이 사라짐을 볼 때마다 그때의 '남은 시간'을
+//   기록해 그 바깥만 판정한다. 관측 전에는 0이므로 미래 칸은 전부 판정한다.
+const CLOSE_BULK = Number(process.env.KAKAO_CLOSE_BULK || 4);   // 이 개수 이상 한 번에 사라지면 판매 마감
+const MIN_LEAD = Number(process.env.KAKAO_MIN_LEAD || 0);       // 최소 안전선(분) — 기본 없음
+const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '1') === '1';
 
 export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
@@ -164,8 +177,31 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const isToday = String(dateYYYYMMDD) === todayStr;
   const isPast = String(dateYYYYMMDD) < todayStr;
-  // 판단 가능한가 — 미래 날짜면 전부 가능, 지난 날짜와 당일은 불가(당일은 KAKAO_TODAY=1일 때만 참고용).
-  const judgeable = (f) => (isPast ? false : (!isToday || (JUDGE_TODAY && f.mins > nowMin + CUTOFF_MIN)));
+
+  // ── 이번 틱에 판매중에서 사라진 칸 ──────────────────────────────────────
+  //  한 칸씩 사라지면 예약, 뭉텅이로 사라지면 판매 마감. 마감이면 그때의 '남은 시간'을 마감선으로 배운다.
+  const prevOpen = new Set(prevSnap?.openKeys || []);
+  const goneNow = fixed.filter((f) => prevOpen.has(key(f.mins, f.course)) && !openSet.has(key(f.mins, f.course)) && (!isToday || f.mins > nowMin));
+  let closeLead = Number(prevSnap?.closeLead || 0);
+  if (isToday && goneNow.length >= CLOSE_BULK) {
+    const lead = Math.min(...goneNow.map((f) => f.mins)) - nowMin;
+    if (lead > closeLead) {
+      closeLead = lead;
+      console.warn(`[카카오골프] ${dateYYYYMMDD} 판매 마감으로 봅니다 — ${goneNow.length}칸이 한꺼번에 사라짐(티오프 ${lead}분 전). 이 안쪽은 판정하지 않습니다.`);
+    }
+  } else if (isToday && goneNow.length) {
+    for (const f of goneNow) console.log(`[카카오골프] ${dateYYYYMMDD} ${f.time} ${f.course} 예약됨(당일) — 티오프 ${f.mins - nowMin}분 전`);
+  }
+  if (isToday && goneNow.length) {
+    try {
+      appendJSONL('kakao-close.jsonl', { at: Date.now(), date: String(dateYYYYMMDD), n: goneNow.length,
+        bulk: goneNow.length >= CLOSE_BULK, leads: goneNow.map((f) => f.mins - nowMin),
+        slots: goneNow.map((f) => key(f.mins, f.course)) });
+    } catch { /* 기록 실패가 판정을 막지는 않는다 */ }
+  }
+  const lead = Math.max(closeLead, MIN_LEAD);
+  // 판단 가능한가 — 지난 날짜는 불가. 당일은 '지나간 칸'과 '마감선 안쪽'만 빼고 판정한다.
+  const judgeable = (f) => (isPast ? false : (!isToday || (JUDGE_TODAY && f.mins > nowMin + lead)));
 
   // ★'그날 안 도는 코스'와 '다 팔린 코스'를 가려낸다 — 이게 이 엔진의 가장 큰 함정이다.
   //  둘 다 판매중 0칸으로 똑같이 보이지만 뜻은 정반대다:
@@ -214,8 +250,13 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, unknown,
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
+    // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
+    openKeys: open.map((o) => key(o.mins, o.course)),
+    closeLead,                                     // 관측으로 배운 판매 마감선(분). 안 봤으면 0.
     everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
-    skippedCount: skipped.length, judgeableFrom: isPast ? null : (isToday ? (JUDGE_TODAY ? toHM(nowMin + CUTOFF_MIN) : '판정안함(당일)') : '00:00'), cutoffMin: CUTOFF_MIN };
+    skippedCount: skipped.length,
+    judgeableFrom: isPast ? null : (isToday ? (JUDGE_TODAY ? toHM(Math.min(nowMin + lead, 1439)) : '판정안함(당일)') : '00:00'),
+    cutoffMin: lead };
 }
 
 // ── 스냅샷 저장 — 시간에 따라 예약이 차는 과정을 남긴다(취소·추가 추적) ──

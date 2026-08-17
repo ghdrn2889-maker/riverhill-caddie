@@ -3,7 +3,9 @@
 //  왜 따로 두나: 이걸 손으로 뽑은 JSON에 의존하게 두면 대조판은 영원히 '샘플'로 남는다.
 //   실제로 그랬다 — 화면은 다 만들어졌는데 file://로 열려 있어서 저장 버튼이 아무 일도 안 했다.
 //   모니터가 이 함수를 불러 그 자리에서 그리면, 보는 화면과 저장하는 화면이 같아진다.
-import { loadJSON } from './store.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadJSON, DATA_DIR } from './store.mjs';
 import { loadBoardPartsStore } from './boardparts.mjs';
 import { effectivePart3Verdict } from './analytics.mjs';
 import { loadSnapshot, kakaoHealth, fixedSlots } from './kakaogolf.mjs';
@@ -69,10 +71,23 @@ function partsOf() {
   return { parts: out, dateLabel };
 }
 
+// 스냅샷이 있는 날짜들 — 대조판 날짜 이동에 쓴다.
+export function snapshotDates() {
+  try {
+    return fs.readdirSync(path.join(DATA_DIR, 'kakao-board'))
+      .map((f) => f.replace(/\.json$/, '')).filter((d) => /^\d{8}$/.test(d)).sort();
+  } catch { return []; }
+}
+
 // 대조판 한 장에 필요한 전부. date를 주면 그 날짜, 안 주면 배치표가 말하는 날짜.
 export function buildDaejoData(date = '') {
   const { parts, dateLabel } = partsOf();
-  const dateKey = String(date || '').replace(/\D/g, '').slice(0, 8) || keyFromLabel(dateLabel) || '';
+  const boardKey = keyFromLabel(dateLabel) || '';
+  const dateKey = String(date || '').replace(/\D/g, '').slice(0, 8) || boardKey || '';
+  // ★다른 날짜를 볼 때는 배치표를 붙이지 않는다. 8/17 배치표 위에 8/18 예약을 겹치면
+  //  둘 다 그럴듯한데 통째로 거짓이 된다 — 없는 건 없다고 말하는 게 낫다.
+  const boardMissing = !!boardKey && dateKey !== boardKey;
+  if (boardMissing) for (const p of Object.keys(parts)) delete parts[p];
   // ★인턴은 수동이 자동을 이긴다(interns.mjs) — 화면에도 실제로 쓰는 값이 그려져야 한다.
   //  ★단, 사진이 읽은 인턴 칸(boardInternTees)은 따로 남긴다 — 그게 '실제 배치표의 팀'이다.
   //   수동 인턴은 카카오 예상 칸에 찍힐 수도 있는데(17:07처럼 본배치표엔 팀이 없는 시각),
@@ -86,9 +101,15 @@ export function buildDaejoData(date = '') {
   // ★관리자 테스트판을 마지막에 덮는다 — 이 값은 대조판 밖으로 나가지 않는다(회원 앱·알림·엔진 무관).
   const sb = applySandbox(parts, dateKey);
   const snap = (dateKey && loadSnapshot(dateKey)) || {};
+  const ymd = (k) => (k.length === 8 ? `${+k.slice(4, 6)}월 ${+k.slice(6, 8)}일` : k);
   return {
     dateKey,
-    dateLabel: dateLabel || dateKey,
+    dateLabel: boardMissing ? ymd(dateKey) : (dateLabel || dateKey),
+    boardKey,
+    boardMissing,
+    dates: snapshotDates(),
+    // 당일은 판정하지 않는다(카카오가 지나간 티오프를 목록에서 빼므로 '안 뜸 = 찼다'가 성립하지 않는다).
+    judgeNote: snap.judgeableFrom || '',
     parts: sb.parts,
     sandbox: { edited: sb.edited, at: sb.at, by: sb.by || '' },
     snap,

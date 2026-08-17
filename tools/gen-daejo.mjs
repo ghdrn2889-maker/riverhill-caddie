@@ -277,6 +277,27 @@ table.cmp td.warn{color:var(--warn);font-weight:700}
 <h1>대조판 &mdash; ${esc(J.dateLabel || '')}</h1>
 <p class="sub">고정 티오프 격자 위에 <b>카카오골프 예약</b>과 <b>배치표 순번</b>을 겹쳐 놓은 것. 두 경로는 서로 완전히 독립이다.</p>
 
+${(() => {
+  const cur = String(J.dateKey || '');
+  const wd = ['일', '월', '화', '수', '목', '금', '토'];
+  // 토큰(?k=)은 클라이언트가 붙인다 — 서버가 HTML에 토큰을 박아두지 않게.
+  const nav = (J.dates || []).map((d) => {
+    const dt = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8));
+    return `<a class="dnav${d === cur ? ' on' : ''}" data-d="${d}" href="?date=${d}">${+d.slice(4, 6)}/${+d.slice(6, 8)}(${wd[dt.getDay()]})</a>`;
+  }).join('');
+  return nav ? `<div class="dates">날짜 ${nav}<span class="dhint">배치표가 있는 날만 순번이 겹쳐집니다</span></div>` : '';
+})()}
+${J.boardMissing ? `<div class="note">
+  <h3>${esc(J.dateLabel || '')} 배치표는 아직 없습니다</h3>
+  <p>지금 보시는 건 <b>카카오 예약 상태만</b>입니다 &mdash; 예약이 차는 걸 실시간으로 보는 화면이에요.
+  배치표가 올라오면 이 격자 위에 순번이 겹쳐집니다. (현재 배치표: ${esc(J.boardKey || '없음')})</p>
+</div>` : ''}
+${(J.judgeNote === '판정안함(당일)') ? `<div class="note">
+  <h3>오늘 날짜는 카카오 판정을 하지 않습니다</h3>
+  <p>당일에는 카카오가 <b>이미 지나간 티오프를 목록에서 빼기</b> 때문에 &lsquo;안 뜬다 = 찼다&rsquo;가 성립하지 않습니다.
+  억지로 세면 지나간 시간이 전부 &lsquo;찬 칸&rsquo;이 되어 커트가 부풀어요. 그래서 오늘은 <b>찬 칸 0</b>으로 둡니다 &mdash; 고장이 아닙니다.
+  실시간으로 차는 걸 보시려면 <b>내일 날짜</b>를 눌러주세요.</p>
+</div>` : ''}
 <div class="sandbox">
   <b>관리자 테스트판</b>
   여기서 고치고 저장하는 값은 <b>회원 앱에 반영되지 않습니다</b> &mdash; 알림도 나가지 않고, 카카오 엔진도 보지 않습니다.
