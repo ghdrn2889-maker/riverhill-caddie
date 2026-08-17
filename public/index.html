@@ -64,6 +64,60 @@
     .hw-ft { font-size:11.5px; font-weight:750; color:#577669; margin-top:7px; }  /* "탭하여 입력" = 이 글자가 유일한 안내 → 키우고 진하게 */
     .hw-w.pay .hw-ft { color:#637169; }
 
+    /* ── ★홈 위젯 확장(ㄷ안) — 위젯 하나하나를 '이동 버튼'으로 ──────────────────
+       사용자 설계: 약 80명이 쓰고 연령·성별이 다양하니 같은 곳으로 가는 길을 셋 둔다.
+       ①햄버거 메뉴 ②하단 탭 ③홈 위젯. 중복은 낭비가 아니라 이 앱에선 기능이다.
+       큰 넷은 '숫자가 있는 것', 작은 셋은 '갈 곳만 있는 것'. */
+    .hw-w { position:relative; }
+    .hw-w.ins  { background:linear-gradient(160deg,#e6f1fa,#dbe8f4); }
+    .hw-w.work { background:linear-gradient(160deg,#f1eef6,#e7e3f0); }
+    .hw-w.ins .label { color:#4c6b85; } .hw-w.work .label { color:#655e7a; }
+    .hw-w.ins .hw-ft { color:#4c6b85; } .hw-w.work .hw-ft { color:#655e7a; }
+    .hw-w.work .hw-num { color:#332b47; }
+    /* 보험만 숫자가 없다 — 한 문장이 값이라, 숫자가 놓이던 자리를 그 문장이 대신한다. */
+    .hw-w.ins .hw-say { margin-top:auto; font-size:15px; font-weight:900; letter-spacing:-.032em;
+                        line-height:1.32; color:#173d59; }
+    /* 오른쪽 위 화살표 = "여기는 눌러서 가는 곳"이라고 말하는 유일한 표시 */
+    .cnr { position:absolute; top:13px; right:13px; width:22px; height:22px; border-radius:50%;
+           background:rgba(255,255,255,.62); display:flex; align-items:center; justify-content:center; }
+    .cnr svg { width:12px; height:12px; stroke:#3f7a63; stroke-width:2.8; fill:none;
+               stroke-linecap:round; stroke-linejoin:round; }
+    .hw-w.pay .cnr svg { stroke:#5c6f64; }
+    .hw-w.ins .cnr svg { stroke:#3d6b93; } .hw-w.work .cnr svg { stroke:#5b5080; }
+
+    /* 작은 타일 — 숫자가 없고 갈 곳만 있는 것들 */
+    .tl { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px; }
+    .tl-b { position:relative; border:1px solid #e2e8e3; border-radius:16px; padding:13px 11px; min-height:86px;
+            display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+            text-align:left; font-family:inherit; color:inherit; background:#fff; cursor:pointer;
+            -webkit-tap-highlight-color:transparent; box-shadow:0 3px 10px rgba(24,54,35,.05);
+            transition:transform .07s ease, filter .16s ease; }
+    .tl-b:active { transform:translateY(1px) scale(.99); }
+    .tl-b .ic { width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+                border-radius:9px; background:#eef4f0; }
+    .tl-b .ic svg { width:16px; height:16px; stroke:#2f6b56; stroke-width:2; fill:none;
+                    stroke-linecap:round; stroke-linejoin:round; }
+    .tl-b .tn { font-size:12.5px; font-weight:850; letter-spacing:-.02em; color:#23312b; }
+    .tl-b .ts { display:block; font-size:10.5px; font-weight:700; color:#7b877f; margin-top:2px; }
+    .tl-b.rul .ic { background:#eceff3; } .tl-b.rul .ic svg { stroke:#546272; }
+    .tl-b.all .ic { background:#e9eef4; } .tl-b.all .ic svg { stroke:#4a6b8c; }
+    .tl-b.tro .ic { background:#f3eee2; } .tl-b.tro .ic svg { stroke:#9a7e3c; }
+    /* ★아직 갈 곳이 없는 타일 — 눌러보고 나서 알게 하지 않는다. 색과 자물쇠로 미리 말한다. */
+    .tl-b.lock { background:#f4f6f4; border-style:dashed; border-color:#d6ded8; box-shadow:none; cursor:default; }
+    .tl-b.lock:active { transform:none; }
+    .tl-b.lock .ic { background:#e8ece9; } .tl-b.lock .ic svg { stroke:#93a099; }
+    .tl-b.lock .tn { color:#8d998f; } .tl-b.lock .ts { color:#a3ada6; }
+    .lk { position:absolute; top:11px; right:11px; width:14px; height:14px; }
+    .lk svg { width:14px; height:14px; stroke:#a9b4ac; stroke-width:2; fill:none;
+              stroke-linecap:round; stroke-linejoin:round; }
+
+    /* 배치표 대시보드(히어로) 자체가 배치표로 가는 문 — 오른쪽 위 화살표로만 알린다.
+       ★히어로는 장면이라 버튼으로 감싸지 않는다(안에 게이지·문구가 계속 바뀐다). 화살표만 얹고 탭을 받는다. */
+    #todayHero { cursor:pointer; }
+    #todayHero .cnr { background:rgba(255,255,255,.78); box-shadow:0 1px 4px rgba(24,54,35,.10); z-index:2; }
+    #todayHero.hero-off .cnr { background:rgba(255,255,255,.34); }
+    #todayHero.hero-off .cnr svg { stroke:#e8f2ec; }
+
     /* ── ★오늘의 기록 위젯(접힌 메모지) ──
        기록은 앱 안에서 유일하게 '종이 결'(크림·금색·Georgia 이탤릭)로 제 정체성을 갖는다.
        민트로 통일하면 그 정체성이 죽어서, 여기서도 종이 결을 그대로 유지한다. 우상단은 접힌 모서리. */
@@ -2522,9 +2576,11 @@
 
     <!-- 오늘 -->
     <section class="view body" id="view-today" role="tabpanel" aria-labelledby="tab-today">
-      <section class="hero" id="todayHero">
+      <section class="hero" id="todayHero" role="button" tabindex="0" aria-label="오늘 내 상황 — 배치표로 이동">
         <div class="fx" id="wxFx" aria-hidden="true"></div>
         <span class="wxref" id="wxRef" hidden></span>
+        <!-- 이 화살표가 "여기를 누르면 배치표로 간다"고 말하는 유일한 표시 -->
+        <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
         <div class="label in" id="heroLabel" style="--j:0">오늘 내 상황</div>
         <h3 id="heroTitle" class="in" style="--j:1">—</h3>
         <p class="sub in" id="heroSub" style="--j:2"></p>
@@ -2539,15 +2595,49 @@
            탭하면 각각 라운드 점검·정산으로 이동(요약을 보고 바로 들어가는 진입점). -->
       <div class="hw" id="homeWidgets">
         <button class="hw-w cart" id="hwCart" type="button" aria-label="오늘 카트 번호 — 라운드 점검으로 이동">
+          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
           <span class="label">오늘 카트 번호</span>
           <span class="hw-num noval" id="hwCartNum">번호 없음</span>
           <span class="hw-ft" id="hwCartFt">탭하여 입력</span>
         </button>
         <button class="hw-w pay" id="hwPay" type="button" aria-label="이번 달 수입 — 정산으로 이동">
+          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
           <span class="label" id="hwPayLab">이번 달 수입</span>
           <span class="hw-num m" id="hwPayNum">—</span>
           <span class="hw-ft" id="hwPayFt">불러오는 중…</span>
         </button>
+        <!-- ★보험은 숫자가 없다 — 한 문장이 값이다. 이 앱이 캐디에게 해줄 수 있는 말 중 가장 중요한 한 줄이라
+             홈에 둔다. 산재를 '가입할까 말까'로 묻지 않는 원칙은 보험 페이지와 같다. -->
+        <button class="hw-w ins" id="hwIns" type="button" aria-label="캐디 보험 — 산재 청구 방법 보기">
+          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
+          <span class="label">캐디 보험</span>
+          <span class="hw-say">산재는 고르는 게<br>아닙니다</span>
+          <span class="hw-ft">다쳤을 때 어떻게 청구하나</span>
+        </button>
+        <button class="hw-w work" id="hwWork" type="button" aria-label="이번 달 근무 — 근무 일지로 이동">
+          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
+          <span class="label" id="hwWorkLab">이번 달 근무</span>
+          <span class="hw-num" id="hwWorkNum">—</span>
+          <span class="hw-ft" id="hwWorkFt">불러오는 중…</span>
+        </button>
+      </div>
+
+      <!-- 작은 타일 — 숫자가 없고 '갈 곳'만 있는 것들. 업적은 아직 화면이 없어 자물쇠로 둔다
+           (눌러보고 나서 없다는 걸 알게 하지 않는다). 트로피 화면이 생기면 이 자리에서 켜진다. -->
+      <div class="tl" id="homeTiles">
+        <button class="tl-b rul" id="hwRule" type="button" aria-label="근무 수칙 열기">
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg></span>
+          <span><span class="tn">근무 수칙</span><span class="ts">읽어두기</span></span>
+        </button>
+        <button class="tl-b all" id="hwAllBoard" type="button" aria-label="전체 배치표 — 1·2부 보기">
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg></span>
+          <span><span class="tn">전체 배치표</span><span class="ts">1·2부 보기</span></span>
+        </button>
+        <div class="tl-b tro lock" aria-disabled="true" aria-label="업적 — 준비 중">
+          <span class="lk"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5v2a3 3 0 0 0 3 3"/><path d="M16 5h3v2a3 3 0 0 1-3 3"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="9" y1="20" x2="15" y2="20"/></svg></span>
+          <span><span class="tn">업적</span><span class="ts">준비 중</span></span>
+        </div>
       </div>
 
       <!-- ★오늘의 기록 위젯 — 안 썼으면 한 줄을 청하고, 썼으면 표정과 그 말이 그대로 남는다.

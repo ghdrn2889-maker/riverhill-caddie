@@ -2345,6 +2345,20 @@ function renderHomeWidgets() {
       pf.textContent = bits.join(' · ') || '아직 기록이 없어요';
     } else { pEl.className = 'hw-num m'; pEl.textContent = '—'; pf.textContent = '불러오는 중…'; }
   }
+  // ── 이번 달 근무 ──
+  //  ★수입과 '같은 응답'에서 꺼낸다(/api/ledger의 workedDays). 근무일을 따로 세면 정산 화면과 갈라진다 —
+  //   같은 사실이 두 곳에서 다르게 보이는 순간 회원은 둘 다 안 믿는다(1·2부 판독이 3부와 갈라졌던 것과 같은 함정).
+  const wLab = $('hwWorkLab'); if (wLab) wLab.textContent = `${new Date().getMonth() + 1}월 근무`;
+  const wEl = $('hwWorkNum'), wf = $('hwWorkFt');
+  if (wEl && wf) {
+    if (hwPay) {
+      wEl.className = 'hw-num'; wEl.innerHTML = `${fmtN(hwPay.workedDays)}<small>일</small>`;
+      const bits = [];
+      if (Number.isFinite(hwPay.prevWorked)) bits.push(`지난달 ${hwPay.prevWorked}일`);
+      if (hwPay.pendingDays) bits.push(`확인 대기 ${hwPay.pendingDays}일`);
+      wf.textContent = bits.join(' · ') || '근무 일지 열기';
+    } else { wEl.className = 'hw-num'; wEl.textContent = '—'; wf.textContent = '불러오는 중…'; }
+  }
 }
 
 async function loadHomeWidgets() {
@@ -2357,14 +2371,16 @@ async function loadHomeWidgets() {
   try {
     const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
     const cur = (await (await fetch(`/api/ledger?year=${y}&month=${m}`)).json()).summary || {};
-    let mom = null;
+    let mom = null, prevWorked = null;
     try {
       const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1;
       const prev = (await (await fetch(`/api/ledger?year=${py}&month=${pm}`)).json()).summary || {};
       const p = Number(prev.revenueTotal) || 0, c = Number(cur.revenueTotal) || 0;
       if (p > 0) mom = Math.round(((c - p) / p) * 100);   // 지난달 0원이면 증감률이 무의미 → 표시 안 함
+      if (Number.isFinite(Number(prev.workedDays))) prevWorked = Number(prev.workedDays);
     } catch { /* 비교 생략 */ }
-    hwPay = { revenueTotal: Number(cur.revenueTotal) || 0, workedDays: Number(cur.workedDays) || 0, mom };
+    hwPay = { revenueTotal: Number(cur.revenueTotal) || 0, workedDays: Number(cur.workedDays) || 0,
+      pendingDays: Number(cur.pendingDays) || 0, prevWorked, mom };
   } catch { /* 무해 — 직전 값 유지 */ }
   // 오늘의 기록 — 기록 탭과 같은 소스. 이번 달만 받아 오늘 하루치만 꺼낸다(연 전체는 불필요).
   //  ★쓰는 중에는 건너뛴다 — 갱신이 들어오면 입력 중인 초안의 기준값이 바뀌어 저장 버튼이 어긋난다.
@@ -2382,6 +2398,21 @@ function initHomeWidgets() {
   const c = $('hwCart'), p = $('hwPay');
   if (c) c.onclick = () => showView('cart');
   if (p) p.onclick = () => showView('settle');
+  // ★위젯 = 이동 버튼. 같은 곳으로 가는 길을 셋 둔다(메뉴·하단 탭·홈 위젯) —
+  //  약 80명이 쓰고 연령·성별이 다양해서, 한 사람에게 자연스러운 길이 다른 사람에겐 아니다(사용자 설계).
+  const ins = $('hwIns'); if (ins) ins.onclick = () => openMenuPage('ins');
+  const wk = $('hwWork'); if (wk) wk.onclick = () => showView('worklog');
+  const ru = $('hwRule'); if (ru) ru.onclick = () => openMenuPage('rule');
+  const ab = $('hwAllBoard'); if (ab) ab.onclick = () => showView('board');
+  // ★배치표 대시보드(히어로) 자체가 배치표로 가는 문.
+  //  버튼으로 감싸지 않는다 — 안에 게이지·문구가 계속 바뀌는 '장면'이라 버튼 의미론과 안 맞고,
+  //  나중에 안에 조작 요소가 생기면 버튼 안의 버튼이 된다. 그래서 탭만 받고, 조작 요소 위 탭은 흘려보낸다.
+  const hero = $('todayHero');
+  if (hero) {
+    const go = (e) => { if (e.target.closest('button,a,input,select,textarea,label')) return; showView('board'); };
+    hero.onclick = go;
+    hero.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView('board'); } };
+  }
   // ★기록 위젯 → 탭 이동 없이 카드 안에서 바로 쓴다. 더 손볼 게 있을 때만 '기록 탭에서 자세히'로 이동.
   const jt = $('hwJTap'); if (jt) jt.onclick = hwJToggle;
   const jm = $('hwJMore'); if (jm) jm.onclick = async () => { hwJClose(); showView('worklog'); try { await jWriteToday(); } catch { /* 무해 */ } };
