@@ -64,11 +64,18 @@ const PART_OF = (key) => { const m = toMin(key.split('|')[0]); if (m == null) re
 
 export function compareDay(date) {
   const d = String(date).replace(/\D/g, '').slice(0, 8);
-  // 카카오 — 그 칸을 '찼다'고 처음 본 시각.
-  const kFirst = new Map(), kGone = new Map();
+  // 카카오 — 그 칸을 '찼다'고 처음 본 시각(빠르기용). 델타 기록에서만 나온다.
+  const kFirst = new Map();
   for (const r of readJSONL('kakao-golf.jsonl').filter((x) => String(x.date) === d).sort((a, b) => a.at - b.at)) {
     for (const s of (r.newBooked || [])) if (!kFirst.has(s)) kFirst.set(s, r.at);
-    for (const s of (r.freed || [])) kGone.set(s, r.at);
+  }
+  // ★맞기는 델타를 누적해서 세지 않는다 — 마지막 스냅샷이 정본이다.
+  //  실사고: 당일 판정이 꺼져 있던 아침엔 전 칸이 한 번에 '풀림'으로 기록됐고,
+  //  그걸 누적해서 빼자 카카오가 멀쩡히 보고 있던 2·3부까지 '못 봤다'로 집계됐다(배치표만 90칸).
+  const snap = loadJSON(`kakao-board/${d}.json`, null);
+  const kNow = new Map();                                  // 부 → Set(칸)
+  for (const [p, arr] of Object.entries((snap && snap.byPart) || {})) {
+    kNow.set(String(p), new Set((arr || []).map((x) => slotKey(x.time, x.course)).filter(Boolean)));
   }
   // 배치표 — 그 칸을 실제로 갖게 된 시각. base(처음 본 상태)는 따로 표시한다.
   const bFirst = new Map(), bBase = new Set(), byPart = new Map();
@@ -86,12 +93,19 @@ export function compareDay(date) {
     rows.push({ slot: s, part: b.part, kakaoAt: kAt || 0, boardAt: b.at, lead: kAt ? Math.round((b.at - kAt) / 60000) : null });
   }
   rows.sort((a, b) => a.boardAt - b.boardAt);
-  // 하루가 끝났을 때 한쪽에만 있는 칸 — 이게 '맞기'다.
-  const kSet = new Set([...kFirst.keys()].filter((s) => !kGone.has(s) || (kFirst.get(s) > kGone.get(s))));
-  const bSet = new Set(bFirst.keys());
-  const kakaoOnly = [...kSet].filter((s) => !bSet.has(s) && byPart.has(PART_OF(s)));
-  const boardOnly = [...bSet].filter((s) => !kSet.has(s));
-  return { date: d, rows, kakaoOnly, boardOnly, parts: [...byPart.keys()].sort() };
+  // 하루가 끝났을 때 한쪽에만 있는 칸 — 이게 '맞기'다. 부마다 따로 센다.
+  //  ★카카오가 그 부를 아예 못 본 날은 '틀렸다'가 아니라 '못 봤다'로 적는다.
+  //   (관측 시작 전에 완판된 부는 한 번도 판매중인 걸 못 봐서 판정에서 통째로 빠진다 —
+  //    이걸 오차로 세면 사람 경로가 이긴 것처럼 보인다. 그건 다른 종류의 실패다.)
+  const acc = [];
+  for (const p of [...byPart.keys()].sort()) {
+    const bSet = new Set([...bFirst].filter(([, v]) => v.part === p).map(([s]) => s));
+    const kSet = kNow.get(p);
+    if (!kSet || !kSet.size) { acc.push({ part: p, blind: true, board: bSet.size }); continue; }
+    acc.push({ part: p, blind: false, board: bSet.size, kakao: kSet.size,
+      kakaoOnly: [...kSet].filter((s) => !bSet.has(s)), boardOnly: [...bSet].filter((s) => !kSet.has(s)) });
+  }
+  return { date: d, rows, acc, parts: [...byPart.keys()].sort() };
 }
 
 export function reportDay(date) {
