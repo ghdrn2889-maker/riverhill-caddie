@@ -673,14 +673,18 @@
       notify: false,   // 알림은 여기서 안 보낸다 — 정정 알림은 '배치표 검수' 탭에서 미리보기 후 발송.
     };
   }
+  // ★관리자가 손댄 부만 보낸다. 안 건드린 부까지 보내면 그 부 회원까지 다시 계산되고
+  //  잠금(_adminLock)이 걸린다 — 손대지도 않은 사람의 상태를 얼려버리는 짓이다.
+  //  '손댔다' = 지금 화면에 저장 안 된 변경이 있거나, 테스트판이 그 부를 덮고 있거나.
+  const touched = (part) => !!(BOARD[part] || {}).roster && roster[part].length
+    && (changed(part) || SB_EDITED.includes(part));
   function applySummary() {
     const lines = [];
     for (const part of PARTS) {
-      if (!(BOARD[part] || {}).roster || !roster[part].length) continue;
+      if (!touched(part)) continue;
       const p = realPayload(part);
       const base = (BOARD[part].teeGrid || []).length;
       const nameFix = roster[part].filter((x, i) => (x || '') !== ((BOARD[part].roster || [])[i] || '')).length;
-      if (p.cutLine === base && !nameFix && !p.interns.length) continue;
       lines.push(`${part}부 — 근무 ${base} → ${p.cutLine}` + (nameFix ? ` · 이름 ${nameFix}칸` : '') + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : ''));
     }
     return lines;
@@ -688,16 +692,17 @@
   applyBtn.addEventListener('click', async () => {
     if (!live) { state.textContent = '샘플에서는 반영할 수 없습니다.'; return; }
     const lines = applySummary();
+    if (!lines.length) { state.textContent = '반영할 게 없습니다 — 고친 부가 없어요.'; return; }
     const msg = '실제 배치표를 앱에 반영합니다. 회원 대시보드가 바뀝니다.\n\n'
-      + (lines.length ? lines.join('\n') : '(팀 수·이름·인턴 변화 없음 — 티오프 배치만 바뀝니다)')
-      + '\n\n카카오 예상 칸은 넘기지 않습니다. 알림은 나가지 않습니다.\n계속할까요?';
+      + lines.join('\n')
+      + '\n\n고친 부만 보냅니다. 카카오 예상 칸은 넘기지 않습니다. 알림은 나가지 않습니다.\n계속할까요?';
     if (!confirm(msg)) return;
     applyBtn.disabled = true;
     state.textContent = '반영 중…';
     const done = [];
     try {
       for (const part of PARTS) {
-        if (!(BOARD[part] || {}).roster || !roster[part].length) continue;
+        if (!touched(part)) continue;
         const r = await fetch(apiUrl('/api/board-correct'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
           body: JSON.stringify(realPayload(part)),
