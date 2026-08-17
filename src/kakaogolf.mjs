@@ -180,9 +180,6 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
   //  그리고 예전에 열려 있던 걸 본 적이 있으면 하루아침에 0이 될 수 없다 — 그건 고장이다.
   const dayGap = Math.round((new Date(`${String(dateYYYYMMDD).slice(0, 4)}-${String(dateYYYYMMDD).slice(4, 6)}-${String(dateYYYYMMDD).slice(6, 8)}T00:00:00`) - new Date(new Date().toDateString())) / 86400000);
-  if (!open.length && dayGap >= 0 && dayGap <= 3 && Number(prevSnap?.everOpenCount || 0) > 0) {
-    throw new KakaoShapeError(`카카오골프 ${dateYYYYMMDD} 판매중 0칸 — 직전엔 ${prevSnap.everOpenCount}칸 있었다. 만석보다 고장을 의심(전 칸 만석 처리 금지)`);
-  }
   // ★고정표에 없는데 카카오엔 뜨는 칸 = 우리 기준표가 틀렸다는 신호. 조용히 버리지 않고 남긴다.
   const fixedSet = new Set(fixed.map((f) => key(f.mins, f.course)));
   const unknown = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
@@ -192,6 +189,18 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const isToday = String(dateYYYYMMDD) === todayStr;
   const isPast = String(dateYYYYMMDD) < todayStr;
+  const lastFixed = Math.max(...fixed.map((f) => f.mins));
+  // ★가장 위험한 경우 — 응답은 멀쩡한데 목록이 비었다. 그대로 두면 "그날 전 칸 만석"이 된다.
+  //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
+  //  그리고 예전에 열려 있던 걸 본 적이 있으면 하루아침에 0이 될 수 없다 — 그건 고장이다.
+  //  ★단, 그날 하루가 끝나가면 0칸은 정상이다. 마지막 티오프까지 마감선 안쪽이면 팔 게 남아 있을 수 없다.
+  //   이 예외가 없으면 매일 저녁 오늘치 관측이 통째로 멈춘다(실제로 8/17 17:40에 얼어붙었다) —
+  //   고장 감지기가 오늘 데이터를 낡은 채로 붙잡아두는, 감지기가 사고를 만드는 모양이 된다.
+  //  ★검사는 다른 계산보다 먼저 한다 — 고장난 응답으로 마감선을 배우거나 로그를 더럽히면 안 된다.
+  const dayOver = isPast || (isToday && nowMin + Math.max(Number(prevSnap?.closeLead || 0), MIN_LEAD, SALE_CLOSE_LEAD) >= lastFixed);
+  if (!open.length && !dayOver && dayGap >= 0 && dayGap <= 3 && Number(prevSnap?.everOpenCount || 0) > 0) {
+    throw new KakaoShapeError(`카카오골프 ${dateYYYYMMDD} 판매중 0칸 — 직전엔 ${prevSnap.everOpenCount}칸 있었다. 만석보다 고장을 의심(전 칸 만석 처리 금지)`);
+  }
 
   // ── 이번 틱에 판매중에서 사라진 칸 ──────────────────────────────────────
   //  한 칸씩 사라지면 예약, 뭉텅이로 사라지면 판매 마감. 마감이면 그때의 '남은 시간'을 마감선으로 배운다.
