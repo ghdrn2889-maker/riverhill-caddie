@@ -329,6 +329,7 @@ ${['1', '2', '3'].map(partTable).join('\n')}
 </div>
 
 <div class="tools" id="tools" hidden>
+  <button data-mode="team" type="button">티오프 추가·삭제</button>
   <button data-mode="intern" type="button">인턴 지정</button>
   <button data-mode="name" type="button">이름 고치기</button>
   <button data-mode="swap" type="button">맞바꾸기</button>

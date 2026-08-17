@@ -22,6 +22,7 @@
   const undoBtn = document.getElementById('undoBtn');
   const resetBtn = document.getElementById('resetBtn');
   const HINTS = {
+    team: '빈 칸을 눌러 팀을 추가하고, 팀이 있는 칸을 눌러 없앱니다. 추가하면 그 뒤가 한 칸씩 뒤로 밀리고 스페어 맨 앞이 근무로 올라옵니다.',
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
     name: '칸을 눌러 그 순번의 이름을 고칩니다.',
     swap: '두 칸을 차례로 눌러 두 사람을 맞바꿉니다(대바). 순번↔이름만 바뀌고 티오프는 그대로입니다.',
@@ -161,6 +162,33 @@
       }
     }
   }
+  // ★티오프(팀) 추가·삭제 — 실시간 추적이 놓친 예약을 관리자가 손으로 살릴 수 있어야 한다.
+  //  카카오가 못 잡은 당추, 전화·회원 예약처럼 애초에 카카오에 안 뜨는 팀이 실제로 있다.
+  //  추가하면 그 시각 자리에 팀이 하나 생기고, 그 뒤 순번이 각자 한 칸씩 뒤로 밀리며
+  //  스페어 맨 앞이 근무로 올라온다(당추가 실제로 일으키는 일과 같다).
+  //  삭제는 그 역 — 뒤가 한 칸씩 당겨지고 맨 뒤 한 명이 스페어로 내려간다.
+  function setTeam(part, key, on) {
+    const v = view;
+    const has = origOcc[v][part].some((s) => K(s.time, s.course) === key);
+    if (on === has) return null;
+    const slot = { time: key.split('|')[0], course: key.split('|')[1] };
+    if (on) {
+      origOcc[v][part] = sortOcc(origOcc[v][part].concat([slot]).map(cp));
+      if (!interns[part].has(key)) {
+        const T = teeV[v][part];
+        T.splice(sortedIdx(T, key), 0, slot);
+      }
+    } else {
+      origOcc[v][part] = origOcc[v][part].filter((s) => K(s.time, s.course) !== key);
+      const T = teeV[v][part];
+      const at = slotAt(T, key);
+      if (at >= 0) T.splice(at, 1);
+      interns[part].delete(key);
+      idxMemo[v][part]?.delete(key);
+    }
+    return { on, work: teeV[v][part].length };
+  }
+
   function internOn(part, time, course) {
     const key = K(time, course);
     const before = tee[part].length;
@@ -286,6 +314,8 @@
   const push = (part) => {
     stack.push({ part: part, roster: roster[part].slice(),
       tee: { real: (teeV.real[part] || []).map(cp), proj: (teeV.proj[part] || []).map(cp) },
+      // 팀 목록도 담는다 — 티오프 추가·삭제가 이걸 바꾸므로 안 담으면 되돌려도 팀이 그대로 남는다.
+      occ: { real: (origOcc.real[part] || []).map(cp), proj: (origOcc.proj[part] || []).map(cp) },
       interns: new Set(interns[part]),
       memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
   };
@@ -445,6 +475,7 @@
     const s = stack.pop(); if (!s) return;
     roster[s.part] = s.roster;
     teeV.real[s.part] = s.tee.real; teeV.proj[s.part] = s.tee.proj;
+    origOcc.real[s.part] = s.occ.real; origOcc.proj[s.part] = s.occ.proj;
     interns[s.part] = s.interns;
     idxMemo.real[s.part] = s.memo.real; idxMemo.proj[s.part] = s.memo.proj;
     paint(s.part);
@@ -456,6 +487,25 @@
     if (!mode) return;
     const td = unit(e.target); if (!td) return;
     if (!isSpare(td) && !td.dataset.t) return;
+
+    // 티오프(팀) 추가·삭제 — 실시간 추적이 놓친 예약을 손으로 살린다.
+    if (mode === 'team') {
+      if (isSpare(td)) { state.textContent = '스페어 칩이 아니라 표의 칸을 눌러주세요.'; return; }
+      const part0 = td.dataset.p;
+      const key0 = K(td.dataset.t, td.dataset.c);
+      const where = td.dataset.t + ' ' + td.dataset.c;
+      const has = origOcc[view][part0].some((s) => K(s.time, s.course) === key0);
+      const before = teeV[view][part0].length;
+      push(part0);
+      const r = setTeam(part0, key0, !has);
+      if (!r) { stack.pop(); return; }
+      paint(part0);
+      const gained = r.work - before;
+      state.textContent = r.on
+        ? `${where}에 팀을 추가했습니다 — 뒤 순번이 한 칸씩 밀렸고 ${gained > 0 ? '스페어 맨 앞이 근무로 올라왔습니다' : '올라올 스페어가 없습니다'} (근무선 ${before}→${r.work})`
+        : `${where} 팀을 없앴습니다 — 뒤 순번이 당겨지고 맨 뒤 한 명이 스페어로 내려갔습니다 (근무선 ${before}→${r.work})`;
+      return;
+    }
 
     if (mode === 'intern') {
       const part0 = td.dataset.p;

@@ -73,7 +73,7 @@ const doc = {
 for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'resetBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
 doc._ids.tools.hidden = true;   // 실제 HTML과 동일하게 — 대조 보기에서 편집 도구는 숨어 있다
 for (const p of ['1', '2', '3']) doc._spares[p] = new El('div');
-doc._modes = ['intern', 'name', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
+doc._modes = ['team', 'intern', 'name', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
 
 const sched = J.sched;
 const toMin = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : 0; };
@@ -364,6 +364,48 @@ if (HAS_KAKAO) {
     chk(doc._ids.saveBtn.hidden === true, '[예상] 저장했는데 저장 버튼이 안 사라진다');
     console.log(`  ${a.pos}번 ${a.name}: ${a.slot} → ${b.slot} · 저장·유지 확인`);
   } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
+}
+
+// ── ⑬ 티오프(팀) 추가·삭제 ───────────────────────────────────────────────
+//  실시간 추적이 놓친 예약을 관리자가 손으로 살릴 수 있어야 한다.
+//  추가 = 그 뒤가 한 칸씩 밀리고 스페어 맨 앞이 근무로. 삭제 = 그 역. 되돌리기로 원상복구.
+{
+  console.log('\n티오프 추가·삭제\n');
+  doc._ids.vReal._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length && readSpares(x).length);
+  if (p) {
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    const sp0 = readSpares(p);
+    const occupied = new Set(g0.map((x) => x.slot));
+    // 표에 있는 칸 중 아무도 없는 칸 하나 — 그 시각엔 원래 팀이 없다
+    const empty = doc.querySelectorAll('td.c[data-p="' + p + '"]')
+      .map((td) => ({ td, slot: td.dataset.t + ' ' + td.dataset.c }))
+      .find((x) => !occupied.has(x.slot) && !x.td._cls.includes('intern'));
+    if (empty) {
+      clickMode('team');
+      clickCell(empty.td);
+      const g1 = readGrid(p).filter((x) => !x.intern);
+      chk(g1.some((x) => x.slot === empty.slot), `팀 추가 — ${empty.slot}에 아무도 안 섰다`);
+      chk(g1.length === g0.length + 1, `팀 추가 — 근무선이 ${g0.length}→${g1.length} (1 늘어야)`);
+      const promoted = g1.find((x) => !g0.some((y) => y.name === x.name));
+      chk(promoted && promoted.name === sp0[0].name, `팀 추가 — 스페어 맨 앞(${sp0[0].name})이 아니라 ${promoted ? promoted.name : '아무도'} 올라왔다`);
+      chk(!readSpares(p).some((s) => s.name === sp0[0].name), `팀 추가 — 올라온 ${sp0[0].name}가 스페어에 남아 있다`);
+      console.log(`  추가  ${empty.slot} · 근무선 ${g0.length}→${g1.length} · ${sp0[0].name} 근무로`);
+      // 삭제 = 역연산
+      clickCell(empty.td);
+      const g2 = readGrid(p).filter((x) => !x.intern);
+      chk(g2.length === g0.length, `팀 삭제 — 근무선이 ${g0.length}로 안 돌아왔다(지금 ${g2.length})`);
+      chk(g2.map((x) => x.pos + x.slot + x.name).join('|') === g0.map((x) => x.pos + x.slot + x.name).join('|'), '팀 삭제가 추가의 역연산이 아니다');
+      console.log(`  삭제  ${empty.slot} · 근무선 ${g2.length} · 원상복구 확인`);
+      // 되돌리기로도 복구되는가
+      clickCell(empty.td);
+      doc._ids.undoBtn._ev.click();
+      const g3 = readGrid(p).filter((x) => !x.intern);
+      chk(g3.length === g0.length && !g3.some((x) => x.slot === empty.slot), '팀 추가 뒤 되돌리기가 복구 못 함');
+      console.log('  되돌리기 복구 확인');
+      clickMode('team');
+    } else console.log('  빈 칸이 없어 건너뜁니다');
+  } else console.log('  스페어가 있는 부가 없어 건너뜁니다');
 }
 
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
