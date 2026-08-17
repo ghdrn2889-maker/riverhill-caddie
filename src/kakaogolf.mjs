@@ -162,7 +162,12 @@ const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '1') === '1';
 //  뭉텅이 감지(CLOSE_BULK)로는 절대 못 잡는다: 티오프 간격 7분·두 코스에 관측이 5분마다면
 //  한 틱에 한두 칸씩만 차례로 내려간다. 4칸 기준에 영영 안 걸리므로 전부 '당일 예약'으로 샌다.
 //  그래서 관측으로 배우는 마감선(closeLead)과 별개로 '최소 마감선'을 바닥에 깐다.
-const SALE_CLOSE_LEAD = Number(process.env.KAKAO_SALE_CLOSE_LEAD || 60);
+//  ★값은 추측이 아니라 실측이다. 8/17 하루치 kakao-close.jsonl 26건이 두 무리로 깨끗이 갈렸다:
+//    56~60분 전  8건 — 전부 같은 시각 IN+OUT이 동시에 소멸(한 팀이 두 코스를 동시에 잡을 수는 없다 = 마감)
+//    78분 전 이상 18건 — 전부 한쪽 코스만 소멸(= 진짜 예약)
+//    61~77분 전  0건 — 빈 구간
+//   그 빈 구간 한가운데인 70을 쓴다. 5분 틱의 관측 흔들림(±5분)을 흡수하면서 진짜 예약은 하나도 안 버린다.
+const SALE_CLOSE_LEAD = Number(process.env.KAKAO_SALE_CLOSE_LEAD || 70);
 
 export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
