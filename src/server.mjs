@@ -34,6 +34,7 @@ import { kakaoAssist, assistOn } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { buildBoardsView } from './boardsview.mjs';
+import { sampleBoards } from './kakaobench.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
@@ -2639,6 +2640,14 @@ if (kakaoOn()) {
   setTimeout(kakaoTick, 20000);
   setInterval(kakaoTick, KAKAO_TICK_MS);
   console.log(`⛳ 카카오골프 예약 관측: ${KAKAO_TICK_MS / 60000}분 간격(07~24시, 오늘+내일치) — 관리자 관측 전용`);
+
+  // ★대조 표본 — 배치표가 그 칸을 실제로 갖게 된 시각을 남긴다.
+  //  카카오가 먼저 봤는지 사람이 먼저 알려줬는지는 이 두 시각을 맞대야만 알 수 있다.
+  //  (사람이 올린 글을 해석해 비교하지 않는다 — 해석이 틀리면 비교가 통째로 틀리고, 그걸 알 방법이 없다.)
+  const benchTick = () => { try { sampleBoards({ labelToISO: worklog.labelToISO }); } catch (e) { console.error('[대조표본]', e.message); } };
+  setTimeout(benchTick, 25000);
+  setInterval(benchTick, 60 * 1000);
+  console.log('📏 카카오 대조 표본: 1분 간격 — node tools/kakaobench.mjs 로 확인');
 }
 
 setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
