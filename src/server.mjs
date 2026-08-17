@@ -33,6 +33,7 @@ import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { kakaoAssist, assistOn } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
+import { buildBoardsView } from './boardsview.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
@@ -682,47 +683,9 @@ app.get('/api/today', (req, res) => {
 //  ★내 부는 이 API를 쓰지 않는다 — 대시보드가 쓰는 today(회원별 교정·잠금 반영본)가 우선.
 //   여긴 '옆 부 구경'용이라 회원별 해석 없이 판독 정본을 그대로 내려보낸다.
 app.get('/api/boards', requireAuth, (req, res) => {
-  const out = [];
-  const push = (part, roster, teeGrid, cut, cutoffName, teamCount, dateLabel, at) => {
-    const r = Array.isArray(roster) ? roster.filter((x) => x != null).map(String) : [];
-    if (!r.length) return;
-    out.push({
-      part: String(part), roster: r,
-      teeGrid: Array.isArray(teeGrid) ? teeGrid : [],
-      cut: Number(cut) || 0, cutoffName: String(cutoffName || ''),
-      teamCount: Number(teamCount) || 0,
-      dateLabel: String(dateLabel || ''), targetISO: worklog.labelToISO(dateLabel || '') || '',
-      at: Number(at) || 0,
-    });
-  };
-  try {
-    const s = loadBoardPartsStore();
-    for (const p of ['1', '2']) {
-      const d = s && s.parts && s.parts[p];
-      if (!d) continue;
-      // 부별 도장(_targetISO)이 있으면 그 근무일을, 없으면(옛 저장본) 저장소 날짜라벨을 쓴다.
-      const label = d._targetISO ? isoToLabel(d._targetISO) : (s.dateLabel || '');
-      // ★팀 수는 '확정선'이 있으면 그걸 쓴다 — 헤더 판독값(teamCount)은 처음 사진의 숫자라
-      //  당추·관리자 교정으로 늘어난 뒤에도 옛값에 멈춘다. 그러면 한 화면에 '확정선 38번'과
-      //  '30팀 편성'이 같이 뜬다(실측). 확정선은 사람이 확인한 지금의 근무선이므로 이쪽이 이긴다.
-      push(p, d.roster, d.teeGrid, d.cutLine || d.cutoffPosition, d.cutoffName,
-        Number(d.cutLine) || Number(d.teamCount) || Number(d.cutoffPosition), label, d._at || s.at);
-    }
-  } catch (e) { console.error('[boards 1·2부 오류]', e.message); }
-  try {
-    const lb = loadJSON('lastboard.json', null);
-    const v = (lb && lb.rawVerdict) || null;
-    if (v) push('3', v.part3Roster, v.teeGrid, v.cutLine || v.cutoffPosition || v.teamCount, v.cutoffName,
-      Number(v.cutLine) || Number(v.cutoffPosition) || Number(v.teamCount), lb.dateLabel || v.dateLabel || '', lb.at);
-  } catch (e) { console.error('[boards 3부 오류]', e.message); }
-  out.sort((a, b) => Number(a.part) - Number(b.part));
-  res.json({ ok: true, today: todayISOKST(), parts: out });
+  // ★계산은 src/boardsview.mjs 한 곳에만 있다 — 라우트 안에 두면 확인할 방법이 눈밖에 없다.
+  res.json({ ok: true, today: todayISOKST(), parts: buildBoardsView({ labelToISO: worklog.labelToISO }) });
 });
-// ISO(2026-08-15) → 배치표 표기('2026년 8월 15일') — 부별 도장만 있고 원 라벨이 없을 때 화면 표기용.
-function isoToLabel(iso) {
-  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  return m ? `${m[1]}년 ${Number(m[2])}월 ${Number(m[3])}일` : '';
-}
 
 // 골프장 날씨 — 근무 확정이면 티오프~+6시간, 아니면 낮(9~18시) 예보. 회원의 상황판(티오프)에 맞춰 창을 잡는다.
 app.get('/api/weather', async (req, res) => {
