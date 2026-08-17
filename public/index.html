@@ -111,12 +111,10 @@
     .lk svg { width:14px; height:14px; stroke:#a9b4ac; stroke-width:2; fill:none;
               stroke-linecap:round; stroke-linejoin:round; }
 
-    /* 배치표 대시보드(히어로) 자체가 배치표로 가는 문 — 오른쪽 위 화살표로만 알린다.
-       ★히어로는 장면이라 버튼으로 감싸지 않는다(안에 게이지·문구가 계속 바뀐다). 화살표만 얹고 탭을 받는다. */
+    /* 배치표 대시보드(히어로) 자체가 배치표로 가는 문. 단 화살표는 얹지 않는다 — 안이 게이지·문구·날씨로
+       이미 꽉 찬 장면이라 표식이 하나 더 붙으면 거슬린다(사용자 판단). 탭만 조용히 받는다.
+       ★히어로는 장면이라 버튼으로 감싸지도 않는다(안에 조작 요소가 생기면 버튼 안의 버튼이 된다). */
     #todayHero { cursor:pointer; }
-    #todayHero .cnr { background:rgba(255,255,255,.78); box-shadow:0 1px 4px rgba(24,54,35,.10); z-index:2; }
-    #todayHero.hero-off .cnr { background:rgba(255,255,255,.34); }
-    #todayHero.hero-off .cnr svg { stroke:#e8f2ec; }
 
     /* ── ★오늘의 기록 위젯(접힌 메모지) ──
        기록은 앱 안에서 유일하게 '종이 결'(크림·금색·Georgia 이탤릭)로 제 정체성을 갖는다.
@@ -2579,8 +2577,6 @@
       <section class="hero" id="todayHero" role="button" tabindex="0" aria-label="오늘 내 상황 — 배치표로 이동">
         <div class="fx" id="wxFx" aria-hidden="true"></div>
         <span class="wxref" id="wxRef" hidden></span>
-        <!-- 이 화살표가 "여기를 누르면 배치표로 간다"고 말하는 유일한 표시 -->
-        <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
         <div class="label in" id="heroLabel" style="--j:0">오늘 내 상황</div>
         <h3 id="heroTitle" class="in" style="--j:1">—</h3>
         <p class="sub in" id="heroSub" style="--j:2"></p>

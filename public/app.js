@@ -33,7 +33,9 @@ function tickDate() {
 const VIEWS = ['today', 'board', 'cart', 'worklog', 'settle'];
 let curView = 'today';
 const _boxFxDone = new Set();   // 박스 스태거는 뷰별 최초 1회만(이후엔 가벼운 방향 슬라이드)
-function showView(name) {
+let _viewPushed = false;        // 홈 위에 뷰 한 칸만 쌓는다 → 뒤로가기 한 번이면 언제나 홈
+let _homeBack = false;          // 홈 탭이 쌓아둔 칸을 회수하는 중(back()은 비동기라 표시해 둔다)
+function showView(name, opts = {}) {
   if (!VIEWS.includes(name)) name = 'today';
   // 탭 순서 기준 방향성 슬라이드: 오른쪽 탭으로 가면 오른쪽에서, 왼쪽 탭이면 왼쪽에서 들어옴.
   const from = VIEWS.indexOf(curView), to = VIEWS.indexOf(name);
@@ -58,7 +60,7 @@ function showView(name) {
     }
   }
   curView = name;
-  if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  if (!opts.noHist) syncViewHistory(name);
   // ★근무 기록·라운드 점검도 같은 원칙 — 첫 진입만 그리고, 재진입은 조용히 확인만(바뀌면 갱신).
   if (name === 'worklog') { if (jCache.year == null) loadJournal(); else loadJournal(jCache.year, { quiet: true }); }
   if (name === 'cart') { if (!ccDate) loadCartCheck(); else loadCartCheck(undefined, { quiet: true }); }
@@ -112,11 +114,43 @@ function boxFx(view) {
   items.forEach((el, i) => el.style.setProperty('--bi', i));
   view.classList.add('boxfx');
 }
+/* ── 뷰 전환과 '뒤로가기' ──
+   홈이 바닥이고, 그 위에 뷰를 한 칸만 쌓는다(탭끼리 이동은 갈아끼우기). 그래서 어느 탭에 있든
+   뒤로가기 한 번이면 홈, 홈에서 한 번 더 누르면 앱이 닫힌다 — 탭을 여러 번 옮겨 다녀도 스택이 깊어지지 않는다.
+   ★뒤로가기 버튼이 없는 아이폰: 하단 홈 탭이 언제나 한 번이고, 팝업은 저마다 ‹ 버튼을 갖는다.
+     홈 화면에 설치한 경우엔 왼쪽 가장자리에서 쓸어넘기는 동작이 이 뒤로가기를 그대로 탄다
+     (예전엔 그게 '앱 종료'였는데, 이제 '홈으로'가 된다). */
+function syncViewHistory(name) {
+  const url = '#' + name;
+  if (name === 'today') {
+    if (_viewPushed) { _viewPushed = false; _homeBack = true; history.back(); }   // 쌓아둔 칸 회수
+    else if (location.hash !== url) history.replaceState({ v: 'today' }, '', url);
+    return;
+  }
+  if (_viewPushed) history.replaceState({ v: name }, '', url);                    // 탭끼리 이동 — 깊이 1 유지
+  else { history.pushState({ v: name }, '', url); _viewPushed = true; }
+}
+function onViewPop(e) {
+  const st = e.state || null;
+  if (st && (st.ov || st.mnu || st.mpg || st.rcgal)) return;        // 팝업이 쌓은 칸 — 각자의 리스너가 닫는다
+  if (_homeBack) {                                                  // 홈 탭이 회수하려던 칸이 이제 돌아왔다
+    _homeBack = false;
+    if (curView !== 'today') { syncViewHistory(curView); return; }  // 그새 다른 탭을 눌렀다면 그 탭을 다시 쌓는다
+  }
+  const v = (st && st.v) || 'today';
+  _viewPushed = !!(st && st.v && st.v !== 'today');
+  if (v !== curView) showView(v, { noHist: true });
+}
 function initNav() {
   document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
-  window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+  // 뒤로가기로 해시가 바뀐 경우엔 popstate가 이미 뷰를 맞춰놨다 — 그때는 다시 그리지 않는다.
+  window.addEventListener('hashchange', () => { const h = location.hash.slice(1) || 'today'; if (h !== curView) showView(h); });
+  window.addEventListener('popstate', onViewPop);
   initNavAutohide();
-  showView(location.hash.slice(1) || 'today');
+  // ★히스토리의 바닥은 언제나 홈 — #board 링크로 열어도 뒤로가기 한 번이면 홈으로 온다.
+  const start = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'today';
+  history.replaceState({ v: 'today' }, '', '#today');
+  showView(start);
 }
 
 /* ── 플랫폼 감지 + 설치 안내(iOS 사파리 전용 / 안드로이드 설치버튼) ── */
