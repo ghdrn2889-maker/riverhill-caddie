@@ -720,7 +720,12 @@
       const p = realPayload(part);
       const base = (BOARD[part].teeGrid || []).length;
       const nameFix = roster[part].filter((x, i) => (x || '') !== ((BOARD[part].roster || [])[i] || '')).length;
-      lines.push(`${part}부 — 근무 ${base} → ${p.cutLine}` + (nameFix ? ` · 이름 ${nameFix}칸` : '') + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : ''));
+      // ★못 넘기는 인턴을 말없이 버리지 않는다 — 실제 배치표에 팀이 없는 칸(카카오 예상 전용)에
+      //  찍은 인턴은 넘길 자리가 없다. 조용히 사라지면 '저장이 안 된다'로 보인다.
+      const drop = interns[part].size - p.interns.length;
+      lines.push(`${part}부 — 근무 ${base} → ${p.cutLine}` + (nameFix ? ` · 이름 ${nameFix}칸` : '')
+        + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : '')
+        + (drop > 0 ? ` · 인턴 ${drop}칸은 못 넘깁니다(실제 배치표에 그 시각 팀이 없어요)` : ''));
     }
     return lines;
   }

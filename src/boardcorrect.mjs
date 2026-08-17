@@ -10,6 +10,8 @@ import { DATA_DIR } from './store.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
 import { interpretForMember } from './judge.mjs';
 import { activeMembers } from './users.mjs';
+import { keyFromLabel } from './boardpending.mjs';
+import { internTeesFor, setManual, teeKey } from './interns.mjs';
 
 export const nkey = (s) => String(s || '').replace(/\s/g, '');
 
@@ -54,6 +56,23 @@ export function correctPart3({ rows, interns = [], cutLine = 0, notify = false, 
     if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
   }
   const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
+  // ★인턴은 두 군데에 따로 살면 안 된다.
+  //  실사고: 관리자가 대조판에서 인턴을 지정하고 앱에 반영했는데, 새로고침하면 사라졌다.
+  //   반영은 lastboard.internTees에 썼고, 대조판은 intern-tees(수동 지정)에서 읽었다.
+  //   그 날짜에 수동 지정이 하나라도 있으면 수동이 전부를 대신하므로(설계상 옳다),
+  //   방금 반영한 인턴은 화면에서 통째로 안 보였다 — 저장이 안 된 것처럼.
+  //  그래서 '관리자가 인턴을 실제로 바꾼 교정'이면 수동 지정도 같이 옮긴다.
+  //  ★안 바뀌었으면 건드리지 않는다 — 이름만 고친 교정까지 수동으로 굳히면
+  //   그 뒤 새 배치표의 노란 칸 판독이 조용히 무시된다.
+  const ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
+  const sig = (a) => (a || []).map((t) => teeKey({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).sort().join(' ');
+  if (ikey) {
+    const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : []));
+    if (before !== sig(iTees)) {
+      try { setManual(ikey, iTees, { by, note: '배치표 교정' }); }
+      catch (e) { console.error('인턴 수동 지정 저장 실패:', e.message); }
+    }
+  }
   v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
   // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다(1·2부 경로와 같은 이유).
   if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.teamCount = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
