@@ -169,6 +169,33 @@ const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '1') === '1';
 //   그 빈 구간 한가운데인 70을 쓴다. 5분 틱의 관측 흔들림(±5분)을 흡수하면서 진짜 예약은 하나도 안 버린다.
 const SALE_CLOSE_LEAD = Number(process.env.KAKAO_SALE_CLOSE_LEAD || 70);
 
+// ── 카카오가 아예 안 파는 칸 ────────────────────────────────────────────
+//  ★이 엔진의 진짜 급소다. 골프장은 각 부 앞쪽 칸을 카카오에 안 내놓는다(전화·회원·단체 배정분).
+//   그 칸은 팀이 있든 없든 영원히 '판매중'으로 안 뜬다 → 여집합이 늘 '찼다'로 읽는다.
+//   실측(8개 날짜·관측 560회 통합): 3부 16:25·16:32·16:39는 한 번도 판매중이 아니었다.
+//   사용자가 지적한 1부 06:16도 같은 부류 — 카카오가 파는 가장 이른 1부 시각은 06:23이다.
+//
+//  ★날짜 하나만 보면 못 가른다 — 관측을 늦게 시작하면 '이미 팔린 칸'도 똑같이 안 보인다.
+//   전 날짜를 합쳐야 갈린다. 사흘 뒤 날짜는 아직 텅 비어 있으므로, 거기서도 안 뜨면 안 파는 칸이다.
+//
+//  ★그리고 함부로 단정하지 않는다. 그 부·코스의 판매 패턴을 충분히 봤을 때만 판단한다 —
+//   패턴을 모르는 채로 '안 판다'고 우기면 그 부의 팀이 통째로 사라진다(미운영 오판과 같은 함정).
+const SELLABLE_FILE = 'kakao-sellable.json';        // { "06:23|OUT": ["20260819", ...] } 판매중으로 본 날짜들
+const SELL_MATURE = Number(process.env.KAKAO_SELL_MATURE || 8);   // 이만큼의 시각을 팔아본 부·코스만 판단
+export const loadSellable = () => loadJSON(SELLABLE_FILE, {}) || {};
+
+// 순수 함수로 뺀다 — 이 판단이 틀리면 팀이 통째로 생기거나 사라지므로 파일 없이 시험할 수 있어야 한다.
+export function blindSlots(sell, fixed, mature = SELL_MATURE) {
+  const soldTimes = {};
+  for (const f of fixed) if ((sell[`${f.time}|${f.course}`] || []).length) (soldTimes[`${f.part}|${f.course}`] ||= new Set()).add(f.time);
+  const blind = new Set();
+  for (const f of fixed) {
+    if ((soldTimes[`${f.part}|${f.course}`]?.size || 0) < mature) continue;   // 패턴을 아직 모른다 → 판단 보류
+    if (!(sell[`${f.time}|${f.course}`] || []).length) blind.add(`${f.time}|${f.course}`);
+  }
+  return blind;
+}
+
 export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
   if (!prevSnap) prevSnap = loadSnapshot(String(dateYYYYMMDD));
@@ -249,9 +276,22 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  이 엔진의 급소: 골프장이 그날 티오프 자체를 없애면(팀이 안 차면 첫 칸 16:25를 지우는 식)
   //  그 칸은 영원히 판매중으로 안 뜬다 → 여집합 계산이 '찼다'로 읽는다. 실제로는 팀이 없는데.
   //  한 번이라도 판매중인 걸 봤으면 그 칸은 팔 수 있는 칸이고, 그 뒤의 사라짐은 진짜 예약이다.
-  //  ★지금은 '기록만' 한다 — 판정은 안 바꾼다. 계측 중에 규칙을 바꾸면 일주일이 무효가 된다.
   const everOpenKeys = new Set(prevSnap?.everOpenKeys || []);
   for (const o of open) everOpenKeys.add(key(o.mins, o.course));
+
+  // ── 전 날짜 통합 증거: 이 칸을 '판매중'으로 본 날짜들 ──────────────────
+  //  날짜 하나로는 못 가른다(관측을 늦게 시작하면 이미 팔린 칸도 안 보인다). 합쳐야 갈린다.
+  const sell = loadSellable();
+  let sellDirty = false;
+  for (const o of open) {
+    const k = key(o.mins, o.course);
+    const arr = (sell[k] ||= []);
+    if (!arr.includes(String(dateYYYYMMDD))) { arr.push(String(dateYYYYMMDD)); if (arr.length > 40) arr.shift(); sellDirty = true; }
+  }
+  if (sellDirty) { try { saveJSON(SELLABLE_FILE, sell); } catch (e) { console.error('[카카오골프] 판매이력 저장 실패:', e.message); } }
+
+  // 그 부·코스의 판매 패턴을 충분히 봤는가 — 봤을 때만 '안 파는 칸'을 판단한다.
+  const blind = blindSlots(sell, fixed);
 
   const idle = new Set(), unsure = new Set();
   for (const p of partsOf) {
@@ -287,6 +327,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     const k = key(f.mins, f.course);
     const ck = `${f.part}|${f.course}`;
     if (openSet.has(k)) continue;                                          // 아직 팔리는 중 = 안 참(취소도 여기로 돌아온다)
+    if (blind.has(k)) { skipped.push(f); continue; }                        // 카카오가 안 파는 칸 — 찼는지 영영 모른다
     if (idle.has(ck) || unsure.has(ck)) { skipped.push(f); continue; }      // 안 도는 코스·판단보류
     if (judgeable(f) || prevConfirmed.has(k)) { booked.push(f); confirmed.add(k); }
     else skipped.push(f);                                                  // 마감선 안쪽에서 처음 본 칸 — 예약인지 마감인지 모른다
@@ -307,9 +348,11 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     openKeys: open.map((o) => key(o.mins, o.course)),
     everOpenKeys: [...everOpenKeys],               // 이 날짜에서 한 번이라도 판매중인 걸 본 칸
     confirmedKeys: [...confirmed],                 // '찼다'고 확정한 칸 — 시각이 지나도 유지(취소되면 빠진다)
-    // ★'찼다'고 본 칸 중, 판매중인 걸 한 번도 못 본 것 — 진짜 예약인지 골프장이 지운 칸인지 모른다.
-    //  판정에는 아직 안 쓴다(계측 중). 얼마나 되는지부터 센다.
+    // ★'찼다'고 본 칸 중, 이 날짜에서 판매중인 걸 한 번도 못 본 것 — 관측을 늦게 시작해도 이렇게 보인다.
+    //  그래서 이건 '경고'일 뿐 판정 근거가 아니다. 판정 근거는 아래 blind(전 날짜 통합)다.
     unverified: booked.filter((b) => !everOpenKeys.has(key(b.mins, b.course))).map((b) => key(b.mins, b.course)),
+    // ★카카오가 아예 안 파는 칸 — 팀이 있는지 없는지 이 엔진으로는 영영 못 안다. 사진 판독만이 답이다.
+    blind: [...blind].sort(),
     closeLead,                                     // 관측으로 배운 판매 마감선(분). 안 봤으면 0.
     everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
     skippedCount: skipped.length,
@@ -410,9 +453,14 @@ export async function tick({ days = 3, from = 0 } = {}) {
       if (prev && dif.booked.length && i <= 1) {
         console.log(`·  [카카오골프] ${date} 새로 찬 칸 ${dif.booked.length}개: ${dif.booked.slice(0, 8).join(' ')}`);
       }
-      if ((snap.unverified || []).length && i <= 2) {
-        console.warn(`[카카오골프] ${date} 확인 못 한 칸 ${snap.unverified.length}개 — 판매중인 걸 한 번도 못 봤다`
-          + `(진짜 예약인지 골프장이 지운 칸인지 모름): ${snap.unverified.slice(0, 6).join(' ')}`);
+      if ((snap.blind || []).length && i <= 2) {
+        console.log(`[카카오골프] ${date} 카카오가 안 파는 칸 ${snap.blind.length}개 — 찼다고 안 센다`
+          + `(팀 유무는 사진 판독만 안다): ${snap.blind.slice(0, 8).join(' ')}`);
+      }
+      const unv = (snap.unverified || []).filter((k) => !(snap.blind || []).includes(k));
+      if (unv.length && i <= 2) {
+        console.warn(`[카카오골프] ${date} 확인 못 한 칸 ${unv.length}개 — 이 날짜에선 판매중인 걸 못 봤다`
+          + `(관측을 늦게 시작해서일 수 있음): ${unv.slice(0, 6).join(' ')}`);
       }
       if (i <= 1) {
         const p3 = snap.byPart['3'] || [];

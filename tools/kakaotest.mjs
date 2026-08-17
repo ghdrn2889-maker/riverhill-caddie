@@ -8,6 +8,10 @@
 //   셋 다 실제로 났고, 셋 다 '지금 몇 시냐'를 바꿔야만 재현된다. 그래서 시계를 가짜로 만든다.
 //  실행: node tools/kakaotest.mjs
 process.env.KAKAO_TODAY = '1';
+// ①~⑦은 '시간' 규칙만 본다. 판매이력(data/kakao-sellable.json)은 쌓인 실데이터라
+//  그대로 두면 시험이 그날그날 달라진다 — 그래서 '안 파는 칸' 판단을 꺼둔다.
+//  그 규칙은 아래 ⑧⑨에서 순수 함수로 따로, 파일 없이 시험한다.
+process.env.KAKAO_SELL_MATURE = '99999';
 
 const RealDate = Date;
 const R = new RealDate();
@@ -23,7 +27,7 @@ globalThis.Date = class extends RealDate {
   static now() { return RealDate.now(); }
 };
 
-const { bookedFor, fixedSlots } = await import('../src/kakaogolf.mjs');
+const { bookedFor, fixedSlots, blindSlots } = await import('../src/kakaogolf.mjs');
 
 let OPEN = [];
 globalThis.fetch = async () => ({
@@ -104,6 +108,25 @@ let s4 = null; err = '';
 try { s4 = await bookedFor(Y, { ...snap, everOpenCount: ALL.length }); } catch (e) { err = e.message; }
 say(`⑦ 10:00 판매중 0칸 → ${s4 ? '정상(★위험)' : `던짐 — ${err.slice(0, 44)}`}`);
 ok(!s4, '한낮의 0칸은 여전히 고장으로 막는다(없는 팀을 만들지 않는다)');
+
+// ⑧ 카카오가 안 파는 칸 — 판매이력만 보고 가른다(파일도 시계도 안 탄다)
+//  ★이 판단이 틀리면 팀이 통째로 생기거나 사라진다. 그래서 순수 함수로 따로 시험한다.
+{
+  const F3 = fixedSlots().filter((f) => f.part === '3' && f.course === 'OUT');
+  const t3 = [...new Set(F3.map((f) => f.time))];
+  // 앞 세 시각만 빼고 전부 팔린 적 있는 이력
+  const sell = {};
+  for (const t of t3.slice(3)) sell[`${t}|OUT`] = ['20260819', '20260820'];
+  const b = blindSlots(sell, F3, 8);
+  say(`⑧ 3부 OUT ${t3.length}시각 중 ${t3.length - 3}시각만 팔린 이력 → 안 파는 칸 ${b.size}개: ${[...b].join(' ')}`);
+  ok([...b].length === 3 && t3.slice(0, 3).every((t) => b.has(`${t}|OUT`)), '한 번도 팔린 적 없는 앞 세 칸만 안 파는 칸으로 본다');
+
+  // 이력이 얕으면(패턴을 모르면) 아무것도 안 파는 칸으로 안 본다 — 팀을 통째로 지우는 게 더 나쁘다
+  const thin = {}; for (const t of t3.slice(0, 3)) thin[`${t}|OUT`] = ['20260819'];
+  const b2 = blindSlots(thin, F3, 8);
+  say(`⑨ 팔린 시각이 3종뿐(패턴 모름) → 안 파는 칸 ${b2.size}개`);
+  ok(b2.size === 0, '패턴을 모르면 판단을 미룬다(성급히 팀을 지우지 않는다)');
+}
 
 say(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);
