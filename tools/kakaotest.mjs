@@ -128,5 +128,35 @@ ok(!s4, '한낮의 0칸은 여전히 고장으로 막는다(없는 팀을 만들
   ok(b2.size === 0, '패턴을 모르면 판단을 미룬다(성급히 팀을 지우지 않는다)');
 }
 
+// ⑩⑪ 비워둔 칸(hold/flex) — 판정하지 않다가, 판매중으로 뜨면 그날 틀에 편입된다
+//  ★8/18 실사고: 1부 맨 앞 06:23이 '안 쓰는 날'이라 판매에서 내려갔는데 엔진이 예약으로 읽어 없는 팀 2개를 만들었다.
+{
+  const { holdSlots } = await import('../src/kakaogolf.mjs');
+  const H = holdSlots();
+  if (!H.length) { say('\n⑩ 비워둘 칸(hold)이 기준표에 없다 — 건너뜀'); }
+  else {
+    const h0 = `${H[0].time}|${H[0].course}`;
+    const hAll = new Set(H.map((x) => `${x.time}|${x.course}`));
+    // ⑩ 한 번도 안 뜬 비움 칸은 '찼다'로 세지 않는다
+    //  ★비움 칸은 각 부의 맨 앞이라 이른 시각이다 — 새벽으로 시계를 맞춰야 '지난 칸' 규칙에 안 걸린다.
+    NOW_MIN = Math.max(0, Math.min(...H.map((x) => mins(x.time))) - 90);
+    OPEN = ALL.filter((k) => !hAll.has(k));
+    let s = await bookedFor(Y, {});
+    const bookedAll = new Set(Object.values(s.byPart).flat().map((x) => `${x.time}|${x.course}`));
+    say(`\n⑩ 비움 칸 ${hAll.size}개를 한 번도 안 띄움 → 비워둔 채 ${(s.held || []).length}개 · 찬 칸으로 셈 ${[...hAll].filter((k) => bookedAll.has(k)).length}개`);
+    ok([...hAll].every((k) => !bookedAll.has(k)), '비워둔 칸은 없는 팀을 만들지 않는다(8/18 06:23 재발 방지)');
+    // ⑪ 그 칸이 판매중으로 뜨면 → 그날 틀에 편입 → 사라지면 진짜 예약
+    OPEN = [...OPEN, h0];
+    s = await bookedFor(Y, s);
+    say(`⑪ ${h0}가 판매중으로 뜸 → 틀 편입 ${(s.frameExtra || []).includes(h0) ? '됨' : '안 됨'} · 이번에 살아난 칸 ${(s.flexOpen || []).join(' ') || '없음'}`);
+    ok((s.frameExtra || []).includes(h0), '판매중인 걸 보면 그날 틀에 편입한다(예약팀이 그 칸을 쓴다는 뜻)');
+    OPEN = OPEN.filter((k) => k !== h0);
+    s = await bookedFor(Y, s);
+    const b2 = new Set(Object.values(s.byPart).flat().map((x) => `${x.time}|${x.course}`));
+    say(`   그 뒤 사라짐 → 찬 칸으로 셈: ${b2.has(h0) ? '예' : '아니오'}`);
+    ok(b2.has(h0), '편입된 뒤 사라지면 진짜 예약으로 센다');
+  }
+}
+
 say(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);

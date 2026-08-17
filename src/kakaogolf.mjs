@@ -71,18 +71,21 @@ export function fixedSlots() {
 //  예약팀장 공식(2026-08-17): 1부는 더운 날 06:16을 열고 08:50을 빼며, 3부는 빠른 시간 수요가 많으면 앞으로 연다.
 //  ★이 칸들은 여집합에 넣지 않는다 — 안 뜬다고 찼다고 볼 근거가 없다(원래 그날 없는 칸일 수 있다).
 //   그래서 기준표(parts)에서 빼고 여기 따로 적는다. 카카오에 뜨면 '그날 틀이 늘었다'는 신호로 읽는다.
-export function flexSlots() {
+function expand(list) {
   const cfg = loadSchedule();
-  if (!cfg || !Array.isArray(cfg.flex)) return [];
-  const courses = Array.isArray(cfg.courses) && cfg.courses.length ? cfg.courses : ['OUT', 'IN'];
+  const courses = Array.isArray(cfg?.courses) && cfg.courses.length ? cfg.courses : ['OUT', 'IN'];
   const out = [];
-  for (const f of cfg.flex) {
+  for (const f of (Array.isArray(list) ? list : [])) {
     const m = toMin(f.time);
     if (m == null) continue;
     for (const c of courses) out.push({ part: String(f.part || ''), mins: m, time: toHM(m), course: c, why: f.why || '', drops: f.drops || '' });
   }
   return out;
 }
+export const flexSlots = () => expand(loadSchedule()?.flex);
+// 기본틀 '안'이지만 기본으로 비워두는 칸 — 각 부의 맨 앞. 안 쓰는 날 판매에서 내려가는데
+//  그게 '예약이 찼다'와 똑같이 보인다(8/18 06:23 실증: 없는 팀 2개를 만들었다).
+export const holdSlots = () => expand(loadSchedule()?.hold);
 
 // ── 카카오골프: 그날 '아직 예약 가능한' 티오프 ────────────────────────
 //  ★우리가 만든 통로가 아니다. 저쪽이 주소나 응답 형태를 바꾸면 끊긴다.
@@ -223,10 +226,26 @@ export function blindSlots(sell, fixed, mature = SELL_MATURE) {
 export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
   if (!prevSnap) prevSnap = loadSnapshot(String(dateYYYYMMDD));
-  const fixed = fixedSlots();
-  if (!fixed.length) throw new Error(`고정 티오프 시간표(${SCHEDULE_FILE}) 없음 — 엔진의 기준표다`);
+  const base = fixedSlots();
+  if (!base.length) throw new Error(`고정 티오프 시간표(${SCHEDULE_FILE}) 없음 — 엔진의 기준표다`);
   const open = await fetchOpen(dateYYYYMMDD);
   const openSet = new Set(open.map((o) => key(o.mins, o.course)));
+
+  // ── 그날의 '틀'을 정한다 — 기본틀은 고정이 아니라 예약팀이 앞뒤로 늘리고 줄인다 ──────────
+  //  ★비워두는 칸(hold·flex): 판정하지 않는다. 안 뜬다고 찼다고 볼 근거가 없기 때문이다.
+  //   그 부의 맨 앞 칸은 예약팀이 그날 안 쓰기로 하면 판매에서 내려가는데,
+  //   그게 '예약이 찼다'와 응답에서 똑같이 보인다 → 없는 팀이 생긴다(8/18 06:23, 실증).
+  //   비어 있는 건 사람이 채우면 정답이 되지만, 없는 팀은 아무도 못 지운다. 그래서 비우는 쪽을 고른다.
+  //  ★되살아나는 법: 그 날짜에 카카오가 그 칸을 한 번이라도 '판매중'으로 보여주면
+  //   = 예약팀이 그날 그 칸을 쓴다는 뜻이다. 그때부터 그 날짜의 틀에 편입해 정상 판정한다.
+  //   그 뒤 사라지면 진짜 예약이다. D+6까지 미리 보고 있으니 대개 제때 잡힌다(사용자 설계).
+  const flexAll = flexSlots();
+  const heldSet = new Set([...holdSlots(), ...flexAll].map((f) => key(f.mins, f.course)));
+  const frameExtra = new Set(prevSnap?.frameExtra || []);
+  for (const o of open) { const k = key(o.mins, o.course); if (heldSet.has(k)) frameExtra.add(k); }
+  const inFrame = (f) => { const k = key(f.mins, f.course); return !heldSet.has(k) || frameExtra.has(k); };
+  const fixed = [...base, ...flexAll].filter(inFrame);
+  const heldNow = [...heldSet].filter((k) => !frameExtra.has(k)).sort();   // 오늘 비워둔 칸
   // ★가장 위험한 경우 — 응답은 멀쩡한데 목록이 비었다. 그대로 두면 "그날 전 칸 만석"이 된다.
   //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
   //  그리고 예전에 열려 있던 걸 본 적이 있으면 하루아침에 0이 될 수 없다 — 그건 고장이다.
@@ -235,10 +254,9 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //   ①flex — 예약팀이 늘렸다 줄였다 하는 칸(06:16·16:25). 뜨면 '그날 틀이 늘었다'는 신호다. 정상.
   //   ②그 밖 — 우리 기준표가 틀렸다는 신호. 조용히 버리지 않고 남긴다.
   const fixedSet = new Set(fixed.map((f) => key(f.mins, f.course)));
-  const flexSet = new Set(flexSlots().map((f) => key(f.mins, f.course)));
-  const outside = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
-  const flexOpen = outside.filter((k) => flexSet.has(k));
-  const unknown = outside.filter((k) => !flexSet.has(k));
+  const unknown = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
+  // 비워뒀다가 이번에 살아난 칸 = 예약팀이 그날 틀을 늘렸다는 신호.
+  const flexOpen = [...frameExtra].filter((k) => !(prevSnap?.frameExtra || []).includes(k)).sort();
 
   const now = new Date();
   const todayStr = ymd(now);
@@ -374,7 +392,9 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   }
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, peakByPart, unknown,
-    flexOpen,                                      // 기본틀 밖인데 팔리는 중 = 그날 예약팀이 틀을 늘렸다
+    frameExtra: [...frameExtra].sort(),             // 이 날짜에서 살아난(=예약팀이 쓰는) 비움 칸
+    flexOpen,                                       // 이번 틱에 새로 살아난 칸 = 틀이 늘어난 순간
+    held: heldNow,                                  // 지금 비워둔 칸 — 카카오가 판정하지 않는다(사람이 채운다)
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
     // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
     openKeys: open.map((o) => key(o.mins, o.course)),
@@ -498,9 +518,9 @@ export async function tick({ days = 3, from = 0 } = {}) {
         console.warn(`[카카오골프] ${date} 확인 못 한 칸 ${unv.length}개 — 이 날짜에선 판매중인 걸 못 봤다`
           + `(관측을 늦게 시작해서일 수 있음): ${unv.slice(0, 6).join(' ')}`);
       }
-      if ((snap.flexOpen || []).length && i <= 2) {
-        console.log(`·  [카카오골프] ${date} 틀 확장 감지 — 기본틀 밖 칸이 팔리는 중: ${snap.flexOpen.join(' ')}`
-          + ` (예약팀이 앞으로 늘린 날. 그 부 첫 팀 시각이 당겨진다)`);
+      if ((snap.flexOpen || []).length) {
+        console.warn(`⚠️ [카카오골프] ${date} 틀 확장 — 비워둔 칸이 판매중으로 떴습니다: ${snap.flexOpen.join(' ')}`
+          + ` (예약팀이 그날 이 칸을 씁니다. 지금부터 정상 판정합니다)`);
       }
       if (i <= 1) {
         const p3 = snap.byPart['3'] || [];
