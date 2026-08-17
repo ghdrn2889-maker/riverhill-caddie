@@ -55,7 +55,8 @@ export function correctPart3({ rows, interns = [], cutLine = 0, notify = false, 
   }
   const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
   v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
-  if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
+  // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다(1·2부 경로와 같은 이유).
+  if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.teamCount = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
   v._adminCorrected = { at: Date.now(), by }; delete v._uncertain;
   lb.rawVerdict = v;
   try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }

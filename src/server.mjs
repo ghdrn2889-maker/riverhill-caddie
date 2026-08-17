@@ -702,13 +702,18 @@ app.get('/api/boards', requireAuth, (req, res) => {
       if (!d) continue;
       // 부별 도장(_targetISO)이 있으면 그 근무일을, 없으면(옛 저장본) 저장소 날짜라벨을 쓴다.
       const label = d._targetISO ? isoToLabel(d._targetISO) : (s.dateLabel || '');
-      push(p, d.roster, d.teeGrid, d.cutLine || d.cutoffPosition, d.cutoffName, d.teamCount, label, d._at || s.at);
+      // ★팀 수는 '확정선'이 있으면 그걸 쓴다 — 헤더 판독값(teamCount)은 처음 사진의 숫자라
+      //  당추·관리자 교정으로 늘어난 뒤에도 옛값에 멈춘다. 그러면 한 화면에 '확정선 38번'과
+      //  '30팀 편성'이 같이 뜬다(실측). 확정선은 사람이 확인한 지금의 근무선이므로 이쪽이 이긴다.
+      push(p, d.roster, d.teeGrid, d.cutLine || d.cutoffPosition, d.cutoffName,
+        Number(d.cutLine) || Number(d.teamCount) || Number(d.cutoffPosition), label, d._at || s.at);
     }
   } catch (e) { console.error('[boards 1·2부 오류]', e.message); }
   try {
     const lb = loadJSON('lastboard.json', null);
     const v = (lb && lb.rawVerdict) || null;
-    if (v) push('3', v.part3Roster, v.teeGrid, v.cutoffPosition || v.teamCount, v.cutoffName, v.teamCount, lb.dateLabel || v.dateLabel || '', lb.at);
+    if (v) push('3', v.part3Roster, v.teeGrid, v.cutLine || v.cutoffPosition || v.teamCount, v.cutoffName,
+      Number(v.cutLine) || Number(v.cutoffPosition) || Number(v.teamCount), lb.dateLabel || v.dateLabel || '', lb.at);
   } catch (e) { console.error('[boards 3부 오류]', e.message); }
   out.sort((a, b) => Number(a.part) - Number(b.part));
   res.json({ ok: true, today: todayISOKST(), parts: out });

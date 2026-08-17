@@ -378,7 +378,7 @@ export async function computeBoardParts() {
     const teams = {};
     const partsSrc = {};
     for (const p of ['1', '2', '3']) {
-      let tc = Number(teams[p]) || (p === '3' ? (Number(v3.teamCount) || Number(v3.cutLine) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
+      let tc = Number(teams[p]) || (p === '3' ? (Number(v3.cutLine) || Number(v3.teamCount) || 0) : 0);   // ★let — 아래 1·2부에서 재할당(const면 예외 → 1·2부 판독 전체가 죽고 3부만 뜨던 버그)
       let roster = [], teeGrid = [], internCount = 0, internTees = [], cutoffName = '', cutoffPosition = null, cutLine = 0, swaps = [], reliable = false, uncertain = '';
       if (p === '3') {                                             // 3부는 대시보드와 같은 최신본(v3) 재사용(추가 판독 없음)
         roster = (Array.isArray(v3.part3Roster) && v3.part3Roster.length) ? v3.part3Roster : [];   // ★죽은 Gemini(analyzeRoster) 폴백 제거 — part3Roster는 today.json에서 항상 채워짐
@@ -395,7 +395,9 @@ export async function computeBoardParts() {
         internCount = Number(pd.internCount) || 0; internTees = Array.isArray(pd.internTees) ? pd.internTees : [];
         cutoffName = pd.cutoffName || ''; cutoffPosition = Number(pd.cutoffPosition) || null;
         reliable = !!pd.rosterReliable || roster.length > 0; uncertain = pd.uncertain || '';
-        tc = Number(pd.teamCount) || tc;                          // 헤더 재판독 대신 저장된 팀수
+        cutLine = Number(pd.cutLine) || 0;                        // 관리자가 확인한 근무선(있으면 이게 지금의 진실)
+        // ★확정선이 헤더 판독값을 이긴다 — teamCount는 처음 사진의 숫자라 당추·교정 뒤에도 옛값에 멈춘다.
+        tc = cutLine || Number(pd.teamCount) || Number(pd.cutoffPosition) || tc;
       }
       if (!roster.length) continue;
       partsSrc[p] = { roster, teamCount: tc || null, teeGrid, internCount, internTees, cutoffName, cutoffPosition, cutLine, swaps, reliable, uncertain };

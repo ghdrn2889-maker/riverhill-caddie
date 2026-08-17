@@ -564,7 +564,9 @@ app.post('/api/board-correct', gate, async (req, res) => {
     }
     const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
     pd.roster = roster; pd.teeGrid = grid; pd.crewDuty = crew; pd.internTees = iTees; pd.internCount = iTees.length;
-    if (cutLine) { pd.cutLine = cutLine; pd.cutoffPosition = cutLine; pd.cutoffName = roster[cutLine - 1] || pd.cutoffName || ''; }
+    // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다. 여기를 안 고치면 헤더 판독값(예: 30)이
+    //  그대로 남아 앱이 '확정선 38번'과 '30팀 편성'을 한 화면에 같이 띄운다(실제로 그랬다).
+    if (cutLine) { pd.cutLine = cutLine; pd.cutoffPosition = cutLine; pd.teamCount = cutLine; pd.cutoffName = roster[cutLine - 1] || pd.cutoffName || ''; }
     pd._adminCorrected = { at: Date.now(), by: 'admin' }; pd.rosterReliable = true; delete pd.uncertain;
     saveBoardPartsStore(bp);
     if (cellDiffs.length) {
