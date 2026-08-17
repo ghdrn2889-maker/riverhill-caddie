@@ -23,17 +23,21 @@ const K = (time, course) => { const m = toMin(time); return m == null ? '' : `${
 const isoOf = (d) => `${String(d).slice(0, 4)}-${String(d).slice(4, 6)}-${String(d).slice(6, 8)}`;
 
 // 카카오가 그 칸을 '찼다'고 처음 말한 시각 — 사람보다 얼마나 빨랐나를 재는 근거.
+//  ★그 날짜를 '처음 본 틱'에 이미 차 있던 칸은 속도를 잰 게 아니다 — 그보다 전에 찼을 뿐 언제인지 모른다.
+//   그래서 하한(floor)으로 따로 표시한다. 섞어서 중간값을 내면 리드 타임이 부풀려진다.
 function firstBookedAt(date) {
   const first = new Map();
+  let firstTick = 0;
   try {
     const lines = fs.readFileSync(path.join(DATA_DIR, 'kakao-golf.jsonl'), 'utf8').trim().split('\n');
     for (const ln of lines) {
       let r; try { r = JSON.parse(ln); } catch { continue; }
       if (r.date !== String(date)) continue;
+      if (!firstTick) firstTick = r.at;
       for (const k of (r.newBooked || [])) if (!first.has(k)) first.set(k, r.at);
     }
   } catch { /* 기록이 없으면 속도는 못 잰다 — 정확도 채점은 그대로 한다 */ }
-  return first;
+  return { first, firstTick };
 }
 
 // 관리자가 그날 손으로 고친 티오프 — 이게 정답지다.
@@ -61,7 +65,7 @@ export function scoreDay(dateYYYYMMDD, { labelToISO = () => '' } = {}) {
 
   const held = new Set([...holdSlots(), ...flexSlots()].map((f) => K(f.time, f.course)))
   ;[...(snap.frameExtra || [])].forEach((k) => held.delete(k));   // 그날 살아난 칸은 비움이 아니다
-  const first = firstBookedAt(date);
+  const { first, firstTick } = firstBookedAt(date);
   const internTees = new Set(((loadJSON('intern-tees.json', {}) || {})[date]?.tees || []).map((t) => K(t.time, t.course)));
 
   const parts = {};
@@ -83,17 +87,19 @@ export function scoreDay(dateYYYYMMDD, { labelToISO = () => '' } = {}) {
   }
 
   // 속도 — 카카오가 배치표보다 몇 분 빨랐나(관측 시작 전에 이미 찬 칸은 하한이라 따로 센다).
-  const leads = [];
+  const leads = [], floors = [];
   for (const b of boards) {
     const at = Number(b.at || 0);
     for (const g of (b.teeGrid || [])) {
       const k = K(g.time, g.course);
       if (!k || !first.has(k) || !at) continue;
-      leads.push({ k, part: b.part, min: Math.round((at - first.get(k)) / 60000) });
+      const row = { k, part: b.part, min: Math.round((at - first.get(k)) / 60000) };
+      (first.get(k) === firstTick ? floors : leads).push(row);   // 첫 틱에 이미 차 있던 칸 = 하한
     }
   }
   const ms = leads.map((x) => x.min).sort((a, b) => a - b);
   const median = ms.length ? ms[Math.floor(ms.length / 2)] : null;
+  const fs2 = floors.map((x) => x.min).sort((a, b) => a - b);
 
   // 인턴 — 카카오는 찼다는데 배치표 순번표엔 없고, 배치표가 나오기 '전에' 찬 칸 = 인턴 후보.
   //  (배치표 뒤에 찬 것은 당추다. 시각이 둘을 가른다.)
@@ -105,7 +111,9 @@ export function scoreDay(dateYYYYMMDD, { labelToISO = () => '' } = {}) {
   return { date, ok: true, at: Date.now(), parts,
     totals: { board: T, hit: H, phantom: P, missHeld: MH, missOther: MU,
       rate: T ? Number((H / T * 100).toFixed(1)) : null },
-    lead: { n: leads.length, medianMin: median, minMin: ms[0] ?? null, maxMin: ms[ms.length - 1] ?? null },
+    // measured = 우리가 지켜보는 중에 찬 칸(진짜 리드 타임) · floor = 첫 관측 때 이미 차 있던 칸(하한)
+    lead: { n: leads.length, medianMin: median, minMin: ms[0] ?? null, maxMin: ms[ms.length - 1] ?? null,
+      floorN: floors.length, floorMinAtLeast: fs2.length ? fs2[0] : null },
     intern: { designated: [...internTees], candidates: [...candKeys], hit: internHit.length },
     adminFixes: adminTeeFixes(iso).length,
     // ★어떤 설정으로 잰 것인지 — 이게 없으면 나중에 '언제부터 나빠졌나'를 못 되짚는다.

@@ -35,6 +35,7 @@ import { internTeesFor, setManual as setInternTees, clearManual as clearInternTe
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { buildBoardsView } from './boardsview.mjs';
 import { sampleBoards } from './kakaobench.mjs';
+import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
@@ -2661,6 +2662,19 @@ if (kakaoOn()) {
   // ★대조 표본 — 배치표가 그 칸을 실제로 갖게 된 시각을 남긴다.
   //  카카오가 먼저 봤는지 사람이 먼저 알려줬는지는 이 두 시각을 맞대야만 알 수 있다.
   //  (사람이 올린 글을 해석해 비교하지 않는다 — 해석이 틀리면 비교가 통째로 틀리고, 그걸 알 방법이 없다.)
+  // ★매일 채점 — 파라미터가 정확도를 떨어뜨리면 다음 날 숫자로 드러나게.
+  //  한 시간에 한 번 오늘·내일치를 채점한다. 하루치 채점 창은 생각보다 좁다:
+  //  그 날짜 배치표가 lastboard에 있는 동안만 잴 수 있고, 저녁이면 다음 날 배치표가 그 자리를 가져간다.
+  //  그래서 '하루가 끝난 뒤 한 번'이 아니라 계속 재고, 마지막 기록이 그날의 성적이 된다.
+  const scoreTick = () => {
+    const now = new Date(), t = new Date(); t.setDate(t.getDate() + 1);
+    const y = (x) => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`;
+    for (const d of [y(now), y(t)]) { try { recordKakaoScore(d, { labelToISO: worklog.labelToISO }); } catch (e) { console.error('[카카오채점]', e.message); } }
+  };
+  setTimeout(scoreTick, 120000);
+  setInterval(scoreTick, 60 * 60 * 1000);
+  console.log('📊 카카오 채점: 1시간 간격 — node tools/kakaoscore.mjs --log 로 설정 변화와 함께 확인');
+
   const benchTick = () => { try { sampleBoards({ labelToISO: worklog.labelToISO }); } catch (e) { console.error('[대조표본]', e.message); } };
   setTimeout(benchTick, 25000);
   setInterval(benchTick, 60 * 1000);

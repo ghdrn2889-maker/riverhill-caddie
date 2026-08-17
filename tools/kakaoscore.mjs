@@ -47,7 +47,8 @@ for (const date of targets) {
     if (x.missHeld.length) console.log(`         누락(비워둔 칸)    : ${x.missHeld.join(' ')}  ← 설계대로. 사람이 채운다`);
     if (x.missOther.length) console.log(`         누락(설명 안 됨)★ : ${x.missOther.join(' ')}`);
   }
-  if (r.lead.n) console.log(`   속도  ${r.lead.n}칸 · 중간값 ${r.lead.medianMin}분 · 가장 늦은 ${r.lead.minMin}분 · 가장 빠른 ${r.lead.maxMin}분 (배치표 대비)`);
+  if (r.lead.n) console.log(`   속도  지켜보는 중에 찬 ${r.lead.n}칸 — 중간값 ${r.lead.medianMin}분 · 가장 늦은 ${r.lead.minMin}분 · 가장 빠른 ${r.lead.maxMin}분 (배치표 대비)`);
+  if (r.lead.floorN) console.log(`         첫 관측 때 이미 차 있던 ${r.lead.floorN}칸 — 최소 ${r.lead.floorMinAtLeast}분 빠름(하한이지 측정값이 아님)`);
   if (r.intern.designated.length || r.intern.candidates.length) {
     console.log(`   인턴  지정 ${r.intern.designated.length} [${r.intern.designated.join(' ')}] · 후보 ${r.intern.candidates.length} [${r.intern.candidates.join(' ')}] · 맞힌 것 ${r.intern.hit}`);
   }
