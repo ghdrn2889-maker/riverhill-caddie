@@ -163,6 +163,7 @@ const HAS_KAKAO = ['1', '2', '3'].some((p) => (BOARD[p].kakaoSlots || []).length
 if (!HAS_KAKAO) console.log('  ⚠️ 카카오 스냅이 없습니다 — 대조(예상) 보기는 검증하지 못합니다. 서버(스냅이 있는 곳)에서 돌리세요.');
 if (HAS_KAKAO) {
   chk(doc._ids.tools.hidden === false, '편집도구 — 대조(카카오 예상) 보기에서 도구가 숨겨져 있다');
+  doc._ids.vProj._ev.click();   // 기본 보기는 실제 배치표다 — 대조를 보려면 눌러야 한다
   const p0 = '3';
   const g = readGrid(p0).filter((x) => !x.intern);
   // 인턴이 이미 지정돼 있으면 그만큼 정규 칸이 줄어 있다 — 그걸 빼고 비교한다.
