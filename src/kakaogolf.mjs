@@ -67,6 +67,23 @@ export function fixedSlots() {
   return out.sort((x, y) => x.mins - y.mins || x.course.localeCompare(y.course));
 }
 
+// ── 기본틀 밖의 '늘렸다 줄였다' 하는 칸 ────────────────────────────────
+//  예약팀장 공식(2026-08-17): 1부는 더운 날 06:16을 열고 08:50을 빼며, 3부는 빠른 시간 수요가 많으면 앞으로 연다.
+//  ★이 칸들은 여집합에 넣지 않는다 — 안 뜬다고 찼다고 볼 근거가 없다(원래 그날 없는 칸일 수 있다).
+//   그래서 기준표(parts)에서 빼고 여기 따로 적는다. 카카오에 뜨면 '그날 틀이 늘었다'는 신호로 읽는다.
+export function flexSlots() {
+  const cfg = loadSchedule();
+  if (!cfg || !Array.isArray(cfg.flex)) return [];
+  const courses = Array.isArray(cfg.courses) && cfg.courses.length ? cfg.courses : ['OUT', 'IN'];
+  const out = [];
+  for (const f of cfg.flex) {
+    const m = toMin(f.time);
+    if (m == null) continue;
+    for (const c of courses) out.push({ part: String(f.part || ''), mins: m, time: toHM(m), course: c, why: f.why || '', drops: f.drops || '' });
+  }
+  return out;
+}
+
 // ── 카카오골프: 그날 '아직 예약 가능한' 티오프 ────────────────────────
 //  ★우리가 만든 통로가 아니다. 저쪽이 주소나 응답 형태를 바꾸면 끊긴다.
 //   그런데 진짜 위험은 '에러'가 아니라 '조용한 거짓말'이다 —
@@ -180,8 +197,15 @@ const SALE_CLOSE_LEAD = Number(process.env.KAKAO_SALE_CLOSE_LEAD || 70);
 //
 //  ★그리고 함부로 단정하지 않는다. 그 부·코스의 판매 패턴을 충분히 봤을 때만 판단한다 —
 //   패턴을 모르는 채로 '안 판다'고 우기면 그 부의 팀이 통째로 사라진다(미운영 오판과 같은 함정).
+//  ★2026-08-17 저녁, 예약팀장(박가람) 공식 답변으로 이 추론의 전제가 깨졌다 — 그래서 기본으로 끈다.
+//   팀장: "3부도 빠른 시간을 찾는 사람이 더 많으면 2부 팀 수에 따라 더 앞으로 여는 거고요."
+//   즉 앞 칸은 안 파는 게 아니라 '제일 인기라 순식간에 팔린다'. 우리가 못 본 건 미판매가 아니라 완판이다.
+//   실제로 8/18 배치표에 16:32 OUT·17:00 OUT 팀이 있었는데 이 규칙이 둘을 '모른다'로 지웠다(맞은 판정을 버렸다).
+//   진짜 사각지대(기본틀 밖의 늘었다 줄었다 하는 칸)는 이제 기준표의 flex로 따로 다룬다 — 추론이 아니라 사실로.
+//   ★기록은 계속한다. 며칠 더 쌓여서 '정말 한 번도 안 파는 칸'이 남으면 그때 KAKAO_BLIND=1로 되살린다.
 const SELLABLE_FILE = 'kakao-sellable.json';        // { "06:23|OUT": ["20260819", ...] } 판매중으로 본 날짜들
 const SELL_MATURE = Number(process.env.KAKAO_SELL_MATURE || 8);   // 이만큼의 시각을 팔아본 부·코스만 판단
+const BLIND_ON = ['1', 'true', 'yes'].includes(String(process.env.KAKAO_BLIND || '').toLowerCase());
 export const loadSellable = () => loadJSON(SELLABLE_FILE, {}) || {};
 
 // 순수 함수로 뺀다 — 이 판단이 틀리면 팀이 통째로 생기거나 사라지므로 파일 없이 시험할 수 있어야 한다.
@@ -207,9 +231,14 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
   //  그리고 예전에 열려 있던 걸 본 적이 있으면 하루아침에 0이 될 수 없다 — 그건 고장이다.
   const dayGap = Math.round((new Date(`${String(dateYYYYMMDD).slice(0, 4)}-${String(dateYYYYMMDD).slice(4, 6)}-${String(dateYYYYMMDD).slice(6, 8)}T00:00:00`) - new Date(new Date().toDateString())) / 86400000);
-  // ★고정표에 없는데 카카오엔 뜨는 칸 = 우리 기준표가 틀렸다는 신호. 조용히 버리지 않고 남긴다.
+  // ★기본틀에 없는데 카카오엔 뜨는 칸. 두 가지가 섞여 있어 갈라 놓는다:
+  //   ①flex — 예약팀이 늘렸다 줄였다 하는 칸(06:16·16:25). 뜨면 '그날 틀이 늘었다'는 신호다. 정상.
+  //   ②그 밖 — 우리 기준표가 틀렸다는 신호. 조용히 버리지 않고 남긴다.
   const fixedSet = new Set(fixed.map((f) => key(f.mins, f.course)));
-  const unknown = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
+  const flexSet = new Set(flexSlots().map((f) => key(f.mins, f.course)));
+  const outside = open.filter((o) => !fixedSet.has(key(o.mins, o.course))).map((o) => key(o.mins, o.course));
+  const flexOpen = outside.filter((k) => flexSet.has(k));
+  const unknown = outside.filter((k) => !flexSet.has(k));
 
   const now = new Date();
   const todayStr = ymd(now);
@@ -291,7 +320,9 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   if (sellDirty) { try { saveJSON(SELLABLE_FILE, sell); } catch (e) { console.error('[카카오골프] 판매이력 저장 실패:', e.message); } }
 
   // 그 부·코스의 판매 패턴을 충분히 봤는가 — 봤을 때만 '안 파는 칸'을 판단한다.
-  const blind = blindSlots(sell, fixed);
+  //  ★기본은 '세기만' 한다(BLIND_ON=false). 위 주석 참조 — 앞 칸은 안 파는 게 아니라 빨리 팔린다.
+  const blindSeen = blindSlots(sell, fixed);
+  const blind = BLIND_ON ? blindSeen : new Set();
 
   const idle = new Set(), unsure = new Set();
   for (const p of partsOf) {
@@ -343,6 +374,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   }
   return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, peakByPart, unknown,
+    flexOpen,                                      // 기본틀 밖인데 팔리는 중 = 그날 예약팀이 틀을 늘렸다
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
     // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
     openKeys: open.map((o) => key(o.mins, o.course)),
@@ -351,8 +383,11 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     // ★'찼다'고 본 칸 중, 이 날짜에서 판매중인 걸 한 번도 못 본 것 — 관측을 늦게 시작해도 이렇게 보인다.
     //  그래서 이건 '경고'일 뿐 판정 근거가 아니다. 판정 근거는 아래 blind(전 날짜 통합)다.
     unverified: booked.filter((b) => !everOpenKeys.has(key(b.mins, b.course))).map((b) => key(b.mins, b.course)),
-    // ★카카오가 아예 안 파는 칸 — 팀이 있는지 없는지 이 엔진으로는 영영 못 안다. 사진 판독만이 답이다.
+    // ★카카오가 아예 안 파는 칸 — 판정에 쓰는 것(blind)과, 판정엔 안 쓰고 세기만 하는 것(blindSeen)을 나눈다.
+    //  전제가 흔들려서 지금은 세기만 한다(KAKAO_BLIND=1이면 판정에도 쓴다).
     blind: [...blind].sort(),
+    blindSeen: [...blindSeen].sort(),
+    blindOn: BLIND_ON,
     closeLead,                                     // 관측으로 배운 판매 마감선(분). 안 봤으면 0.
     everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
     skippedCount: skipped.length,
@@ -453,14 +488,19 @@ export async function tick({ days = 3, from = 0 } = {}) {
       if (prev && dif.booked.length && i <= 1) {
         console.log(`·  [카카오골프] ${date} 새로 찬 칸 ${dif.booked.length}개: ${dif.booked.slice(0, 8).join(' ')}`);
       }
-      if ((snap.blind || []).length && i <= 2) {
-        console.log(`[카카오골프] ${date} 카카오가 안 파는 칸 ${snap.blind.length}개 — 찼다고 안 센다`
-          + `(팀 유무는 사진 판독만 안다): ${snap.blind.slice(0, 8).join(' ')}`);
+      if ((snap.blindSeen || []).length && i <= 2) {
+        console.log(`[카카오골프] ${date} 판매중을 한 번도 못 본 칸 ${snap.blindSeen.length}개`
+          + `${snap.blindOn ? ' — 찼다고 안 센다' : ' — 세기만 한다(빨리 팔린 것일 수 있음)'}`
+          + `: ${snap.blindSeen.slice(0, 8).join(' ')}`);
       }
       const unv = (snap.unverified || []).filter((k) => !(snap.blind || []).includes(k));
       if (unv.length && i <= 2) {
         console.warn(`[카카오골프] ${date} 확인 못 한 칸 ${unv.length}개 — 이 날짜에선 판매중인 걸 못 봤다`
           + `(관측을 늦게 시작해서일 수 있음): ${unv.slice(0, 6).join(' ')}`);
+      }
+      if ((snap.flexOpen || []).length && i <= 2) {
+        console.log(`·  [카카오골프] ${date} 틀 확장 감지 — 기본틀 밖 칸이 팔리는 중: ${snap.flexOpen.join(' ')}`
+          + ` (예약팀이 앞으로 늘린 날. 그 부 첫 팀 시각이 당겨진다)`);
       }
       if (i <= 1) {
         const p3 = snap.byPart['3'] || [];
