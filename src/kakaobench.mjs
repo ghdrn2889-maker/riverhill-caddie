@@ -123,28 +123,35 @@ export function reportDay(date) {
     const avg = Math.round(withLead.reduce((s, r) => s + r.lead, 0) / withLead.length);
     L.push(`  빠르기 — 카카오가 먼저 ${won.length}/${withLead.length}칸 · 평균 ${avg}분`);
   }
-  L.push(`  맞기 — 카카오만 ${c.kakaoOnly.length}칸${c.kakaoOnly.length ? ` (${c.kakaoOnly.slice(0, 6).map((s) => s.replace('|', ' ')).join(', ')})` : ''}`
-    + ` · 배치표만 ${c.boardOnly.length}칸${c.boardOnly.length ? ` (${c.boardOnly.slice(0, 6).map((s) => s.replace('|', ' ')).join(', ')})` : ''}`);
+  const show = (arr) => arr.slice(0, 6).map((s) => s.replace('|', ' ')).join(', ');
+  for (const a of c.acc) {
+    if (a.blind) { L.push(`  맞기 ${a.part}부 — 카카오가 이 부를 하나도 못 봤다(관측 시작 전 완판 추정) · 배치표 ${a.board}칸`); continue; }
+    L.push(`  맞기 ${a.part}부 — 카카오 ${a.kakao}칸 vs 배치표 ${a.board}칸`
+      + ` · 헛것 ${a.kakaoOnly.length}${a.kakaoOnly.length ? `(${show(a.kakaoOnly)})` : ''}`
+      + ` · 놓침 ${a.boardOnly.length}${a.boardOnly.length ? `(${show(a.boardOnly)})` : ''}`);
+  }
   return L.join('\n');
 }
 
 // 여러 날 묶음 — 일주일 뒤 이걸 보고 정한다.
 export function reportRange(days = 7) {
-  const out = [], acc = { rows: 0, lead: [], won: 0, kOnly: 0, bOnly: 0, missed: 0 };
+  const out = [], acc = { rows: 0, lead: [], won: 0, kOnly: 0, bOnly: 0, missed: 0, blind: 0, seen: 0 };
   const now = new Date();
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
     const key = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
     const c = compareDay(key);
-    if (!c.rows.length && !c.kakaoOnly.length && !c.boardOnly.length) continue;
+    if (!c.rows.length && !c.acc.length) continue;
     out.push(reportDay(key));
-    acc.rows += c.rows.length; acc.kOnly += c.kakaoOnly.length; acc.bOnly += c.boardOnly.length;
+    acc.rows += c.rows.length;
+    for (const a of c.acc) { if (a.blind) { acc.blind++; continue; } acc.kOnly += a.kakaoOnly.length; acc.bOnly += a.boardOnly.length; acc.seen++; }
     acc.missed += c.rows.filter((r) => r.lead == null).length;
     for (const r of c.rows) if (r.lead != null) { acc.lead.push(r.lead); if (r.lead > 0) acc.won++; }
   }
   const avg = acc.lead.length ? Math.round(acc.lead.reduce((s, x) => s + x, 0) / acc.lead.length) : 0;
   out.push('\n── 합계 ──');
   out.push(`  당일 추가 ${acc.rows}칸 중 카카오가 먼저 본 것 ${acc.won}칸 · 평균 ${avg}분 빠름`);
-  out.push(`  카카오가 못 본 추가 ${acc.missed}칸 · 헛것(카카오만) ${acc.kOnly}칸 · 놓침(배치표만) ${acc.bOnly}칸`);
+  out.push(`  카카오가 못 본 추가 ${acc.missed}칸 · 헛것 ${acc.kOnly}칸 · 놓침 ${acc.bOnly}칸  (부·날 ${acc.seen}건 기준)`);
+  if (acc.blind) out.push(`  ★카카오가 통째로 못 본 부·날 ${acc.blind}건 — 관측 시작 전에 완판된 부다. 이건 정확도가 아니라 관측 공백이다.`);
   return out.join('\n');
 }
