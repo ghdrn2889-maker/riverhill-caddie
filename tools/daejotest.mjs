@@ -102,8 +102,10 @@ globalThis.prompt = () => null;
 globalThis.confirm = () => true;
 // 보낸 몸통을 기록해둔다 — '무엇을 저장했는가'가 불변식이다(예상 격자가 새어나가면 안 된다).
 globalThis.__SENT = [];
-globalThis.fetch = async (url, opt) => {
-  try { globalThis.__SENT.push({ url: String(url).split('?')[0], body: JSON.parse(opt.body) }); } catch { /* noop */ }
+globalThis.fetch = async (url, opt = {}) => {
+  // 몸통이 없는 요청(GET)도 기록한다 — '언제 서버를 찔렀는가' 자체가 불변식이다(갱신은 편집 중에 멈춰야 한다).
+  let body = null; try { body = JSON.parse(opt.body); } catch { /* 몸통 없음 */ }
+  globalThis.__SENT.push({ url: String(url).split('?')[0], body });
   return { ok: true, json: async () => ({ ok: true, effective: [] }) };
 };
 await import('../tools/daejo-client.js');
@@ -491,6 +493,36 @@ if (HAS_KAKAO) {
     if (!doc._ids.undoBtn.hidden) doc._ids.undoBtn._ev.click();
     console.log(`  ${p}부 예상에서 옮김 → 화면은 바뀌고, 저장 상태는 안 생김`);
   } else console.log('  근무 4명 이상인 부가 없어 건너뜁니다');
+}
+
+// ── ⑱ 갱신은 고치는 중에 화면을 건드리지 않는다 ──────────────────────────
+//  카카오는 계속 도니 화면도 따라가야 한다. 그런데 손대고 있는 화면이 발밑에서 바뀌면
+//  하던 일이 통째로 날아간다 — 그건 안 따라가는 것보다 나쁘다. 그래서 편집 중에는 멈춘다.
+{
+  console.log('\n갱신은 고치는 중을 건드리지 않는다\n');
+  const refresh = globalThis.window.__daejoRefresh;
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length >= 3);
+  if (p && refresh) {
+    doc._ids.vReal._ev.click();
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    clickMode('move');
+    clickCell(cellOf(p, g0[0].slot.split(' ')[0], g0[0].slot.split(' ')[1]));
+    clickCell(cellOf(p, g0[2].slot.split(' ')[0], g0[2].slot.split(' ')[1]));
+    clickMode('move');
+    const mid = JSON.stringify(readGrid(p));
+    globalThis.__SENT.length = 0;
+    await refresh();
+    const hit = () => globalThis.__SENT.some((x) => x.url.endsWith('/api/daejo-data'));
+    chk(!hit(), '고치는 중인데 갱신이 서버를 찔렀다 — 화면이 발밑에서 바뀔 수 있다');
+    chk(JSON.stringify(readGrid(p)) === mid, '고치는 중인데 갱신이 화면을 바꿨다');
+    // 앞 시험들이 남긴 것까지 전부 되돌려 '고친 게 없는 상태'를 만든다.
+    let guard = 0;
+    while (!doc._ids.undoBtn.hidden && guard++ < 200) doc._ids.undoBtn._ev.click();
+    globalThis.__SENT.length = 0;
+    await refresh();
+    chk(hit(), '고친 게 없는데도 갱신이 안 돈다 — 화면이 낡은 채로 남는다');
+    console.log('  고치는 중 → 갱신 멈춤 · 되돌린 뒤 → 갱신 돎');
+  } else console.log('  건너뜁니다(갱신 손잡이 없음)');
 }
 
 // ── ⑮ 저장한 뒤에도 반영할 수 있어야 한다 ────────────────────────────────

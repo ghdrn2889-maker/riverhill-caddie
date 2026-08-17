@@ -777,15 +777,74 @@
     } catch (err) { state.textContent = '초기화 실패: ' + err.message; resetBtn.disabled = false; }
   });
 
-  // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.
-  PARTS.forEach((p) => {
+  // 한 부를 지금의 서버 값으로 다시 세운다 — 처음 켤 때와 갱신할 때가 같은 길을 쓴다.
+  function seat(p) {
     const teams = (teeOrig[p] || []).filter(Boolean).map((t) => ({ time: t.time, course: t.course }));
     ((BOARD[p] || {}).boardInternTees || []).forEach((t) => teams.push({ time: toHM(toMin(t.time)), course: /IN/i.test(t.course) ? 'IN' : 'OUT' }));
     // 실제 축만 깔아준다 — 테스트판에 저장해둔 배치가 있으면 그게 기준선이다.
     //  예상 축은 넘기지 않는다: 켤 때마다 지금의 실제 배치표 ∪ 지금의 카카오로 새로 계산한다.
     setBaseline(p, teams, { real: (teeOrig[p] || []).filter(Boolean).map(cp) });
-  });
+  }
+
+  // ── 살아 있는 화면 ──────────────────────────────────────────────────
+  //  카카오는 계속 돈다. 화면을 열어둔 채로도 따라가야 '실시간'이다.
+  //  ★단 하나의 규칙: 고치는 중에는 절대 건드리지 않는다. 손대고 있는 화면이 발밑에서
+  //   바뀌면 하던 일이 통째로 날아간다 — 그건 안 따라가는 것보다 나쁘다.
+  const POLL_MS = 60000;
+  const slotKeys = (a) => (a || []).map((s) => K(s.time, s.course)).sort().join(',');
+  const sigOf = (b) => JSON.stringify([(b.roster || []), slotKeys(b.teeGrid), slotKeys(b.internTees), slotKeys(b.kakaoSlots), b.cut || 0]);
+  const busy = () => !!mode || !!pick || stack.length > 0 || PARTS.some(changed);
+  const newSlots = (was, now) => {
+    const a = new Set((was || []).map((s) => K(s.time, s.course)));
+    return (now || []).map((s) => K(s.time, s.course)).filter((k) => !a.has(k));
+  };
+  let polling = false, lastNote = '';
+  async function refresh(force) {
+    if (!live || polling || (!force && busy())) return;
+    polling = true;
+    try {
+      const q = apiUrl('/api/daejo-data') + (apiUrl('').includes('?') ? '&' : '?') + 'date=' + encodeURIComponent(DATE);
+      const j = await (await fetch(q, { credentials: 'include' })).json();
+      if (!j.ok || j.dateKey !== DATE || !j.parts) return;      // 다른 날짜를 보고 있으면 손대지 않는다
+      if (busy()) return;                                        // 기다리는 사이에 손을 댔을 수도 있다
+      const notes = [];
+      for (const p of PARTS) {
+        const nb = { ...(j.parts[p] || {}), kakaoSlots: ((j.snap || {}).byPart || {})[p] || [] };
+        const ob = BOARD[p] || {};
+        if (!(nb.roster || []).length || sigOf(nb) === sigOf(ob)) continue;
+        const gotKakao = newSlots(ob.kakaoSlots, nb.kakaoSlots);
+        const gotBoard = newSlots(ob.teeGrid, nb.teeGrid);
+        BOARD[p] = nb;
+        roster[p] = (nb.roster || []).slice();
+        interns[p] = new Set((nb.internTees || []).map((t) => K(t.time, t.course)));
+        const t = []; (nb.teeGrid || []).forEach((g) => { t[Number(g.pos) - 1] = { time: g.time, course: /IN/i.test(g.course) ? 'IN' : 'OUT' }; });
+        teeOrig[p] = t;
+        seat(p);
+        if (gotBoard.length) notes.push(`${p}부 배치표 +${gotBoard.length}팀(${gotBoard.map((k) => k.replace('|', ' ')).join(' ')})`);
+        else if (gotKakao.length) notes.push(`${p}부 카카오 +${gotKakao.length}칸(${gotKakao.slice(0, 3).map((k) => k.replace('|', ' ')).join(' ')})`);
+        else notes.push(`${p}부 바뀜`);
+      }
+      SB_EDITED.length = 0; ((j.sandbox || {}).edited || []).forEach(markEdited);
+      if (notes.length) {
+        PARTS.forEach(paint);
+        const now = new Date();
+        lastNote = `${pad(now.getHours())}:${pad(now.getMinutes())} 갱신 — ${notes.join(' · ')}`;
+        state.textContent = lastNote;
+      }
+    } catch { /* 조용히 넘어간다 — 갱신 실패가 편집을 방해하면 안 된다 */ }
+    finally { polling = false; }
+  }
+
+  // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.
+  PARTS.forEach(seat);
   tools.hidden = false;
   PARTS.forEach(paint);
   if (!live) state.textContent = '샘플(파일) — 눌러서 동작만 보실 수 있고 저장은 안 됩니다. 실제 저장은 모니터 /daejo.';
+  if (live) {
+    setInterval(refresh, POLL_MS);
+    // 폰은 화면을 끄면 타이머가 멈춘다 — 돌아왔을 때 낡은 화면을 보여주지 않으려면 그때 한 번 더 본다.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    if (window.addEventListener) window.addEventListener('focus', () => refresh());
+    window.__daejoRefresh = refresh;   // 실브라우저 검증에서 기다리지 않고 바로 돌려보기 위한 손잡이
+  }
 })();
