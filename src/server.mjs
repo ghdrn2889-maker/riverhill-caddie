@@ -2639,6 +2639,17 @@ if (kakaoOn()) {
   };
   setTimeout(kakaoTick, 20000);
   setInterval(kakaoTick, KAKAO_TICK_MS);
+  // ★먼 날짜는 한 시간에 한 번만 — '한 번이라도 판매중인 걸 봤는가'를 미리 쌓아두기 위해서다.
+  //  하루 전에야 처음 보면, 이미 팔린 칸과 골프장이 아예 안 내놓은 칸이 똑같이 '한 번도 안 열림'으로
+  //  보인다(실측: 8/17을 8/16 저녁에 처음 봤다). 그 둘을 가르는 건 관측 기간뿐이다.
+  //  요청은 시간당 4건 — Crawl-delay를 지키고도 부담이 없다.
+  const kakaoFarTick = () => {
+    const h = new Date().getHours();
+    if (h < 7 || h >= 24) return;
+    kakaoGolfTick({ from: 3, days: 7 }).catch((e) => console.error('[카카오골프/먼날]', e.message));
+  };
+  setTimeout(kakaoFarTick, 90000);
+  setInterval(kakaoFarTick, 60 * 60 * 1000);
   console.log(`⛳ 카카오골프 예약 관측: ${KAKAO_TICK_MS / 60000}분 간격(07~24시, 오늘+내일치) — 관리자 관측 전용`);
 
   // ★대조 표본 — 배치표가 그 칸을 실제로 갖게 된 시각을 남긴다.

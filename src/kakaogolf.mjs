@@ -216,6 +216,13 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   const seenCount = Number(prevSnap?.seenCount || 0) + 1;
   const partsOf = new Set(fixed.map((f) => f.part));
   for (const f of fixed) if (openSet.has(key(f.mins, f.course))) ever[`${f.part}|${f.course}`] = true;
+  // ★칸 하나하나에 대해 '판매중인 걸 본 적이 있는가'를 남긴다.
+  //  이 엔진의 급소: 골프장이 그날 티오프 자체를 없애면(팀이 안 차면 첫 칸 16:25를 지우는 식)
+  //  그 칸은 영원히 판매중으로 안 뜬다 → 여집합 계산이 '찼다'로 읽는다. 실제로는 팀이 없는데.
+  //  한 번이라도 판매중인 걸 봤으면 그 칸은 팔 수 있는 칸이고, 그 뒤의 사라짐은 진짜 예약이다.
+  //  ★지금은 '기록만' 한다 — 판정은 안 바꾼다. 계측 중에 규칙을 바꾸면 일주일이 무효가 된다.
+  const everOpenKeys = new Set(prevSnap?.everOpenKeys || []);
+  for (const o of open) everOpenKeys.add(key(o.mins, o.course));
 
   const idle = new Set(), unsure = new Set();
   for (const p of partsOf) {
@@ -259,6 +266,10 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
     // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
     openKeys: open.map((o) => key(o.mins, o.course)),
+    everOpenKeys: [...everOpenKeys],               // 이 날짜에서 한 번이라도 판매중인 걸 본 칸
+    // ★'찼다'고 본 칸 중, 판매중인 걸 한 번도 못 본 것 — 진짜 예약인지 골프장이 지운 칸인지 모른다.
+    //  판정에는 아직 안 쓴다(계측 중). 얼마나 되는지부터 센다.
+    unverified: booked.filter((b) => !everOpenKeys.has(key(b.mins, b.course))).map((b) => key(b.mins, b.course)),
     closeLead,                                     // 관측으로 배운 판매 마감선(분). 안 봤으면 0.
     everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
     skippedCount: skipped.length,
@@ -337,10 +348,13 @@ export function compareWithBoard(snap, teeGrid, part = '3') {
 //  D..D+N일치를 훑는다. robots.txt Crawl-delay 1을 지켜 요청 사이에 1초 이상 쉰다.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function tick({ days = 3 } = {}) {
+// from..days-1 일치를 훑는다. 가까운 날은 자주, 먼 날은 드물게 부르기 위해 시작점을 받는다.
+//  ★먼 날부터 봐둬야 '한 번이라도 판매중인 걸 봤는가'가 쌓인다. 하루 전에야 처음 보면
+//   이미 팔린 칸과 골프장이 지운 칸이 똑같이 '한 번도 안 열림'으로 보인다(실측: 8/17을 8/16 저녁에 처음 봤다).
+export async function tick({ days = 3, from = 0 } = {}) {
   if (!kakaoOn()) return;
   const today = new Date();
-  for (let i = 0; i < days; i++) {
+  for (let i = from; i < days; i++) {
     const d = new Date(today); d.setDate(d.getDate() + i);
     const date = ymd(d);
     try {
@@ -355,6 +369,10 @@ export async function tick({ days = 3 } = {}) {
       }
       if (prev && dif.booked.length && i <= 1) {
         console.log(`·  [카카오골프] ${date} 새로 찬 칸 ${dif.booked.length}개: ${dif.booked.slice(0, 8).join(' ')}`);
+      }
+      if ((snap.unverified || []).length && i <= 2) {
+        console.warn(`[카카오골프] ${date} 확인 못 한 칸 ${snap.unverified.length}개 — 판매중인 걸 한 번도 못 봤다`
+          + `(진짜 예약인지 골프장이 지운 칸인지 모름): ${snap.unverified.slice(0, 6).join(' ')}`);
       }
       if (i <= 1) {
         const p3 = snap.byPart['3'] || [];
