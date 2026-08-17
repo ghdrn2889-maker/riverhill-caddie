@@ -825,7 +825,7 @@ app.post('/api/daejo-save', gate, (req, res) => {
 app.post('/api/daejo-reset', gate, (req, res) => {
   const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
-  const cleared = clearSandbox(date, String(req.body?.part || ''));
+  const cleared = clearSandbox(date, String(req.body?.part || ''), String(req.body?.axis || ''));
   res.json({ ok: true, date, cleared });
 });
 

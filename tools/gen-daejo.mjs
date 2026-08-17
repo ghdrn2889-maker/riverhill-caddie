@@ -230,6 +230,8 @@ body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-rad
 .tools button:hover{border-color:var(--warn)}
 .tools button.on{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);font-weight:600}
 .tools button.save{background:var(--ok);color:var(--panel);border-color:var(--ok);font-weight:600}
+/* 앱 반영은 되돌릴 수 없는 쪽이라 색을 달리한다 — 실수로 누르는 버튼과 같아 보이면 안 된다. */
+.tools button.apply{background:var(--warn);color:var(--panel);border-color:var(--warn);font-weight:700}
 .tools button:disabled{opacity:.5;cursor:default}
 .tools .hint{font-size:12px;color:var(--dim)}
 body.editing td.c{cursor:pointer}
@@ -300,9 +302,10 @@ ${(J.judgeNote === '판정안함(당일)') ? `<div class="note">
 </div>` : ''}
 <div class="sandbox">
   <b>관리자 테스트판</b>
-  여기서 고치고 저장하는 값은 <b>회원 앱에 반영되지 않습니다</b> &mdash; 알림도 나가지 않고, 카카오 엔진도 보지 않습니다.
-  이 화면의 &lsquo;실제 배치표&rsquo;는 아직 기능이 덜 여물었기 때문입니다.
-  회원에게 실제로 반영되는 교정은 모니터의 <b>배치표 검수</b> 탭에서만 합니다.
+  <b>테스트판에 저장</b>은 회원 앱에 반영되지 않습니다 &mdash; 여기 안에서만 삽니다.
+  회원 앱에 넘기려면 <b>실제 배치표를 앱에 반영</b>을 따로 눌러야 하고, 그때 넘어가는 건
+  <b>실제 배치표 축만</b>입니다 &mdash; 카카오 예상 칸은 절대 넘어가지 않습니다(예상은 아직 관측 전용).
+  반영해도 <b>알림은 나가지 않습니다</b>. 정정 알림은 모니터의 <b>배치표 검수</b> 탭에서 미리보기 후 보냅니다.
   ${(J.sandbox?.edited || []).length ? `<span class="sbon">지금 ${J.sandbox.edited.map((p) => p + '부').join('·')}는 테스트판이 덮여 있습니다${J.sandbox.at ? ` (${esc(new Date(J.sandbox.at).toLocaleString('ko-KR'))})` : ''}.</span>` : ''}
 </div>
 
@@ -336,6 +339,7 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button data-mode="move" type="button">순번 옮기기</button>
   <button id="undoBtn" type="button" hidden>되돌리기</button>
   <button id="saveBtn" type="button" class="save" hidden>테스트판에 저장</button>
+  <button id="applyBtn" type="button" class="apply" hidden>실제 배치표를 앱에 반영</button>
   <button id="resetBtn" type="button" ${(J.sandbox?.edited || []).length ? '' : 'hidden'}>실제 판독으로 초기화</button>
   <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
   <span id="state" class="hint"></span>
@@ -382,6 +386,7 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
 </div>`; }).join('')}
 <script>
 window.__DAEJO_DATE = ${JSON.stringify(String(J.dateKey || ''))};
+window.__DAEJO_SANDBOX = ${JSON.stringify((J.sandbox && J.sandbox.edited) || [])};
 window.__DAEJO_BOARD = ${JSON.stringify(Object.fromEntries(['1', '2', '3'].map((p) => [p, {
   ...(J.parts?.[p] || {}),
   // 예상 보기에서도 편집하려면 카카오가 '찼다'고 본 칸을 클라이언트가 알아야 한다.

@@ -59,11 +59,20 @@ export function saveSandbox(date, parts, { by = '관리자' } = {}) {
 }
 
 // 실제 판독으로 되돌리기(테스트판 버리기). 부를 주면 그 부만.
-export function clearSandbox(date, part = '') {
+//  axis='real'이면 실제 배치표 축만 버리고 카카오 예상 배치(projGrid)는 남긴다 —
+//  앱에 반영한 뒤에는 배치표 자체가 그 내용을 들고 있으므로 테스트판이 계속 덮으면 안 된다.
+//  (그대로 두면 나중에 새 배치표가 올라와도 낡은 테스트판이 계속 이겨서 판독이 묻힌다.)
+export function clearSandbox(date, part = '', axis = '') {
   const k = dateKey(date);
   const all = load();
   if (!all[k]) return false;
-  if (part) { delete all[k].parts[String(part)]; if (!Object.keys(all[k].parts).length) delete all[k]; }
+  if (part && axis === 'real') {
+    const v = all[k].parts[String(part)];
+    if (!v) return false;
+    if ((v.projGrid || []).length) all[k].parts[String(part)] = { projGrid: v.projGrid, at: Date.now() };
+    else delete all[k].parts[String(part)];
+    if (!Object.keys(all[k].parts).length) delete all[k];
+  } else if (part) { delete all[k].parts[String(part)]; if (!Object.keys(all[k].parts).length) delete all[k]; }
   else delete all[k];
   saveJSON(FILE, all);
   console.log(`🧪 [대조판 테스트] ${k}${part ? ` ${part}부` : ''} 초기화 — 실제 판독으로 되돌림`);
@@ -78,6 +87,8 @@ export function applySandbox(parts, date) {
   if (!sb) return { parts, edited, at: 0 };
   for (const [p, v] of Object.entries(sb.parts || {})) {
     if (!parts[p]) continue;                     // 판독이 없는 부는 테스트판도 의미가 없다
+    // 예상 배치만 남은 항목(앱에 반영한 뒤)은 실제 축을 덮지 않는다.
+    if (!v.roster) { parts[p] = { ...parts[p], projGrid: v.projGrid || [] }; continue; }
     parts[p] = { ...parts[p], roster: v.roster, teeGrid: v.teeGrid, projGrid: v.projGrid || [], boardInternTees: v.boardInternTees, internTees: v.internTees, cut: v.cut || parts[p].cut };
     edited.push(p);
   }

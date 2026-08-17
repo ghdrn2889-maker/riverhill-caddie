@@ -13,6 +13,7 @@
 (() => {
   const DATE = window.__DAEJO_DATE || '';
   const BOARD = window.__DAEJO_BOARD || {};
+  const SB_EDITED = window.__DAEJO_SANDBOX || [];   // 테스트판이 덮고 있는 부
   const live = location.protocol.startsWith('http');
   // 모니터는 ?k=토큰 게이트다 — 저장 요청에도 그대로 붙여야 401이 안 난다(모니터 index.html과 같은 방식).
   const apiUrl = (p) => { const k = new URLSearchParams(location.search).get('k') || ''; return p + (k ? '?k=' + encodeURIComponent(k) : ''); };
@@ -21,6 +22,7 @@
   const saveBtn = document.getElementById('saveBtn');
   const undoBtn = document.getElementById('undoBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const applyBtn = document.getElementById('applyBtn');
   const HINTS = {
     team: '빈 칸을 눌러 팀을 추가하고, 팀이 있는 칸을 눌러 없앱니다. 추가하면 그 뒤가 한 칸씩 뒤로 밀리고 스페어 맨 앞이 근무로 올라옵니다.',
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
@@ -276,6 +278,8 @@
     paintSpares(part);
     saveBtn.hidden = !PARTS.some(changed);
     undoBtn.hidden = !stack.length;
+    // 반영할 게 있으면(테스트판이 덮여 있거나 방금 고쳤으면) 반영 버튼을 낸다.
+    if (applyBtn) applyBtn.hidden = !(SB_EDITED.length || PARTS.some(changed));
   }
 
   // ★스페어 줄 — 티오프가 없는 순번들. 이걸 안 그리면 편집 모드에서 그 사람들이 통째로 사라진다.
@@ -647,6 +651,70 @@
         : '바뀐 게 없습니다.';
     } catch (err) { state.textContent = '저장 실패: ' + err.message; }
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }
+  });
+
+  // ── 앱에 반영 ── 실제 배치표 축만, 그것도 이 버튼을 눌렀을 때만 넘어간다.
+  //
+  //  ★카카오 예상은 절대 안 넘긴다. 예상 격자가 본배치표로 새어 들어가 8/17 3부가
+  //   10팀 → 13팀으로 덮이고 커트가 10→13이 된 적이 있다(알림은 안 나갔지만 앱은 틀린 걸 보여줬다).
+  //   그래서 rows는 언제나 teeV.real이고, 인턴도 '본배치표에 팀이 있는 칸'만 보낸다.
+  //  ★그리고 조용히 일어나지 않는다 — 무엇이 어떻게 바뀌는지 먼저 보여주고 확인을 받는다.
+  function realPayload(part) {
+    const real = teeV.real[part] || [];
+    const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
+    return {
+      part: part,
+      rows: roster[part].map((cell, i) => {
+        const t = real[i];
+        return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
+      }),
+      interns: [...interns[part]].filter((k) => teamSet.has(k)).map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
+      cutLine: real.length,
+      notify: false,   // 알림은 여기서 안 보낸다 — 정정 알림은 '배치표 검수' 탭에서 미리보기 후 발송.
+    };
+  }
+  function applySummary() {
+    const lines = [];
+    for (const part of PARTS) {
+      if (!(BOARD[part] || {}).roster || !roster[part].length) continue;
+      const p = realPayload(part);
+      const base = (BOARD[part].teeGrid || []).length;
+      const nameFix = roster[part].filter((x, i) => (x || '') !== ((BOARD[part].roster || [])[i] || '')).length;
+      if (p.cutLine === base && !nameFix && !p.interns.length) continue;
+      lines.push(`${part}부 — 근무 ${base} → ${p.cutLine}` + (nameFix ? ` · 이름 ${nameFix}칸` : '') + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : ''));
+    }
+    return lines;
+  }
+  applyBtn.addEventListener('click', async () => {
+    if (!live) { state.textContent = '샘플에서는 반영할 수 없습니다.'; return; }
+    const lines = applySummary();
+    const msg = '실제 배치표를 앱에 반영합니다. 회원 대시보드가 바뀝니다.\n\n'
+      + (lines.length ? lines.join('\n') : '(팀 수·이름·인턴 변화 없음 — 티오프 배치만 바뀝니다)')
+      + '\n\n카카오 예상 칸은 넘기지 않습니다. 알림은 나가지 않습니다.\n계속할까요?';
+    if (!confirm(msg)) return;
+    applyBtn.disabled = true;
+    state.textContent = '반영 중…';
+    const done = [];
+    try {
+      for (const part of PARTS) {
+        if (!(BOARD[part] || {}).roster || !roster[part].length) continue;
+        const r = await fetch(apiUrl('/api/board-correct'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(realPayload(part)),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));
+        done.push(`${part}부 ${j.updated || 0}명`);
+        // 반영된 뒤에는 배치표가 그 내용을 들고 있다 — 테스트판의 실제 축은 비운다(예상 배치는 남긴다).
+        await fetch(apiUrl('/api/daejo-reset'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ date: DATE, part: part, axis: 'real' }),
+        }).catch(() => {});
+      }
+      state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} (알림은 안 나갔습니다)`;
+      applyBtn.hidden = true;
+    } catch (err) { state.textContent = '반영 실패: ' + err.message; }
+    finally { applyBtn.disabled = false; }
   });
 
   // 실제 판독으로 되돌리기 — 테스트판을 버린다.
