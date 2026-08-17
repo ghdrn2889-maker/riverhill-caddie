@@ -13,7 +13,13 @@
 (() => {
   const DATE = window.__DAEJO_DATE || '';
   const BOARD = window.__DAEJO_BOARD || {};
-  const SB_EDITED = window.__DAEJO_SANDBOX || [];   // 테스트판이 덮고 있는 부
+  // 테스트판이 덮고 있는 부. ★살아 있는 값이어야 한다 —
+  //  처음 켤 때 서버가 알려준 값에서 얼어붙으면, 저장한 직후 changed()는 false가 되고
+  //  이 목록은 여전히 비어 있어서 '앱에 반영' 버튼이 스스로 사라진다(저장은 됐는데 반영을 못 함).
+  //  그래서 저장하면 넣고, 반영·초기화하면 뺀다.
+  const SB_EDITED = (window.__DAEJO_SANDBOX || []).slice();
+  const markEdited = (p) => { if (!SB_EDITED.includes(p)) SB_EDITED.push(p); };
+  const unmarkEdited = (p) => { const i = SB_EDITED.indexOf(p); if (i >= 0) SB_EDITED.splice(i, 1); };
   const live = location.protocol.startsWith('http');
   // 모니터는 ?k=토큰 게이트다 — 저장 요청에도 그대로 붙여야 401이 안 난다(모니터 index.html과 같은 방식).
   const apiUrl = (p) => { const k = new URLSearchParams(location.search).get('k') || ''; return p + (k ? '?k=' + encodeURIComponent(k) : ''); };
@@ -639,6 +645,7 @@
           // ★배치를 그대로 넘긴다 — 안 넘기면 시각 순으로 다시 짜여 손수 옮긴 결과가 사라진다.
           setBaseline(part, (teeV.real[part] || []).concat(payload[part].boardInternTees),
             { real: teeV.real[part], proj: teeV.proj[part] });
+          markEdited(part);   // 이제 테스트판이 이 부를 덮고 있다 — 반영 버튼이 살아 있어야 한다.
         }
         resetBtn.hidden = false;
       }
@@ -646,8 +653,8 @@
       PARTS.forEach(paint);
       // ★저장 버튼이 사라지는 것이 곧 '저장됐다'는 신호다. 남아 있으면 아직 안 된 것이다.
       state.textContent = saved.length
-        ? `테스트판에 저장됐습니다 — ${saved.map((p) => p + '부').join('·')} (앱에는 반영되지 않습니다)`
-          + (view === 'proj' ? ' · 카카오 예상 칸은 팀으로 세지 않았습니다' : '')
+        ? `테스트판에 저장됐습니다 — ${saved.map((p) => p + '부').join('·')}. 앱에는 아직 안 갔습니다 — 회원에게 보이려면 ‘실제 배치표를 앱에 반영’을 누르세요.`
+          + (view === 'proj' ? ' (카카오 예상 칸은 팀으로 세지 않았습니다)' : '')
         : '바뀐 게 없습니다.';
     } catch (err) { state.textContent = '저장 실패: ' + err.message; }
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }
@@ -703,9 +710,10 @@
     try {
       for (const part of PARTS) {
         if (!touched(part)) continue;
+        const p = realPayload(part);
         const r = await fetch(apiUrl('/api/board-correct'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(realPayload(part)),
+          body: JSON.stringify(p),
         });
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));
@@ -715,11 +723,14 @@
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ date: DATE, part: part, axis: 'real' }),
         }).catch(() => {});
+        // 이제 이 부는 배치표가 곧 화면이다 — 기준선을 여기로 옮겨 두 번 보내지 않게 한다.
+        unmarkEdited(part);
+        setBaseline(part, (teeV.real[part] || []).concat(p.interns.map((t) => ({ time: t.time, course: t.course }))),
+          { real: teeV.real[part], proj: teeV.proj[part] });
       }
       state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} (알림은 안 나갔습니다)`;
-      applyBtn.hidden = true;
     } catch (err) { state.textContent = '반영 실패: ' + err.message; }
-    finally { applyBtn.disabled = false; }
+    finally { applyBtn.disabled = false; stack.length = 0; PARTS.forEach(paint); }
   });
 
   // 실제 판독으로 되돌리기 — 테스트판을 버린다.

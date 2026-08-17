@@ -443,6 +443,34 @@ if (HAS_KAKAO) {
   } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
 }
 
+// ── ⑮ 저장한 뒤에도 반영할 수 있어야 한다 ────────────────────────────────
+//  실사고: 고치고 '테스트판에 저장'을 누르면 반영 버튼이 스스로 사라졌다.
+//   저장이 기준선을 옮겨 changed()가 false가 되는데, '테스트판이 덮은 부' 목록은
+//   페이지를 켤 때 값에서 얼어붙어 있었기 때문이다 — 저장은 됐는데 앱에 보낼 방법이 없었다.
+{
+  console.log('\n저장 → 반영 연결\n');
+  doc._ids.vReal._ev.click();
+  const p = ['3', '2', '1'].find((x) => readGrid(x).filter((y) => !y.intern).length >= 3);
+  if (p) {
+    const g0 = readGrid(p).filter((x) => !x.intern);
+    clickMode('move');
+    clickCell(cellOf(p, g0[0].slot.split(' ')[0], g0[0].slot.split(' ')[1]));
+    clickCell(cellOf(p, g0[2].slot.split(' ')[0], g0[2].slot.split(' ')[1]));
+    clickMode('move');
+    globalThis.__SENT.length = 0;
+    await doc._ids.saveBtn._ev.click();
+    chk(globalThis.__SENT.some((x) => x.url.endsWith('/api/daejo-save')), '저장이 안 나갔다');
+    chk(doc._ids.saveBtn.hidden === true, '저장했는데 저장 버튼이 남아 있다');
+    chk(doc._ids.applyBtn.hidden === false, '저장했더니 반영 버튼이 사라졌다 — 앱에 보낼 방법이 없다');
+    globalThis.__SENT.length = 0;
+    await doc._ids.applyBtn._ev.click();
+    const sent = globalThis.__SENT.filter((x) => x.url.endsWith('/api/board-correct'));
+    chk(sent.length === 1 && sent[0].body.part === p, `저장 뒤 반영이 ${p}부를 안 보냈다(보낸 것: ${sent.map((s) => s.body.part + '부').join(',') || '없음'})`);
+    chk(doc._ids.applyBtn.hidden === true, '반영했는데 반영 버튼이 그대로 — 또 보낼 수 있다');
+    console.log(`  저장 → 반영 버튼 살아 있음 → ${p}부 ${sent[0]?.body.rows.filter((r) => r.tee).length}팀 전송 · 반영 뒤 버튼 사라짐`);
+  } else console.log('  근무 3명 이상인 부가 없어 건너뜁니다');
+}
+
 // ── ⑧ 실제 배치표의 팀은 사진이 정한다 ────────────────────────────────────
 //  카카오 예상 칸에만 찍은 인턴(예: 본배치표에 팀이 없는 17:07)이 실제 보기의 팀 수를 바꾸면 안 된다.
 //  바뀌면 없는 팀이 유령으로 끼어 밀림이 어긋나고, 화면에선 '밀림'이 아니라 '교체'로 보인다.
