@@ -4,11 +4,14 @@
 //   가리키는데 출처가 달랐고(확정선=근무선, 팀 편성=처음 사진 헤더), 한쪽만 갱신됐다.
 //   눈으로 보는 것 말고는 이걸 알아챌 방법이 없었다. 이제 매번 여기서 걸린다.
 import { buildBoardsView } from '../src/boardsview.mjs';
+import * as worklog from '../src/worklog.mjs';
 
 let fails = 0;
 const chk = (ok, msg) => { if (!ok) { fails++; console.log('   ★NG ' + msg); } return ok; };
 
-const parts = buildBoardsView();
+// ★labelToISO를 반드시 넘긴다 — 안 넘기면 근무일이 전부 빈 값이 되고, 날짜 검사가 조용히 통과한다.
+//  검사가 통과하는 것과 검사할 게 없는 것은 다르다.
+const parts = buildBoardsView({ labelToISO: worklog.labelToISO });
 if (!parts.length) { console.log('배치표가 아직 없습니다 — 검사할 게 없어요.'); process.exit(0); }
 
 console.log('\n앱 배치표 — 스스로 모순되지 않는가\n');
@@ -17,6 +20,7 @@ console.log('\n앱 배치표 — 스스로 모순되지 않는가\n');
 {
   const days = [...new Set(parts.map((b) => b.targetISO).filter(Boolean))];
   console.log(`  근무일 — ${parts.map((b) => `${b.part}부 ${b.targetISO || '?'}${b.stale ? '(낡음★)' : ''}`).join(' · ')}`);
+  chk(days.length > 0, '어느 부에서도 근무일을 못 읽었다 — 날짜 검사가 무의미해진다(날짜표기 형식 확인)');
   chk(days.length <= 1, `부끼리 배치표 날짜가 다르다: ${days.sort().join(' vs ')} — 한쪽만 갱신됐다`);
 }
 console.log('');
