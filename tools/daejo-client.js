@@ -114,7 +114,7 @@
     rosterOrig[p] = roster[p].slice();
     internsOrig[p] = new Set(interns[p]);
     VIEWS.forEach((v) => {
-      teeV[v][p] = (assign && assign[v]) ? assign[v].map(cp) : defaultAssign(v, p);
+      teeV[v][p] = (assign && assign[v]) ? reseat(v, p, assign[v]) : defaultAssign(v, p);
     });
     idxMemo.real[p] = new Map(); idxMemo.proj[p] = new Map();
     // 기준선은 두 보기 모두 잡는다 — 어느 쪽에서 고쳐도 '바뀌었다'를 알아채야 한다.
@@ -142,6 +142,24 @@
   });
   // 시각 순 기본 배치 — 팀이 있는 칸에서 인턴 칸을 뺀 것. 판독 직후의 배치표가 늘 이 모양이다.
   const defaultAssign = (v, p) => origOcc[v][p].filter((s) => !interns[p].has(K(s.time, s.course))).map(cp);
+  // ★저장해둔 배치를 다시 깔되, 그 사이에 생기거나 사라진 칸을 반영한다.
+  //  실사고: 2부 예상 보기가 10시 2분의 모습에 얼어붙었다. 카카오가 그 뒤로 12:46·13:42·13:49를
+  //  새로 잡았는데도 화면은 33자리 그대로였고, 관리자가 티오프를 손으로 하나씩 넣어야 했다.
+  //  (3부는 저장해둔 예상 배치가 없어 매번 새로 깔리니 저절로 따라갔다 — 부마다 다르게 보인 이유다.)
+  //  배치는 여전히 진실이다. 손수 옮긴 자리는 그대로 두고, 모르는 칸만 제자리에 끼우고 뺀다.
+  const reseat = (v, p, saved) => {
+    const occ = origOcc[v][p].filter((s) => !interns[p].has(K(s.time, s.course)));
+    const want = new Set(occ.map((s) => K(s.time, s.course)));
+    const T = saved.map(cp).filter((s) => s && want.has(K(s.time, s.course)));   // 없어진 칸(캔슬)은 뺀다
+    const have = new Set(T.map((s) => K(s.time, s.course)));
+    for (const s of occ) {                                                       // 새로 찬 칸은 시각 자리에 끼운다
+      const k = K(s.time, s.course);
+      if (have.has(k)) continue;
+      T.splice(sortedIdx(T, k), 0, cp(s));
+      have.add(k);
+    }
+    return T;
+  };
   // 인턴을 켤 때 '몇 번째 자리가 빠졌는지'를 기억해둔다 — 끄면 정확히 그 자리에 되돌린다.
   //  기억이 없으면(불러온 데이터의 인턴) 시각 순서에 맞는 자리에 끼운다.
   const idxMemo = { real: {}, proj: {} };

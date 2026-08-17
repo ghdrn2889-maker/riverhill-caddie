@@ -446,6 +446,28 @@ if (HAS_KAKAO) {
   } else console.log('  근무 5명 이상인 부가 없어 건너뜁니다');
 }
 
+// ── ⑯ 예상 보기가 새로 찬 칸을 따라가는가 ────────────────────────────────
+//  실사고: 2부 예상 보기가 10시 2분 모습에 얼어붙었다. 카카오가 그 뒤로 12:46·13:42·13:49를
+//   새로 잡았는데도 자리가 5개 빈 채였고, 관리자는 티오프를 손으로 하나씩 넣어야 했다.
+//   3부는 저장해둔 예상 배치가 없어 매번 새로 깔리니 저절로 따라갔다 — 그래서 부마다 달라 보였다.
+//  ★팀이 있는 칸(배치표든 카카오든)에는 인턴이거나 사람이 앉아 있어야 한다. 빈 채로 남으면 안 된다.
+{
+  console.log('\n예상 보기가 새 칸을 따라가는가\n');
+  doc._ids.vProj._ev.click();
+  const KK = (t, c) => toHM(toMin(t)) + '|' + (/IN/i.test(c) ? 'IN' : 'OUT');
+  for (const p of ['1', '2', '3']) {
+    const d = J.parts[p]; if (!d || !(d.teeGrid || []).length) continue;
+    const want = new Set([...(d.teeGrid || []).map((g) => KK(g.time, g.course)),
+      ...(((J.snap || {}).byPart || {})[p] || []).map((s) => KK(s.time, s.course))]);
+    const cells = all.filter((e) => e.dataset.p === p);
+    const interned = new Set(cells.filter((e) => e.classList.contains('intern')).map((e) => KK(e.dataset.t, e.dataset.c)));
+    const seated = new Set(cells.filter((e) => (e.querySelector('.pos') || {}).textContent).map((e) => KK(e.dataset.t, e.dataset.c)));
+    const orphan = [...want].filter((k) => !interned.has(k) && !seated.has(k));
+    chk(orphan.length === 0, `${p}부 예상 — 팀이 있는데 아무도 안 앉은 칸 ${orphan.length}개: ${orphan.slice(0, 6).join(' ')}`);
+    console.log(`  ${p}부 — 팀 ${want.size} · 앉음 ${[...want].filter((k) => seated.has(k)).length} · 인턴 ${[...want].filter((k) => interned.has(k)).length}`);
+  }
+}
+
 // ── ⑮ 저장한 뒤에도 반영할 수 있어야 한다 ────────────────────────────────
 //  실사고: 고치고 '테스트판에 저장'을 누르면 반영 버튼이 스스로 사라졌다.
 //   저장이 기준선을 옮겨 changed()가 false가 되는데, '테스트판이 덮은 부' 목록은
