@@ -23,6 +23,7 @@ import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
 import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
+import { setPartRange, setPartOneway, clearPart, dayFrameParts } from './dayframe.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
@@ -805,7 +806,10 @@ app.post('/api/upload-board', gate, async (req, res) => {
 app.get('/daejo', gate, (req, res) => {
   try {
     const J = buildDaejoData(String(req.query.date || ''));
-    if (!J.parts || !Object.keys(J.parts).length) return res.status(503).send('아직 판독된 배치표가 없습니다.');
+    // ★배치표가 없는 날에도 그린다 — 카카오 관측만으로도 대조판은 성립하고(원래 그런 화면이다),
+    //  무엇보다 '내일 원웨이'는 배치표가 뜨기 전에 알게 된다. 그때 말할 수 없으면 버튼이 헛돈다.
+    const empty = !Object.keys(J.parts || {}).length && !(J.snap && J.snap.at);
+    if (empty) return res.status(503).send('아직 판독된 배치표도, 카카오 관측도 없습니다.');
     // ★no-store — 이 페이지는 배치표 데이터를 HTML 안에 박아서 보낸다(window.__DAEJO_BOARD).
     //  no-cache는 '쓰기 전에 물어보라'일 뿐이라 304가 오면 브라우저가 캐시본을 그대로 다시 그린다.
     //  그래서 서버를 고쳐도 화면이 안 바뀌었고, 고친 사람도 보는 사람도 한나절을 헛돌았다(8/18).
@@ -827,6 +831,27 @@ app.post('/api/daejo-save', gate, (req, res) => {
   try {
     const rec = saveSandbox(date, req.body.parts, { by: '모니터' });
     res.json({ ok: true, date, edited: Object.keys(rec.parts || {}), at: rec.at });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+// ── 하루치 운영 선언 ── 그날 그 부가 몇 시부터 몇 시까지, 몇 코스로 도는가.
+//  ★이건 테스트판이 아니다 — 카카오 엔진이 곧바로 읽는다(그게 이 버튼의 목적이다).
+//   기본틀(config/riverhill-tee-schedule.json)은 건드리지 않는다. 하루의 사정으로 기본틀을 고치면
+//   그 다음 날부터 조용히 틀린다. 선언은 날짜에 붙고 45일 뒤 저절로 사라진다.
+app.post('/api/daejo-frame', gate, (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  const part = String(req.body?.part || '');
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  try {
+    const J = buildDaejoData(date);
+    const base = (J.sched?.base || {})[part];      // 기본틀 — 여기로 돌아오면 선언을 지운다
+    const cur = (J.sched?.parts || {})[part];      // 지금 이 부의 실제 범위 — 검사 기준
+    const cadence = Number(J.sched?.cadence) || 7;
+    if (req.body?.reset) clearPart(date, part, { by: '모니터' });
+    else if (req.body?.oneway !== undefined) setPartOneway(date, part, req.body.oneway, { by: '모니터' });
+    else setPartRange(date, part, { first: req.body?.first, last: req.body?.last, cur, base, cadence, by: '모니터' });
+    const now = dayFrameParts(date)[part] || null;
+    console.log(`🕒 [운영선언] ${date} ${part}부 — ${now ? JSON.stringify(now) : '기본틀로 되돌림'}`);
+    res.json({ ok: true, date, part, declared: now });
   } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
 });
 app.post('/api/daejo-reset', gate, (req, res) => {

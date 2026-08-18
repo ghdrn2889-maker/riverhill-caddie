@@ -109,6 +109,36 @@ function cell(part, mins, course) {
   return `<td class="c open"${at}></td>`;
 }
 
+// -- 하루치 운영 선언 줄 -- 그날 이 부가 몇 시부터 몇 시까지, 몇 코스로 도는가.
+//  ★기본틀(config/)이 아니라 '오늘'을 말하는 자리다. 예약팀은 날씨·수요로 앞뒤를 늘리고 줄이며,
+//   캐디가 모자라면 한 코스만 돌린다(원웨이). 8/18엔 그걸 엔진이 관측으로 배우느라 반나절이 걸렸고,
+//   그동안 3부 IN 24칸이 허위 팀이었다. 아는 사람이 그 자리에서 말할 수 있어야 한다.
+function partCtl(part) {
+  const cur = sched.parts?.[part] || {};
+  const base = sched.base?.[part] || {};
+  const dec = sched.declared?.[part] || {};
+  const edge = (which, v) => {
+    const ko = which === 'first' ? '첫' : '마지막';
+    return `<button type="button" data-fr="${which}" data-d="-${cadence}" title="${ko} 티오프를 ${cadence}분 당깁니다 - ${which === 'first' ? '앞에 한 칸이 생깁니다' : '뒤의 한 칸이 없어집니다'}">&minus;${cadence}</button>`
+      + `<b data-fv="${which}"${dec[which] ? ' class="dec"' : ''} title="기본틀 ${esc(base[which] || '-')}">${esc(v || '-')}</b>`
+      + `<button type="button" data-fr="${which}" data-d="${cadence}" title="${ko} 티오프를 ${cadence}분 미룹니다 - ${which === 'first' ? '앞의 한 칸이 없어집니다' : '뒤에 한 칸이 생깁니다'}">+${cadence}</button>`;
+  };
+  // ★팀 수를 같이 쓴다 — 관리자가 세는 단위는 '시각'이 아니라 '팀'이다(1부 기본 44팀).
+  //  시각만 보이면 한 칸 늘렸을 때 몇 팀이 되는지 눌러봐야 알고, 그러면 두 끝이 서로 묶인 것처럼 읽힌다.
+  //  두 끝은 따로 움직인다 — 앞만 늘리면 46팀, 앞뒤를 다 늘리면 48팀이다.
+  const span = (a, b) => (toMin(a) && toMin(b) && toMin(b) >= toMin(a)) ? Math.floor((toMin(b) - toMin(a)) / cadence) + 1 : 0;
+  const rowsNow = span(cur.first, cur.last), rowsBase = span(base.first, base.last);
+  const teamsNow = rowsNow * (dec.oneway ? 1 : 2), teamsBase = rowsBase * 2;
+  const cnt = rowsNow
+    ? `<span class="cnt${teamsNow !== teamsBase ? ' dec' : ''}" title="기본틀 ${teamsBase}팀(${rowsBase}시각 &times; 2코스)">${rowsNow}시각 &middot; <b>${teamsNow}</b>팀${teamsNow !== teamsBase ? ` <i>(기본 ${teamsBase})</i>` : ''}</span>`
+    : '';
+  return `<div class="pctl" data-p="${part}">
+    <span class="cl">시각</span>${edge('first', cur.first)}<span class="cs">&mdash;</span>${edge('last', cur.last)}${cnt}
+    <button type="button" class="ow${dec.oneway ? ' on' : ''}" data-ow="${part}" title="투웨이 &rarr; OUT만 &rarr; IN만 순으로 바뀝니다. 카카오 엔진이 곧바로 읽습니다.">${dec.oneway ? `원웨이 ${dec.oneway}만` : '투웨이'}</button>
+    ${(dec.first || dec.last || dec.oneway) ? `<button type="button" class="rev" data-rev="${part}" title="이 부의 선언을 거두고 기본틀(${esc(base.first || '-')}&ndash;${esc(base.last || '-')} &middot; 투웨이)로 되돌립니다">기본틀</button>` : ''}
+  </div>`;
+}
+
 function partTable(part) {
   const rows = slotsOf(part);
   if (!rows.length) return '';
@@ -117,6 +147,7 @@ function partTable(part) {
   const c = CMP[part];
   return `<section class="part">
   <header class="ph"><h2>${part}부</h2><span class="pn">커트 <b>${c.cut || '-'}</b>${c.newCut !== c.cut ? ` &rarr; <b>${c.newCut}</b>` : ''} &middot; 찬 칸 ${n}</span></header>
+  ${partCtl(part)}
   <table class="grid"><thead><tr><th>OUT</th><th class="t">시각</th><th>IN</th></tr></thead><tbody>
 ${body}
   </tbody></table>
@@ -224,6 +255,26 @@ td.c.intern::after{content:'인턴';font-size:10.5px;font-weight:600}
 .seg button.on{background:var(--ok);color:var(--panel);font-weight:600}
 .vnote{font-size:12px;color:var(--dim)}
 body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-radius:12px}
+/* 하루치 운영 선언 줄 - 표 바로 위, 그 부의 '오늘'을 말하는 자리. 편집 도구보다 조용해야 한다
+   (하루에 한 번 누르는 것이지 계속 만지는 게 아니다). */
+.pctl{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 11px;
+  border-bottom:1px solid var(--line);background:var(--open);font-size:11px;color:var(--dim)}
+.pctl .cl{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;margin-right:2px}
+.pctl .cs{opacity:.55;padding:0 2px}
+.pctl b{min-width:38px;text-align:center;font-weight:700;font-size:11.5px;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.pctl b.dec{color:var(--warn);text-decoration:underline;text-underline-offset:3px}
+.pctl button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;
+  padding:1px 6px;font-size:11px;font-family:inherit;line-height:1.6;cursor:pointer}
+.pctl button:hover{border-color:var(--warn)}
+.pctl button:disabled{opacity:.45;cursor:default}
+.pctl .cnt{margin-left:9px;padding-left:9px;border-left:1px solid var(--line);white-space:nowrap}
+.pctl .cnt b{min-width:0;font-size:12px;color:var(--ink)}
+.pctl .cnt.dec b{color:var(--warn)}
+.pctl .cnt i{font-style:normal;opacity:.7;font-size:10px}
+.pctl button.ow{margin-left:auto;font-weight:600}
+.pctl button.ow.on{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.pctl button.rev{color:var(--dim)}
 .tools{display:flex;flex-wrap:wrap;align-items:center;gap:11px;margin:10px 0 4px}
 .tools button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:7px;
   padding:7px 15px;font-size:13px;font-family:inherit;cursor:pointer}
@@ -387,6 +438,8 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
 <script>
 window.__DAEJO_DATE = ${JSON.stringify(String(J.dateKey || ''))};
 window.__DAEJO_SANDBOX = ${JSON.stringify((J.sandbox && J.sandbox.edited) || [])};
+window.__DAEJO_FRAME = ${JSON.stringify(sched.declared || {})};
+window.__DAEJO_CAD = ${JSON.stringify(cadence)};
 window.__DAEJO_BOARD = ${JSON.stringify(Object.fromEntries(['1', '2', '3'].map((p) => [p, {
   ...(J.parts?.[p] || {}),
   // 예상 보기에서도 편집하려면 카카오가 '찼다'고 본 칸을 클라이언트가 알아야 한다.

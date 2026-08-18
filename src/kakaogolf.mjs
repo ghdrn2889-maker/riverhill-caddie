@@ -11,6 +11,7 @@
 //  한계(정직하게): 골프장이 전 물량을 카카오에 내놓지 않으면(회원·전화 보류분) 그 칸은
 //   '안 뜸 = 찬 것'으로 잘못 읽힌다. 그래서 당분간 판독을 고치지 않고 대조만 한다.
 import { loadJSON, saveJSON, appendJSONL, DATA_DIR } from './store.mjs';
+import { dayFrameParts, reframeSlots } from './dayframe.mjs';
 import { ROOT_DIR } from './env.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 import fs from 'node:fs';
@@ -245,7 +246,17 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   const frameExtra = new Set(prevSnap?.frameExtra || []);
   for (const o of open) { const k = key(o.mins, o.course); if (heldSet.has(k)) frameExtra.add(k); }
   const inFrame = (f) => { const k = key(f.mins, f.course); return !heldSet.has(k) || frameExtra.has(k); };
-  const fixed = [...base, ...flexAll].filter(inFrame);
+  // ★관리자의 하루치 운영 선언이 마지막에 온다 — 아침에 이미 아는 사실을 저녁까지 추론하지 않는다.
+  //  선언이 없으면 이 줄은 아무 일도 하지 않는다(기존 경로 그대로).
+  const _cfg = loadSchedule() || {};
+  const framed = reframeSlots([...base, ...flexAll].filter(inFrame), {
+    cadence: Number(_cfg.cadence) || 7, courses: _cfg.courses, frame: dayFrameParts(dateYYYYMMDD),
+  });
+  const fixed = framed.slots;
+  if (framed.added.length || framed.dropped.length) {
+    console.log(`[카카오골프] ${dateYYYYMMDD} 운영 선언 — 칸 +${framed.added.length}·−${framed.dropped.length}`
+      + ` (${framed.declared.map((p) => p + '부').join('·')})`);
+  }
   const heldNow = [...heldSet].filter((k) => !frameExtra.has(k)).sort();   // 오늘 비워둔 칸
   // ★가장 위험한 경우 — 응답은 멀쩡한데 목록이 비었다. 그대로 두면 "그날 전 칸 만석"이 된다.
   //  먼 날짜(예약 오픈 전)는 정말 0일 수 있으니, 가까운 날짜에서만 의심한다.
@@ -378,7 +389,15 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //   원웨이는 하루 단위 결정이라 중간에 안 바뀐다. 뒤집는 사실은 하나뿐 — 그 코스가 실제로 팔리는 것이고,
   //   그러면 ever가 참이 되어 아래에서 저절로 풀린다.
   const idle = new Set(), unsure = new Set();
-  for (const ck of (prevSnap?.idle || [])) if (!ever[ck]) idle.add(ck);
+  // ★선언으로 굳은 판정은 선언을 거두면 같이 풀린다 — 안 그러면 잘못 누른 버튼을 되돌릴 방법이 없다
+  //  (한 번 미운영이 되면 그날 내내 유지되는 게 기본 규칙이라, 관측만으로는 절대 안 풀린다).
+  const prevFrameIdle = new Set(prevSnap?.frameIdle || []);
+  const nowFrameIdle = new Set(framed.idle);
+  for (const ck of (prevSnap?.idle || [])) {
+    if (ever[ck]) continue;
+    if (prevFrameIdle.has(ck) && !nowFrameIdle.has(ck)) continue;
+    idle.add(ck);
+  }
   for (const p of partsOf) {
     const cnt = {};
     for (const f of fixed) if (f.part === p) cnt[f.course] = (cnt[f.course] || 0) + (openSet.has(key(f.mins, f.course)) ? 1 : 0);
@@ -400,6 +419,13 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
       (seenCount >= 3 ? idle : unsure).add(`${p}|${c}`);
     }
   }
+  // ★선언한 원웨이는 증거를 기다리지 않는다. 여집합이 스스로 배우는 데 반나절이 걸렸고,
+  //  그 반나절 동안 3부 IN 24칸이 허위 팀이었다(8/18). 사람이 아는 사실은 즉시 반영한다.
+  for (const ck of framed.idle) {
+    idle.add(ck); unsure.delete(ck);
+    if (ever[ck]) console.warn(`[카카오골프] ${dateYYYYMMDD} ${ck.replace('|', '부 ')} — 원웨이로 선언됐는데 실제로 판매된 적이 있습니다. 선언을 따르지만 확인해보세요.`);
+  }
+  if (framed.idle.length) console.log(`[카카오골프] ${dateYYYYMMDD} 원웨이 선언: ${framed.idle.map((k) => k.replace('|', '부 ')).join(', ')} — 관리자 선언(관측보다 우선)`);
   if (idle.size) console.log(`[카카오골프] ${dateYYYYMMDD} 미운영 코스: ${[...idle].map((k) => k.replace('|', '부 ')).join(', ')} — 만석 아님(한 번도 안 열림)`);
   if (unsure.size) console.warn(`[카카오골프] ${dateYYYYMMDD} 판단보류: ${[...unsure].map((k) => k.replace('|', '부 ')).join(', ')} — 완판인지 미운영인지 아직 모름(관측 1회차)`);
 
@@ -434,6 +460,10 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     const [p, c] = ck.split('|');
     if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => x.course !== c);
   }
+  // 선언으로 틀에서 빠진 칸도 걷어낸다 — 최대치는 줄지 않는 값이라 두면 허위 팀이 하루 종일 남는다.
+  for (const d of framed.dropped) {
+    if (Array.isArray(peakByPart[d.part])) peakByPart[d.part] = peakByPart[d.part].filter((x) => !(x.time === d.time && x.course === d.course));
+  }
   // 철수한 칸도 같은 이유로 걷어낸다(key가 곧 '시각|코스'라 그대로 대조된다).
   if (pulled.size) for (const p of Object.keys(peakByPart)) {
     if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => !pulled.has(`${x.time}|${x.course}`));
@@ -447,6 +477,8 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     flexOpen,                                       // 이번 틱에 새로 살아난 칸 = 틀이 늘어난 순간
     held: heldNow,                                  // 지금 비워둔 칸 — 카카오가 판정하지 않는다(사람이 채운다)
     everOpen: ever, seenCount, idle: [...idle], unsure: [...unsure],
+    dayFrame: dayFrameParts(dateYYYYMMDD),          // 그날의 운영 선언(관리자) — 대조판이 그대로 보여준다
+    frameIdle: framed.idle,                          // 그중 원웨이로 안 도는 부·코스
     // ★판매중 목록을 남긴다 — 다음 틱에 '무엇이 사라졌는지'를 알아야 예약과 마감을 가른다.
     openKeys: open.map((o) => key(o.mins, o.course)),
     everOpenKeys: [...everOpenKeys],               // 이 날짜에서 한 번이라도 판매중인 걸 본 칸

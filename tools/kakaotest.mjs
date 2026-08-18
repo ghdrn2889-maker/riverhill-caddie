@@ -217,5 +217,51 @@ ok(!s4, '한낮의 0칸은 여전히 고장으로 막는다(없는 팀을 만들
   }
 }
 
+// ⑭ 하루치 운영 선언 — 관리자가 아는 사실은 관측을 기다리지 않는다.
+//  ⑫는 엔진이 증거로 스스로 배우는 길이다(8/18엔 반나절 걸렸고 그동안 3부 IN 24칸이 허위 팀이었다).
+//  이건 사람이 아침에 곧바로 말하는 길이다.
+//  ★그리고 거둘 수 있어야 한다 — 잘못 눌렀는데 그날 내내 안 풀리면 버튼이 아니라 덫이다.
+{
+  const { setPartOneway, setPartRange, clearPart, dayFrameParts } = await import('../src/dayframe.mjs');
+  const D = '20991231';                                  // 실데이터와 안 겹치는 날짜. 끝나면 지운다.
+  try {
+    NOW_MIN = 0;
+    const P3IN = P3.filter((k) => k.endsWith('|IN'));
+    OPEN = ALL.filter((k) => !P3IN.includes(k));         // 3부 IN은 처음부터 안 뜬다(원웨이 하루)
+    const in3 = (x) => (x.byPart['3'] || []).filter((y) => y.course === 'IN').length;
+    let s = await bookedFor(D, {});
+    say('');
+    say(`⑭ 선언 없음 → 3부 IN 찬칸 ${in3(s)}칸`);
+
+    setPartOneway(D, '3', 'OUT', { by: '시험' });
+    s = await bookedFor(D, {});
+    say(`   원웨이 OUT 선언 → 3부 IN 찬칸 ${in3(s)}칸 · idle ${JSON.stringify(s.idle)}`);
+    ok((s.idle || []).includes('3|IN'), '원웨이를 선언하면 반대 코스는 첫 틱부터 미운영이다');
+    ok(in3(s) === 0, '선언한 코스에는 허위 팀이 생기지 않는다');
+
+    setPartOneway(D, '3', '', { by: '시험' });
+    const s2 = await bookedFor(D, s);                     // 앞 스냅샷에는 미운영이 굳어 있다
+    say(`   선언 거둠 → idle ${JSON.stringify(s2.idle)}`);
+    ok(!(s2.idle || []).includes('3|IN'), '선언을 거두면 굳었던 미운영 판정도 같이 풀린다');
+
+    const base = { first: '16:32', last: '18:45' };
+    setPartRange(D, '3', { first: '16:25', base, cadence: 7, by: '시험' });
+    OPEN = ALL.slice();
+    const s3 = await bookedFor(D, {});
+    say(`   첫 티오프 16:25 선언 → 그날 틀 ${s3.fixedCount}칸`);
+    ok(String((dayFrameParts(D)['3'] || {}).first) === '16:25', '앞으로 7분 늘린 선언이 남는다');
+
+    setPartRange(D, '3', { first: '16:32', base, cadence: 7, by: '시험' });
+    ok(!(dayFrameParts(D)['3'] || {}).first, '기본틀과 같아지면 선언은 흔적 없이 사라진다');
+
+    let threw = '';
+    try { setPartRange(D, '3', { first: '19:00', last: '18:45', base, cadence: 7, by: '시험' }); }
+    catch (e) { threw = e.message; }
+    ok(!!threw, `첫 시각이 마지막보다 늦으면 거절한다 (${threw || '거절 안 함'})`);
+  } finally {
+    try { clearPart(D, '3', { by: '시험' }); } catch { /* noop */ }
+  }
+}
+
 say(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);

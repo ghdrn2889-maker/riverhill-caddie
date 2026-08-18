@@ -12,12 +12,15 @@ import { loadSnapshot, kakaoHealth, fixedSlots } from './kakaogolf.mjs';
 import { keyFromLabel } from './boardpending.mjs';
 import { internTeesFor } from './interns.mjs';
 import { applySandbox } from './daejosandbox.mjs';
+import { dayFrameParts } from './dayframe.mjs';
 
 const norm = (t) => (String(t || '').match(/\d{1,2}:\d{2}/) || [''])[0];
 
 // 고정 시간표 원본 — 대조판은 cadence·parts.first/last로 격자를 다시 그린다.
 //  fixedSlots()는 이미 펼쳐진 칸 목록이라, 여기서 부별 첫·끝을 되짚어 격자 정의를 복원한다.
-function schedShape() {
+//  ★날짜를 받는다 — 그날의 운영 선언(원웨이·앞뒤 늘리기)이 격자에 그대로 보여야 한다.
+//   엔진이 판정하는 틀과 화면이 그리는 격자가 갈라지면, 관리자는 자기가 무엇을 고쳤는지 알 수 없다.
+function schedShape(dateKey = '') {
   const slots = fixedSlots();
   if (!slots.length) return {};
   const parts = {};
@@ -33,7 +36,15 @@ function schedShape() {
   const sorted = [...mins].sort((a, b) => a - b);
   let cad = 7;
   for (let i = 1; i < sorted.length; i++) cad = Math.min(cad, sorted[i] - sorted[i - 1]);
-  return { cadence: cad || 7, parts };
+  // 기본틀을 그대로 남겨둔다 — 버튼이 '기본으로 되돌리기'를 하려면 기준이 무엇이었는지 알아야 한다.
+  const base = Object.fromEntries(Object.entries(parts).map(([p, v]) => [p, { first: v.first, last: v.last }]));
+  const declared = dayFrameParts(dateKey);
+  for (const [p, d] of Object.entries(declared)) {
+    if (!parts[p]) continue;
+    if (d.first) parts[p].first = d.first;
+    if (d.last) parts[p].last = d.last;
+  }
+  return { cadence: cad || 7, parts, base, declared };
 }
 
 // 부별 배치표 — 3부는 lastboard, 1·2부는 board-parts-store.
@@ -100,7 +111,27 @@ export function buildDaejoData(date = '') {
   for (const p of ['1', '2']) if (parts[p]) parts[p].boardInternTees = parts[p].internTees.slice();
   // ★관리자 테스트판을 마지막에 덮는다 — 이 값은 대조판 밖으로 나가지 않는다(회원 앱·알림·엔진 무관).
   const sb = applySandbox(parts, dateKey);
-  const snap = (dateKey && loadSnapshot(dateKey)) || {};
+  const sched = schedShape(dateKey);
+  // ★원웨이 선언은 즉시 화면에 보여야 한다 — 엔진은 5분마다 돌지만 관리자는 지금 눌렀다.
+  //  (판정 자체는 엔진이 같은 선언을 읽어서 한다. 여긴 그 결과를 기다리지 않고 그릴 뿐이다.)
+  const rawSnap = (dateKey && loadSnapshot(dateKey)) || {};
+  const idle = new Set(rawSnap.idle || []);
+  for (const [p, d] of Object.entries(sched.declared || {})) {
+    if (!d.oneway) continue;
+    for (const c of ['OUT', 'IN']) if (c !== d.oneway) idle.add(`${p}|${c}`);
+  }
+  // ★선언한 코스의 '찬 칸'은 그 자리에서 걷어낸다. 안 걷어내면 다음 엔진 틱까지(최대 5분)
+  //  화면은 여전히 허위 팀을 순번으로 매겨 그린다 — 관리자는 버튼이 안 먹었다고 본다.
+  const mn = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? (+m[1] * 60 + +m[2]) : null; };
+  const inDeclared = (p, x) => {
+    const d = (sched.declared || {})[p]; if (!d) return true;
+    if (d.oneway && x.course !== d.oneway) return false;
+    const t = mn(x.time), a = mn(d.first), b = mn(d.last);
+    if (t == null) return true;
+    return !((a != null && t < a) || (b != null && t > b));
+  };
+  const sieve = (obj) => Object.fromEntries(Object.entries(obj || {}).map(([p, arr]) => [p, (arr || []).filter((x) => inDeclared(p, x))]));
+  const snap = { ...rawSnap, idle: [...idle], byPart: sieve(rawSnap.byPart), peakByPart: sieve(rawSnap.peakByPart) };
   const ymd = (k) => (k.length === 8 ? `${+k.slice(4, 6)}월 ${+k.slice(6, 8)}일` : k);
   return {
     dateKey,
@@ -113,7 +144,7 @@ export function buildDaejoData(date = '') {
     parts: sb.parts,
     sandbox: { edited: sb.edited, at: sb.at, by: sb.by || '' },
     snap,
-    sched: schedShape(),
+    sched,
     health: kakaoHealth() || {},
   };
 }

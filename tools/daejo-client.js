@@ -894,6 +894,83 @@
     finally { polling = false; }
   }
 
+
+  // ── 하루치 운영 선언 ── 그날 이 부가 몇 시부터 몇 시까지, 몇 코스로 도는가.
+  //
+  //  ★이건 테스트판이 아니다 — 카카오 엔진이 곧바로 이 값을 읽는다. 그게 이 버튼의 목적이다.
+  //   8/18 원웨이(OUT 한 코스만 운영)에 엔진은 IN 24칸을 통째로 '찼다'고 읽었고, 배치표 13팀이
+  //   39팀으로 부풀었다. 증거가 쌓여 스스로 풀리기까지 반나절이 걸렸는데, 관리자는 아침에 이미 알았다.
+  //   시각 늘리기도 같다 — 예약팀이 앞으로 한 칸 더 열면(3부 16:25) 격자에 그 칸이 아예 없어서
+  //   팀을 손으로 넣을 자리조차 없었다.
+  //
+  //  ★그래서 두 가지를 지킨다.
+  //   ① 저장 안 한 편집이 있으면 받지 않는다 — 선언은 격자를 다시 그리므로(새로고침) 편집이 날아간다.
+  //   ② 원웨이는 한 번 묻는다 — 그 부의 반쪽을 판정에서 통째로 빼는 일이다.
+  const FRAME = window.__DAEJO_FRAME || {};
+  const CAD = Number(window.__DAEJO_CAD) || 7;
+  const pctlBtns = () => [...document.querySelectorAll('.pctl button')];
+  async function declare(part, body, what) {
+    if (!live) { state.textContent = '샘플에서는 선언할 수 없습니다 — 모니터의 /daejo 에서 열어주세요.'; return; }
+    if (anyChanged()) {
+      state.textContent = '저장 안 한 편집이 있습니다 — 먼저 저장하거나 되돌린 뒤에 ' + what + '를 바꿔주세요(선언은 화면을 다시 그립니다).';
+      return;
+    }
+    pctlBtns().forEach((b) => { b.disabled = true; });
+    state.textContent = part + '부 ' + what + ' 반영 중…';
+    try {
+      const r = await fetch(apiUrl('/api/daejo-frame'), {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(Object.assign({ date: DATE, part: part }, body)),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || '실패');
+      state.textContent = part + '부 ' + what + ' 반영됨 — 다시 그립니다.';
+      location.reload();
+    } catch (err) {
+      pctlBtns().forEach((b) => { b.disabled = false; });
+      state.textContent = part + '부 ' + what + ' 실패: ' + err.message;
+    }
+  }
+  // 시각 늘리기·줄이기 — 격자 간격(7분)의 배수로만 움직인다. 격자를 벗어난 시각은
+  //  '오늘의 사정'이 아니라 기준표가 틀렸다는 뜻이라, 그건 config/를 고쳐야 한다.
+  document.querySelectorAll('.pctl button[data-fr]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const box = b.closest('.pctl'); if (!box) return;
+      const part = box.dataset.p, which = b.dataset.fr;
+      const cell0 = box.querySelector('b[data-fv="' + which + '"]');
+      const m = toMin(cell0 ? cell0.textContent : '');
+      if (!Number.isFinite(m)) { state.textContent = '기준 시각을 읽을 수 없습니다.'; return; }
+      const next = m + (Number(b.dataset.d) || CAD);
+      const body = {}; body[which] = toHM(next);
+      declare(part, body, (which === 'first' ? '첫' : '마지막') + ' 티오프 ' + toHM(next));
+    });
+  });
+  // 투웨이 ↔ 원웨이 — 세 상태를 한 버튼이 돈다. 기본은 투웨이다.
+  document.querySelectorAll('.pctl button[data-ow]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const part = b.dataset.ow;
+      const cur = String((FRAME[part] || {}).oneway || '');
+      const next = cur === '' ? 'OUT' : (cur === 'OUT' ? 'IN' : '');
+      const label = next ? '원웨이 ' + next + '만' : '투웨이';
+      const NL = String.fromCharCode(10);
+      const msg = next
+        ? [part + '부를 오늘 ' + label + '으로 선언합니다.', '',
+           (next === 'OUT' ? 'IN' : 'OUT') + ' 코스는 오늘 안 도는 것으로 봅니다 — 그 코스의 칸은 팀 0이 되고,',
+           '카카오가 안 뜬다고 본 것도 예약이 아니라 미운영으로 읽습니다.', '', '계속할까요?'].join(NL)
+        : part + '부를 오늘 투웨이(기본)로 되돌립니다. 계속할까요?';
+      if (!confirm(msg)) return;
+      declare(part, { oneway: next }, label);
+    });
+  });
+  // 선언 거두기 — 기본틀 그대로.
+  document.querySelectorAll('.pctl button[data-rev]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const part = b.dataset.rev;
+      if (!confirm(part + '부의 오늘 선언(시각·원웨이)을 모두 거두고 기본틀로 되돌립니다. 계속할까요?')) return;
+      declare(part, { reset: 1 }, '기본틀 복귀');
+    });
+  });
+
   // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.
   PARTS.forEach(seat);
   tools.hidden = false;
