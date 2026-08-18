@@ -74,9 +74,11 @@
     .hw-w.ins .label { color:#4c6b85; } .hw-w.work .label { color:#655e7a; }
     .hw-w.ins .hw-ft { color:#4c6b85; } .hw-w.work .hw-ft { color:#655e7a; }
     .hw-w.work .hw-num { color:#332b47; }
-    /* 보험만 숫자가 없다 — 한 문장이 값이라, 숫자가 놓이던 자리를 그 문장이 대신한다. */
-    .hw-w.ins .hw-say { margin-top:auto; font-size:15px; font-weight:900; letter-spacing:-.032em;
-                        line-height:1.32; color:#173d59; }
+    /* 보험만 숫자가 없다 — 그 자리에 '보험'이라는 단어가 앉는다.
+       ★슬로건을 크게 쓰던 자리였는데, 문장은 홈에서 읽히지 않고 '산재 하나만 다룬다'고 오해까지 샀다.
+        위젯이 할 일은 단어를 각인시키고 페이지로 들여보내는 것이다 — 다른 칸의 7번·14일과 같은 크기·무게로 둔다. */
+    .hw-w.ins .hw-say { margin-top:auto; font-size:40px; font-weight:900; letter-spacing:-.055em;
+                        line-height:1; color:#12395a; }
     /* 오른쪽 위 화살표 = "여기는 눌러서 가는 곳"이라고 말하는 유일한 표시 */
     .cnr { position:absolute; top:13px; right:13px; width:22px; height:22px; border-radius:50%;
            background:rgba(255,255,255,.62); display:flex; align-items:center; justify-content:center; }
@@ -2602,13 +2604,15 @@
           <span class="hw-num m" id="hwPayNum">—</span>
           <span class="hw-ft" id="hwPayFt">불러오는 중…</span>
         </button>
-        <!-- ★보험은 숫자가 없다 — 한 문장이 값이다. 이 앱이 캐디에게 해줄 수 있는 말 중 가장 중요한 한 줄이라
-             홈에 둔다. 산재를 '가입할까 말까'로 묻지 않는 원칙은 보험 페이지와 같다. -->
-        <button class="hw-w ins" id="hwIns" type="button" aria-label="캐디 보험 — 산재 청구 방법 보기">
+        <!-- ★보험은 숫자가 없다 — 그 자리에 '보험'이라는 단어를 그대로 앉힌다.
+             캐디에게 걸린 보험은 셋(산재·고용·배상책임)인데, 슬로건을 크게 쓰던 예전 위젯은 산재 하나만
+             다루는 것처럼 보였다. 셋의 이름을 각주에 그대로 박아, 캐디가 '고용보험'과 '배상책임'을
+             여기서 처음 보게 한다 — 그게 이 칸이 할 수 있는 가장 센 일이다. -->
+        <button class="hw-w ins" id="hwIns" type="button" aria-label="캐디 보험 — 산재·고용·배상책임 세 가지 보기">
           <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
           <span class="label">캐디 보험</span>
-          <span class="hw-say">산재는 고르는 게<br>아닙니다</span>
-          <span class="hw-ft">다쳤을 때 어떻게 청구하나</span>
+          <span class="hw-say">보험</span>
+          <span class="hw-ft">산재 · 고용 · 배상책임</span>
         </button>
         <button class="hw-w work" id="hwWork" type="button" aria-label="이번 달 근무 — 근무 일지로 이동">
           <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
