@@ -113,12 +113,28 @@
     origOcc.proj[p] = sortOcc(occP);
     rosterOrig[p] = roster[p].slice();
     internsOrig[p] = new Set(interns[p]);
+    // ★실제 축의 기본 배치는 다시 계산하지 않는다 — 배치표가 이미 'pos → 티오프' 짝을 들고 있다.
+    //  전에는 팀이 있는 칸을 시각순으로 줄 세워 순번과 짝지었다(defaultAssign). 그러면 배치표가
+    //  말하는 짝이 통째로 버려지고, 칸 하나만 어긋나도 그 뒤가 전부 밀린다 — 8·9가 뒤바뀌고
+    //  11·12가 화면에서 사라졌다(8/18 실사고). 서버 파일은 멀쩡한데 화면만 뒤죽박죽이던 이유다.
+    //  배치표에 순번표가 있으면 그걸 그대로 그린다. 없을 때만 예전처럼 시각순으로 깐다.
+    const seatFromBoard = (() => {
+      const t = [];
+      ((BOARD[p] || {}).teeGrid || []).forEach((g) => {
+        const i = Number(g.pos) - 1;
+        if (i >= 0) t[i] = { time: g.time, course: /IN/i.test(g.course) ? 'IN' : 'OUT' };
+      });
+      return t.filter(Boolean);
+    })();
     VIEWS.forEach((v) => {
       // ★실제 축은 지킨다 — 지각·인턴처럼 사진에 없는 사실을 사람이 손으로 넣은 결과다.
       //  ★예상 축은 지키지 않는다 — 매번 지금의 실제 배치표 ∪ 지금의 카카오로 새로 깐다.
       //   예상은 저작물이 아니라 계산 결과다. 한 번 옮겨둔 걸 붙잡으면 그 뒤의 변동을 못 따라간다
       //   (실사고: 2부 예상이 10시 2분에 얼어붙어, 카카오가 잡은 12:46·13:42·13:49를 손으로 넣어야 했다).
-      teeV[v][p] = (v === 'real' && assign && assign.real) ? reseat('real', p, assign.real) : defaultAssign(v, p);
+      teeV[v][p] = (v === 'real')
+        ? ((assign && assign.real) ? reseat('real', p, assign.real)
+          : (seatFromBoard.length ? seatFromBoard.map(cp) : defaultAssign(v, p)))
+        : defaultAssign(v, p);
     });
     idxMemo.real[p] = new Map(); idxMemo.proj[p] = new Map();
     // 기준선은 두 보기 모두 잡는다 — 어느 쪽에서 고쳐도 '바뀌었다'를 알아채야 한다.
