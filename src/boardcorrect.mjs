@@ -108,17 +108,8 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     const pos = Number(next.myPosition) || 0;
     if (!isOff && pos > 0 && cutLine > 0) {
       next.cutLine = cutLine;
-      const inWork = pos <= cutLine;
-      // ★순번이 확정됐는데 티오프가 비었으면 순번표(grid)에서 그 순번의 시각을 가져온다.
-      //  실사고(8/18): 교정 재계산이 순번 10번은 확정했는데 티오프를 안 채웠고, 그 '빈 값'을
-      //  그대로 잠가버려 이후 자동 판독도 못 고쳤다. 표에는 10번 18:03 OUT이 또렷이 있었는데,
-      //  앱은 티오프가 있어야 보드를 그리므로 대시보드가 세 줄로 쪼그라들었다.
-      //  서버가 이미 아는 사실을 안 쓰는 게 문제였다 — 여기서 채운다.
-      if (inWork && !/\d{1,2}:\d{2}/.test(String(next.teeTime || ''))) {
-        const g = grid.find((x) => Number(x.pos) === pos);
-        if (g && g.time) { next.teeTime = g.time; next.course = g.course || next.course || ''; }
-      }
       const hasTee = next.teeTime && /\d{1,2}:\d{2}/.test(String(next.teeTime));
+      const inWork = pos <= cutLine;
       next.status = inWork ? (hasTee ? 'assigned' : 'work') : 'spare';
       if (!inWork) { next.teeTime = ''; next.course = ''; }
     }
