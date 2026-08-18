@@ -224,6 +224,7 @@ function overlayMemberTees(v) {
   try {
     const grid = Array.isArray(v.teeGrid) ? v.teeGrid.slice() : [];
     const byPos = new Map(grid.map((g) => [Number(g.pos), { pos: Number(g.pos), time: String(g.time || ''), course: g.course || '' }]));
+    const over = [];
     const dir = path.join(DATA_DIR, 'users');
     for (const d of fs.readdirSync(dir)) {
       if (!/^\d+$/.test(d)) continue;
@@ -234,8 +235,26 @@ function overlayMemberTees(v) {
       const pos = Number(j.myPosition) || 0;
       const tee = String(j.teeTime || '');
       if (pos >= 1 && /^\d{1,2}:\d{2}$/.test(tee)) {
-        byPos.set(pos, { pos, time: tee, course: /IN/i.test(String(j.course)) ? 'IN' : 'OUT' });
+        over.push({ pos, time: tee, course: /IN/i.test(String(j.course)) ? 'IN' : 'OUT' });
       }
+    }
+    // ★겹치면 덮지 않는다.
+    //  회원 today는 배치표보다 낡을 수 있다 — 교정이 그 사람만 건드렸거나 _adminLock으로 얼어 있으면
+    //  옛 티오프가 그대로 남는다. 그걸 새 배치표 위에 찍으면 한 시각에 두 순번이 앉고, 표는 한 시각에
+    //  한 명만 그리므로 뒤 사람이 화면에서 통째로 사라진다.
+    //  8/18 실사고: 배치표는 8~14번이 17:21~18:03으로 멀쩡했는데 대조판만 17:21·17:42가 빈칸이 되고
+    //  11 홍준표·12 연승준이 사라졌다. 앱은 각자 자기 today를 보므로 멀쩡했다 — 그래서 더 못 잡았다.
+    //  회원 교정이 최종 권위라는 원칙은 그대로 두되, '배치표를 깨뜨리는 덮어쓰기'만 거른다.
+    const taken = new Map();
+    for (const g of byPos.values()) if (g.time) taken.set(`${g.time}|${g.course}`, g.pos);
+    for (const o of over) {
+      const k = `${o.time}|${o.course}`;
+      const owner = taken.get(k);
+      if (owner != null && owner !== o.pos) continue;      // 다른 순번이 이미 쓰는 칸이면 덮지 않는다
+      const prev = byPos.get(o.pos);
+      if (prev && prev.time) taken.delete(`${prev.time}|${prev.course}`);
+      byPos.set(o.pos, { pos: o.pos, time: o.time, course: o.course });
+      taken.set(k, o.pos);
     }
     v.teeGrid = [...byPos.values()].sort((a, b) => a.pos - b.pos);
   } catch { /* noop */ }
