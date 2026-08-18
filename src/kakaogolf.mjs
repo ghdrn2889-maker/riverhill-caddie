@@ -342,7 +342,14 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   const blindSeen = blindSlots(sell, fixed);
   const blind = BLIND_ON ? blindSeen : new Set();
 
+  //  ★'안 도는 코스' 판정은 그날 내내 유지한다(찼다고 본 칸과 같은 원리).
+  //   근거인 '반대 코스가 몇 칸 팔리는 중인가'는 하루가 저물면 저절로 0이 된다. 그 순간 미운영 판정이
+  //   풀리고, 안 도는 코스 전체가 한꺼번에 '찼다'로 굳었다 — 8/18 원웨이 실사고(OUT 한 코스만 운영):
+  //   3부 IN 24칸이 통째로 허위 팀이 되어 배치표 13팀이 카카오 39팀으로 부풀었다.
+  //   원웨이는 하루 단위 결정이라 중간에 안 바뀐다. 뒤집는 사실은 하나뿐 — 그 코스가 실제로 팔리는 것이고,
+  //   그러면 ever가 참이 되어 아래에서 저절로 풀린다.
   const idle = new Set(), unsure = new Set();
+  for (const ck of (prevSnap?.idle || [])) if (!ever[ck]) idle.add(ck);
   for (const p of partsOf) {
     const cnt = {};
     for (const f of fixed) if (f.part === p) cnt[f.course] = (cnt[f.course] || 0) + (openSet.has(key(f.mins, f.course)) ? 1 : 0);
@@ -387,6 +394,12 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  byPart는 '지금 판정 가능한 칸'이라 시각이 지나면 줄어든다 — 오후에 보면 1·2부가 0칸이다.
   //  그래서 하루가 끝난 뒤 사람 경로와 맞대려면 이 최대치가 있어야 한다(없으면 '카카오가 못 봤다'로 오독된다).
   const peakByPart = { ...(prevSnap?.peakByPart || {}) };
+  // ★안 도는 코스로 판정이 바뀌면, 최대치에 남아 있는 그 코스의 칸도 걷어낸다.
+  //  최대치는 줄지 않는 값이라 걷어내지 않으면 이미 쌓인 허위 팀이 하루 종일 대조표에 남는다.
+  for (const ck of idle) {
+    const [p, c] = ck.split('|');
+    if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => x.course !== c);
+  }
   for (const [p, arr] of Object.entries(byPart)) {
     if (!peakByPart[p] || arr.length > peakByPart[p].length) peakByPart[p] = arr.map((x) => ({ time: x.time, course: x.course }));
   }

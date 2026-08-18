@@ -158,5 +158,33 @@ ok(!s4, '한낮의 0칸은 여전히 고장으로 막는다(없는 팀을 만들
   }
 }
 
+// ⑫ 원웨이(그날 한 코스만 도는 날) — 안 도는 코스 판정은 하루 내내 유지돼야 한다.
+//  실사고(8/18): 아침엔 '3부 IN 미운영'을 맞게 봤는데, 저녁에 반대 코스(OUT)가 다 팔리자
+//  판정 근거('반대 코스가 3칸 이상 팔리는 중')가 사라지면서 미운영이 풀렸다.
+//  그 순간 IN 24칸이 통째로 '찼다'로 굳어, 배치표 13팀이 카카오 39팀으로 부풀었다.
+{
+  const P3OUT = P3.filter((k) => k.endsWith('|OUT'));
+  const P3IN = P3.filter((k) => k.endsWith('|IN'));
+  const others = ALL.filter((k) => !P3.includes(k));      // 1·2부는 계속 판매중(목록이 비어 고장으로 안 걸리게)
+  if (P3OUT.length >= 3 && P3IN.length && others.length) {
+    NOW_MIN = 9 * 60;                                      // 3부 마감선 한참 전 — 전 칸 판정 가능
+    OPEN = [...others, ...P3OUT];                          // 3부 IN은 한 번도 안 뜬다 = 원웨이
+    let s = await bookedFor(Y, {});
+    s = await bookedFor(Y, s);
+    s = await bookedFor(Y, s);                             // 관측 3회 → '판단보류'가 아니라 '미운영'
+    say(`\n⑫ 3부 IN이 한 번도 안 뜸(OUT 원웨이) → 미운영 판정 ${(s.idle || []).includes('3|IN') ? '됨' : '안 됨'}`);
+    ok((s.idle || []).includes('3|IN'), '한 코스만 도는 날을 알아본다');
+
+    OPEN = others;                                         // 반대 코스(OUT)마저 완판 = 판정 근거가 사라지는 순간
+    s = await bookedFor(Y, s);
+    const b3 = new Set((s.byPart['3'] || []).map((x) => `${x.time}|${x.course}`));
+    const ghosts = P3IN.filter((k) => b3.has(k));
+    const pk3 = new Set((s.peakByPart?.['3'] || []).map((x) => `${x.time}|${x.course}`));
+    say(`   OUT 완판 뒤 → IN을 찼다고 센 칸 ${ghosts.length}개 · 최대치에 남은 IN ${P3IN.filter((k) => pk3.has(k)).length}개 · 미운영 유지 ${(s.idle || []).includes('3|IN') ? '예' : '아니오'}`);
+    ok(!ghosts.length && (s.idle || []).includes('3|IN'), '반대 코스가 다 팔려도 미운영 판정은 유지한다(8/18 원웨이 재발 방지)');
+    ok(!P3IN.some((k) => pk3.has(k)), '최대치에 남아 있던 허위 칸도 걷어낸다');
+  }
+}
+
 say(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);
