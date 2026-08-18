@@ -358,8 +358,12 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     for (const c of cs) {
       if (cnt[c] > 0) continue;                       // 팔리는 중 = 돈다
       if (ever[`${p}|${c}`]) continue;                // 예전에 열린 적 있다 = 돌고, 지금은 완판 → '참'으로 센다
-      const other = Math.max(...cs.filter((x) => x !== c).map((x) => cnt[x]));
-      if (other < 3) continue;                        // 반대 코스도 거의 없으면 판단 근거 부족
+      // ★근거는 '지금 몇 칸 팔리는 중인가'가 아니라 '오늘 몇 칸이 팔리는 걸 봤는가'다.
+      //  현재 시점만 보면 저녁엔 반대 코스도 0칸이라(완판·마감) 근거가 사라지고, 그때 판정이 풀린다.
+      //  오늘 본 것은 사라지지 않는다 — everOpenKeys가 그 기억이다.
+      const other = Math.max(...cs.filter((x) => x !== c)
+        .map((x) => fixed.filter((f) => f.part === p && f.course === x && everOpenKeys.has(key(f.mins, f.course))).length));
+      if (other < 3) continue;                        // 반대 코스도 오늘 거의 안 팔렸으면 판단 근거 부족
       // 한 번도 열린 걸 못 봤다. 관측이 충분히 쌓였을 때만 미운영으로 보고, 아니면 판단을 미룬다.
       //  ★관측을 늦게 시작하면 '이미 완판된 코스'도 한 번도 안 열린 것처럼 보인다. 그때는 모른다고 하는 게 맞다 —
       //   미운영이라 우기면 그 부의 팀이 통째로 사라지고, 완판이라 우기면 없는 팀이 생긴다. 둘 다 나쁘다.
