@@ -186,5 +186,36 @@ ok(!s4, '한낮의 0칸은 여전히 고장으로 막는다(없는 팀을 만들
   }
 }
 
+// ⑬ 캐디가 동나 내려간 칸(철수)은 예약이 아니다.
+//  실사고(8/18 1부): 07:01에 24칸이 한꺼번에 내려갔고, 마감선 밖 12칸이 예약으로 잡혀
+//  배치표 3팀이 카카오 15팀이 됐다. 골프장은 시각을 넉넉히 던져놓고 나온 캐디 수만큼만 팀을 받는다.
+{
+  const P1 = fixedSlots().filter((f) => f.part === '1').map((f) => `${f.time}|${f.course}`);
+  if (P1.length >= 8) {
+    NOW_MIN = 0;                                    // 자정 — 전 칸이 마감선 밖이라 판정 가능(수정 전이면 예약으로 샌다)
+    OPEN = ALL.slice();
+    let s = await bookedFor(Y, {});
+    const drop = P1.slice(-6);                      // 1부 꼬리 6칸이 한 틱에 내려간다
+    OPEN = ALL.filter((k) => !drop.includes(k));
+    s = await bookedFor(Y, s);
+    const b1 = () => new Set((s.byPart['1'] || []).map((x) => `${x.time}|${x.course}`));
+    say(`\n⑬ 1부 ${drop.length}칸이 한 틱에 내려감 → 예약으로 센 칸 ${drop.filter((k) => b1().has(k)).length}개`);
+    ok(!drop.some((k) => b1().has(k)), '한 부에서 뭉텅이로 내려간 칸은 예약이 아니다(캐디 부족 철수)');
+    s = await bookedFor(Y, s);
+    ok(!drop.some((k) => b1().has(k)), '철수 판정은 다음 틱에도 유지된다');
+
+    const one = P1.find((k) => !drop.includes(k));  // 한 칸만 사라지는 건 여전히 진짜 예약
+    OPEN = OPEN.filter((k) => k !== one);
+    s = await bookedFor(Y, s);
+    say(`   한 칸만 사라짐(${one}) → 예약으로 셈: ${b1().has(one) ? '예' : '아니오'}`);
+    ok(b1().has(one), '한두 칸씩 사라지는 건 여전히 예약으로 센다');
+
+    OPEN = [...OPEN, drop[0]];                      // 되팔면 철수가 아니었던 것
+    s = await bookedFor(Y, s);
+    say(`   ${drop[0]}가 다시 판매중 → 철수 목록에 ${(s.pulledKeys || []).includes(drop[0]) ? '남음' : '빠짐'}`);
+    ok(!(s.pulledKeys || []).includes(drop[0]), '다시 팔리면 철수 판정이 풀린다');
+  }
+}
+
 say(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);

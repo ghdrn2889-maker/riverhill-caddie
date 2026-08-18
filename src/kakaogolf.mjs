@@ -175,6 +175,7 @@ export async function fetchOpen(dateYYYYMMDD) {
 //   한 틱에 한두 칸 — CLOSE_BULK(4)에 영영 안 걸리고 전부 '당일 예약'으로 샌다.
 //   그래서 SALE_CLOSE_LEAD(기본 60분)를 바닥선으로 깔았다. 관측으로 더 큰 마감선을 배우면 그쪽이 이긴다.
 const CLOSE_BULK = Number(process.env.KAKAO_CLOSE_BULK || 4);   // 이 개수 이상 한 번에 사라지면 판매 마감
+const PULL_BULK = Number(process.env.KAKAO_PULL_BULK || 4);     // 한 부에서 이 개수 이상 한꺼번에 내려가면 철수(캐디 부족)
 const MIN_LEAD = Number(process.env.KAKAO_MIN_LEAD || 0);       // 최소 안전선(분) — 기본 없음
 const JUDGE_TODAY = String(process.env.KAKAO_TODAY || '1') === '1';
 // ★판매 마감선(사용자 관측 2026-08-17): 카카오골프는 티오프 약 1시간 전이면 그 칸을 판매에서 내린다.
@@ -280,21 +281,49 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  한 칸씩 사라지면 예약, 뭉텅이로 사라지면 판매 마감. 마감이면 그때의 '남은 시간'을 마감선으로 배운다.
   const prevOpen = new Set(prevSnap?.openKeys || []);
   const goneNow = fixed.filter((f) => prevOpen.has(key(f.mins, f.course)) && !openSet.has(key(f.mins, f.course)) && (!isToday || f.mins > nowMin));
+  // ── ★캐디가 동나서 내려간 칸(철수) — 예약이 아니다 ──────────────────────
+  //  골프장은 팔 수 있는 시각을 넉넉히 던져놓고, 그날 나온 캐디 수만큼 팀이 차면 남은 칸을 내린다.
+  //  여집합 엔진에는 이것도 그냥 '사라짐'이라 예약과 구분이 안 된다 — 8/18 1부 07:01에 24칸이
+  //  한꺼번에 내려갔고, 그중 마감선 밖 12칸이 예약으로 잡혀 배치표 3팀이 카카오 15팀이 됐다.
+  //  ★가르는 건 '한 부 안에서 한꺼번에'다. 실측 40건: 예약은 한 틱에 1~2칸(38건)이고, 4칸짜리
+  //   사건 하나는 부가 섞인 우연이었다(2부 2칸 마감 + 3부 2칸). 철수만 한 부에서 24칸이었다.
+  //   그래서 전체가 아니라 부별로 센다 — 그래야 문턱을 4로 낮춰도 우연한 겹침에 안 걸린다.
+  //  판정은 그날 내내 유지한다(원웨이와 같은 이유 — 안 그러면 다음 틱에 또 예약으로 굳는다).
+  //  뒤집는 사실은 하나뿐: 그 칸이 다시 판매중이 되는 것.
+  const pulled = new Set(prevSnap?.pulledKeys || []);
+  for (const k of [...pulled]) if (openSet.has(k)) pulled.delete(k);   // 다시 팔린다 = 철수가 아니었다
+  const pulledNow = new Set();
+  {
+    const goneByPart = {};
+    for (const f of goneNow) (goneByPart[f.part] ||= []).push(f);
+    for (const [p, arr] of Object.entries(goneByPart)) {
+      if (arr.length < PULL_BULK) continue;
+      for (const f of arr) { pulled.add(key(f.mins, f.course)); pulledNow.add(key(f.mins, f.course)); }
+      console.warn(`[카카오골프] ${dateYYYYMMDD} ${p}부 ${arr.length}칸이 한 번에 내려감 — 예약이 아니라 철수로 봅니다(캐디 수만큼만 팀을 받는다): ${arr.map((f) => key(f.mins, f.course)).join(' ')}`);
+    }
+  }
+
+  // ★마감선 학습에는 '철수로 설명된 사라짐'을 넣지 않는다.
+  //  마감선 학습기는 뭉텅이 사라짐을 전부 '판매 마감'으로 읽고 그때의 남은 시간을 마감선으로 삼는다.
+  //  철수까지 삼키면 엉뚱하게 큰 마감선을 배우고(실측: 516분), 그 뒤 하루 종일 아무것도 판정하지 못한다.
+  //  둘은 뜻이 정반대다 — 마감은 티오프가 임박해서, 철수는 캐디가 없어서 내린다.
+  const goneForClose = goneNow.filter((f) => !pulledNow.has(key(f.mins, f.course)));
   let closeLead = Number(prevSnap?.closeLead || 0);
-  if (isToday && goneNow.length >= CLOSE_BULK) {
-    const lead = Math.min(...goneNow.map((f) => f.mins)) - nowMin;
+  if (isToday && goneForClose.length >= CLOSE_BULK) {
+    const lead = Math.min(...goneForClose.map((f) => f.mins)) - nowMin;
     if (lead > closeLead) {
       closeLead = lead;
-      console.warn(`[카카오골프] ${dateYYYYMMDD} 판매 마감으로 봅니다 — ${goneNow.length}칸이 한꺼번에 사라짐(티오프 ${lead}분 전). 이 안쪽은 판정하지 않습니다.`);
+      console.warn(`[카카오골프] ${dateYYYYMMDD} 판매 마감으로 봅니다 — ${goneForClose.length}칸이 한꺼번에 사라짐(티오프 ${lead}분 전). 이 안쪽은 판정하지 않습니다.`);
     }
-  } else if (isToday && goneNow.length) {
+  } else if (isToday && goneForClose.length) {
     const ld = Math.max(closeLead, MIN_LEAD, SALE_CLOSE_LEAD);
-    for (const f of goneNow) {
+    for (const f of goneForClose) {
       const gl = f.mins - nowMin;
       if (gl <= ld) console.log(`[카카오골프] ${dateYYYYMMDD} ${f.time} ${f.course} 판매 마감(티오프 ${gl}분 전) — 예약으로 세지 않음`);
       else console.log(`[카카오골프] ${dateYYYYMMDD} ${f.time} ${f.course} 예약됨(당일) — 티오프 ${gl}분 전`);
     }
   }
+
   if (isToday && goneNow.length) {
     try {
       appendJSONL('kakao-close.jsonl', { at: Date.now(), date: String(dateYYYYMMDD), n: goneNow.length,
@@ -389,6 +418,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     if (openSet.has(k)) continue;                                          // 아직 팔리는 중 = 안 참(취소도 여기로 돌아온다)
     if (blind.has(k)) { skipped.push(f); continue; }                        // 카카오가 안 파는 칸 — 찼는지 영영 모른다
     if (idle.has(ck) || unsure.has(ck)) { skipped.push(f); continue; }      // 안 도는 코스·판단보류
+    if (pulled.has(k)) { skipped.push(f); continue; }                       // 캐디가 동나 내려간 칸 — 팀이 없다
     if (judgeable(f) || prevConfirmed.has(k)) { booked.push(f); confirmed.add(k); }
     else skipped.push(f);                                                  // 마감선 안쪽에서 처음 본 칸 — 예약인지 마감인지 모른다
   }
@@ -404,6 +434,10 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     const [p, c] = ck.split('|');
     if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => x.course !== c);
   }
+  // 철수한 칸도 같은 이유로 걷어낸다(key가 곧 '시각|코스'라 그대로 대조된다).
+  if (pulled.size) for (const p of Object.keys(peakByPart)) {
+    if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => !pulled.has(`${x.time}|${x.course}`));
+  }
   for (const [p, arr] of Object.entries(byPart)) {
     if (!peakByPart[p] || arr.length > peakByPart[p].length) peakByPart[p] = arr.map((x) => ({ time: x.time, course: x.course }));
   }
@@ -417,6 +451,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     openKeys: open.map((o) => key(o.mins, o.course)),
     everOpenKeys: [...everOpenKeys],               // 이 날짜에서 한 번이라도 판매중인 걸 본 칸
     confirmedKeys: [...confirmed],                 // '찼다'고 확정한 칸 — 시각이 지나도 유지(취소되면 빠진다)
+    pulledKeys: [...pulled].sort(),                // 캐디가 동나 내려간 칸 — 그날 내내 유지(다시 팔리면 빠진다)
     // ★'찼다'고 본 칸 중, 이 날짜에서 판매중인 걸 한 번도 못 본 것 — 관측을 늦게 시작해도 이렇게 보인다.
     //  그래서 이건 '경고'일 뿐 판정 근거가 아니다. 판정 근거는 아래 blind(전 날짜 통합)다.
     unverified: booked.filter((b) => !everOpenKeys.has(key(b.mins, b.course))).map((b) => key(b.mins, b.course)),
