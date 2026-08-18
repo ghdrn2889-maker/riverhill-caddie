@@ -16,6 +16,9 @@
 //        node tools/kakaopull.mjs --save
 //        node tools/kakaopull.mjs --date 20260818 --part 3 --end 18:10         (끝선 지정 — 미리보기)
 //        node tools/kakaopull.mjs --date 20260818 --part 3 --end 18:10 --save
+//        node tools/kakaopull.mjs --date 20260818 --slots "08:50|IN" --save     (칸 지정)
+//   ★같은 시각에 IN·OUT 두 칸이 있어 끝선으로는 못 가르는 날이 있다 — 8/18 1부는 마지막 팀이
+//    08:50 OUT이라 08:50 IN만 팀이 없었다. 그때는 칸을 직접 준다.
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '../src/store.mjs';
@@ -59,10 +62,24 @@ function applyToSnapshot(date, keys, note) {
   return true;
 }
 
-// ── 갈래 ② 관리자 끝선 지정 ──
+// ── 갈래 ② 관리자 지정(칸 단위) ──
 const dateArg = arg('--date').replace(/-/g, '');
 const partArg = arg('--part');
 const endArg = arg('--end');
+const slotArg = arg('--slots');
+if (dateArg && slotArg) {
+  const known = new Set(SLOTS.map((f) => `${f.time}|${f.course}`));
+  const keys = slotArg.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+  const bad = keys.filter((k) => !known.has(k));
+  if (bad.length) { console.error(`기본틀에 없는 칸입니다: ${bad.join(' ')}  (형식: 08:50|IN)`); process.exit(1); }
+  console.log(`${dateArg}  관리자 지정 ${keys.length}칸을 철수로 봅니다`);
+  console.log(`  ${keys.join(' ')}`);
+  applyToSnapshot(dateArg, keys, '관리자 칸 지정');
+  console.log(SAVE ? '\n반영 완료 — 다음 틱부터 엔진이 이어받습니다(다시 팔리면 저절로 풀립니다).' : '\n미리보기입니다  (반영하려면 --save)');
+  process.exit(0);
+}
+
+// ── 갈래 ③ 관리자 끝선 지정 ──
 if (dateArg && partArg && endArg) {
   const end = toMin(endArg);
   if (!Number.isFinite(end)) { console.error('--end 는 HH:MM 형식이어야 합니다(예: 18:10).'); process.exit(1); }
@@ -74,7 +91,7 @@ if (dateArg && partArg && endArg) {
   console.log(SAVE ? '\n반영 완료 — 다음 틱부터 엔진이 이어받습니다(다시 팔리면 저절로 풀립니다).' : '\n미리보기입니다  (반영하려면 --save)');
   process.exit(0);
 }
-if (dateArg || partArg || endArg) { console.error('끝선 지정은 --date --part --end 를 모두 주셔야 합니다.'); process.exit(1); }
+if (dateArg || partArg || endArg) { console.error('끝선은 --date --part --end, 칸 지정은 --date --slots 를 주셔야 합니다.'); process.exit(1); }
 
 // ── 갈래 ① 기록에서 뭉텅이 철수 찾기 ──
 //  판정 규칙은 엔진과 같다 — '한 부 안에서 PULL_BULK칸 이상 한 틱에'.
