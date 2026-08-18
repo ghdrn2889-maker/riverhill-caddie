@@ -283,6 +283,9 @@ body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-rad
 .tools button.save{background:var(--ok);color:var(--panel);border-color:var(--ok);font-weight:600}
 /* 앱 반영은 되돌릴 수 없는 쪽이라 색을 달리한다 — 실수로 누르는 버튼과 같아 보이면 안 된다. */
 .tools button.apply{background:var(--warn);color:var(--panel);border-color:var(--warn);font-weight:700}
+/* 알림은 회원 폰으로 나간다 — 이 화면에서 유일하게 '밖으로' 나가는 버튼이라 색을 따로 준다.
+   반영은 되돌릴 수 있지만 보낸 알림은 못 거둔다. */
+.tools button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
 .tools button:disabled{opacity:.5;cursor:default}
 .tools .hint{font-size:12px;color:var(--dim)}
 body.editing td.c{cursor:pointer}
@@ -391,6 +394,7 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button id="undoBtn" type="button" hidden>되돌리기</button>
   <button id="saveBtn" type="button" class="save" hidden>테스트판에 저장</button>
   <button id="applyBtn" type="button" class="apply" hidden>실제 배치표를 앱에 반영</button>
+  <button id="notifyBtn" type="button" class="notify" hidden>정정 알림 보내기</button>
   <button id="resetBtn" type="button" ${(J.sandbox?.edited || []).length ? '' : 'hidden'}>실제 판독으로 초기화</button>
   <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
   <span id="state" class="hint"></span>

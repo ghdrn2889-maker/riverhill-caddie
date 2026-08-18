@@ -29,6 +29,7 @@
   const undoBtn = document.getElementById('undoBtn');
   const resetBtn = document.getElementById('resetBtn');
   const applyBtn = document.getElementById('applyBtn');
+  const notifyBtn = document.getElementById('notifyBtn');
   const HINTS = {
     team: '빈 칸을 눌러 팀을 추가하고, 팀이 있는 칸을 눌러 없앱니다. 추가하면 그 뒤가 한 칸씩 뒤로 밀리고 스페어 맨 앞이 근무로 올라옵니다.',
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
@@ -709,6 +710,60 @@
     finally { saveBtn.disabled = false; PARTS.forEach(paint); }
   });
 
+
+  // ── 정정 알림 ── 이 화면에서 유일하게 '밖으로' 나가는 버튼이다.
+  //
+  //  ★반영과 한 버튼에 묶지 않는다. 반영은 틀리면 다시 고치면 되지만, 보낸 알림은 못 거둔다.
+  //   그래서 반영은 문구를 '만들어 두기만' 하고(서버가 15분짜리 토큰에 담는다), 발송은 따로 누른다.
+  //  ★그리고 누구에게 무엇이 가는지 전부 보여주고 확인을 받는다. 몇 명인지만 말하는 확인은
+  //   확인이 아니다 — 엉뚱한 사람에게 '티오프 변경!'이 가는 걸 막을 방법이 없다.
+  //  ★대상은 서버가 고른다. '실제로 상태가 바뀐 회원'만이다(correctionMsg). 화면이 다시 세면
+  //   두 곳이 갈라지고, 갈라지면 반드시 한쪽이 틀린다.
+  const NOTIFY = { items: [], tokens: [], at: 0, noPush: false };
+  const NOTIFY_TTL = 15 * 60 * 1000;                 // 서버 토큰 수명과 같다
+  const notifyLeft = () => (NOTIFY.at ? NOTIFY_TTL - (Date.now() - NOTIFY.at) : 0);
+  function resetNotify() { NOTIFY.items = []; NOTIFY.tokens = []; NOTIFY.at = 0; NOTIFY.noPush = false; paintNotify(); }
+  function paintNotify() {
+    if (!notifyBtn) return;
+    const n = NOTIFY.items.length;
+    const alive = n > 0 && NOTIFY.tokens.length > 0 && notifyLeft() > 0;
+    notifyBtn.hidden = !alive;
+    if (alive) notifyBtn.textContent = `정정 알림 보내기 (${n}명)`;
+  }
+  setInterval(paintNotify, 30000);                   // 15분이 지나면 스스로 사라진다(서버도 그때 버린다)
+
+  if (notifyBtn) notifyBtn.addEventListener('click', async () => {
+    if (!live) { state.textContent = '샘플에서는 보낼 수 없습니다.'; return; }
+    if (!NOTIFY.items.length || !NOTIFY.tokens.length) { state.textContent = '보낼 알림이 없습니다.'; return; }
+    if (notifyLeft() <= 0) { resetNotify(); state.textContent = '알림이 만료됐습니다(15분) — 다시 반영해주세요.'; return; }
+    const NL = String.fromCharCode(10);
+    const lines = NOTIFY.items.map((x) => `· ${x.name} — ${x.body}`);
+    const min = Math.max(1, Math.round(notifyLeft() / 60000));
+    const msg = [`회원 ${NOTIFY.items.length}명에게 정정 알림을 보냅니다. 보낸 알림은 거둘 수 없습니다.`, '']
+      .concat(lines).concat(['', `(남은 시간 약 ${min}분) 보낼까요?`]).join(NL);
+    if (!confirm(msg)) return;
+    notifyBtn.disabled = true;
+    state.textContent = '알림 보내는 중…';
+    let sent = 0, total = 0, err = '';
+    for (const token of NOTIFY.tokens) {
+      try {
+        const r = await fetch(apiUrl('/api/board-notify'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token: token }),
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || '발송 실패');
+        sent += Number(j.sent) || 0; total += Number(j.total) || 0;
+      } catch (e) { err = e.message; }
+    }
+    // ★토큰은 한 번 쓰면 서버가 지운다 — 두 번 눌러 두 번 가는 일이 없게 여기서도 비운다.
+    resetNotify();
+    notifyBtn.disabled = false;
+    state.textContent = err
+      ? `알림 일부 실패 — 보냄 ${sent}/${total}명 · ${err}`
+      : `정정 알림을 보냈습니다 — ${sent}/${total}명`;
+  });
+
   // ── 앱에 반영 ── 실제 배치표 축만, 그것도 이 버튼을 눌렀을 때만 넘어간다.
   //
   //  ★카카오 예상은 절대 안 넘긴다. 예상 격자가 본배치표로 새어 들어가 8/17 3부가
@@ -734,7 +789,10 @@
       //  예전엔 real.length였다 — 팀을 추가할 때마다 splice로 배열이 길어져서, 명단 21명인데
       //  커트가 24가 됐다(8/18). 화면은 커트만큼 줄을 그리니 뒤 세 줄이 빈칸으로 남았다.
       cutLine: Math.min(real.filter(Boolean).length, roster[part].filter((x) => String(x || '').trim()).length),
-      notify: false,   // 알림은 여기서 안 보낸다 — 정정 알림은 '배치표 검수' 탭에서 미리보기 후 발송.
+      // ★문구는 만들되 보내지는 않는다. 서버는 '실제 바뀐 회원'만 골라 문구를 짜서
+      //  토큰에 담아두고(15분), 관리자가 /api/board-notify로 확인해야 그때 나간다.
+      //  반영과 발송을 한 버튼에 묶지 않는 이유: 반영은 되돌릴 수 있고 알림은 못 거둔다.
+      notify: true,
     };
   }
   // ★깨진 배치는 아예 보내지 않는다 — 반영이 끝난 뒤에 알아채면 되돌릴 방법이 마땅치 않다.
@@ -793,6 +851,7 @@
     if (!confirm(msg)) return;
     applyBtn.disabled = true;
     state.textContent = '반영 중…';
+    resetNotify();
     const done = [];
     try {
       for (const part of PARTS) {
@@ -805,6 +864,9 @@
         const j = await r.json();
         if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));
         done.push(`${part}부 ${j.updated || 0}명`);
+        if (j.notifyToken) NOTIFY.tokens.push(j.notifyToken);
+        (j.pending || []).forEach((x) => NOTIFY.items.push({ part: part, name: x.name, title: x.title, body: x.body }));
+        if (!j.notifyToken && (j.pending || []).length) NOTIFY.noPush = true;   // 푸시가 꺼져 있으면 토큰이 안 온다
         // 반영된 뒤에는 배치표가 그 내용을 들고 있다 — 테스트판의 실제 축은 비운다(예상 배치는 남긴다).
         await fetch(apiUrl('/api/daejo-reset'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
@@ -815,9 +877,13 @@
         setBaseline(part, (teeV.real[part] || []).concat(p.interns.map((t) => ({ time: t.time, course: t.course }))),
           { real: teeV.real[part] });
       }
-      state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} (알림은 안 나갔습니다)`;
+      NOTIFY.at = Date.now();
+      const n = NOTIFY.items.length;
+      state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} · `
+        + (n ? `알림은 아직 안 나갔습니다 — 알릴 사람 ${n}명(‘정정 알림 보내기’를 눌러야 나갑니다)`
+             : '알릴 사람 없음(바뀐 회원이 없습니다)');
     } catch (err) { state.textContent = '반영 실패: ' + err.message; }
-    finally { applyBtn.disabled = false; stack.length = 0; PARTS.forEach(paint); }
+    finally { applyBtn.disabled = false; stack.length = 0; paintNotify(); PARTS.forEach(paint); }
   });
 
   // 실제 판독으로 되돌리기 — 테스트판을 버린다.
