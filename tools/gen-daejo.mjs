@@ -283,6 +283,34 @@ body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-rad
 .tools button.save{background:var(--ok);color:var(--panel);border-color:var(--ok);font-weight:600}
 /* 앱 반영은 되돌릴 수 없는 쪽이라 색을 달리한다 — 실수로 누르는 버튼과 같아 보이면 안 된다. */
 .tools button.apply{background:var(--warn);color:var(--panel);border-color:var(--warn);font-weight:700}
+/* 알림 대상 고르기 — 누구에게 갈지 눈으로 보고 손으로 고르는 판.
+   ★목록을 안 보여주고 '전체에게 보냅니다'만 묻는 건 확인이 아니다. 이 화면의 값은 목록 그 자체다. */
+.npick{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin:12px 0 4px;overflow:hidden}
+.nhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--line)}
+.nhead .nt{font-size:12px;font-weight:700;letter-spacing:-.01em}
+.nhead button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+  padding:3px 10px;font-size:11.5px;font-family:inherit;cursor:pointer}
+.nhead button:hover{border-color:var(--warn)}
+.nhead button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
+.nhead button:disabled{opacity:.45;cursor:default}
+.nseg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.nseg button{border:0;border-right:1px solid var(--line);border-radius:0;color:var(--dim);padding:3px 11px}
+.nseg button:last-child{border-right:0}
+.nseg button.on{background:var(--ok);color:var(--panel);font-weight:700}
+.ncount{margin-left:auto;font-size:11.5px;color:var(--dim)}
+.nnote{margin:0;padding:9px 13px;font-size:11.5px;line-height:1.6;color:var(--dim);background:var(--open);
+  border-bottom:1px solid var(--line)}
+.nlist{max-height:340px;overflow-y:auto}
+.nrow{display:flex;align-items:flex-start;gap:9px;padding:8px 13px;border-bottom:1px solid var(--line);
+  font-size:12px;cursor:pointer}
+.nrow:last-child{border-bottom:0}
+.nrow:hover{background:var(--open)}
+.nrow input{margin:2px 0 0;width:15px;height:15px;accent-color:var(--ok);cursor:pointer}
+.nrow .nm{font-weight:700;min-width:62px}
+.nrow .bd{color:var(--dim);line-height:1.5}
+.nrow.chg .nm{color:var(--warn)}
+.nrow.chg .nm::after{content:' 바뀜';font-size:9.5px;font-weight:600}
+.nempty{padding:14px;font-size:12px;color:var(--dim)}
 /* 알림은 회원 폰으로 나간다 — 이 화면에서 유일하게 '밖으로' 나가는 버튼이라 색을 따로 준다.
    반영은 되돌릴 수 있지만 보낸 알림은 못 거둔다. */
 .tools button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
@@ -395,9 +423,26 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button id="saveBtn" type="button" class="save" hidden>테스트판에 저장</button>
   <button id="applyBtn" type="button" class="apply" hidden>실제 배치표를 앱에 반영</button>
   <button id="notifyBtn" type="button" class="notify" hidden>정정 알림 보내기</button>
+  <button id="pickBtn" type="button">알림 대상 고르기</button>
   <button id="resetBtn" type="button" ${(J.sandbox?.edited || []).length ? '' : 'hidden'}>실제 판독으로 초기화</button>
   <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
   <span id="state" class="hint"></span>
+</div>
+
+<div class="npick" id="npick" hidden>
+  <div class="nhead">
+    <span class="nt">알림 대상</span>
+    <span class="nseg" id="npParts"></span>
+    <button type="button" data-npsel="all">전체</button>
+    <button type="button" data-npsel="chg">바뀐 사람만</button>
+    <button type="button" data-npsel="none">해제</button>
+    <span class="ncount" id="npCount"></span>
+    <button type="button" id="npSend" class="notify">보내기</button>
+    <button type="button" id="npClose">닫기</button>
+  </div>
+  <p class="nnote">지금 <b>그 회원의 현재 상태</b>를 그대로 알립니다(근무·티오프·순번 또는 스페어·휴무).
+  방금 무엇이 어떻게 바뀌었는지를 알리려면 <b>정정 알림 보내기</b>를 쓰세요 &mdash; 그건 반영 직후에만 나옵니다.</p>
+  <div class="nlist" id="npList"></div>
 </div>
 
 <div class="legend">

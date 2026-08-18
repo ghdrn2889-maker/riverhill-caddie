@@ -720,6 +720,7 @@
   //  ★대상은 서버가 고른다. '실제로 상태가 바뀐 회원'만이다(correctionMsg). 화면이 다시 세면
   //   두 곳이 갈라지고, 갈라지면 반드시 한쪽이 틀린다.
   const NOTIFY = { items: [], tokens: [], at: 0, noPush: false };
+  const AUTO = [];                                   // 이번 반영에서 서버가 자동으로 보낸 결과(부별)
   const NOTIFY_TTL = 15 * 60 * 1000;                 // 서버 토큰 수명과 같다
   const notifyLeft = () => (NOTIFY.at ? NOTIFY_TTL - (Date.now() - NOTIFY.at) : 0);
   function resetNotify() { NOTIFY.items = []; NOTIFY.tokens = []; NOTIFY.at = 0; NOTIFY.noPush = false; paintNotify(); }
@@ -793,6 +794,11 @@
       //  토큰에 담아두고(15분), 관리자가 /api/board-notify로 확인해야 그때 나간다.
       //  반영과 발송을 한 버튼에 묶지 않는 이유: 반영은 되돌릴 수 있고 알림은 못 거둔다.
       notify: true,
+      // ★자동 발송 — 반영은 이미 명시적 행위다. 바뀐 회원에게 그 자리에서 나간다(사용자 결정).
+      //  서버가 보내기 전에 배치표가 성립하는지 먼저 센다. 겹친 칸·이름 없는 티오프·명단을 넘는 커트가
+      //  하나라도 있으면 통째로 멈추고, 그때는 아래 '정정 알림 보내기'로 사람이 확인하고 보낸다.
+      //  자동이 보낸 사람은 서버가 그 목록에서 빼주므로 같은 폰이 두 번 울리지 않는다.
+      autoNotify: true,
     };
   }
   // ★깨진 배치는 아예 보내지 않는다 — 반영이 끝난 뒤에 알아채면 되돌릴 방법이 마땅치 않다.
@@ -852,6 +858,7 @@
     applyBtn.disabled = true;
     state.textContent = '반영 중…';
     resetNotify();
+    AUTO.length = 0;
     const done = [];
     try {
       for (const part of PARTS) {
@@ -862,8 +869,9 @@
           body: JSON.stringify(p),
         });
         const j = await r.json();
-        if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));
+        if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));   // 서버도 배치가 성립하는지 센다
         done.push(`${part}부 ${j.updated || 0}명`);
+        if (j.auto) AUTO.push({ part: part, ...j.auto });
         if (j.notifyToken) NOTIFY.tokens.push(j.notifyToken);
         (j.pending || []).forEach((x) => NOTIFY.items.push({ part: part, name: x.name, title: x.title, body: x.body }));
         if (!j.notifyToken && (j.pending || []).length) NOTIFY.noPush = true;   // 푸시가 꺼져 있으면 토큰이 안 온다
@@ -878,10 +886,23 @@
           { real: teeV.real[part] });
       }
       NOTIFY.at = Date.now();
+      if (npick && !npick.hidden) npLoad(npPart);      // 열려 있던 대상판은 방금 반영으로 낡았다
       const n = NOTIFY.items.length;
-      state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'} · `
-        + (n ? `알림은 아직 안 나갔습니다 — 알릴 사람 ${n}명(‘정정 알림 보내기’를 눌러야 나갑니다)`
-             : '알릴 사람 없음(바뀐 회원이 없습니다)');
+      // ★무엇이 실제로 나갔는지 그대로 말한다. '반영했습니다'만 남기면 알림이 갔는지 안 갔는지
+      //  관리자가 알 방법이 없고, 그러면 확인차 한 번 더 눌러 같은 알림을 또 보내게 된다.
+      const auto = AUTO.map((a) => {
+        const p = a.part + '부';
+        if (a.held) return `${p} 자동발송 멈춤(${a.reason})`;
+        if (!a.on) return `${p} 자동발송 꺼짐`;
+        const bits = [];
+        if (a.sent) bits.push(`${a.sent}명 보냄`);
+        if (a.queued) bits.push(`${a.queued}명 아침대기(조용시간)`);
+        if (a.skipped) bits.push(`${a.skipped}명 이미 알림`);
+        return `${p} ${bits.join(' · ') || '보낼 사람 없음'}`;
+      }).join(' · ');
+      state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'}`
+        + (auto ? ` · 자동알림 ${auto}` : '')
+        + (n ? ` · 남은 ${n}명은 ‘정정 알림 보내기’로 보낼 수 있습니다` : '');
     } catch (err) { state.textContent = '반영 실패: ' + err.message; }
     finally { applyBtn.disabled = false; stack.length = 0; paintNotify(); PARTS.forEach(paint); }
   });
@@ -1035,6 +1056,110 @@
       if (!confirm(part + '부의 오늘 선언(시각·원웨이)을 모두 거두고 기본틀로 되돌립니다. 계속할까요?')) return;
       declare(part, { reset: 1 }, '기본틀 복귀');
     });
+  });
+
+
+  // ── 알림 대상 고르기 ── 전체에게든 한 사람에게든, 누가 받는지 눈으로 보고 손으로 고른다.
+  //
+  //  ★정정 알림과 무엇이 다른가 — 보내는 '글'이 다르다.
+  //   정정 알림 = 무엇이 어떻게 바뀌었나(17:42 → 17:49). 반영 직후에만 만들 수 있다.
+  //   여기      = 지금 그 회원의 상태가 무엇인가(근무·티오프·순번 / 스페어 / 휴무).
+  //   그래서 둘을 한 버튼으로 합치지 않는다. 합치면 둘 중 하나는 반드시 틀린 글이 된다.
+  //
+  //  ★목록을 그리는 것도 글을 짓는 것도 서버다(board-notify-candidates). 화면이 다시 지으면
+  //   보여준 글과 나가는 글이 갈라진다 — 그러면 확인이 확인이 아니다.
+  //  ★'바뀐 사람'도 서버가 표시한다(그 배치표 잠금이 걸린 회원). 화면이 다시 세지 않는다.
+  const npick = document.getElementById('npick');
+  const pickBtn = document.getElementById('pickBtn');
+  const npList = document.getElementById('npList');
+  const npCount = document.getElementById('npCount');
+  const npParts = document.getElementById('npParts');
+  const npSend = document.getElementById('npSend');
+  let npPart = '3', npCands = [];
+
+  function npPaintCount() {
+    const sel = npList.querySelectorAll('input:checked').length;
+    npCount.textContent = npCands.length ? `${npCands.length}명 중 ${sel}명 선택` : '';
+    npSend.disabled = !sel;
+    npSend.textContent = sel ? `${sel}명에게 보내기` : '보내기';
+  }
+  function npPaint() {
+    npList.innerHTML = '';
+    if (!npCands.length) {
+      const d = document.createElement('div');
+      d.className = 'nempty';
+      d.textContent = npPart + '부에 알릴 회원이 없습니다 — 이 부의 명단에 우리 회원이 없거나 배치표가 아직 없습니다.';
+      npList.appendChild(d);
+      npPaintCount();
+      return;
+    }
+    for (const c of npCands) {
+      const row = document.createElement('label');
+      row.className = 'nrow' + (c.sel ? ' chg' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = String(c.id); cb.checked = !!c.sel;
+      cb.addEventListener('change', npPaintCount);
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = c.name;
+      const bd = document.createElement('span'); bd.className = 'bd'; bd.textContent = c.body;
+      row.appendChild(cb); row.appendChild(nm); row.appendChild(bd);
+      npList.appendChild(row);
+    }
+    npPaintCount();
+  }
+  async function npLoad(part) {
+    npPart = String(part);
+    [...npParts.querySelectorAll('button')].forEach((b) => b.classList.toggle('on', b.dataset.np === npPart));
+    npList.innerHTML = '<div class="nempty">불러오는 중…</div>';
+    npCands = [];
+    try {
+      const q = apiUrl('/api/board-notify-candidates') + (apiUrl('').includes('?') ? '&' : '?') + 'part=' + encodeURIComponent(npPart);
+      const j = await (await fetch(q, { credentials: 'include' })).json();
+      if (!j.ok) throw new Error(j.error || '목록 실패');
+      npCands = j.candidates || [];
+    } catch (err) { npList.innerHTML = ''; state.textContent = '알림 대상 목록 실패: ' + err.message; }
+    npPaint();
+  }
+  PARTS.slice().reverse().forEach((p) => {          // 3·2·1 — 이 화면의 주인공은 3부다
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.np = p; b.textContent = p + '부';
+    b.addEventListener('click', () => npLoad(p));
+    npParts.appendChild(b);
+  });
+  if (pickBtn) pickBtn.addEventListener('click', () => {
+    if (!live) { state.textContent = '샘플에서는 대상을 불러올 수 없습니다 — 모니터의 /daejo 에서 열어주세요.'; return; }
+    if (npick.hidden) { npick.hidden = false; npLoad(npPart); npick.scrollIntoView({ block: 'nearest' }); }
+    else npick.hidden = true;
+  });
+  document.getElementById('npClose').addEventListener('click', () => { npick.hidden = true; });
+  npick.querySelectorAll('button[data-npsel]').forEach((b) => b.addEventListener('click', () => {
+    const how = b.dataset.npsel;
+    npList.querySelectorAll('input').forEach((cb, i) => {
+      cb.checked = how === 'all' ? true : how === 'none' ? false : !!(npCands[i] || {}).sel;
+    });
+    npPaintCount();
+  }));
+  npSend.addEventListener('click', async () => {
+    const boxes = [...npList.querySelectorAll('input:checked')];
+    if (!boxes.length) { state.textContent = '받을 회원을 골라주세요.'; return; }
+    const ids = boxes.map((b) => Number(b.value));
+    const picked = npCands.filter((c) => ids.includes(c.id));
+    const NL = String.fromCharCode(10);
+    const msg = [`${npPart}부 회원 ${picked.length}명에게 지금 상태를 알립니다. 보낸 알림은 거둘 수 없습니다.`, '']
+      .concat(picked.map((c) => `· ${c.name} — ${c.body}`)).concat(['', '보낼까요?']).join(NL);
+    if (!confirm(msg)) return;
+    npSend.disabled = true;
+    state.textContent = '알림 보내는 중…';
+    try {
+      const r = await fetch(apiUrl('/api/board-notify-adhoc'), {
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ part: npPart, ids: ids }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || '발송 실패');
+      state.textContent = `${npPart}부 알림을 보냈습니다 — ${j.sent}/${ids.length}명`;
+      npick.hidden = true;
+    } catch (err) { state.textContent = '알림 실패: ' + err.message; }
+    finally { npSend.disabled = false; npPaintCount(); }
   });
 
   // 시작 — 실제 팀 = 배치표 격자 + 사진이 읽은 인턴 칸. 기준선을 세우면 두 보기가 함께 계산된다.

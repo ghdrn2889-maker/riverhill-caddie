@@ -24,6 +24,7 @@ import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from '.
 import { buildDaejoData } from './daejodata.mjs';
 import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
 import { setPartRange, setPartOneway, clearPart, dayFrameParts } from './dayframe.mjs';
+import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
@@ -463,14 +464,7 @@ app.get('/api/board-review', gate, (req, res) => {
 // ★교정 정정알림 — 저장 시 '실제 바뀐 회원'만 골라 문구를 만들되, 즉시 발송하지 않고
 //  토큰에 담아 관리자에게 미리보기로 돌려준다. /api/board-notify 로 확인해야 실제 발송.
 const pendingNotify = {};
-// 사후(이미 저장된 교정) 정정 알림용 — 현재 배정 상태 그대로 안내하는 문구.
-function currentStateMsg(pl, name, today) {
-  if (today.status === 'off') { const ot = today.offType; const w = ot === 'sick' ? '병가' : ot === 'vacation' ? '휴가' : '휴무'; return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 오늘은 ${w}예요.` }; }
-  const pos = Number(today.myPosition) || 0;
-  const work = ['work', 'assigned', 'your_turn'].includes(today.status);
-  if (work) return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 근무${today.teeTime ? ` · 티오프 ${today.teeTime}${today.course ? `(${today.course})` : ''}` : ''}${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
-  return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 스페어(대기)${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
-}
+// currentStateMsg는 boardpush.mjs에 있다 — 자동 발송과 손으로 보내는 알림이 같은 문구를 써야 한다.
 function boardCtxForPart(part) {
   if (part === '3') { const lb = loadLastBoard(); if (!lb || !lb.rawVerdict) return null; const v = lb.rawVerdict; return { articleId: String(lb.id), dk: dayKey(v.dateLabel || lb.dateLabel || ''), roster: v.part3Roster || [], dateLabel: v.dateLabel || lb.dateLabel || '' }; }
   const bp = loadBoardPartsStore(); const pd = bp && bp.parts && bp.parts[part]; if (!pd || !Array.isArray(pd.roster)) return null;
@@ -507,13 +501,13 @@ function leaveMemberPart(userId, part, dateLabel, articleId) {
   saveToday(t, userId, '3');
 }
 const bareName = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
-function stashNotify(pending) {
+function stashNotify(pending, part = '3') {
   // 오래된 대기건 정리(15분 초과)
   const now = Date.now();
   for (const k of Object.keys(pendingNotify)) { if (now - (pendingNotify[k].at || 0) > 15 * 60 * 1000) delete pendingNotify[k]; }
   if (!pending.length) return null;
   const token = 'nt_' + now.toString(36) + Math.random().toString(36).slice(2, 7);
-  pendingNotify[token] = { at: now, items: pending };
+  pendingNotify[token] = { at: now, part: String(part), items: pending };
   return token;
 }
 // ★당번·벌당 수동 교정 — 하단 배정표 판독이 틀렸거나(부분 크롭 등) 구두 지시로 바뀌었을 때.
@@ -532,6 +526,23 @@ app.post('/api/duty-set', gate, (req, res) => {
   res.json({ ok: true, duty });
 });
 
+// ★자동이 이미 보낸 사람은 '손으로 보낼 목록'에서 뺀다 — 안 빼면 같은 사람 폰이 두 번 울린다.
+//  자동이 멈췄거나(배치 깨짐) 건너뛴 사람은 그대로 남는다 — 그게 버튼이 있는 이유다.
+const pendingFor = (pending, auto) => {
+  const done = new Set(auto ? auto.sent.concat(auto.queued) : []);
+  return (pending || []).filter((p) => !done.has(p.id)).map((p) => ({ name: p.name, title: p.title, body: p.body }));
+};
+const tokenFor = (pending, auto, notify, part = '3') => {
+  if (!pushReady) return null;
+  const done = new Set(auto ? auto.sent.concat(auto.queued) : []);
+  const rest = (pending || []).filter((p) => !done.has(p.id));
+  if (!rest.length) return null;
+  if (!notify && !auto) return null;          // 알림을 안 만들라고 한 경우
+  return stashNotify(rest, part);
+};
+const autoBrief = (a) => (a ? { on: a.ok, held: a.held, reason: a.reason,
+  sent: a.sent.length, queued: a.queued.length, skipped: a.skipped.length } : null);
+
 app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
@@ -540,7 +551,18 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const allInterns = Array.isArray(req.body?.allInterns) ? req.body.allInterns : null;
   const cutLine = Number(req.body?.cutLine) || 0;
   const notify = !!req.body?.notify;
+  const autoNotify = !!req.body?.autoNotify;
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
+  // ★깨진 배치표는 저장 자체를 안 한다. 8/18에 같은 시각에 두세 명이 겹친 채로 반영돼
+  //  다섯 명이 화면에서 사라졌다. 그때 막은 건 브라우저뿐이었다 — 브라우저는 우회할 수 있고,
+  //  이 API를 부르는 길은 대조판 말고도 있다. 세는 일은 서버가 한 번 더 한다.
+  {
+    const bad = boardIntegrity(rows, cutLine);
+    if (bad.length) {
+      console.error(`🚫 [monitor] ${part}부 교정 거절 — ${bad.join(' / ')}`);
+      return res.status(400).json({ ok: false, error: `배치가 어긋나 저장하지 않았습니다 — ${bad[0]}${bad.length > 1 ? ` 외 ${bad.length - 1}건` : ''}`, problems: bad });
+    }
+  }
   // ★1·2부 — board-parts-store에 교정 반영 + 그 부 회원 today{part}.json 재계산(3부는 아래 lastboard 경로).
   if (part !== '3') {
     const bp = loadBoardPartsStore();
@@ -624,14 +646,17 @@ app.post('/api/board-correct', gate, async (req, res) => {
     }
     const notifyToken = (notify && pushReady) ? stashNotify(pending) : null;
     console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
-    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pending: pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
+    const auto = autoNotify ? await autoNotifyPart(part, { rows, cutLine, by: '대조판 반영' }) : null;
+    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated,
+      pending: pendingFor(pending, auto), notifyToken: tokenFor(pending, auto, notify, part), auto: autoBrief(auto) });
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
   let out;
   try { out = correctPart3({ rows, interns, allInterns, cutLine, notify }); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
-  const notifyToken = (notify && pushReady) ? stashNotify(out.pending) : null;
-  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pending: out.pending.map((p) => ({ name: p.name, title: p.title, body: p.body })), notifyToken });
+  const auto = autoNotify ? await autoNotifyPart('3', { rows, cutLine, by: '대조판 반영' }) : null;
+  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated,
+    pending: pendingFor(out.pending, auto), notifyToken: tokenFor(out.pending, auto, notify, '3'), auto: autoBrief(auto) });
 });
 
 // ★교정 정정알림 확정 발송 — board-correct가 돌려준 notifyToken을 관리자가 미리보기 후 확인하면 실제 발송.
@@ -643,8 +668,12 @@ app.post('/api/board-notify', gate, async (req, res) => {
   delete pendingNotify[token];   // 재발송 방지 — 먼저 제거
   let sent = 0;
   for (const it of entry.items) {
-    try { await broadcast({ title: it.title, body: it.body, url: '/', level: 'high', bypassQuiet: true }, it.id); sent++; }
-    catch (e) { console.error('정정알림 발송 실패:', e.message); }
+    try {
+      await broadcast({ title: it.title, body: it.body, url: '/', level: 'high', bypassQuiet: true }, it.id); sent++;
+      // ★보냈다는 사실을 자동 경로와 같은 장부에 적는다 — 안 적으면 자동이 곧바로 같은 말을 또 한다.
+      const t = (entry.part === '3' ? loadToday(it.id) : loadToday(it.id, entry.part)) || {};
+      markNotified(it.id, entry.part || '3', t);
+    } catch (e) { console.error('정정알림 발송 실패:', e.message); }
   }
   console.log(`📢 [monitor] 정정 알림 발송: ${sent}/${entry.items.length}명`);
   res.json({ ok: true, sent, total: entry.items.length });
@@ -684,8 +713,10 @@ app.post('/api/board-notify-adhoc', gate, async (req, res) => {
       if (!idset.has(m.id)) continue;
       const today = (part === '3' ? loadToday(m.id) : loadToday(m.id, part)) || {};
       const cm = currentStateMsg(pl, m.board_name, today);
-      try { await broadcast({ title: cm.title, body: cm.body, url: '/', level: 'high', bypassQuiet: true }, m.id); sent++; }
-      catch (e) { console.error('사후 정정알림 발송 실패:', e.message); }
+      try {
+        await broadcast({ title: cm.title, body: cm.body, url: '/', level: 'high', bypassQuiet: true }, m.id); sent++;
+        markNotified(m.id, part, today);      // 같은 장부 — 자동이 뒤따라 또 보내지 않게
+      } catch (e) { console.error('사후 정정알림 발송 실패:', e.message); }
     }
     console.log(`📢 [monitor] 사후 정정 알림(수동 선택) 발송: ${sent}/${ids.length}명`);
     res.json({ ok: true, sent });
