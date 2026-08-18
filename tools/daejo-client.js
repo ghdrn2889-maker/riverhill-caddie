@@ -203,7 +203,12 @@
       origOcc[v][part] = sortOcc(origOcc[v][part].concat([slot]).map(cp));
       if (!interns[part].has(key)) {
         const T = teeV[v][part];
-        T.splice(sortedIdx(T, key), 0, slot);
+        // ★이미 그 칸이 배치에 있으면 넣지 않는다.
+        //  검사는 origOcc(199행), 삽입은 teeV라 두 배열이 갈라질 수 있다 — setIntern이 teeV에서만
+        //  칸을 빼내기 때문이다(184행). 갈라진 뒤 같은 시각을 추가하면 검사를 통과해 사본이 하나 더
+        //  들어갔고, 그러면 두 순번이 같은 티오프를 갖는다. 표는 한 시각에 한 명만 그리므로
+        //  뒤 사람이 화면에서 사라진다(8/18 실사고: 17:35에 둘, 17:56에 셋, 18:03에 셋).
+        if (slotAt(T, key) < 0) T.splice(sortedIdx(T, key), 0, slot);
       }
     } else {
       origOcc[v][part] = origOcc[v][part].filter((s) => K(s.time, s.course) !== key);
@@ -709,10 +714,31 @@
       //  서버가 그 걸러진 목록을 '오늘 인턴의 전부'로 알아듣고 수동 지정을 통째로 지웠다.
       //  반영했더니 인턴이 날아간 이유다. 전체 목록을 따로 보내 그 판단을 서버가 안 하게 한다.
       allInterns: [...interns[part]].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
-      cutLine: real.length,
+      // ★커트는 '티오프가 있는 사람 수'이고, 명단을 넘을 수 없다.
+      //  예전엔 real.length였다 — 팀을 추가할 때마다 splice로 배열이 길어져서, 명단 21명인데
+      //  커트가 24가 됐다(8/18). 화면은 커트만큼 줄을 그리니 뒤 세 줄이 빈칸으로 남았다.
+      cutLine: Math.min(real.filter(Boolean).length, roster[part].filter((x) => String(x || '').trim()).length),
       notify: false,   // 알림은 여기서 안 보낸다 — 정정 알림은 '배치표 검수' 탭에서 미리보기 후 발송.
     };
   }
+  // ★깨진 배치는 아예 보내지 않는다 — 반영이 끝난 뒤에 알아채면 되돌릴 방법이 마땅치 않다.
+  //  8/18 실사고: 같은 시각에 두세 명이 겹친 채로 반영돼 배치표에 그대로 저장됐고, 표는 한 시각에
+  //  한 명만 그리므로 다섯 명이 화면에서 사라졌다. 사람이 흔적을 뒤져 찾아낼 일이 아니다.
+  function payloadProblems(part, p) {
+    const bad = [];
+    const seen = new Map();
+    for (const r of p.rows) {
+      if (!r.tee) continue;
+      const k = K(r.tee, r.course);
+      if (seen.has(k)) bad.push(`${part}부 ${k} — ${seen.get(k)}번과 ${r.pos}번이 같은 칸`);
+      else seen.set(k, r.pos);
+      if (!String(r.name || '').trim()) bad.push(`${part}부 ${r.pos}번 — 티오프는 있는데 이름이 없음`);
+    }
+    const names = p.rows.filter((r) => String(r.name || '').trim()).length;
+    if (p.cutLine > names) bad.push(`${part}부 커트 ${p.cutLine} — 명단 ${names}명보다 큼`);
+    return bad;
+  }
+
   // ★관리자가 손댄 부만 보낸다. 안 건드린 부까지 보내면 그 부 회원까지 다시 계산되고
   //  잠금(_adminLock)이 걸린다 — 손대지도 않은 사람의 상태를 얼려버리는 짓이다.
   //  '손댔다' = 지금 화면에 저장 안 된 변경이 있거나, 테스트판이 그 부를 덮고 있거나.
@@ -738,6 +764,13 @@
     if (!live) { state.textContent = '샘플에서는 반영할 수 없습니다.'; return; }
     const lines = applySummary();
     if (!lines.length) { state.textContent = '반영할 게 없습니다 — 고친 부가 없어요.'; return; }
+    const problems = [];
+    for (const part of PARTS) if (touched(part)) problems.push(...payloadProblems(part, realPayload(part)));
+    if (problems.length) {
+      state.textContent = '반영하지 않았습니다 — ' + problems[0] + (problems.length > 1 ? ` 외 ${problems.length - 1}건` : '');
+      alert(['배치가 어긋나 반영하지 않았습니다. 아래를 고치고 다시 눌러주세요.', ''].concat(problems).join(String.fromCharCode(10)));
+      return;
+    }
     const msg = '실제 배치표를 앱에 반영합니다. 회원 대시보드가 바뀝니다.\n\n'
       + lines.join('\n')
       + '\n\n고친 부만 보냅니다. 카카오 예상 칸은 넘기지 않습니다. 알림은 나가지 않습니다.\n계속할까요?';
