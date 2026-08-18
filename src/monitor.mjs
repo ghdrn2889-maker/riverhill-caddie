@@ -806,11 +806,14 @@ app.get('/daejo', gate, (req, res) => {
   try {
     const J = buildDaejoData(String(req.query.date || ''));
     if (!J.parts || !Object.keys(J.parts).length) return res.status(503).send('아직 판독된 배치표가 없습니다.');
-    res.set('Cache-Control', 'no-cache').type('html').send(renderDaejo(J));
+    // ★no-store — 이 페이지는 배치표 데이터를 HTML 안에 박아서 보낸다(window.__DAEJO_BOARD).
+    //  no-cache는 '쓰기 전에 물어보라'일 뿐이라 304가 오면 브라우저가 캐시본을 그대로 다시 그린다.
+    //  그래서 서버를 고쳐도 화면이 안 바뀌었고, 고친 사람도 보는 사람도 한나절을 헛돌았다(8/18).
+    res.set('Cache-Control', 'no-store, must-revalidate').set('Pragma', 'no-cache').type('html').send(renderDaejo(J));
   } catch (e) { console.error('대조판 오류:', e.message); res.status(500).send('대조판 생성 실패: ' + e.message); }
 });
 app.get('/api/daejo-data', gate, (req, res) => {
-  try { res.json({ ok: true, ...buildDaejoData(String(req.query.date || '')) }); }
+  try { res.set('Cache-Control', 'no-store').json({ ok: true, ...buildDaejoData(String(req.query.date || '')) }); }
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
