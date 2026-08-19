@@ -1032,6 +1032,30 @@
       declare(part, body, (which === 'first' ? '첫' : '마지막') + ' 티오프 ' + toHM(next));
     });
   });
+  // 격자 밖 칸 끼워넣기·빼기 — 7분 배수가 깨지는 날(예약팀이 팀을 하나 더 받으려고 칸을 끼운 날).
+  document.querySelectorAll('.pctl button[data-ins]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const part = b.dataset.ins;
+      const box = b.closest('.pctl');
+      const lo = box.querySelector('b[data-fv="first"]').textContent.trim();
+      const hi = box.querySelector('b[data-fv="last"]').textContent.trim();
+      const v = prompt([part + '부에 끼워넣을 칸 (' + lo + '~' + hi + ' 사이)',
+        '예: 17:30 OUT   ·   17:30 IN'].join(String.fromCharCode(10)), '');
+      if (v == null) return;
+      const m = String(v).match(/(\d{1,2}:\d{2})\s*(IN|OUT|인|아웃)?/i);
+      if (!m) { state.textContent = '시각을 못 알아들었습니다 — 17:30 OUT 처럼 적어주세요.'; return; }
+      const course = /IN|인/i.test(m[2] || '') ? 'IN' : 'OUT';
+      declare(part, { slot: m[1] + '|' + course, on: true }, '칸 ' + m[1] + ' ' + course + ' 끼워넣기');
+    });
+  });
+  document.querySelectorAll('.pctl button[data-del]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const part = b.dataset.del, k = b.dataset.k;
+      if (!confirm(part + '부에서 ' + k.replace('|', ' ') + ' 칸을 뺍니다. 계속할까요?')) return;
+      declare(part, { slot: k, on: false }, '칸 ' + k.replace('|', ' ') + ' 빼기');
+    });
+  });
+
   // 투웨이 ↔ 원웨이 — 세 상태를 한 버튼이 돈다. 기본은 투웨이다.
   document.querySelectorAll('.pctl button[data-ow]').forEach((b) => {
     b.addEventListener('click', () => {

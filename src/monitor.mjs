@@ -23,7 +23,7 @@ import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
 import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
-import { setPartRange, setPartOneway, clearPart, dayFrameParts } from './dayframe.mjs';
+import { setPartRange, setPartOneway, setPartSlot, clearPart, dayFrameParts } from './dayframe.mjs';
 import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
@@ -877,7 +877,10 @@ app.post('/api/daejo-frame', gate, (req, res) => {
     const base = (J.sched?.base || {})[part];      // 기본틀 — 여기로 돌아오면 선언을 지운다
     const cur = (J.sched?.parts || {})[part];      // 지금 이 부의 실제 범위 — 검사 기준
     const cadence = Number(J.sched?.cadence) || 7;
-    if (req.body?.reset) clearPart(date, part, { by: '모니터' });
+    if (req.body?.slot) {                       // 격자 밖 칸 넣고 빼기 — "17:30|OUT"
+      const [t, c] = String(req.body.slot).split('|');
+      setPartSlot(date, part, t, c || 'OUT', req.body.on !== false, { by: '모니터', range: base });
+    } else if (req.body?.reset) clearPart(date, part, { by: '모니터' });
     else if (req.body?.oneway !== undefined) setPartOneway(date, part, req.body.oneway, { by: '모니터' });
     else setPartRange(date, part, { first: req.body?.first, last: req.body?.last, cur, base, cadence, by: '모니터' });
     const now = dayFrameParts(date)[part] || null;

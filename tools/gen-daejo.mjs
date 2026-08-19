@@ -23,12 +23,25 @@ const K = (time, course) => `${toHM(toMin(time))}|${String(course).toUpperCase()
 
 // 고정 격자 — 이 표가 대조의 바닥이다.
 const cadence = Number(sched.cadence) || 7;
+// 그 부에 사람이 끼워넣은 격자 밖 칸 — "17:30|OUT" 꼴.
+//  ★7분 배수는 원칙이지 법이 아니다. 예약팀은 팀을 하나 더 받으려고 격자 사이에 칸을 끼운다
+//   (실측 8/18 3부 17:30 — 순번 10만 5분 앞당겨지고 11번은 17:35를 그대로 받았다).
+//   격자만 그리면 그 팀은 화면에 아예 없어서 볼 수도 고칠 수도 없다.
+const extraOf = (part) => ((sched.declared?.[part] || {}).extra || []).map(String);
+const extraKeys = new Set(['1', '2', '3'].flatMap((p) => extraOf(p).map((k) => `${p}|${K(k.split('|')[0], k.split('|')[1])}`)));
+const extraMins = (part) => new Set(extraOf(part).map((k) => toMin(k.split('|')[0])));
+const onGrid = (part, mins) => {
+  const p = sched.parts?.[part]; if (!p) return true;
+  return (mins - toMin(p.first)) % cadence === 0;
+};
+
 function slotsOf(part) {
   const p = sched.parts?.[part]; if (!p) return [];
   const a = toMin(p.first), b = toMin(p.last);
-  const rows = [];
-  for (let t = a; t <= b; t += cadence) rows.push(t);
-  return rows;
+  const rows = new Set();
+  for (let t = a; t <= b; t += cadence) rows.add(t);
+  for (const m of extraMins(part)) rows.add(m);      // 끼운 칸도 한 줄을 차지한다
+  return [...rows].sort((x, y) => x - y);
 }
 
 // 카카오가 '찼다'고 본 칸 / '판매중'인 칸 / '보류'
@@ -83,6 +96,10 @@ const CMP = { 1: compareOf('1'), 2: compareOf('2'), 3: compareOf('3') };
 
 function cell(part, mins, course) {
   const key = K(toHM(mins), course);
+  // ★끼운 행의 반대편 코스는 '없는 칸'이다. 격자 행처럼 그리면 있지도 않은 팀이 하나 더 생긴다.
+  if (!onGrid(part, mins) && !extraKeys.has(`${part}|${key}`)) {
+    return `<td class="c none" data-t="${toHM(mins)}" data-c="${course}" data-p="${part}"></td>`;
+  }
   const bp = boardPos[part].get(key);
   const isBooked = bookedSet.has(key);
   const partUnsure = unsureSet.has(`${part}|${course}`);
@@ -128,12 +145,17 @@ function partCtl(part) {
   //  두 끝은 따로 움직인다 — 앞만 늘리면 46팀, 앞뒤를 다 늘리면 48팀이다.
   const span = (a, b) => (toMin(a) && toMin(b) && toMin(b) >= toMin(a)) ? Math.floor((toMin(b) - toMin(a)) / cadence) + 1 : 0;
   const rowsNow = span(cur.first, cur.last), rowsBase = span(base.first, base.last);
-  const teamsNow = rowsNow * (dec.oneway ? 1 : 2), teamsBase = rowsBase * 2;
+  // ★끼워넣은 칸도 팀이다 — 애초에 팀을 하나 더 받으려고 끼운 것이니 세지 않으면 뜻이 없다.
+  //  격자 행 계산에서는 빠져 있다(그 시각은 격자 위에 없다). 코스 하나당 한 팀이므로 개수 그대로 더한다.
+  const insN = (dec.extra || []).length;
+  const teamsNow = rowsNow * (dec.oneway ? 1 : 2) + insN, teamsBase = rowsBase * 2;
   const cnt = rowsNow
-    ? `<span class="cnt${teamsNow !== teamsBase ? ' dec' : ''}" title="기본틀 ${teamsBase}팀(${rowsBase}시각 &times; 2코스)">${rowsNow}시각 &middot; <b>${teamsNow}</b>팀${teamsNow !== teamsBase ? ` <i>(기본 ${teamsBase})</i>` : ''}</span>`
+    ? `<span class="cnt${teamsNow !== teamsBase ? ' dec' : ''}" title="기본틀 ${teamsBase}팀(${rowsBase}시각 &times; 2코스)${insN ? ` &middot; 끼워넣은 칸 ${insN}` : ''}">${rowsNow}시각${insN ? ` +${insN}칸` : ''} &middot; <b>${teamsNow}</b>팀${teamsNow !== teamsBase ? ` <i>(기본 ${teamsBase})</i>` : ''}</span>`
     : '';
   return `<div class="pctl" data-p="${part}">
     <span class="cl">시각</span>${edge('first', cur.first)}<span class="cs">&mdash;</span>${edge('last', cur.last)}${cnt}
+    <button type="button" class="ins" data-ins="${part}" title="격자 밖 시각에 칸을 하나 끼워넣습니다(예: 17:30 OUT). 7분 배수가 깨지는 날에 씁니다.">＋칸</button>
+    ${(dec.extra || []).map((k) => `<button type="button" class="chip" data-del="${part}" data-k="${esc(k)}" title="이 칸을 뺍니다">${esc(k.replace('|', ' '))} &times;</button>`).join('')}
     <button type="button" class="ow${dec.oneway ? ' on' : ''}" data-ow="${part}" title="투웨이 &rarr; OUT만 &rarr; IN만 순으로 바뀝니다. 카카오 엔진이 곧바로 읽습니다.">${dec.oneway ? `원웨이 ${dec.oneway}만` : '투웨이'}</button>
     ${(dec.first || dec.last || dec.oneway) ? `<button type="button" class="rev" data-rev="${part}" title="이 부의 선언을 거두고 기본틀(${esc(base.first || '-')}&ndash;${esc(base.last || '-')} &middot; 투웨이)로 되돌립니다">기본틀</button>` : ''}
   </div>`;
@@ -142,7 +164,7 @@ function partCtl(part) {
 function partTable(part) {
   const rows = slotsOf(part);
   if (!rows.length) return '';
-  const body = rows.map((t) => `<tr>${cell(part, t, 'OUT')}<th class="t">${toHM(t)}</th>${cell(part, t, 'IN')}</tr>`).join('\n');
+  const body = rows.map((t) => `<tr>${cell(part, t, 'OUT')}<th class="t${extraMins(part).has(t) ? ' ins' : ''}"${extraMins(part).has(t) ? ' title="격자 밖에 끼워넣은 칸"' : ''}>${toHM(t)}</th>${cell(part, t, 'IN')}</tr>`).join('\n');
   const n = (snap.byPart?.[part] || []).length;
   const c = CMP[part];
   return `<section class="part">
@@ -272,6 +294,10 @@ body.realview .parts{outline:2px solid var(--warn);outline-offset:6px;border-rad
 .pctl .cnt b{min-width:0;font-size:12px;color:var(--ink)}
 .pctl .cnt.dec b{color:var(--warn)}
 .pctl .cnt i{font-style:normal;opacity:.7;font-size:10px}
+.pctl button.ins{font-weight:700}
+.pctl button.chip{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);font-weight:700}
+th.t.ins{color:var(--warn);font-weight:700;box-shadow:inset 3px 0 0 var(--warn)}
+td.c.none{background:repeating-linear-gradient(135deg,var(--open),var(--open) 5px,transparent 5px,transparent 10px);cursor:default}
 .pctl button.ow{margin-left:auto;font-weight:600}
 .pctl button.ow.on{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
 .pctl button.rev{color:var(--dim)}

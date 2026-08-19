@@ -53,6 +53,7 @@ function put(date, part, patch, by) {
   const cur = { ...(rec.parts[p] || {}), ...patch };
   // 빈 선언은 남기지 않는다 — '아무 말도 안 한 상태'와 '기본틀과 같다고 말한 상태'는 같아야 한다.
   for (const f of ['first', 'last', 'oneway']) if (!cur[f]) delete cur[f];
+  if (Array.isArray(cur.extra) && !cur.extra.length) delete cur.extra;
   if (Object.keys(cur).length) rec.parts[p] = cur; else delete rec.parts[p];
   rec.at = Date.now(); rec.by = String(by || '관리자').slice(0, 40);
   if (!Object.keys(rec.parts).length) delete all[k];
@@ -93,9 +94,36 @@ export function setPartOneway(date, part, oneway, { by } = {}) {
   return put(date, part, { oneway: c }, by);
 }
 
+// ── 격자 밖 칸 끼워넣기 ──────────────────────────────────────────
+//  ★7분 배수는 원칙이지 법이 아니다. 예약팀은 팀을 하나 더 받으려고 격자 사이에 칸을 끼운다.
+//   실측 2026-08-18 3부: 순번 10이 17:35 → 17:30으로 앞당겨졌고, 11번은 17:35를 그대로 받았다.
+//   즉 한 칸이 통째로 새로 생긴 것이고 그 앞사람만 밀렸다 — 끝을 늘린 것도, 전체가 민 것도 아니다.
+//  ★그날 그 칸은 대조판에도 없고(격자에 행이 없다) 카카오 여집합에도 없다(기준틀 밖이라 판정 대상이 아니다).
+//   팀이 하나 더 있는데 두 경로 모두 모른다. 그래서 사람이 '여기 칸이 하나 더 있다'고 말할 자리가 필요하다.
+//  ★기준표에는 안 적는다 — 그날 하루의 사정이지 기본틀이 바뀐 게 아니다.
+export function setPartSlot(date, part, time, course, on = true, { by, range } = {}) {
+  const m = toMin(time);
+  if (m == null) throw new Error('시각이 이상합니다(예: 17:30)');
+  const c = String(course || 'OUT').toUpperCase();
+  if (!COURSES.includes(c)) throw new Error('코스는 OUT·IN만');
+  if (m < DAY_MIN || m > DAY_MAX) throw new Error('하루 밖의 시각입니다');
+  // 그 부의 시간대 안이어야 한다 — 3부 격자에 06:23을 끼우는 건 실수지 사정이 아니다.
+  if (range) {
+    const a = toMin(range.first), b = toMin(range.last);
+    if (a != null && b != null && (m < a || m > b)) throw new Error(`${part}부 시간대(${range.first}~${range.last}) 밖입니다`);
+  }
+  const k = `${toHM(m)}|${c}`;
+  const all = load();
+  const cur = { ...((all[dateKey(date)]?.parts || {})[String(part)] || {}) };
+  const set = new Set(Array.isArray(cur.extra) ? cur.extra : []);
+  if (on) set.add(k); else set.delete(k);
+  return put(date, part, { extra: [...set].sort() }, by);
+}
+export const partExtras = (date, part) => ((dayFrameParts(date)[String(part)] || {}).extra || []).slice();
+
 // 그 부의 선언을 통째로 거둔다 — 기본틀로 되돌리기.
 export function clearPart(date, part, { by } = {}) {
-  return put(date, part, { first: '', last: '', oneway: '' }, by);
+  return put(date, part, { first: '', last: '', oneway: '', extra: [] }, by);
 }
 
 // ── 선언을 칸 목록에 적용한다 ────────────────────────────────────────
@@ -136,6 +164,17 @@ export function reframeSlots(slots, { cadence = 7, courses = COURSES, frame = {}
     for (let t = lo; t <= hi; t += cadence) for (const c of cs) {
       if (seen.has(`${t}|${c}`)) continue;
       const s = { part: p, mins: t, time: toHM(t), course: c };
+      out.push(s); added.push(s);
+    }
+  }
+  // ★격자 밖에 끼운 칸 — 부에 원래 칸이 하나도 없어도 넣는다(그 자체가 사람이 말한 사실이다).
+  for (const [p, d] of Object.entries(frame)) {
+    for (const k of (Array.isArray(d?.extra) ? d.extra : [])) {
+      const [t, c] = String(k).split('|');
+      const m = toMin(t);
+      if (m == null || !cs.includes(c)) continue;
+      if (out.some((s) => s.part === p && s.mins === m && s.course === c)) continue;
+      const s = { part: p, mins: m, time: toHM(m), course: c, inserted: true };
       out.push(s); added.push(s);
     }
   }

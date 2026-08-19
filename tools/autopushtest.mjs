@@ -67,5 +67,21 @@ ok(currentStateMsg('3부', '김홍구', { status: 'assigned', teeTime: '17:35', 
 ok(currentStateMsg('3부', '박신훈', { status: 'off', offType: 'vacation' }).body.includes('휴가'), '휴무 종류를 구분한다');
 ok(currentStateMsg('1부(조출)', '연승준', { status: 'spare', myPosition: 21 }).body.includes('스페어'), '스페어 문구');
 
-console.log(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
+// ── ④ 격자 밖 티오프 감지 ───────────────────────────────────────────
+//  8/18 3부 17:30 — 예약팀이 팀을 하나 더 받으려고 격자 사이에 끼운 칸. 판독이 봤을 때 알아채야 한다.
+{
+  const { reframeSlots } = await import('../src/dayframe.mjs');
+  const { fixedSlots } = await import('../src/kakaogolf.mjs');
+  const base = fixedSlots();
+  const r = reframeSlots(base, { cadence: 7, courses: ['OUT', 'IN'], frame: { 3: { extra: ['17:30|OUT'] } } });
+  const p3 = r.slots.filter((x) => x.part === '3' && x.course === 'OUT').map((x) => x.time);
+  const i = p3.indexOf('17:30');
+  ok(i > 0 && p3[i - 1] === '17:28' && p3[i + 1] === '17:35', `끼운 칸이 시각 자리에 들어간다 (…${p3[i - 1]} ${p3[i]} ${p3[i + 1]}…)`);
+  ok(r.added.length === 1 && r.added[0].inserted, '끼운 칸은 하나만 늘고 표시가 남는다');
+  ok(!r.slots.some((x) => x.part === '3' && x.time === '17:30' && x.course === 'IN'), '반대 코스는 지어내지 않는다(17:30 IN 없음)');
+  const back = reframeSlots(base, { cadence: 7, courses: ['OUT', 'IN'], frame: { 3: { extra: [] } } });
+  ok(back.slots.length === base.length, '칸을 빼면 원래 격자로 돌아온다');
+}
+
+console.log(fail ? `\n★ ${fail}개 실패(끼워넣기 포함)` : '\n★ 전부 통과(끼워넣기 포함)');
 process.exit(fail ? 1 : 0);

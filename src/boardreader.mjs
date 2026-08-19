@@ -12,6 +12,8 @@ import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColum
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
+import { fixedSlots, flexSlots } from './kakaogolf.mjs';
+import { partExtras } from './dayframe.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -169,6 +171,29 @@ function _teeConflicts(tees) {
     if (arr.length > 2 || arr.filter((c) => /IN/.test(c)).length > 1 || arr.filter((c) => /OUT/.test(c)).length > 1) bad.push(tm);
   }
   return bad;
+}
+
+// ── 격자 밖 티오프 — 팀이 끼워진 신호 ────────────────────────────────
+//  ★7분 배수는 원칙이지 법이 아니다. 예약팀은 팀을 하나 더 받으려고 격자 사이에 칸을 끼운다.
+//   실측 2026-08-18 3부: 순번 10이 17:35 → 17:30으로 앞당겨졌고 11번은 17:35를 그대로 받았다.
+//   그날 그 칸은 대조판 격자에도 없고(행이 없다) 카카오 여집합에도 없다(기준틀 밖이라 판정 안 함).
+//   팀이 하나 더 있는데 두 경로 모두 몰랐고, 사람이 손으로 일지를 고쳐야 했다.
+//  ★고칠 수는 없다 — 골프장이 정하는 일이다. 그러나 '알아채는 것'은 우리 몫이다.
+//   판독이 격자에 없는 시각을 봤다면 그건 오독이거나 끼워진 칸이고, 둘 다 사람이 봐야 한다.
+//  ★이미 관리자가 '＋칸'으로 넣어둔 칸은 아는 칸이므로 다시 안 알린다.
+function _offGridTees(tees, part, dateKey = '') {
+  const ok = new Set([...fixedSlots(), ...flexSlots()]
+    .filter((f) => String(f.part) === String(part)).map((f) => f.time));
+  for (const k of partExtras(dateKey, part)) ok.add(String(k).split('|')[0]);
+  const hm = (n) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+  const out = new Set();
+  for (const t of (tees || [])) {
+    const m = String((t && t.time) || t || '').match(/(\d{1,2}):(\d{2})/);
+    if (!m) continue;
+    const norm = hm(+m[1] * 60 + +m[2]);          // "6:23"과 "06:23"을 같은 것으로 본다
+    if (!ok.has(norm)) out.add(norm);
+  }
+  return [...out].sort();
 }
 
 // ── ★티오프 사다리 — 줄 단위 판독을 순번↔시각으로 조립하고 '기계적으로' 검증한다 ──
@@ -689,6 +714,8 @@ export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
       if (holes.length) raiseBoardIssue({ kind: 'roster_holes', part: Number(p), holes: holes.slice(0, 30), rosterLen: (pd.roster || []).length, cut: pd.cut || 0 });
       const tconf = _teeConflicts(pd.tee || []);
       if (tconf.length) raiseBoardIssue({ kind: 'tee_conflict', part: Number(p), times: tconf });
+      const off = _offGridTees(pd.tee || [], p, pd.dateKey || '');
+      if (off.length) raiseBoardIssue({ kind: 'offgrid_tee', part: Number(p), times: off });
     }
     // 시도 단위로만 알 수 있는 손상(3부 홀리스틱 티오프 하단 누락) — 그 시도가 채택됐을 때만 전달됨.
     for (const it of attemptIssues) raiseBoardIssue(it);
