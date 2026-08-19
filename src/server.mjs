@@ -38,6 +38,7 @@ import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
+import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts, claudeDutyList } from './boardreader.mjs';
@@ -1465,9 +1466,33 @@ function reconcileCrossPartConsistency(dateLabel) {
   } catch (e) { console.error('[대바 정합 오류]', e.message); }
 }
 
+// ── 1·2부 '수정배치표' 자동 판독 잠금 (MINOR_PART_UPDATE=0) ──────────────────
+//  ★관리자 요청(2026-08-19): 전날 올라오는 본배치표에서 1·2부는 그대로 읽되, 그 뒤에 올라오는
+//   수정·변동 배치표가 1·2부를 다시 읽어 덮는 것만 멈춘다. 그 과정이 계속 사고를 냈다 —
+//   본배치표가 2부 명단 31명을 제대로 읽어놨는데 뒤이은 "2부 8팀 시간표입니다"가 8명으로 덮었다(8/19).
+//
+//  판정은 추측이 아니라 계수다 — 그 부에 '이 근무일의 판독본'이 이미 있으면 이번 글은 수정본이다.
+//   · 판독본 없음 / 지난 근무일  → 아직 첫 판독이다. 읽는다.
+//   · 근무일이 다르다(내일 본배치표) → 새 날의 본배치표다. 읽는다.
+//   · 같은 근무일에 이미 판독본  → 수정본이다. 3부만 읽고 1·2부는 그대로 둔다.
+//
+//  ★막는 것은 '자동 판독'뿐이다. 관리자 교정(board-correct)·대조판 반영은 이 문을 안 지나므로
+//   손으로 고치는 길은 그대로 열려 있다. /api/simulate?minor=1 도 통과시킨다(일부러 다시 읽히는 길).
+//  ★3부는 한 줄도 안 건드린다.
+const frozenLog = (part, subject) => console.log(
+  `·  [${part}부 수정배치표 잠금] 자동 판독 멈춤(MINOR_PART_UPDATE=0) — 본배치표 판독본 ${keptCount(part)}명 유지: ${String(subject || '').slice(0, 40)}`);
+
 async function handleStandalonePartBoard(full, part, opts = {}) {
   const primary = envMember();
   const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
+  // ★판독(judge) 앞에서 막는다 — 뒤에서 막으면 크레딧은 이미 쓴 뒤다.
+  if (minorReadFrozen(part, '', opts)) {
+    const kept = keptCount(part);
+    frozenLog(part, full.subject);
+    try { appendJSONL('part-detect.jsonl', { at: Date.now(), kind: 'standalone_board_frozen', part,
+      articleId: String(full.id || ''), subject: String(full.subject || '').slice(0, 40), kept }); } catch { /* noop */ }
+    return { pushed: false, push: 'low', relevant: true, title: '', body: full.subject || '', standalonePart: part, frozen: true };
+  }
   const win = partWindow(part);
   const mp = { name: primary.name, part, commuteMin: primary.commuteMin, teeMin: win.min, teeMax: win.max };
   const outP = await judge(full, loadToday(1, part), mp);   // 그 부로만 판독(3부 판독 안 함)
@@ -1729,7 +1754,12 @@ async function notifyForArticle(full, result = {}, opts = {}) {
             const meta = { at: Date.now(), dateLabel: out.rawVerdict?.dateLabel || '', subject: full.subject || '',
               image: (full.images && full.images[0]) || '', url: full.url || '', scope: _sc.parts, scopeSource: _sc.source };
             // ★명단이 있는 부만 저장 — 빈 명단으로 형제 부를 덮지 않도록(오독 방어).
-            for (const p of ['1', '2']) if (mparts[p] && Array.isArray(mparts[p].roster) && mparts[p].roster.length) setBoardPart(full.id, meta, full, p, mparts[p]);
+            const _fISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '';
+            for (const p of ['1', '2']) {
+              if (!(mparts[p] && Array.isArray(mparts[p].roster) && mparts[p].roster.length)) continue;
+              if (minorReadFrozen(p, _fISO, opts)) { frozenLog(p, full.subject); continue; }
+              setBoardPart(full.id, meta, full, p, mparts[p]);
+            }
             console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
             // ★조출(1부) 회원 대시보드 복구 — MINOR_PART_PUSH 꺼져도 '조출'처럼 배치표에 명시 태그된 고신뢰
             //  1부 배정은 회원 today1에 반영(대시보드·일지). 이미 읽은 1부 캐시만 사용(추가 판독·Gemini 0),
@@ -1798,6 +1828,12 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       const isText = !isBoardImg && chgKw && (cfg.word || cfg.time);
       const run = (isBoardImg && (hasTable || isFullBoard)) || isText;
       if (!run) { if (isBoardImg) console.log(`·  [${p}부] 스킵 — 이 배치표엔 ${p}부 표 없음(크레딧 절약): ${full.subject}`); continue; }
+      // ★수정배치표 잠금 — 판독(judge) 앞에서 막는다. 뒤에서 막으면 크레딧은 이미 쓴 뒤다.
+      //  회원 처리(today1/today2)도 이 아래에 있으므로 함께 멈춘다 — 그게 관리자가 멈추라고 한 그 과정이다.
+      if (minorReadFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts)) {
+        frozenLog(p, full.subject);
+        continue;
+      }
       if (!hasTable && isFullBoard) console.log(`·  [${p}부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 ${p}부 확인: ${full.subject}`);
       if (isText) console.log(`·  [${p}부] 텍스트 변동 감지 — 이미지 없이 글로 온 ${p}부 변동 판독: ${full.subject}`);
       const win = partWindow(p);
