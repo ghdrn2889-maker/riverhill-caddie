@@ -120,7 +120,10 @@ export function scoreDay(dateYYYYMMDD, { labelToISO = () => '' } = {}) {
     config: { closeLead: Number(process.env.KAKAO_SALE_CLOSE_LEAD || 70),
       blindOn: ['1', 'true', 'yes'].includes(String(process.env.KAKAO_BLIND || '').toLowerCase()),
       hold: holdSlots().map((f) => K(f.time, f.course)), flex: flexSlots().map((f) => K(f.time, f.course)),
-      frame: fixedSlots().length, snapSeen: Number(snap.seenCount || 0) } };
+      frame: fixedSlots().length, snapSeen: Number(snap.seenCount || 0),
+      // ★선언이 늘려 만든 칸을 판정에서 뺀 목록 — 이 규칙 전후로 정확도를 갈라 볼 수 있어야 한다
+      //  (8/19 3부 18:52 OUT/IN이 이 규칙 없이 허위 팀이 됐다).
+      grownSkipped: Array.isArray(snap.grownSkipped) ? snap.grownSkipped : [] } };
 }
 
 // 하루치를 채점해 남긴다. 같은 날을 여러 번 불러도 마지막 것이 최신이다(추가만 한다 — 기록은 안 지운다).

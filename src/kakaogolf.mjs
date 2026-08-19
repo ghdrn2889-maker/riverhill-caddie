@@ -435,6 +435,20 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   //  대조표 데이터가 섞인 것처럼 보였다). 사라진 게 아니라 '판정 대상에서 빠진' 것이었다.
   //  판정은 한 번만 하면 된다. 뒤집는 사실은 하나뿐 — 그 칸이 다시 판매중이 되는 것(=취소)이고,
   //  그건 아래에서 openSet이 알아서 걸러낸다.
+  // ★선언으로 '범위를 늘려' 새로 생긴 칸 — 우리가 만든 칸이지 카카오가 파는 칸이 아니다.
+  //  관리자가 말한 건 '그날 꼬리가 여기까지'이지 '거기 팀이 있다'가 아니다. 그런데 카카오 목록엔
+  //  그 칸이 아예 없으니 영영 판매중으로 안 뜨고, 여집합이 그대로 '찼다'로 읽었다.
+  //  실사고 8/19: 3부 last를 18:52로 선언한 17초 뒤 관측에서 18:52 OUT·IN이 통째로 허위 팀이 됐다
+  //  (기준표 3부 끝은 18:45 — 18:52는 선언이 만들어낸 칸이다).
+  //  ★'끼워넣기(extra)'는 다르다 — 그건 사람이 '여기 팀을 끼웠다'고 말한 것이라 찼다고 보는 게 맞다.
+  //   그래서 inserted 표식이 있는 칸은 건드리지 않는다.
+  //  ★영원히 모른다고 하지도 않는다 — 그 칸이 실제로 팔리는 걸 보면(오늘이든 지난 날짜든)
+  //   카카오 재고에 있는 칸이므로 그때부터는 보통 칸으로 판정한다.
+  const frameGrown = new Set(framed.added.filter((s) => !s.inserted).map((s) => key(s.mins, s.course)));
+  const neverSold = (k) => !everOpenKeys.has(k) && !((sell[k] || []).length);
+  const grownSkip = new Set([...frameGrown].filter(neverSold));
+  if (grownSkip.size) console.log(`[카카오골프] ${dateYYYYMMDD} 선언으로 늘어난 칸 ${grownSkip.size}개 — 카카오가 판 적 없어 판정하지 않음(${[...grownSkip].join(', ')})`);
+
   const prevConfirmed = new Set(prevSnap?.confirmedKeys || []);
   const confirmed = new Set();
   const booked = [], skipped = [];
@@ -442,6 +456,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     const k = key(f.mins, f.course);
     const ck = `${f.part}|${f.course}`;
     if (openSet.has(k)) continue;                                          // 아직 팔리는 중 = 안 참(취소도 여기로 돌아온다)
+    if (grownSkip.has(k)) { skipped.push(f); continue; }                    // 선언이 늘려 만든 칸 — 카카오에 없던 칸이라 못 판정
     if (blind.has(k)) { skipped.push(f); continue; }                        // 카카오가 안 파는 칸 — 찼는지 영영 모른다
     if (idle.has(ck) || unsure.has(ck)) { skipped.push(f); continue; }      // 안 도는 코스·판단보류
     if (pulled.has(k)) { skipped.push(f); continue; }                       // 캐디가 동나 내려간 칸 — 팀이 없다
@@ -459,6 +474,13 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   for (const ck of idle) {
     const [p, c] = ck.split('|');
     if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => x.course !== c);
+  }
+  // 선언이 늘려 만든 칸도 걷어낸다 — 규칙이 생기기 전에 쌓인 허위 팀이 최대치에 그대로 남아 있다.
+  for (const k of grownSkip) {
+    const [t, c] = k.split('|');
+    for (const p of Object.keys(peakByPart)) {
+      if (Array.isArray(peakByPart[p])) peakByPart[p] = peakByPart[p].filter((x) => !(x.time === t && x.course === c));
+    }
   }
   // 선언으로 틀에서 빠진 칸도 걷어낸다 — 최대치는 줄지 않는 값이라 두면 허위 팀이 하루 종일 남는다.
   for (const d of framed.dropped) {
@@ -492,6 +514,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
     blind: [...blind].sort(),
     blindSeen: [...blindSeen].sort(),
     blindOn: BLIND_ON,
+    grownSkipped: [...grownSkip],                    // 선언이 늘려 만들어 판정에서 뺀 칸(계측을 가르는 근거)
     closeLead,                                     // 관측으로 배운 판매 마감선(분). 안 봤으면 0.
     everOpenCount: Math.max(Number(prevSnap?.everOpenCount || 0), open.length),   // 이 날짜에서 본 최대 판매중 칸 수(고장 감지용)
     skippedCount: skipped.length,
