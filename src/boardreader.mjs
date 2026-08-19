@@ -270,6 +270,50 @@ async function teeShadow(crop, rcols, part, oldTee, cut) {
   } catch (e) { console.error('[티오프 섀도우] 오류:', e.message); }
 }
 
+// 티오프 구제 — 가운데 부의 티오프 표가 '다음 부 시작점'에 잘렸을 때만 부 크롭을 넓혀 다시 읽는다.
+//  ★2부는 티오프 표가 명단 오른쪽 끝(=3부 바로 앞)에 있다. 위 크롭이 여유 0으로 next.x0에서 끊으므로
+//    경계 추정이 조금만 왼쪽으로 빗나가면 IN 열이 통째로 사라진다.
+//    실측 8/20 #27438: 컷 16인데 티오프 10개가 전부 OUT, 빠진 2,3,5,7,11,16이 정확히 IN 열이었다.
+//  ★열 경계(rcols)에 기대지 않는다 — 실측해 보니 rcols 오른끝이 OUT 열을 삼켜서, 그걸 기준으로 자르면
+//    구제 크롭에 OUT이 안 들어온다. 부 크롭 자체를 오른쪽으로 조금 넓혀 같은 부 판독을 한 번 더 돌린다.
+//  ★넓힌 크롭에서 '명단은 버리고 티오프만' 가져온다 — 옆 부 이름이 섞여 들어와도 쓰지 않으므로
+//    교차 부 오염이 구조적으로 불가능하다(과거 사고의 재발 경로를 원천 차단).
+//  ★증거가 있을 때만(컷 안에 빈 순번이 있을 때만) 돈다. 멀쩡하면 호출을 안 태운다.
+const TEE_RESCUE_SPILL = 0.02;            // 다음 부 시작점 너머로 더 보는 폭
+async function rescueTee({ img, tee, bx0, next, part, cut }) {
+  try {
+    if (String(process.env.TEE_RESCUE || '1') === '0') return tee;
+    if (!next || !(Number(cut) > 0)) return tee;             // 마지막 부는 이미 우측 여유(margin)가 있다
+    const have = new Set((tee || []).map((t) => Number(t.pos)).filter((n) => n > 0));
+    const miss = [];
+    for (let n = 1; n <= cut; n++) if (!have.has(n)) miss.push(n);
+    if (!miss.length) return tee;                            // 빈 자리가 없으면 손대지 않는다
+    if (claudeBudgetLeft() < TEE_SHADOW_MIN_BUDGET) { console.log(`·  [티오프 구제] 부${part} 예산 부족(${claudeBudgetLeft()}) — 건너뜀`); return tee; }
+    const x1 = Math.min(1, (Number(next.x0) || 0) + TEE_RESCUE_SPILL);
+    if (!(x1 > Number(bx0))) return tee;
+    const tmp = path.join(TMP, `teerescue_${part}_${Date.now()}.png`);
+    try { await runPy({ image: img, crop_only: tmp, slice: { x0: bx0, x1, margin: 0, y1: 0.73 }, scale: 6 }, 30000); }
+    catch (e) { console.error('[티오프 구제] 크롭 실패:', e.message); return tee; }
+    const wide = await readPartWithClaude(tmp);              // ★명단은 안 쓴다 — tee만 꺼낸다
+    try { fs.unlinkSync(tmp); } catch { /* noop */ }
+    if (!wide || !Array.isArray(wide.tee)) return tee;
+    const pos = wide.tee.map((t) => Number(t.pos)).filter((n) => n > 0);
+    const fresh = new Set(pos);
+    const d = teeDiff(tee, wide.tee);
+    // ★채택 조건 셋 — 하나라도 어기면 원래 판독을 그대로 둔다(구제가 사고가 되면 안 된다).
+    //   ①원래 있던 순번의 시각이 하나도 안 바뀔 것(줄 밀림 없음) ②컷을 넘는 순번이 없을 것(옆 부 숫자 유입)
+    //   ③실제로 더 채웠을 것.
+    const over = pos.filter((n) => n > cut);
+    const ok = d.diff.length === 0 && !over.length && fresh.size > have.size;
+    console.log(`·  [티오프 구제] 부${part} 컷${cut} · 빈 순번 ${miss.join(',')} → 재판독 ${fresh.size}칸(기존 ${have.size}) ${ok ? '채택' : '거부'}`
+      + `${d.diff.length ? ' | 시각 어긋남 ' + d.diff.slice(0, 3).join(', ') : ''}`
+      + `${over.length ? ' | 컷 초과 순번 ' + over.slice(0, 5).join(',') : ''}`);
+    appendJSONL('tee-rescue.jsonl', { at: Date.now(), part: Number(part), cut, missBefore: miss, before: have.size,
+      after: fresh.size, adopted: ok, diffN: d.diff.length, over, x0: bx0, x1 });
+    return ok ? wide.tee : tee;
+  } catch (e) { console.error('[티오프 구제] 오류:', e.message); return tee; }
+}
+
 // 두 사다리 비교 — 같은 순번에 붙은 시각이 다른 곳을 센다(섀도우 판정의 근거).
 export function teeDiff(a, b) {
   const A = new Map((a || []).filter((x) => Number(x.pos) > 0).map((x) => [Number(x.pos), String(x.time || '')]));
@@ -558,6 +602,8 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
       //  같은 배치표에서 숫자로 확인한다("고쳐봤습니다"로 끝내지 않기 위한 장치).
       if (attempt === 0) await teeShadow(cropPath, rcols, b.part, r.tee, cut);   // ★첫 시도에만 — 재시도마다 따라 돌면 호출만 태운다
       try { fs.unlinkSync(cropPath); } catch { /* noop */ }
+      // ★티오프 구제 — 컷 안에 빈 순번이 있으면(=표가 잘렸다는 신호) 시각표만 넓게 다시 잘라 읽는다.
+      r.tee = await rescueTee({ img, tee: r.tee, bx0: b.x0, next, part: b.part, cut });
       // ★자가검증(3부 교정 원리 이식) — 1·2부는 그동안 어떤 완전성 검사도 없이 조용히 통과했다.
       //  고치지는 못해도(고치려면 재판독=비용) '이상하다'를 남겨 모니터·사람이 잡게 한다. 3부의 grid_short와 같은 취지.
       const holes = _rosterHoles(roster);
