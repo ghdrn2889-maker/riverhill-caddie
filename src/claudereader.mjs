@@ -532,7 +532,38 @@ function noteCall(kind, ms, ok, extra = {}) {
   }
 }
 
-function runClaude(prompt, kind = '기타') {
+// ── 타임아웃 재시도 ──────────────────────────────────────────────────
+//  ★실측(8/19, 3부 배치표 43KB): 홀리스틱 판독은 62·91·124초에 끝났다. 한도는 600초 —
+//   이미 실측 최장의 5배다. 그러니 600초를 넘긴 호출은 '느린 것'이 아니라 '매달린 것'이고,
+//   한도를 더 올리면 낫는 게 아니라 그만큼 더 오래 멈춰 있게 된다(재확인 루프가 recheckBusy로
+//   막혀 그 시간 내내 새 배치표를 못 읽는다). 매달림의 약은 기다림이 아니라 다시 부르기다.
+//  ★재시도는 한 번만, 타임아웃일 때만. exit 코드나 spawn 실패는 다시 불러도 같은 이유로 죽는다.
+//  ★재시도 한도는 더 짧게 잡는다(실측 최장의 약 2배). 첫 판이 매달렸는데 두 번째까지 10분을
+//   더 기다리면, 고치려던 '파이프라인이 오래 잡히는' 문제를 오히려 키운다.
+const RETRY_ON = () => !['0', 'false', 'no', 'off'].includes(String(process.env.CLAUDE_RETRY_ON_TIMEOUT ?? '1').toLowerCase());
+const RETRY_TIMEOUT_MS = Number(process.env.CLAUDE_RETRY_TIMEOUT_MS || 240000);
+
+// 다시 부를 것인가 — 순수 판정(테스트가 이걸 표로 확인한다).
+export function shouldRetry({ why, attempt, budgetLeft, on = true }) {
+  if (!on) return false;
+  if (why !== 'timeout') return false;          // 매달림만 다시 부른다
+  if (attempt >= 2) return false;               // 한 번만
+  return budgetLeft > 0;                        // 하루 상한이 남아 있을 때만
+}
+
+async function runClaude(prompt, kind = '기타') {
+  try {
+    return await runClaudeOnce(prompt, kind, CLAUDE_TIMEOUT_MS, 1);
+  } catch (e) {
+    const why = e.message === '타임아웃' ? 'timeout' : 'other';
+    if (!shouldRetry({ why, attempt: 1, budgetLeft: claudeBudgetLeft(), on: RETRY_ON() })) throw e;
+    console.warn(`[claude] ${kind} 타임아웃 → 한 번 다시 부릅니다(한도 ${Math.round(RETRY_TIMEOUT_MS / 1000)}초)`);
+    bumpCalls();                                 // 재시도도 실제 호출이다 — 상한은 호출 수를 센다
+    return await runClaudeOnce(prompt, kind, RETRY_TIMEOUT_MS, 2);
+  }
+}
+
+function runClaudeOnce(prompt, kind, capMs, attempt) {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
@@ -544,10 +575,10 @@ function runClaude(prompt, kind = '기타') {
     let out = '', err = '';
     const timer = setTimeout(() => {
       p.kill('SIGKILL'); _claudeTimeouts += 1;
-      noteCall(kind, Date.now() - t0, false, { why: 'timeout', got: out.length });
-      console.error(`[claude] 타임아웃 — ${kind} ${Math.round((Date.now() - t0) / 1000)}초 (한도 ${Math.round(CLAUDE_TIMEOUT_MS / 1000)}초, 받은 글자 ${out.length})`);
+      noteCall(kind, Date.now() - t0, false, { why: 'timeout', got: out.length, attempt, capMs });
+      console.error(`[claude] 타임아웃 — ${kind} ${Math.round((Date.now() - t0) / 1000)}초 (한도 ${Math.round(capMs / 1000)}초, ${attempt}번째 시도, 받은 글자 ${out.length})`);
       reject(new Error('타임아웃'));
-    }, CLAUDE_TIMEOUT_MS);
+    }, capMs);
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { err += d; });
     p.on('error', (e) => { clearTimeout(timer); noteCall(kind, Date.now() - t0, false, { why: 'spawn', msg: String(e.message).slice(0, 80) }); reject(e); });
@@ -558,7 +589,7 @@ function runClaude(prompt, kind = '기타') {
         noteCall(kind, ms, false, { why: `exit${code}`, msg: err.slice(0, 80) });
         return reject(new Error(`claude exit ${code}: ${err.slice(0, 200)}`));
       }
-      noteCall(kind, ms, true, { bytes: out.length });
+      noteCall(kind, ms, true, { bytes: out.length, attempt });
       resolve(out);
     });
   });
