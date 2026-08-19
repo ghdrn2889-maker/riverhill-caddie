@@ -46,6 +46,12 @@
   const K = (t, c) => toHM(toMin(t)) + '|' + (/IN/i.test(c) ? 'IN' : 'OUT');
   const bare = (x) => String(x || '').replace(/\([^)]*\)/g, '').trim();
   const tagOf = (x) => { const m = String(x || '').match(/\(([^)]*)\)/); return m ? m[1].trim() : ''; };
+  // ★부 태그(54·1,3·2,3)는 '자리'가 아니라 '사람'의 성질이다 — 그 사람이 어느 부를 뛰는지다.
+  //  자리에 남겨두면 남의 근무가 엉뚱한 사람에게 붙는다(실측 8/20 2부 9번 "조하빈(1,3)").
+  const PART_TAG_RE = /^(54|1[,、]\s*3|2[,、]\s*3)$/;
+  const partsWord = (list) => { const a = [...list].map(String).sort(); return a.length === 3 ? '54' : (a.length === 2 ? a.join(',') : ''); };
+  // 아는 게 많을수록 높다 — 54 > 1,3/2,3 > 없음. 이걸로 '깎아내리기'를 막는다.
+  const tagRank = (t) => (t === '54' ? 3 : (PART_TAG_RE.test(String(t || '')) ? 2 : 0));
 
   // 두 축을 따로 들고 다닌다.
   const roster = {}, rosterOrig = {};      // 순번 → 이름(태그 포함)
@@ -500,6 +506,44 @@
   const nk = (x) => bare(x).replace(/\s/g, '');
   const placedIn = (part) => new Set(roster[part].map(nk).filter(Boolean));
   const elsewhere = (name) => PARTS.filter((p) => placedIn(p).has(nk(name)));
+
+  // 새로 앉는 사람 '자신의' 태그 — 판독 원본에서 가져온다. 배치로는 알 수 없는 것(찾근·조출·후출)만.
+  //  부 태그는 여기서 안 준다. 그건 retagParts가 실제 배치를 보고 세운다.
+  const ownTag = (name) => {
+    const k = nkd(name);
+    for (const p of PARTS) {
+      const hit = ((BOARD[p] || {}).roster || []).find((x) => nkd(x) === k);
+      const t = hit ? tagOf(hit) : '';
+      if (t && !PART_TAG_RE.test(t)) return t;
+    }
+    return '';
+  };
+
+  // ── 부 태그를 실제 배치에서 다시 세운다 ──
+  //  ★손댄 부만 고친다 — 안 연 부가 조용히 바뀌면 관리자는 자기가 뭘 저장하는지 모른다.
+  //  ★세 부 명단이 다 올라온 날만 손댄다 — 1부가 안 실린 날 파생하면 진짜 (1,3)이 소리 없이 사라진다.
+  //  ★깎아내리지 않는다 — 판독이 읽은 (54)를 (1,3)으로 줄이지 않는다.
+  //   안 보이는 부는 '없다'가 아니라 '모른다'다. 모르는 걸 안다고 쓰면 그게 다음 사고가 된다.
+  //  ★근태성 태그(찾근·조출·후출…)는 파생 대상이 아니다 — 배치에 안 적혀 있는 사실이라 지어내면 안 된다.
+  function retagParts(...only) {
+    if (!PARTS.every((p) => (roster[p] || []).some((x) => nkd(x)))) return [];
+    const scope = only.length ? only.map(String) : PARTS;
+    const out = [];
+    for (const p of scope) {
+      const arr = roster[p] || [];
+      for (let i = 0; i < arr.length; i++) {
+        const nm = bare(arr[i]);
+        if (!nm) continue;
+        const tg = tagOf(arr[i]);
+        if (tg && !PART_TAG_RE.test(tg)) continue;
+        const want = partsWord(elsewhere(nm));
+        if (want === tg || tagRank(tg) > tagRank(want)) continue;
+        arr[i] = nm + (want ? '(' + want + ')' : '');
+        out.push(p + '부 ' + (i + 1) + '번 ' + nm + ' ' + (tg ? '(' + tg + ')' : '태그 없음') + ' → ' + (want ? '(' + want + ')' : '태그 없음'));
+      }
+    }
+    return out;
+  }
   // ★고른 사람 · 넣을 상태. 상태는 부와 무관하게 하나만 둔다(한 번에 한 가지를 넣는다).
   //  ★기본을 '스페어'로 두되 통째로 밀어 넣는 버튼은 두지 않는다 —
   //   서랍에 남은 사람은 '오늘 이 부에 안 잡힌 전부'라서 휴무·휴가·병가·다른 부 근무가 섞여 있다.
@@ -563,10 +607,13 @@
     const st = String(state || '스페어');
     if (DUTIES.includes(st)) setDuty(part, nm, st);
     const work = teeV.real[part].length;
+    // ★두 부에 다 앉게 되면 그 사실이 태그로 드러나야 한다(두 탕은 앞 순번을 차지한다).
+    const retag = retagParts(part);
     return part + '부 ' + pos + '번에 ' + nm + ' 넣음'
       + (DUTIES.includes(st) ? ' — ' + st + '(으)로 표시했습니다'
         : (pos <= work ? ' — 뒤 순번이 한 칸씩 밀렸고 맨 뒤 근무자가 스페어로 내려갔습니다' : ' — 스페어로 들어갔습니다'))
-      + ' · 명단 ' + n + ' → ' + (n + 1) + '명';
+      + ' · 명단 ' + n + ' → ' + (n + 1) + '명'
+      + (retag.length ? ' · 부 태그 ' + retag.join(' · ') : '');
   }
 
   // ★두 보기의 배치를 모두 담는다. 인턴 하나를 켜면 양쪽 배치가 같이 움직이는데
@@ -645,11 +692,14 @@
       else crossMark[p].set(k, src);
     };
     markOrClear(pa, nb, pb); markOrClear(pb, na, pa);
+    // ★두 사람이 부를 옮겼으니 부 태그도 따라 움직여야 한다 — (1,3)이던 사람이 2부로 가면 (2,3)이다.
+    const retag = retagParts(pa, pb);
     paint(pa); paint(pb);
     const seat = (p, i) => { const t = (teeV.real[p] || [])[i - 1]; return t ? t.time + ' ' + t.course : '스페어'; };
     return pa + '부 ' + ia + '번 ' + bare(na) + '(' + seat(pa, ia) + ') ↔ '
       + pb + '부 ' + ib + '번 ' + bare(nb) + '(' + seat(pb, ib) + ') 부 간 맞바꿈'
-      + ' · 티오프는 자리에 그대로 · 두 부 모두 반영해야 합니다';
+      + ' · 티오프는 자리에 그대로 · 두 부 모두 반영해야 합니다'
+      + (retag.length ? ' · 부 태그 ' + retag.join(' · ') : '');
   }
   const pos0 = (p) => p - 1;
   function applyMove(part, from, to, target) {
@@ -1007,13 +1057,23 @@
     if (mode === 'name') {
       if (!pos) { state.textContent = '이 칸엔 배정된 순번이 없습니다.'; return; }
       const cell = roster[part][pos - 1] || '';
-      const next = prompt(part + '부 ' + pos + '번 — 이름', bare(cell));
-      if (next == null || next.trim() === bare(cell)) return;
+      const was = bare(cell);
+      const next = prompt(part + '부 ' + pos + '번 — 이름', was);
+      if (next == null) return;
+      const nm = next.trim();
+      if (!nm || nm === was) return;
       push(part);
-      const tg = tagOf(cell);
-      roster[part][pos - 1] = next.trim() + (tg ? '(' + tg + ')' : '');
+      // ★앞사람 태그를 물려주지 않는다. (54)·(1,3)은 자리가 아니라 '그 사람이 어느 부를 뛰는지'다.
+      //  자리에 남겨두면 남의 근무가 엉뚱한 사람에게 붙는다 — 8/20 2부 9번이 "조하빈(1,3)"이 된 경위다.
+      //  철자만 고친 경우(같은 사람)에는 그대로 둔다. 그게 원래 이 태그 보존이 있던 이유다.
+      const same = nkd(nm) === nkd(was);
+      const keep = same ? tagOf(cell) : ownTag(nm);
+      roster[part][pos - 1] = nm + (keep ? '(' + keep + ')' : '');
+      const fixed = retagParts(part);
       paint(part);
-      state.textContent = part + '부 ' + pos + '번 → ' + next.trim();
+      state.textContent = part + '부 ' + pos + '번 → ' + nm + (keep ? '(' + keep + ')' : '')
+        + (same ? '' : (tagOf(cell) ? ' · 앞사람 태그(' + tagOf(cell) + ')는 함께 옮기지 않았습니다' : ''))
+        + (fixed.length ? ' · 부 태그 ' + fixed.join(' · ') : '');
       return;
     }
 
