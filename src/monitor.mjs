@@ -7,10 +7,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { loadEnv, ROOT_DIR } from './env.mjs';
 import { computeStats, computeBoardParts, effectivePart3Verdict } from './analytics.mjs';
-import { listMembersForAdmin, setUserStatus, setUserRole, getUser, getProfile, activeMembers, deleteUser, adminUserIds } from './users.mjs';
+import { listMembersForAdmin, setUserStatus, setUserRole, getUser, getProfile, activeMembers, deleteUser } from './users.mjs';
 import { seedTesterData } from './testerseed.mjs';
 import { startWatchdog } from './watchdog.mjs';
-import { initPush, broadcast, getSubscriptions } from './push.mjs';
+import { broadcast, broadcastOps, getSubscriptions, initPush } from './push.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict, clearTodayPart } from './today.mjs';
 import { commuteInfo, dayWordFor, interpretForMember, partWindow } from './judge.mjs';
 import * as worklog from './worklog.mjs';
@@ -1068,9 +1068,8 @@ startWatchdog({
       console.log(`[감시] 시스템 진단(${report.severity}) 기록됨 — push 억제(모니터 사이트에서 확인): ${(report.rootCause || '').slice(0, 120)}`);
       return;
     }
-    for (const id of adminUserIds()) {
-      try { await broadcast({ title: `시스템 진단(${report.severity}) — 확인 필요`, body, url: '/', level: 'high', bypassQuiet: true }, id); }
-      catch (e) { console.error('[감시] 관리자 알림 실패:', e.message); }
-    }
+    // 운영 통로 — 회원 알림 장부에 섞이지 않는다.
+    try { await broadcastOps({ title: `시스템 진단(${report.severity}) — 확인 필요`, body, url: '/', level: 'high', bypassQuiet: true }); }
+    catch (e) { console.error('[감시] 관리자 알림 실패:', e.message); }
   },
 });

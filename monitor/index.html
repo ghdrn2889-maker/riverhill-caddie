@@ -590,6 +590,9 @@
     <div class="sectlab">알림 발송</div>
     <div class="grid">
       <div class="panel full"><h2>회원별 발송 알림</h2><p class="desc" id="pushRange">각 회원에게 어떤 알림이 어떤 문구로 갔는지 · 발송 없는 회원도 표시 · 전달(도달/구독 기기)</p><div id="pushTbl"></div></div>
+      <div class="panel full"><h2>운영 알림 <span class="tag i">관리자 전용</span></h2>
+        <p class="desc" id="opsRange">시스템 사정을 알리는 알림(판독 확인 필요 · 시스템 진단 · 네이버 쿠키 만료 · 새 캐디 가입) — 회원에게는 가지 않습니다. 회원 알림 장부와 따로 쌓입니다.</p>
+        <div id="opsTbl"></div></div>
     </div>
   </div>
 
@@ -855,6 +858,24 @@
     $('feedTbl').innerHTML = fd.length? ('<table><thead><tr><th>시각</th><th>상태</th><th>제목</th><th>메시지</th></tr></thead><tbody>'+
       fd.map(function(f){ var st = f.status||'—'; var cls = st==='assigned'||st==='work'?'g':(st==='spare'||st==='waiting'?'i':(st==='off'?'b':'')); return '<tr><td class="num">'+rel(f.at)+'</td><td><span class="tag '+cls+'">'+esc(st)+'</span></td><td class="tx">'+esc(f.subject).slice(0,36)+'</td><td>'+esc((f.aiMessage||'').split('\n')[0]).slice(0,46)+'</td></tr>'; }).join('')+
       '</tbody></table>') : '<div class="muted">피드가 없습니다.</div>';
+
+    // 운영 알림(관리자 전용) — 회원 알림과 다른 장부에서 읽는다.
+    var op = s.ops || {};
+    if ($('opsRange')) $('opsRange').innerHTML = '시스템 사정을 알리는 알림 — 회원에게는 가지 않습니다 · '
+      + '오늘 <b>' + n(op.today || 0) + '건</b> · 최근 7일 <b>' + n(op.week || 0) + '건</b>';
+    if ($('opsTbl')) {
+      var oi = op.items || [];
+      $('opsTbl').innerHTML = oi.length
+        ? ('<table><thead><tr><th>시각</th><th>제목</th><th>내용</th><th>도달</th></tr></thead><tbody>'
+          + oi.map(function(o){
+              var dv = (o.sent==null) ? '—' : (o.sent + '/' + (o.devices==null?'?':o.devices));
+              var cls = (o.sent===0) ? ' style="color:var(--bad)"' : '';
+              return '<tr><td class="num">' + rel(o.at) + '</td><td class="tx"><b>' + esc(o.title) + '</b></td>'
+                + '<td>' + esc(String(o.body||'').slice(0,70)) + '</td><td class="num"' + cls + '>' + dv + '</td></tr>';
+            }).join('')
+          + '</tbody></table>')
+        : '<div class="muted">최근 7일 운영 알림이 없습니다. (조용한 게 좋은 소식입니다)</div>';
+    }
 
     // 회원별 발송 알림(어제~오늘)
     var pk = s.pushes || {};

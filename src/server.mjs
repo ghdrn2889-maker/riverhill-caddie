@@ -6,7 +6,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { initPush, addSubscription, broadcast, flushDeferred } from './push.mjs';
+import { addSubscription, broadcast, broadcastOps, flushDeferred, initPush } from './push.mjs';
 import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
@@ -171,7 +171,7 @@ app.post('/api/profile', requireAuth, (req, res) => {
       setUserStatus(req.user.id, 'active');
       approved = true;
       console.log(`✅ [가입] #${req.user.id} ${boardName} 명부 매칭 → 자동 승인(active)`);
-      broadcastAdmins({ title: '새 캐디 가입', body: `${boardName}님이 명부 확인되어 자동 가입했어요. 문제 있으면 회원관리에서 차단하세요.`, url: '/' }).catch(() => {});
+      broadcastAdmins({ title: '새 캐디 가입', body: `${boardName}님이 명부 확인되어 자동 가입했습니다. 문제가 있으면 회원관리에서 차단해주세요.`, url: '/', bypassQuiet: false }).catch(() => {});
     } else {
       console.log(`⏳ [가입] #${req.user.id} ${boardName} 명부 미매칭 → 가입 대기(pending)`);
     }
@@ -295,11 +295,12 @@ app.post('/api/journal/remove', (req, res) => {
   res.json({ ok });
 });
 
-// 관리자 전용 알림 발송 — role='admin' 계정들의 기기에만. (네이버 쿠키 만료·테스트 등 운영성 알림)
-//  일반 회원(테스터 등)에게는 절대 가지 않는다. 관리자 계정이 없으면 조용히 아무것도 안 보냄.
-async function broadcastAdmins(msg) {
-  for (const id of adminUserIds()) await broadcast(msg, id);
-}
+// 관리자 전용 알림 — 이제 '운영 통로'(push.mjs broadcastOps)로 나간다.
+//  ★받는 사람은 전과 같다(관리자뿐). 달라진 건 장부와 대기열이다:
+//   운영 알림이 회원 알림 장부(sent-push.jsonl)에 섞이면 모니터의 회원 피드가 잡음으로 덮이고,
+//   발송 관문의 '오늘 이미 N건 보냄'도 그 숫자를 세서 관리자가 자기 회원 알림을 못 본다.
+//  ★bypassQuiet 기본값은 부르는 쪽이 정한다 — 급한 것(판독 손상)은 밤에도, 아닌 것(쿠키 만료)은 아침에.
+const broadcastAdmins = (msg) => broadcastOps(msg);
 
 // 테스트용(관리자 전용): 관리자 폰으로 알림 한 번 쏴보기
 app.post('/api/test', requireAdmin, async (req, res) => {
@@ -2594,10 +2595,11 @@ startCrawler({
   },
   onCafeError: async () => {
     // 운영성 알림 → 관리자(김홍구)에게만. 일반 회원(테스터)에게는 보내지 않는다.
+    // 급한 알림은 아니다 — 밤에 깨울 일이 아니라 아침 운영 대기열로 보낸다.
     await broadcastAdmins({
       title: '네이버 쿠키 만료',
-      body: '카페 감시가 멈췄어요. .env 의 쿠키를 새로 갱신해주세요.',
-      url: '/',
+      body: '카페 감시가 멈췄습니다. .env 의 쿠키를 새로 갱신해주세요.',
+      url: '/', bypassQuiet: false,
     });
   },
 });

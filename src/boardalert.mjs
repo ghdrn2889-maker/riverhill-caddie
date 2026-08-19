@@ -11,8 +11,8 @@
 //  조용시간(22~07시) 예외: 배치표는 전날 밤에 뜬다. 손상은 그날 밤에 고쳐야 아침 근무가 산다.
 //   여기서 안 울리면 다음 기회는 사람들이 이미 출근한 뒤다 — 그래서 bypassQuiet.
 import { loadJSON, saveJSON, appendJSONL } from './store.mjs';
-import { broadcast } from './push.mjs';
-import { adminUserIds } from './users.mjs';
+import { broadcastOps } from './push.mjs';
+
 
 const STATE = 'board-alert-state.json';
 // 같은 손상으로 다시 안 울리는 창. 배치표는 재시도·시뮬레이트로 여러 번 판독되므로 이게 없으면 알림 폭풍.
@@ -88,14 +88,11 @@ export async function raiseBoardIssue(it) {
     const sig = `${it.kind}|${it.part || ''}|${detail}`;
     if (seenRecently(sig, now)) return false;
     const { title, body } = describe(it);
-    const ids = adminUserIds();
-    if (!ids.length) { console.warn('[판독손상] 관리자 계정이 없어 알림 생략 —', title); return false; }
-    for (const id of ids) {
-      try { await broadcast({ title: `판독 확인 필요 — ${title}`, body, url: '/', level: 'high', bypassQuiet: true }, id); }
-      catch (e) { console.error('[판독손상] 알림 실패:', e.message); }
-    }
-    console.log(`[판독손상] 관리자 ${ids.length}명에게 알림: ${title} — ${body}`);
-    appendJSONL('board-alert.jsonl', { at: now, sig, title, body, admins: ids.length, raw: it });
+    // ★운영 통로로 보낸다 — 회원 알림 장부·대기열과 섞이지 않는다.
+    //  밤에도 통과시킨다: 3부 배치표는 밤에 올라오고, 판독이 깨진 걸 아침에 알면 이미 늦다.
+    const r = await broadcastOps({ title: `판독 확인 필요 — ${title}`, body, url: '/', level: 'high', bypassQuiet: true });
+    if (!r.admins) return false;
+    appendJSONL('board-alert.jsonl', { at: now, sig, title, body, admins: r.admins, raw: it });
     return true;
   } catch (e) { console.error('[판독손상] 오류:', e.message); return false; }
 }

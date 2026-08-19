@@ -661,5 +661,24 @@ export function computeStats(now = Date.now()) {
     byMember: memberRows,
   };
 
-  return { generatedAt: now, members, signups, sessions: sessInfo, visits, presence, recentLogins, board, devices, health, feed, pushes, latestBoard };
+  // ── 운영 알림(sent-ops.jsonl) ──
+  //  ★회원 알림 장부와 나눠 놨다. 그래서 관리자가 볼 자리를 따로 만든다 —
+  //   안 만들면 '분리'가 아니라 '실종'이 된다(보낸 건 있는데 화면 어디에도 안 보이는 상태).
+  const opsAll = readJSONL('sent-ops.jsonl', { sinceTs: now - 7 * DAY });
+  const opsSeen = new Set();
+  const opsRows = [];
+  for (let i = opsAll.length - 1; i >= 0 && opsRows.length < 40; i--) {
+    const r = opsAll[i];
+    const k = `${r.at}|${r.title}`;                 // 관리자가 여럿이면 같은 알림이 여러 줄 — 한 줄로 본다
+    if (opsSeen.has(k)) continue;
+    opsSeen.add(k);
+    opsRows.push({ at: r.at, title: r.title || '', body: r.body || '', sent: r.sent ?? null, devices: r.devices ?? null });
+  }
+  const ops = {
+    today: opsAll.filter((p) => p.at >= startToday).length,
+    week: opsAll.length,
+    items: opsRows,
+  };
+
+  return { generatedAt: now, members, signups, sessions: sessInfo, visits, presence, recentLogins, board, devices, health, feed, pushes, ops, latestBoard };
 }
