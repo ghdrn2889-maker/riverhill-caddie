@@ -83,5 +83,35 @@ ok(currentStateMsg('1부(조출)', '연승준', { status: 'spare', myPosition: 2
   ok(back.slots.length === base.length, '칸을 빼면 원래 격자로 돌아온다');
 }
 
-console.log(fail ? `\n★ ${fail}개 실패(끼워넣기 포함)` : '\n★ 전부 통과(끼워넣기 포함)');
+// ── ⑤ 근태를 지우지 않는다 ─────────────────────────────────────────
+//  ★판독은 배치표 근태칸을 스스로 읽는다. 수동 화면이 그걸 조용히 지우면, 사람은 자기가
+//   뭘 망가뜨렸는지도 모른다. 8/19 시점 3부에 판독이 잡아둔 휴무가 17명 있었다.
+{
+  const { nkey } = await import('../src/boardcorrect.mjs');
+  ok(nkey('표승완(54)') === '표승완', `키가 태그를 뗀다 — 판독(judge)과 같은 규칙 (${nkey('표승완(54)')})`);
+  ok(nkey('문태익(1,3)') === nkey('문태익'), '태그가 있든 없든 같은 사람은 같은 키');
+  ok(nkey('김 홍 구') === '김홍구', '공백도 뗀다');
+
+  // correctPart3의 근태 분기를 그대로 흉내내 '항목 없음'과 '빈 값'이 다름을 확인한다.
+  const apply = (crew, r) => {
+    const key = nkey(String(r.name || '').trim());
+    if (!(key && r.duty !== undefined)) return crew;
+    const d = String(r.duty || '');
+    if (/병가|휴무|휴가/.test(d)) crew[key] = d;
+    else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) crew[key] = '';
+    return crew;
+  };
+  let crew = { 도대영: '휴무', '표승완': '54h' };
+  apply(crew, { pos: 1, name: '도대영' });                       // duty 없음 = 안 만짐
+  ok(crew.도대영 === '휴무', '근태를 안 보낸 행은 건드리지 않는다(판독이 잡은 휴무가 남는다)');
+  apply(crew, { pos: 1, name: '도대영', duty: '' });             // 빈 값 = 해제하라
+  ok(crew.도대영 === '', '빈 값으로 보내면 해제된다(관리자가 명시적으로 푼 경우)');
+  crew = { 도대영: '휴무', 표승완: '54h' };
+  apply(crew, { pos: 2, name: '표승완(54)', duty: '' });
+  ok(crew.표승완 === '54h', '타부 근무 코드(54h)는 근태가 아니라 안 지워진다');
+  apply(crew, { pos: 2, name: '표승완(54)', duty: '휴가' });
+  ok(crew.표승완 === '휴가', '태그 달린 사람에게도 근태가 붙는다(전에는 다른 키로 새서 판독이 못 봤다)');
+}
+
+console.log(fail ? `\n★ ${fail}개 실패` : '\n★ 전부 통과');
 process.exit(fail ? 1 : 0);

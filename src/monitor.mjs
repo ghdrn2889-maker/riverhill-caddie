@@ -579,10 +579,15 @@ app.post('/api/board-correct', gate, async (req, res) => {
       const course = /IN/i.test(String(r.course || '')) ? 'IN' : (tee ? 'OUT' : '');
       roster[p - 1] = nm;
       if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
-      const d = String(r.duty || ''); const key = nkey(nm);
-      if (key) {
+      // ★근태는 '보낸 행'만 만진다(boardcorrect와 같은 규칙). 안 보내는 것과 '해제하라'는 다르다 —
+      //  근태를 안 싣는 화면이 반영하면 판독이 제대로 읽어둔 휴무가 통째로 지워졌다.
+      const key = nkey(nm);
+      if (key && r.duty !== undefined) {
+        const d = String(r.duty || '');
         if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
         else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) { cellDiffs.push({ pos: p, field: 'duty', model: crew[key], admin: '' }); crew[key] = ''; }
+        const legacy = String(nm).replace(/\s/g, '');
+        if (legacy !== key && crew[legacy] !== undefined && /휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[legacy]))) delete crew[legacy];
       }
       if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
       if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });

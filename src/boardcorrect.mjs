@@ -13,7 +13,11 @@ import { activeMembers } from './users.mjs';
 import { keyFromLabel } from './boardpending.mjs';
 import { internTeesFor, setManual, teeKey } from './interns.mjs';
 
-export const nkey = (s) => String(s || '').replace(/\s/g, '');
+// ★키는 '맨 이름'이다 — 태그를 뗀다. 판독(judge.mjs:424,517)이 crewDuty를 그렇게 읽기 때문이다.
+//  전에는 여기서만 태그를 남겨서, 태그 달린 사람(표승완(54)·문태익(1,3) 등 7명)은
+//  관리자가 근태를 줘도 판독이 다른 키를 보느라 못 읽었다. 회원 대조(rosterNk)도 같은 이유로 빗나갔다.
+//  두 곳이 같은 키를 써야 한다 — 안 그러면 한쪽이 쓴 것을 다른 쪽이 영영 못 본다.
+export const nkey = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '');
 
 export function loadLastBoard() {
   try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'lastboard.json'), 'utf8')); } catch { return null; }
@@ -50,10 +54,16 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     roster[p - 1] = nm;
     if (tee) grid.push({ pos: p, time: tee, course: course || 'OUT' });
     // ── 근태(휴무/병가/휴가) 오버라이드: crewDuty 반영. 54·1,3(타부 근무) 코드는 보존. ──
-    const d = String(r.duty || ''); const key = nkey(nm);
-    if (key) {
+    // ★근태는 '보낸 행'만 만진다. duty 항목 자체가 없으면 손대지 않는다.
+    //  전에는 안 보내는 것과 '해제하라'가 같았다 — 근태를 안 싣는 화면이 반영하면
+    //  판독이 제대로 읽어둔 휴무가 통째로 지워졌다(대조판이 정확히 그 상태였다).
+    //  판독이 잡아낸 것을 수동 화면이 조용히 지우는 일은 없어야 한다.
+    if (key && r.duty !== undefined) {
+      const d = String(r.duty || '');
       if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
       else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[key] || ''))) { cellDiffs.push({ pos: p, field: 'duty', model: crew[key], admin: '' }); crew[key] = ''; }
+      const legacy = String(nm).replace(/\s/g, '');           // 옛 교정이 남긴 태그 포함 키 정리
+      if (legacy !== key && crew[legacy] !== undefined && /휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[legacy]))) delete crew[legacy];
     }
     if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
     if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });

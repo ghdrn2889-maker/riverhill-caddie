@@ -76,8 +76,11 @@
   const nkd = (x) => String(x || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
   const DUTY_RE = /휴무|휴가|병가|격리|연차|반차|월차/;
   const dutyOf = (part, name) => { const v = String(duty[part][nkd(name)] || ''); return DUTY_RE.test(v) ? v : ''; };
+  const touchedDuty = {};                            // 부 → 관리자가 근태를 실제로 만진 이름들
+  for (const p of PARTS) touchedDuty[p] = new Set();
   const setDuty = (part, name, d) => {
     const k = nkd(name); if (!k) return;
+    touchedDuty[part].add(k);
     if (d) { duty[part][k] = d; return; }
     // ★비울 때는 근태만 지운다. '1,3'·'54h' 같은 타부 근무 코드는 근태가 아니라 그 사람의 근무 사실이다.
     if (DUTY_RE.test(String(duty[part][k] || ''))) duty[part][k] = '';
@@ -145,7 +148,7 @@
     origOcc.proj[p] = sortOcc(occP);
     rosterOrig[p] = roster[p].slice();
     internsOrig[p] = new Set(interns[p]);
-    dutyOrig[p] = { ...duty[p] };
+    dutyOrig[p] = { ...duty[p] }; touchedDuty[p].clear();   // 기준선을 새로 잡으면 만진 표시도 지운다
     // ★실제 축의 기본 배치는 다시 계산하지 않는다 — 배치표가 이미 'pos → 티오프' 짝을 들고 있다.
     //  전에는 팀이 있는 칸을 시각순으로 줄 세워 순번과 짝지었다(defaultAssign). 그러면 배치표가
     //  말하는 짝이 통째로 버려지고, 칸 하나만 어긋나도 그 뒤가 전부 밀린다 — 8·9가 뒤바뀌고
@@ -503,7 +506,7 @@
       tee: { real: (teeV.real[part] || []).map(cp), proj: (teeV.proj[part] || []).map(cp) },
       // 팀 목록도 담는다 — 티오프 추가·삭제가 이걸 바꾸므로 안 담으면 되돌려도 팀이 그대로 남는다.
       occ: { real: (origOcc.real[part] || []).map(cp), proj: (origOcc.proj[part] || []).map(cp) },
-      interns: new Set(interns[part]), duty: { ...duty[part] },
+      interns: new Set(interns[part]), duty: { ...duty[part] }, touched: new Set(touchedDuty[part]),
       memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
   };
 
@@ -686,7 +689,7 @@
     roster[s.part] = s.roster;
     teeV.real[s.part] = s.tee.real; teeV.proj[s.part] = s.tee.proj;
     origOcc.real[s.part] = s.occ.real; origOcc.proj[s.part] = s.occ.proj;
-    interns[s.part] = s.interns; duty[s.part] = s.duty || {};
+    interns[s.part] = s.interns; duty[s.part] = s.duty || {}; touchedDuty[s.part] = s.touched || new Set();
     idxMemo.real[s.part] = s.memo.real; idxMemo.proj[s.part] = s.memo.proj;
     paint(s.part);
     state.textContent = '되돌렸습니다.';
@@ -1028,10 +1031,16 @@
     const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
     return {
       part: part,
-      // ★근태를 반드시 같이 보낸다. 안 보내면 서버가 '해제'로 읽어 휴무가 통째로 지워진다.
+      // ★근태는 '내가 만진 사람'만 싣는다.
+      //  판독은 배치표 근태칸을 스스로 읽는다(휴무·휴가·병가). 그건 사람보다 정확할 때가 많고,
+      //  이 화면이 안 보낸다고 없어져서는 안 된다. 그래서 안 만진 행은 duty 항목 자체를 빼서
+      //  서버가 손대지 않게 한다 — '빈 값'과 '항목 없음'은 다르다.
+      //  이 화면의 근태 지식이 낡거나 이름 키가 어긋나도, 판독이 잡은 것을 지울 수는 없게 된다.
       rows: roster[part].map((cell, i) => {
         const t = real[i];
-        return { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '', duty: dutyOf(part, cell) };
+        const row = { pos: i + 1, name: String(cell || ''), tee: t ? t.time : '', course: t ? t.course : '' };
+        if (touchedDuty[part].has(nkd(cell))) row.duty = dutyOf(part, cell);
+        return row;
       }),
       interns: [...interns[part]].filter((k) => teamSet.has(k)).map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
       // ★배치표에 못 넘기는 인턴도 '없던 일'이 되면 안 된다.
@@ -1215,6 +1224,10 @@
         const gotBoard = newSlots(ob.teeGrid, nb.teeGrid);
         BOARD[p] = nb;
         roster[p] = (nb.roster || []).slice();
+        // ★근태도 같이 새로 읽는다. 안 읽으면 판독이 새로 잡은 휴무를 화면이 모르고,
+        //  그 상태로 반영하면 낡은 지식이 새 사실을 덮는다(손댄 행만 보내므로 피해는 좁지만,
+        //  화면이 틀린 걸 보여주는 것 자체가 다음 실수의 씨앗이다).
+        duty[p] = { ...(nb.crewDuty || {}) }; dutyOrig[p] = { ...duty[p] }; touchedDuty[p].clear();
         interns[p] = new Set((nb.internTees || []).map((t) => K(t.time, t.course)));
         const t = []; (nb.teeGrid || []).forEach((g) => { t[Number(g.pos) - 1] = { time: g.time, course: /IN/i.test(g.course) ? 'IN' : 'OUT' }; });
         teeOrig[p] = t;
