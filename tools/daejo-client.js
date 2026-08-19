@@ -425,24 +425,29 @@
   //   순서를 만질 때 반드시 헷갈린다(사용자 지적). 칸을 나누는 것만으로 그 실수가 사라진다.
   //  ★순번은 그대로 들고 있는다 — 배치표 명단에서 자리를 차지하는 건 사실이기 때문이다.
   //   다만 그 자리를 '대기 줄'로 보여주지 않을 뿐이다.
+  //  ★근태는 순번 명단과 별개 축이다. 실측(8/19 서버): 3부 근태 17명 중 명단에 있는 사람 0명 —
+  //   휴무자는 배치표 순번 명단에 아예 없고 근태칸에만 적힌다. 그래서 명단을 훑어서는 한 명도 못 찾는다.
+  //   근태 칸은 crewDuty 지도를 그대로 그린다. 명단에 있으면 순번을 같이 보여줄 뿐이다.
   function paintOffs(part) {
     const box = document.querySelector('.offs[data-p="' + part + '"]');
     if (!box) return;
+    const posOf = {};
+    for (let p = 1; p <= roster[part].length; p++) { const k = nkd(roster[part][p - 1]); if (k) posOf[k] = p; }
     const byDuty = {}; DUTIES.forEach((d2) => (byDuty[d2] = []));
-    for (let p = 1; p <= roster[part].length; p++) {
-      const cell = roster[part][p - 1];
-      const d2 = dutyOf(part, cell);
-      if (!d2) continue;
-      const key = DUTIES.find((x) => d2.includes(x)) || DUTIES[0];
-      byDuty[key].push({ pos: p, cell: cell });
+    for (const [k, v] of Object.entries(duty[part] || {})) {
+      const v2 = String(v || '');
+      if (!DUTY_RE.test(v2)) continue;
+      const lane = DUTIES.find((x) => v2.includes(x)) || DUTIES[0];
+      byDuty[lane].push({ name: k, pos: posOf[k] || 0 });
     }
+    for (const d2 of DUTIES) byDuty[d2].sort((a2, b2) => (a2.pos || 999) - (b2.pos || 999) || (a2.name < b2.name ? -1 : 1));
     const total = DUTIES.reduce((a2, d2) => a2 + byDuty[d2].length, 0);
-    // 편집 중이 아니고 근태자도 없으면 굳이 자리를 차지하지 않는다.
     if (!total && mode !== 'crew') { box.hidden = true; return; }
     box.innerHTML = '';
     const lb = document.createElement('span');
     lb.className = 'lb';
-    lb.textContent = '근태 ' + total + '명 — 끌어다 놓으면 그 상태가 되고, 스페어 줄로 끌면 풀립니다';
+    lb.textContent = '근태 ' + total + '명 — 끌어다 놓으면 그 상태가 되고, 스페어 줄로 끌면 풀립니다'
+      + (mode === 'crew' ? '' : ' (고치려면 ‘캐디 추가·삭제’)');
     box.appendChild(lb);
     for (const d2 of DUTIES) {
       const lane = document.createElement('div');
@@ -455,9 +460,10 @@
       }
       for (const x of byDuty[d2]) {
         const c2 = document.createElement('span');
-        c2.className = 'offc'; c2.dataset.p = part; c2.dataset.pos = String(x.pos);
-        const b2 = document.createElement('b'); b2.textContent = x.pos + '번'; c2.appendChild(b2);
-        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = bare(x.cell); c2.appendChild(nm);
+        c2.className = 'offc'; c2.dataset.p = part; c2.dataset.name = x.name;
+        if (x.pos) c2.dataset.pos = String(x.pos);
+        if (x.pos) { const b2 = document.createElement('b'); b2.textContent = x.pos + '번'; c2.appendChild(b2); }
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = x.name; c2.appendChild(nm);
         lane.appendChild(c2);
       }
       box.appendChild(lane);
@@ -488,8 +494,9 @@
     if (!box) return;
     if (mode !== 'crew') { box.hidden = true; picked.clear(); return; }
     const here = placedIn(part);
-    const left = OFFICIAL.filter((n) => n && !here.has(nk(n)));
-    for (const n of [...picked]) if (here.has(nk(n))) picked.delete(n);
+    // 근태가 붙은 사람은 이미 근태 칸에 서 있다 — 서랍에 또 두면 두 곳에 같은 사람이 보인다.
+    const left = OFFICIAL.filter((n) => n && !here.has(nk(n)) && !dutyOf(part, n));
+    for (const n of [...picked]) if (here.has(nk(n)) || dutyOf(part, n)) picked.delete(n);
     box.innerHTML = '';
     const lb = document.createElement('span');
     lb.className = 'lb';
@@ -641,9 +648,12 @@
     if (mode === 'crew') {
       // 근태 칩·스페어 칩·표의 칸 모두 끌 수 있다 — 끌어서 근태를 주고, 스페어 줄로 끌어서 푼다.
       if (!isOff(td) && !isSpare(td) && !td.dataset.t) return;
-      const part1 = td.dataset.p, from1 = posAt(part1, td);
-      if (!from1) return;
-      drag = { td: td, part: part1, from: from1, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, crew: true };
+      const part1 = td.dataset.p;
+      // ★근태 칩은 명단에 없을 수 있다(대부분 없다) — 순번이 아니라 이름으로 잡는다.
+      const name1 = isOff(td) ? String(td.dataset.name || '') : '';
+      const from1 = posAt(part1, td);
+      if (!name1 && !from1) return;
+      drag = { td: td, part: part1, from: from1, name: name1, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, crew: true };
       return;
     }
     if (!isSpare(td) && !td.dataset.t) return;
@@ -660,7 +670,9 @@
       document.body.classList.add('dragging-now');
       ghost = document.createElement('div');
       ghost.className = 'ghost';
-      ghost.textContent = drag.pool ? ('＋ ' + drag.pool) : (drag.from + '번 ' + bare(roster[drag.part][drag.from - 1]));
+      ghost.textContent = drag.pool ? ('＋ ' + drag.pool)
+        : drag.name ? drag.name
+          : (drag.from + '번 ' + bare(roster[drag.part][drag.from - 1]));
       document.body.appendChild(ghost);
       try { drag.td.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
     }
@@ -681,25 +693,22 @@
     dragEnd(false);
     const zone = zoneUnder(e.clientX, e.clientY);
     // ── 근태 줄에 놓기 = 그 상태로 만들기 · 스페어 줄에 놓기 = 근태 풀기 ──
+    //  ★근태는 순번을 주지 않는다. 명단에 없는 사람을 휴무로 놓을 때 명단에 끼워 넣으면
+    //   있지도 않은 순번이 생기고 뒤가 통째로 밀린다 — 사용자가 걱정한 그 꼬임이 바로 이것이다.
+    //   근태는 '이름 → 상태' 한 장이라 순번과 무관하게 적으면 된다(배치표도 그렇게 생겼다).
     if (zone && zone.dataset.p === d.part) {
       const lane = zone.classList.contains('offlane') ? String(zone.dataset.off || '') : '';
+      const name = d.pool || (d.name || bare(roster[d.part][d.from - 1] || ''));
+      if (!name) { state.textContent = '이름이 없는 자리입니다.'; return; }
+      const was = dutyOf(d.part, name);
+      if (lane === was) { state.textContent = `${name}은(는) 이미 ${lane || '스페어'}입니다.`; return; }
       push(d.part);
-      if (d.pool) {                                  // 서랍에서 바로 근태로
-        const msg = addCrew(d.part, d.pool, 0, lane || '스페어');
-        paint(d.part);
-        state.textContent = msg;
-        return;
-      }
-      const cell = roster[d.part][d.from - 1] || '';
-      const who = bare(cell);
-      if (!who) { stack.pop(); state.textContent = '이름이 없는 자리입니다.'; return; }
-      const was = dutyOf(d.part, cell);
-      if (lane === was) { stack.pop(); state.textContent = `${who}은(는) 이미 ${lane}입니다.`; return; }
-      setDuty(d.part, cell, lane);
+      setDuty(d.part, name, lane);
       paint(d.part);
+      const inRoster = roster[d.part].some((x) => nkd(x) === nkd(name));
       state.textContent = lane
-        ? `${d.part}부 ${d.from}번 ${who} — ${lane}` + (was ? ` (${was}에서 옮김)` : ' · 스페어 줄에서 뺐습니다')
-        : `${d.part}부 ${d.from}번 ${who} — 근태 해제, 스페어로 돌아왔습니다`;
+        ? `${name} — ${lane}` + (was ? ` (${was}에서 옮김)` : (inRoster ? ' · 스페어 줄에서 뺐습니다' : ' · 명단 순번은 주지 않았습니다'))
+        : `${name} — 근태 해제` + (inRoster ? ', 스페어로 돌아왔습니다' : ', 서랍으로 돌아갔습니다');
       return;
     }
     // ★서랍에서 끌어온 사람 — 놓은 자리가 곧 순번이다. 표 밖(스페어 줄·서랍)에 놓으면 맨 뒤로 간다.
@@ -1114,6 +1123,8 @@
     const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
     return {
       part: part,
+      // ★명단 밖 사람의 근태 — rows로는 말할 수 없다(rows는 순번 명단이다). 따로 싣는다.
+      dutySet: Object.fromEntries([...touchedDuty[part]].map((k) => [k, String(duty[part][k] || '')])),
       // ★근태는 '내가 만진 사람'만 싣는다.
       //  판독은 배치표 근태칸을 스스로 읽는다(휴무·휴가·병가). 그건 사람보다 정확할 때가 많고,
       //  이 화면이 안 보낸다고 없어져서는 안 된다. 그래서 안 만진 행은 duty 항목 자체를 빼서

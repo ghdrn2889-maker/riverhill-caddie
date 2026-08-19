@@ -37,7 +37,7 @@ export function correctionMsg(partLabel, name, s) {
 // allInterns: 화면이 들고 있는 인턴 '전부'. interns는 그중 실제 배치표에 팀이 있는 칸만이다.
 //  배치표(lastboard)에는 팀이 있는 칸만 넣고, 관리자 수동 지정에는 전부를 남긴다 —
 //  둘을 같은 목록으로 취급하면 넘길 수 없는 인턴이 지정 자체에서 지워진다(실사고).
-export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 0, notify = false, by = 'admin' }) {
+export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 0, notify = false, by = 'admin', dutySet = null }) {
   if (!Array.isArray(rows)) throw new Error('rows 필요');
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) throw new Error('현재 배치표가 없어요.');
@@ -67,6 +67,15 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     }
     if (nm !== (origRoster[p - 1] || '')) cellDiffs.push({ pos: p, field: 'name', model: origRoster[p - 1] || '', admin: nm });
     if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
+  }
+  // ★근태는 순번 명단과 별개 축이다 — 휴무자는 배치표 순번 명단에 없고 근태칸에만 적힌다
+  //  (실측: 3부 근태 17명 중 명단에 있는 사람 0명). 그래서 rows(=명단)만으로는 그들을 말할 수 없다.
+  //  dutySet은 '이름 → 근태' 한 장이다. 값이 비면 해제. 보내지 않은 이름은 건드리지 않는다.
+  for (const [nm2, d2] of Object.entries(dutySet || {})) {
+    const k = nkey(nm2); if (!k) continue;
+    const v2 = String(d2 || '');
+    if (/병가|휴무|휴가/.test(v2)) { if (crew[k] !== v2) cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k] || '', admin: v2 }); crew[k] = v2; }
+    else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[k] || ''))) { cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k], admin: '' }); crew[k] = ''; }
   }
   const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
   // ★인턴은 두 군데에 따로 살면 안 된다.

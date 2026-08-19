@@ -552,6 +552,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const cutLine = Number(req.body?.cutLine) || 0;
   const notify = !!req.body?.notify;
   const autoNotify = !!req.body?.autoNotify;
+  const dutySet = (req.body?.dutySet && typeof req.body.dutySet === 'object') ? req.body.dutySet : null;
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
   // ★깨진 배치표는 저장 자체를 안 한다. 8/18에 같은 시각에 두세 명이 겹친 채로 반영돼
   //  다섯 명이 화면에서 사라졌다. 그때 막은 건 브라우저뿐이었다 — 브라우저는 우회할 수 있고,
@@ -593,6 +594,13 @@ app.post('/api/board-correct', gate, async (req, res) => {
       if (tee !== (origGrid[p] || '')) cellDiffs.push({ pos: p, field: 'tee', model: origGrid[p] || '', admin: tee });
     }
     const iTees = interns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean);
+    // ★명단 밖 사람의 근태(3부와 같은 규칙) — 휴무자는 순번 명단에 없다.
+    for (const [nm2, d3] of Object.entries(dutySet || {})) {
+      const k = nkey(nm2); if (!k) continue;
+      const v2 = String(d3 || '');
+      if (/병가|휴무|휴가/.test(v2)) { if (crew[k] !== v2) cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k] || '', admin: v2 }); crew[k] = v2; }
+      else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[k] || ''))) { cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k], admin: '' }); crew[k] = ''; }
+    }
     pd.roster = roster; pd.teeGrid = grid; pd.crewDuty = crew; pd.internTees = iTees; pd.internCount = iTees.length;
     // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다. 여기를 안 고치면 헤더 판독값(예: 30)이
     //  그대로 남아 앱이 '확정선 38번'과 '30팀 편성'을 한 화면에 같이 띄운다(실제로 그랬다).
@@ -657,7 +665,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
   let out;
-  try { out = correctPart3({ rows, interns, allInterns, cutLine, notify }); }
+  try { out = correctPart3({ rows, interns, allInterns, cutLine, notify, dutySet }); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const auto = autoNotify ? await autoNotifyPart('3', { rows, cutLine, by: '대조판 반영' }) : null;
   res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated,
