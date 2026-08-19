@@ -4721,10 +4721,21 @@ function goSettle(then) {
   };
   tick();
 }
-const scrollToCard = (id) => {
+/* ★부드러운 스크롤(behavior:'smooth')은 '탭이 열린 뒤 아래로 훑어 내려가는' 두 번째 움직임을 만든다.
+ *   바로가기는 목적지에 '이미 도착해 있어야' 한다 — 즉시 자리를 잡고, 칸을 화면 맨 위에 붙인다.
+ *   진입 페이드(.s2.pgin)가 도는 동안은 rect가 16px 뜬 채로 잡힌다 → 다음 프레임·페이드 종료 뒤 한 번씩 더 앉힌다. */
+const scrollToCard = (id, gap = 10) => {
   const el = $(id); if (!el) return;
   const card = el.closest('.card') || el;
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const sc = card.closest('main'); if (!sc) return;
+  const place = () => {
+    if (!document.body.contains(card)) return;
+    const y = sc.scrollTop + card.getBoundingClientRect().top - sc.getBoundingClientRect().top - gap;
+    sc.scrollTo({ top: Math.max(0, y), behavior: 'auto' });
+  };
+  place();
+  requestAnimationFrame(place);
+  setTimeout(place, 460);
 };
 
 // ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
