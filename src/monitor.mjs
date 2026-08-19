@@ -20,7 +20,7 @@ import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs
 import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import * as outbox from './outbox.mjs';
-import { KINDS as NOTIFY_KINDS, compose as composeNotify, contextOf as notifyContext } from './notifytext.mjs';
+import { KINDS as NOTIFY_KINDS, compose as composeNotify, contextOf as notifyContext, partLabel as NOTIFY_PART } from './notifytext.mjs';
 import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
@@ -228,8 +228,8 @@ app.post('/api/user-status', gate, async (req, res) => {
     try {
       const nm = (getProfile(id) || {}).board_name || '회원';
       await broadcast({
-        title: '가입 승인 완료 🎉',
-        body: `${nm}님, 리버힐 캐디 앱 이용이 승인됐어요. 지금 바로 열어보세요!`,
+        title: '가입 승인 완료',
+        body: `${nm}님, 리버힐 캐디 앱 이용이 승인됐습니다.`,
         url: '/', level: 'high', bypassQuiet: true,
       }, id);
       notified = true;
@@ -271,19 +271,22 @@ app.post('/api/user-role', gate, (req, res) => {
 // ── 관리자 수동 교정: 판독이 틀렸을 때 관리자가 실제 배치표를 보고 대시보드를 바로잡음 ──
 //  교정값은 그날 자동 판독이 덮지 않도록 today.json 에 _adminLock 으로 잠근다(applyAdminLock).
 //  모든 교정은 '모델값 vs 관리자값' diff 로 admin-corrections.jsonl 에 남겨 정확도 진단에 쓴다.
-function correctionMessage(name, t, changes) {
+//  ★제목은 카탈로그가 짓는다 — 여기서 짓던 '티오프 시간 변경!'은 부도 안 붙고 느낌표가 있어
+//   다른 경로의 '{부} 티오프 변경'과 갈라져 있었다. 받는 사람은 그걸 다른 알림으로 읽는다.
+function correctionMessage(name, t, changes, part = '3') {
   const st = t.status;
+  const pl = NOTIFY_PART(part);
   const statusChg = changes.find((c) => c.field === 'status');
   const teeChg = changes.find((c) => c.field === 'teeTime');
-  if (statusChg && ['assigned', 'work', 'your_turn'].includes(st))
-    return { title: '근무 확정', body: `${name}님, 근무로 확정됐어요${t.teeTime ? ` — 티오프 ${t.teeTime}` : ''}. 배치표를 확인해주세요.` };
-  if (statusChg && ['spare', 'waiting', 'near'].includes(st))
-    return { title: '스페어 전환', body: `${name}님, 스페어(대기)로 전환됐어요.` };
-  if (statusChg && st === 'off')
-    return { title: '휴무', body: `${name}님, 오늘은 휴무로 처리됐어요.` };
   if (teeChg)
-    return { title: '티오프 시간 변경!', body: `${name}님, 티오프가 ${teeChg.from || '-'} → ${teeChg.to}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
-  return { title: '배치표 수정', body: `${name}님, 배치표 정보가 갱신됐어요. 확인해주세요.` };
+    return composeNotify('tee', notifyContext(part, name, t, { teeFrom: teeChg.from || '' }));
+  if (statusChg && ['assigned', 'work', 'your_turn'].includes(st))
+    return { title: `${pl} 근무 배정`, body: `${pl} 근무로 확정됐습니다${t.teeTime ? ` — 티오프 ${t.teeTime}` : ''}.` };
+  if (statusChg && ['spare', 'waiting', 'near'].includes(st))
+    return { title: `${pl} 스페어 전환`, body: `${pl} 스페어(대기)로 전환됐습니다.` };
+  if (statusChg && st === 'off')
+    return { title: `${pl} 휴무`, body: `${pl} 오늘은 휴무로 처리됐습니다.` };
+  return { title: `${pl} 배치표 수정`, body: `${pl} 배치표 정보가 갱신됐습니다.` };
 }
 app.post('/api/member-correct', gate, async (req, res) => {
   const id = Number(req.body?.id);
@@ -886,7 +889,7 @@ app.post('/api/board-swap', gate, async (req, res) => {
       }
       const pl = mv.to === '1' ? '1부(조출)' : `${mv.to}부`;
       const work = ['work', 'assigned', 'your_turn'].includes(nextTo.status);
-      pending.push({ id: m.id, name: m.board_name, title: `대바 반영 · ${pl}`, body: `${m.board_name}님, 대바로 ${pl} ${work ? '근무' : '배정'}가 됐어요${nextTo.teeTime ? ` — 티오프 ${nextTo.teeTime}` : ''}. 배치표를 확인해주세요.` });
+      pending.push({ id: m.id, name: m.board_name, title: `${pl} 대바 반영`, body: `${m.board_name}님, 대바로 ${pl} ${work ? '근무' : '배정'}가 됐습니다${nextTo.teeTime ? ` — 티오프 ${nextTo.teeTime}` : ''}.` });
     }
     const notifyToken = (!dryRun && notify && pushReady) ? stashNotify(pending) : null;
     if (!dryRun) console.log(`🔄 [monitor] 대바: ${aName}(${aPart}부#${aPos}) ↔ ${bName}(${bPart}부#${bPos})`);

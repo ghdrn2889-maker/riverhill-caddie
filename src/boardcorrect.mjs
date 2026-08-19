@@ -25,10 +25,10 @@ export function loadLastBoard() {
 
 // 정정 알림 문구 — '실제로 바뀐 회원'에게만 만든다(즉시 발송하지 않는다).
 export function correctionMsg(partLabel, name, s) {
-  if (s.nowOff && !s.wasOff) return { title: `${partLabel} 휴무`, body: `${name}님, ${partLabel} 오늘은 휴무로 확인됐어요. 편히 쉬세요.` };
-  if ((s.wasWait || s.wasOff) && s.nowWork && s.pos > 0) return { title: `${partLabel} 근무 전환`, body: `${name}님, ${partLabel} 근무로 확정됐어요${s.newTee ? ` — 티오프 ${s.newTee}` : ''}. 배치표를 확인해주세요.` };
-  if (s.wasWork && s.nowSpare) return { title: `${partLabel} 스페어 전환`, body: `${name}님, ${partLabel} 스페어(대기)로 전환됐어요.` };
-  if (s.wasWork && s.nowWork && s.oldTee && s.newTee && s.oldTee !== s.newTee) return { title: `${partLabel} 티오프 변경!`, body: `${name}님, ${partLabel} 티오프가 ${s.oldTee} → ${s.newTee}(으)로 변경됐어요. 출발·백대기 시각도 확인해주세요.` };
+  if (s.nowOff && !s.wasOff) return { title: `${partLabel} 휴무`, body: `${name}님, ${partLabel} 오늘은 휴무로 확인됐습니다.` };
+  if ((s.wasWait || s.wasOff) && s.nowWork && s.pos > 0) return { title: `${partLabel} 근무 배정`, body: `${name}님, ${partLabel} 근무로 확정됐습니다${s.newTee ? ` — 티오프 ${s.newTee}` : ''}.` };
+  if (s.wasWork && s.nowSpare) return { title: `${partLabel} 스페어 전환`, body: `${name}님, ${partLabel} 스페어(대기)로 전환됐습니다.` };
+  if (s.wasWork && s.nowWork && s.oldTee && s.newTee && s.oldTee !== s.newTee) return { title: `${partLabel} 티오프 변경`, body: `${name}님, ${partLabel} 티오프가 ${s.oldTee} → ${s.newTee}(으)로 바뀌었습니다. 출발·백대기 시각도 함께 바뀝니다.` };
   return null;
 }
 

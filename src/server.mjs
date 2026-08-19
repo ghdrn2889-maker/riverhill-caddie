@@ -14,6 +14,7 @@ import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
+import { compose as composeNotify, contextOf as notifyContextOf, partLabel as notifyPartLabel } from './notifytext.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
@@ -302,7 +303,7 @@ async function broadcastAdmins(msg) {
 
 // 테스트용(관리자 전용): 관리자 폰으로 알림 한 번 쏴보기
 app.post('/api/test', requireAdmin, async (req, res) => {
-  await broadcastAdmins({ title: '테스트 알림', body: '알림이 정상 작동합니다!', url: '/' });
+  await broadcastAdmins({ title: '테스트 알림', body: '알림이 정상 작동합니다.', url: '/' });
   res.json({ ok: true });
 });
 
@@ -1155,19 +1156,8 @@ function stateSig(full, ai) {
 const CHANGE_MENU_ID = process.env.CHANGE_MENU_ID || '13';     // 당일 변동사항
 const SCHEDULE_MENU_ID = process.env.SCHEDULE_MENU_ID || '2';  // 배치 시간표(배치표)
 
-// AI가 판단한 상태(status)에 맞춰 알림 제목을 정한다.
-function titleForStatus(status) {
-  switch (status) {
-    case 'your_turn': return '지금 출근 순번!';
-    case 'near':      return '곧 출근 순번!';
-    case 'assigned':  return '오늘 근무 배정됨';
-    case 'waiting':   return '3부 대기 현황';
-    case 'work':      return '출근 확정!';
-    case 'spare':     return '스페어(대기)';
-    case 'off':       return '근무 없음';
-    default:          return '새 소식';
-  }
-}
+// (알림 제목 스위치는 여기 있었지만 아무도 부르지 않는 죽은 코드였다 — 그래서 judge.mjs 쪽과
+//  조용히 갈라져 있었다. 제목은 이제 notifytext.mjs의 statusTitle 한 곳에서만 짓는다.)
 
 // 피드에 저장할 항목 (관련·무관 모두 — 데이터는 절대 안 버린다). 회원별 피드.
 function saveRecentV2(full, out, userId = 1) {
@@ -1732,6 +1722,14 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
+  // ★판독이 실패한 글은 관리자에게만, 그것도 회원 수와 무관하게 한 번만 알린다.
+  if (out.adminOnly && !opts.noPush && !opts.previewMode) {
+    try {
+      await broadcastAdmins({ title: '판독 실패 — 확인 필요',
+        body: `${full.subject || '새 글'} — 자동 판독이 실패했습니다. 회원에게는 보내지 않았습니다.`,
+        url: '/', level: 'check' });
+    } catch (e) { console.error('판독 실패 관리자 알림 오류:', e.message); }
+  }
   await rememberBoard(full, out); // 이 글이 본배치표면, 이후 '조용한 수정'을 감시하도록 기록
 
   // ── 1·2부 감지(다중 라운드: 조출·2탕·세 탕 등) — 각 부 창으로 board를 추가 판독해 today{1,2}.json에 반영. ──
@@ -2028,15 +2026,20 @@ async function processForMember(userId, member, out, full, opts = {}) {
 
   // ★★카톡發은 '배치표 감시' 전용 — 소식 피드에 절대 안 뜨고(위에서 미저장), 알림도 '실제 업무 변동'이 있을 때만.
   //  개인 카톡·잡담·개인 톡방 내용은 상황판만 조용히 스치고 알림을 내지 않는다(변동 없으면 완전 무음).
-  //  변동(reversal: 티오프 변경/근무↔스페어/취소 등)이 있을 때만 '업무 시간 변동'을 최소한으로, 원문 노출 없이 알린다.
+  //  변동(reversal)이 있고 그게 '티오프 변경'일 때만 알린다. 원문은 노출하지 않는다.
   if (isKakaoSource(full)) {
-    if (out.relevant && change.reversal && !v._uncertain) {
-      const teeChg = (change.changes || []).find((c) => c.field === 'tee');
-      title = '업무 시간 변동';
-      body = teeChg
-        ? `${member.name}님, 티오프가 ${teeChg.from} → ${teeChg.to}(으)로 변동됐어요. 출발·백대기 시각도 확인해주세요.`
-        : `${member.name}님, 업무에 변동이 있어요 — ${change.message}.`;
+    // ★'업무 시간 변동'은 없앴다(2026-08-20) — 제목만 보고는 무엇이 바뀌었는지 알 수 없어서
+    //  받는 사람이 앱을 열어야만 알 수 있었다. 그건 알림이 아니라 '앱을 열라는 재촉'이다.
+    //  다만 티오프가 바뀐 건 놓치면 시간을 놓치는 일이라, 그때는 다른 경로와 같은 말로 알린다.
+    const teeChg = (change.changes || []).find((c) => c.field === 'tee');
+    if (out.relevant && change.reversal && !v._uncertain && teeChg && teeChg.to) {
+      const t = composeNotify('tee',
+        notifyContextOf(member.part, member.name, { date: merged?.next?.date || '', teeTime: teeChg.to, course: merged?.next?.course || '' }, { teeFrom: teeChg.from }));
+      title = t.title; body = t.body;
       out.push = 'high';
+    } else if (out.relevant && change.reversal && !v._uncertain) {
+      // 무엇이 바뀌었는지 구체적으로 말할 수 없으면 아무 말도 안 한다.
+      out.push = 'low';
     } else {
       out.push = 'low'; // 변동 없음(또는 무관) → 무음. 소식·알림 어디에도 안 남김.
     }
@@ -2129,6 +2132,11 @@ async function processForMember(userId, member, out, full, opts = {}) {
   }
   // ★noPush(관리자 재판독/드라이런) — 상태·저널·상황판·검수는 모두 갱신하되 회원 기기 발송만 억제.
   if (opts.noPush) { console.log(`·  [noPush·회원${userId}] 발송 억제(상태만 갱신): ${title}`); return { pushed: false, suppressed: true, ...ret }; }
+  // ★관리자 전용 판정(판독 실패 등)은 회원 기기로 안 간다 — 상태·피드·장부는 위에서 이미 다 남겼다.
+  if (out.adminOnly) {
+    console.log(`·  [관리자전용·회원${userId}] 회원 발송 안 함: ${title}`);
+    return { pushed: false, adminOnly: true, ...ret };
+  }
   await broadcast({ title, body, url: full.url, level: out.push }, userId);
   console.log(`🔔 [회원${userId}·${out.push}${change.reversal ? '/번복' : ''}] ${title} | ${String(body).replace(/\n/g, ' ')}`);
   if (merged && merged.next && merged.next.status === 'off')   // off 알림 발송 표식 → 그날 재발송 잠금
@@ -2178,23 +2186,23 @@ function composePreview(userId, dayISO, dayW) {
   if (workParts.length >= 2) {                                   // 두 탕(1·3 등) — 통합 1건
     const combo = workParts.map((p) => `${p}부`).join('·');
     const detail = workParts.map((p) => { const s = slots[p]; return `${p}부 ${s.teeTime || '티오프 미정'}${s.course ? `(${s.course})` : ''}`; }).join(' / ');
-    return { title: `${dayW} ${combo} 근무 배정!`, body: `${name}님, ${dayW} ${combo} 근무예요.\n${detail}\n출발·백대기 시각은 앱에서 확인하세요.` };
+    return { title: `${dayW} ${combo} 근무 배정`, body: `${name}님, ${dayW} ${combo} 근무입니다.\n${detail}` };
   }
   if (workParts.length === 1) {
     const p = workParts[0], s = slots[p], pl = partLabel(p);
-    return { title: `${dayW} ${pl} 근무 배정!`, body: `${name}님, ${dayW} ${pl} 근무예요. 티오프 ${s.teeTime || '미정'}${s.course ? `(${s.course})` : ''}${s.myPosition ? ` · 순번 ${s.myPosition}번` : ''}. 배치표를 확인해주세요.` };
+    return { title: `${dayW} ${pl} 근무 배정`, body: `${name}님, ${dayW} ${pl} 근무입니다. 티오프 ${s.teeTime || '미정'}${s.course ? `(${s.course})` : ''}${s.myPosition ? ` · 순번 ${s.myPosition}번` : ''}.` };
   }
   const t3 = slots['3'];
   if (t3 && t3.status === 'off') {                               // 휴무/휴가/병가/순번 제외
     const kind = t3.offType === 'sick' ? '병가' : t3.offType === 'vacation' ? '휴가' : (t3.offReason === 'removed' ? '순번 제외' : '휴무');
-    return { off: true, title: `${dayW} ${kind}`, body: kind === '휴무' ? `${name}님, ${dayW}은 휴무로 확인됐어요. 편히 쉬세요.` : `${name}님, ${dayW}은 ${kind}로 확인됐어요.` };
+    return { off: true, title: `${dayW} ${kind}`, body: `${name}님, ${dayW}은 ${kind}로 확인됐습니다.` };
   }
   for (const p of ['3', '1', '2']) {                             // 스페어(먼 순번 포함)
     const s = slots[p];
     if (s && ['spare', 'waiting', 'near'].includes(s.status) && Number(s.myPosition) > 0) {
       const pos = Number(s.myPosition) || 0, cut = Number(s.cutLine) || 0;
       const ahead = (cut && pos > cut) ? Math.max(0, pos - cut - 1) : Math.max(0, pos - 1);
-      return { title: `${dayW} ${p}부 스페어`, body: `${name}님, ${dayW} ${p}부 스페어(대기)예요. 순번 ${pos}번${ahead ? ` · 앞에 ${ahead}명` : ' · 대기 1순위'}. 팀이 차면 알려드릴게요.` };
+      return { title: `${dayW} ${p}부 스페어`, body: `${name}님, ${dayW} ${p}부 스페어(대기)입니다. 순번 ${pos}번${ahead ? ` · 앞에 ${ahead}명` : ' · 대기 1순위'}입니다.` };
     }
   }
   return null;
@@ -2432,56 +2440,12 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
   return { pushed: true };
 }
 
-// 근무일 차량기록 리마인더: 저녁(기본 20시) 이후, 기록 비어있는 근무일이 있으면 상기 푸시.
-//  ★조용시간(22~07시) 전에 보내야 하므로 기본 20시 — 라운드는 끝난 뒤라 안전.
-async function checkWorklogReminders() {
-  try {
-    const hour = new Date().getHours();
-    if (hour < Number(process.env.REMIND_HOUR ?? 20)) return;
-    for (const day of worklog.dueReminders()) {
-      const md = `${Number(day.date.slice(5, 7))}/${Number(day.date.slice(8, 10))}`;
-      await broadcast({ title: '근무 기록 잊지 마세요', body: `${md} 근무하셨나요? 계기판 사진(집출발·직장도착·집복귀)을 앱에 등록해주세요.`, url: '/' });
-      worklog.markReminded(day.date);
-      console.log(`[리마인더] ${day.date} 차량기록 상기 발송`);
-    }
-  } catch (e) { console.error('리마인더 오류:', e.message); }
-}
-setInterval(checkWorklogReminders, 60 * 60 * 1000); // 매시간 체크(리마인드 시각 이후에만 발송)
-
-// 카트 점검 리마인더: 오늘 근무일이고, 라운드가 끝날 무렵(티오프+라운드시간)인데
-//  종료 점검(체크리스트)이 아직 미완이면 1회 상기. 고객 소지품 두고 오는 사고 방지.
-async function checkCartReminders() {
-  try {
-    const todayISO = todayISOKST();
-    const now = new Date();
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    const roundMin = Number(process.env.CART_ROUND_HOURS ?? 2.5) * 60;
-    for (const mem of activeMembers()) {
-      // 오늘 근무 라운드(1·2·3부) 중 '마지막에 끝나는' 라운드 기준 — 두 탕/세 탕이면 하루 마무리 시점에 1회.
-      //  ★카트 점검은 하루 1건(cartcheck.json)이라 라운드별 개별 알림은 안 함(모델 한계, 하루 종료 알림으로 커버).
-      let lastTeeMin = -1;
-      for (const part of ['3', '2', '1']) {
-        const t = loadToday(mem.id, part);
-        if (!t || !['assigned', 'work', 'your_turn'].includes(t.status)) continue;
-        const tISO = worklog.labelToISO(t.date);
-        if (!tISO || tISO !== todayISO) continue;       // 오늘 근무만(내일 배치표 제외)
-        const m = String(t.teeTime || '').match(/(\d{1,2}):(\d{2})/);
-        if (!m) continue;
-        const teeMin = Number(m[1]) * 60 + Number(m[2]);
-        if (teeMin > lastTeeMin) lastTeeMin = teeMin;
-      }
-      if (lastTeeMin < 0) continue;                      // 오늘 이 회원 근무 라운드 없음
-      if (nowMin < lastTeeMin + roundMin) continue;      // 아직 라운드 중 → 나중에
-      if (!cartcheck.needsExitCheck(todayISO, mem.id)) continue;   // 이미 점검 완료 → 조용
-      const rec = cartcheck.getDay(todayISO, mem.id);
-      if (rec.remindedAt && Date.now() - rec.remindedAt < 6 * 3600 * 1000) continue; // 6h내 재알림 억제
-      await broadcast({ title: '카트 정리 점검하세요', body: '반납 전 보관대·컵홀더 등 소지품을 훑고, 빈 카트 사진을 남겨두세요. (고객 분실물 방지)', url: '/#cart' }, mem.id);
-      cartcheck.markReminded(todayISO, mem.id);
-      console.log(`[카트리마인더] 회원${mem.id} ${todayISO} 종료 점검 상기 발송`);
-    }
-  } catch (e) { console.error('카트 리마인더 오류:', e.message); }
-}
-setInterval(checkCartReminders, 20 * 60 * 1000); // 20분마다 체크
+// ── 없앤 알림 두 가지(2026-08-20) ──
+//  · '근무 기록 잊지 마세요'(저녁 차량기록 독촉) · '카트 정리 점검하세요'(라운드 종료 점검 독촉)
+//  왜: 7일 실측에서 회원 한 사람이 하루 8건씩 받고 있었다. 알림이 흔해지면 정작 놓치면 안 되는
+//   출발·티오프 알림까지 같이 안 읽힌다. 이 둘은 캐디가 이미 하는 일을 옆에서 되뇌는 알림이라
+//   흔해지는 값을 치를 만하지 않다고 판단(사용자 결정).
+//  데이터는 그대로다 — worklog·cartcheck 기록·화면·API는 전부 살아 있다. '재촉'만 뺐다.
 
 // ── 라운드 점검(카트·클럽) 사진 자동 정리 — 블랙박스식 롤링 삭제 ──────────
 //  기본 45일 보관 후 그 이전 날의 사진+기록을 통째 삭제(용량·프라이버시·분쟁 대비창). ★근무기록(세무)은 별개라 영향 없음.
@@ -2514,10 +2478,12 @@ function timelineReminders(c, name) {
   const L = toMinOfDay(c.leave), A = toMinOfDay(c.arrive), T = toMinOfDay(c.tee);
   if (L == null || A == null || T == null) return [];
   return [
-    { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발이에요. 준비하세요.` },
-    { key: 'leave',   at: L,                       level: 'high',  title: '출발 시간', body: `${name}님, 지금 출발하세요! 도착 ${c.arrive} · 티오프 ${c.tee}.` },
-    { key: 'arrive',  at: A,                       level: 'check', title: '도착·백대기', body: `${name}님, 골프장 도착 시간이에요. 백대기 ${c.standby}까지 준비하세요.` },
-    { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프예요. 코스로 이동하세요.` },
+    // ★이 넷은 '행동을 요구하는' 알림이라 청유형을 남긴다(상태 알림의 서술형 규칙과 다른 이유).
+    //  다만 느낌표는 뺀다 — 알림은 그 자체로 이미 다급하다. 제목의 부는 부르는 쪽이 붙인다.
+    { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발입니다. 준비해주세요.` },
+    { key: 'leave',   at: L,                       level: 'high',  title: '출발 시간', body: `${name}님, 지금 출발하세요. 도착 ${c.arrive} · 티오프 ${c.tee}.` },
+    { key: 'arrive',  at: A,                       level: 'check', title: '도착·백대기', body: `${name}님, 골프장 도착 시간입니다. 백대기 ${c.standby}까지 준비해주세요.` },
+    { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프입니다. 코스로 이동해주세요.` },
   ];
 }
 
@@ -2541,7 +2507,9 @@ async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMi
   // ★조출(1부) 근무 알림만 조용시간(22~07시) 예외로 통과 — 새벽 출발이라 안 울리면 지각 위험.
   const bypassQuiet = prefix === 'p1-';
   let rems = timelineReminders(c, name);
-  if (roundLabel) rems = rems.map((r) => ({ ...r, key: prefix + r.key, title: `${r.title} (${roundLabel})`, body: `${roundLabel} 라운드 — ${r.body}` }));
+  // ★부는 항상 제목 맨 앞에 붙인다 — 두 탕인 날 '출발 시간'만 두 번 뜨면 어느 라운드인지 알 수 없다.
+  //  키(prefix)는 그대로 둔다: 저장된 발송 기록의 키라, 바꾸면 오늘 것이 다시 울린다.
+  rems = rems.map((r) => ({ ...r, key: prefix + r.key, title: `${roundLabel} ${r.title}` }));
   let changed = false;
   for (const r of rems) {
     if (r.at == null || store.sent[r.key]) continue;
@@ -2568,9 +2536,9 @@ async function checkTimelineReminders() {
       store.sent = store.sent || {};
       const name = mem.board_name || '회원';
       // 3부(기본, 기존 키) + 1·2부(다중 라운드, p1-/p2- 키) — 각 라운드 독립적으로 출발/도착/티오프 알람.
-      let changed = await fireRoundReminders(mem, name, loadToday(mem.id), '', '', store, nowMin, todayISO);
-      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '1'), 'p1-', '조출', store, nowMin, todayISO)) || changed;
-      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '2'), 'p2-', '2부', store, nowMin, todayISO)) || changed;
+      let changed = await fireRoundReminders(mem, name, loadToday(mem.id), '', notifyPartLabel('3'), store, nowMin, todayISO);
+      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '1'), 'p1-', notifyPartLabel('1'), store, nowMin, todayISO)) || changed;
+      changed = (await fireRoundReminders(mem, name, loadToday(mem.id, '2'), 'p2-', notifyPartLabel('2'), store, nowMin, todayISO)) || changed;
       if (changed) saveUserJSON(mem.id, 'timeline-remind.json', store);
     }
   } catch (e) { console.error('타임라인 리마인더 오류:', e.message); }

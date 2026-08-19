@@ -3,6 +3,7 @@
 //  흩어진 정규식 게이트(부·커트라인·시간·이름) 대신 여기 한 곳에서 의미로 판단한다.
 //  원칙: Gemini는 '읽기'(위치/여부/티오프)만, 남은인원·출근시간 '산수'는 코드가(정확도).
 import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePartTeams, parseDaebaByModel } from './gemini.mjs';
+import { statusTitle as notifyStatusTitle, partLabel as notifyPartLabel } from './notifytext.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
 import { loadJSON } from './store.mjs';
@@ -662,18 +663,8 @@ ${postedLine}
 }
 
 // ── 최종 알림 문구/제목/푸시강도 결정 (산수는 코드가) ──────
-function titleFor(status) {
-  switch (status) {
-    case 'your_turn': return '지금 출근 순번!';
-    case 'near':      return '스페어 상위 — 곧 차례!';
-    case 'assigned':  return '오늘 근무 배정됨';
-    case 'work':      return '출근 확정!';
-    case 'waiting':   return '3부 대기 현황';
-    case 'spare':     return '스페어(대기)';
-    case 'off':       return '근무 없음';
-    default:          return '3부 소식';
-  }
-}
+//  ★제목은 카탈로그(notifytext.mjs)가 짓는다 — 여기서 짓던 스위치는 server.mjs에도 한 벌 더 있었고
+//   둘이 서로 달랐다. 게다가 '3부'가 글자로 박혀 1·2부 회원에게도 "3부"라고 갔다.
 // 회원에게 '푸시할 만한' 구체 상태. 이 집합에 없으면(=decide가 회원별 문구를 못 만든 일반 소식)
 //  피드에만 남기고 푸시 안 함 — 알맹이 없는 "3부 소식"이 회원들에게 스팸처럼 발송되던 문제 차단.
 const PUSH_STATUSES = new Set(['your_turn', 'near', 'assigned', 'work', 'waiting', 'spare', 'off']);
@@ -687,7 +678,11 @@ export function decide(article, verdict, member = memberFromEnv()) {
     //  알림 보내면 스팸이므로, 일정 단서(부·근무·시간·순번·"○○까지" 등)가 있을 때만 푸시.
     const blob = `${article.subject || ''} ${article.text || ''}`;
     if (cheapRelevance(blob, member) !== 'other' && scheduleHint(blob)) {
-      return { relevant: true, push: 'check', status: 'unknown', verdict: null,
+      // ★회원에게는 보내지 않는다(2026-08-20). 7일 실측에서 이 알림 하나가 전체의 20%였고,
+      //  회원 한 사람이 하루 1.6건씩 받았다. 그런데 '우리 판독이 실패했다'는 건 회원이 할 수 있는
+      //  일이 없는 우리 쪽 사정이다. 원문을 열어 스스로 판단하라고 떠넘기는 셈이고, 열어봐도
+      //  대개 자기 일이 아니다. 관리자에게만 올리고, 정말 알려야 할 글이면 발송 관문에서 골라 보낸다.
+      return { relevant: true, push: 'check', status: 'unknown', verdict: null, adminOnly: true,
         title: '새 일정글 — 직접 확인', body: `${article.subject || ''} (자동 판독 실패, 눌러서 확인)` };
     }
     // 일정 단서 없음(사진/광고/잡담) → 피드에만, 푸시 안 함.
@@ -791,7 +786,8 @@ export function decide(article, verdict, member = memberFromEnv()) {
   if (!PUSH_STATUSES.has(status)) {
     return { relevant: false, push: 'low', status, verdict, title: '', body: verdict.summary || article.subject || '' };
   }
-  const title = push === 'check' ? '3부 소식 — 확인' : titleFor(status);
+  const pl = notifyPartLabel(myPart);
+  const title = push === 'check' ? `${pl} 소식 — 확인` : notifyStatusTitle(status, myPart);
   return { relevant: true, push, status, verdict, title, body };
 }
 

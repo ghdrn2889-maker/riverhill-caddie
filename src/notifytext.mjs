@@ -30,9 +30,11 @@ const dayText = (d) => String(d || '').replace(/^\s*\d{4}\s*년\s*/, '').trim();
 export const partLabel = (part) => (String(part) === '1' ? '1부(조출)' : `${part}부`);
 
 // 회원 한 명의 오늘 상태 → 문구를 지을 재료.
-export function contextOf(part, name, today = {}) {
+//  extra: { teeFrom } — 티오프가 '무엇에서' 바뀌었는지. 아는 날엔 말해주는 게 훨씬 낫다.
+export function contextOf(part, name, today = {}, extra = {}) {
   const course = /IN/i.test(today.course || '') ? 'IN' : (today.course ? 'OUT' : '');
   return {
+    teeFrom: String(extra.teeFrom || ''),
     part: String(part), pl: partLabel(part), name: String(name || ''),
     day: dayText(today.date),
     pos: Number(today.myPosition) || 0,
@@ -57,6 +59,24 @@ export function kindFromState(ctx) {
   return 'board';
 }
 
+// 상태(status) → 제목. 회원의 '부'를 받아 붙인다.
+//  ★이게 두 벌이었다: judge.mjs의 titleFor와 server.mjs의 titleForStatus. 서로 달랐고
+//   (near가 한쪽은 '스페어 상위 — 곧 차례!', 다른 쪽은 '곧 출근 순번!'), 게다가 '3부'가 글자로
+//   박혀 있어 1·2부 회원에게도 "3부 대기 현황"이라고 갔다. 한 곳으로 모으고 부를 인자로 받는다.
+export function statusTitle(status, part) {
+  const pl = partLabel(part);
+  switch (String(status)) {
+    case 'your_turn': return `${pl} 지금 출근 순번`;
+    case 'near':      return `${pl} 곧 출근 순번`;
+    case 'assigned':
+    case 'work':      return `${pl} 근무 배정`;
+    case 'waiting':
+    case 'spare':     return `${pl} 스페어 전환`;
+    case 'off':       return `${pl} 휴무`;
+    default:          return `${pl} 소식`;
+  }
+}
+
 // 종류 + 재료 → { title, body }. 재료가 모자라면 아는 만큼만 말한다(지어내지 않는다).
 export function compose(kind, ctx) {
   const k = KIND_KEYS.includes(String(kind)) ? String(kind) : 'state';
@@ -66,6 +86,11 @@ export function compose(kind, ctx) {
     return { title: `${ctx.pl} 근무 배정`, body: `${head(ctx)}${seat(ctx)} 입니다.${cutTail(ctx)}` };
   }
   if (k === 'tee') {
+    // 무엇에서 무엇으로 바뀌었는지 아는 날엔 그걸 말한다 — '바뀌었습니다'만으로는 앱을 열어야 안다.
+    if (ctx.tee && ctx.teeFrom) {
+      return { title: `${ctx.pl} 티오프 변경`,
+        body: `${head(ctx)}${ctx.pl} 티오프가 ${ctx.teeFrom} → ${ctx.tee}${ctx.course ? ` ${ctx.course}` : ''}(으)로 바뀌었습니다.` };
+    }
     return { title: `${ctx.pl} 티오프 변경`, body: ctx.tee
       ? `${head(ctx)}${seat(ctx)}으로 바뀌었습니다.`
       : `${head(ctx)}${ctx.pl} 티오프가 바뀌었습니다.` };

@@ -36,6 +36,15 @@ check('스페어 — 티오프가 없어도 말이 된다', compose('spare', T.s
 check('휴무', compose('off', T.off).body === '8월 20일 목요일 3부 휴무로 확인됩니다.', compose('off', T.off).body);
 check('1부는 조출을 붙여 부른다', compose('work', T.one).title === '1부(조출) 근무 배정', compose('work', T.one).title);
 
+// ── 티오프가 '무엇에서' 바뀌었는지 아는 날 ──
+{
+  const c = contextOf('3', '연승준', { date: '2026년 8월 20일 목요일', myPosition: 9, teeTime: '17:07', course: 'OUT', status: 'assigned' }, { teeFrom: '17:14' });
+  const b = compose('tee', c);
+  check('전 → 후를 말한다', b.body === '8월 20일 목요일 3부 티오프가 17:14 → 17:07 OUT(으)로 바뀌었습니다.', b.body);
+  check('그래도 규칙을 지킨다', /(입니다|습니다|됩니다)\.$/.test(b.body) && !/[!！]/.test(b.title + b.body));
+  check('앞 시각을 모르면 예전처럼 말한다', compose('tee', T.tee).body === '8월 20일 목요일 3부 9번 · 17:07 OUT으로 바뀌었습니다.', compose('tee', T.tee).body);
+}
+
 // ── 아는 게 없을 때 지어내지 않는가 ──
 {
   const b = compose('work', T.bare);

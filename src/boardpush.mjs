@@ -33,13 +33,13 @@ export function currentStateMsg(pl, name, today) {
   if (today.status === 'off') {
     const ot = today.offType;
     const w = ot === 'sick' ? '병가' : ot === 'vacation' ? '휴가' : '휴무';
-    return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 오늘은 ${w}예요.` };
+    return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐습니다 — ${pl} 오늘은 ${w}입니다.` };
   }
   const pos = Number(today.myPosition) || 0;
   if (WORKISH.includes(today.status)) {
-    return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 근무${today.teeTime ? ` · 티오프 ${today.teeTime}${today.course ? `(${today.course})` : ''}` : ''}${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
+    return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐습니다 — ${pl} 근무${today.teeTime ? ` · 티오프 ${today.teeTime}${today.course ? `(${today.course})` : ''}` : ''}${pos ? ` · 순번 ${pos}번` : ''}입니다.` };
   }
-  return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐어요 — ${pl} 스페어(대기)${pos ? ` · 순번 ${pos}번` : ''}. 확인해주세요.` };
+  return { title: `${pl} 배치표 수정`, body: `${name}님, 배치표가 수정됐습니다 — ${pl} 스페어(대기)${pos ? ` · 순번 ${pos}번` : ''}입니다.` };
 }
 
 // ★사진 경로(server.mjs)와 글자 하나까지 같은 서명. 다르면 두 경로가 같은 알림을 두 번 보낸다.
