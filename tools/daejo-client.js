@@ -34,6 +34,7 @@
     team: '빈 칸을 눌러 팀을 추가하고, 팀이 있는 칸을 눌러 없앱니다. 추가하면 그 뒤가 한 칸씩 뒤로 밀리고 스페어 맨 앞이 근무로 올라옵니다.',
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
     name: '칸을 눌러 그 순번의 이름을 고칩니다.',
+    crew: '스페어 줄의 ‘＋ 캐디 추가’로 명단에 사람을 넣고, 사람을 눌러 뺍니다. 순번은 다시 매겨지고 티오프 짝은 그대로 유지됩니다.',
     swap: '두 칸을 차례로 눌러 두 사람을 맞바꿉니다(대바). 순번↔이름만 바뀌고 티오프는 그대로입니다.',
     move: '옮길 사람을 누르고, 갈 티오프를 누르세요. 순번은 그대로고 티오프만 옮겨가며, 사이 순번들이 한 칸씩 따라 이동합니다.',
   };
@@ -356,6 +357,21 @@
       out.push(ch);
     }
     box.innerHTML = '';
+    // ★'캐디 추가'는 스페어 줄에 둔다 — 시스템이 명단을 놓칠 때 사라지는 건 대개 스페어이고,
+    //  새로 넣는 사람도 맨 뒤(스페어)로 들어오기 때문이다. 스페어가 0명이어도 줄은 떠 있어야 한다.
+    if (mode === 'crew') {
+      const add = document.createElement('span');
+      add.className = 'sp add'; add.dataset.p = part; add.dataset.add = '1';
+      add.textContent = '＋ 캐디 추가';
+      const lb0 = document.createElement('span');
+      lb0.className = 'lb';
+      lb0.textContent = '스페어 ' + out.length + '명 · 명단 ' + roster[part].filter((x) => String(x || '').trim()).length + '명 — 눌러서 넣고 뺍니다';
+      box.appendChild(lb0);
+      out.forEach((x) => box.appendChild(x));
+      box.appendChild(add);
+      box.hidden = false;
+      return;
+    }
     if (!out.length) { box.hidden = true; return; }
     const lb = document.createElement('span');
     lb.className = 'lb'; lb.textContent = '스페어 ' + out.length + '명 — 티오프 없음(끌어다 근무자와 맞바꿀 수 있습니다)';
@@ -526,6 +542,7 @@
     document.body.classList.toggle('editing', !!mode);
     hint.textContent = mode ? HINTS[mode] : '모드를 고르고 칸을 누르거나 끌어놓으세요.';
     clearPick();
+    PARTS.forEach(paint);   // 모드에 따라 스페어 줄이 달라진다(캐디 추가 칩) — 바꾸면 다시 그린다
   }
   document.querySelectorAll('.tools button[data-mode]').forEach((b) => {
     b.addEventListener('click', () => setMode(mode === b.dataset.mode ? '' : b.dataset.mode));
@@ -546,6 +563,7 @@
     if (!mode) return;
     const td = unit(e.target); if (!td) return;
     if (!isSpare(td) && !td.dataset.t) return;
+    if (td.dataset.add && mode !== 'crew') return;         // '＋ 캐디 추가'는 그 모드에서만 뜻이 있다
 
     // 티오프(팀) 추가·삭제 — 실시간 추적이 놓친 예약을 손으로 살린다.
     if (mode === 'team') {
@@ -590,6 +608,56 @@
 
     const part = td.dataset.p;
     const pos = posAt(part, td);
+
+    // ── 캐디 추가·삭제 ── 시스템이 명단을 크게 놓치는 날이 있다(8/19 2부: 31명 명단이 8명으로 덮였다).
+    //  그때 '이름 고치기'로는 손쓸 수가 없다 — 고칠 칸 자체가 없기 때문이다.
+    //
+    //  ★두 축은 여기서도 갈라둔다. 명단(순번↔이름)만 늘고 줄고, 티오프 배열은 그대로 둔다.
+    //   티오프는 '순번 자리'에 붙어 있으므로, 사람을 하나 끼우면 그 뒤가 한 칸씩 밀리며
+    //   맨 뒤 근무자가 스페어로 내려가고, 빼면 스페어 맨 앞이 근무로 올라온다.
+    //   실제 배치표에서 사람이 하나 들고 나면 정확히 그 일이 일어난다.
+    if (mode === 'crew') {
+      const part0 = td.dataset.p;
+      if (td.dataset.add) {                                  // 넣기
+        const n = roster[part0].filter((x) => String(x || '').trim()).length;
+        const nm = prompt(part0 + '부에 넣을 캐디 이름', '');
+        if (nm == null || !nm.trim()) return;
+        const atStr = prompt([nm.trim() + '님을 몇 번에 넣을까요?',
+          '비워두면 맨 뒤(' + (n + 1) + '번)로 들어갑니다.'].join(String.fromCharCode(10)), String(n + 1));
+        if (atStr == null) return;
+        const at = Math.min(Math.max(1, Number(atStr) || (n + 1)), n + 1);
+        push(part0);
+        roster[part0].splice(at - 1, 0, nm.trim());
+        paint(part0);
+        const work = tee[part0].length;
+        state.textContent = `${part0}부 ${at}번에 ${nm.trim()} 넣음 — 뒤 순번이 한 칸씩 밀렸습니다`
+          + (at <= work ? ` · 맨 뒤 근무자 한 명이 스페어로 내려갔습니다(팀 수는 그대로 ${work})` : '')
+          + ` · 명단 ${n} → ${n + 1}명`;
+        return;
+      }
+      const pos0 = posAt(part0, td);
+      if (!pos0) { state.textContent = '뺄 사람이 있는 칸을 눌러주세요.'; return; }
+      const who = bare(roster[part0][pos0 - 1] || '');
+      if (!who) { state.textContent = '이 칸엔 이름이 없습니다.'; return; }
+      if (!confirm(`${part0}부 ${pos0}번 ${who}을(를) 명단에서 뺍니다. 뒤 순번이 한 칸씩 당겨집니다. 계속할까요?`)) return;
+      push(part0);
+      roster[part0].splice(pos0 - 1, 1);
+      // ★명단이 티오프보다 짧아지면 안 된다 — 그러면 주인 없는 티오프가 남아 반영이 막힌다.
+      //  올라올 스페어가 없다는 뜻이므로 맨 뒤 팀 하나를 내린다(다시 필요하면 '티오프 추가'로 넣는다).
+      const names = roster[part0].filter((x) => String(x || '').trim()).length;
+      let dropped = '';
+      while (teeV.real[part0].length > names) {
+        const g = teeV.real[part0].pop();
+        dropped = g ? `${g.time} ${g.course}` : '';
+        const k = K(g.time, g.course);
+        origOcc.real[part0] = origOcc.real[part0].filter((x) => K(x.time, x.course) !== k);
+      }
+      paint(part0);
+      state.textContent = `${part0}부 ${pos0}번 ${who} 뺐습니다 — 뒤 순번이 당겨졌습니다`
+        + (dropped ? ` · 올라올 스페어가 없어 맨 뒤 팀(${dropped})을 내렸습니다` : ' · 스페어 맨 앞이 근무로 올라왔습니다')
+        + ` · 명단 ${names + 1} → ${names}명`;
+      return;
+    }
 
     if (mode === 'name') {
       if (!pos) { state.textContent = '이 칸엔 배정된 순번이 없습니다.'; return; }

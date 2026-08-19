@@ -366,6 +366,8 @@ td.c.empty{background:var(--open)}
 .sp.drop-to{outline:2px dashed var(--warn);outline-offset:-2px;background:var(--warn-bg)}
 .sp.dragging{opacity:.4}
 .sp.edited{box-shadow:inset 3px 0 0 var(--ok)}
+.sp.add{border-style:dashed;color:var(--ok);font-weight:700;border-color:var(--ok)}
+.sp.add:hover{background:var(--ok-bg)}
 body.editing .sp{touch-action:none}
 
 .ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;
@@ -443,6 +445,7 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button data-mode="team" type="button">티오프 추가·삭제</button>
   <button data-mode="intern" type="button">인턴 지정</button>
   <button data-mode="name" type="button">이름 고치기</button>
+  <button data-mode="crew" type="button">캐디 추가·삭제</button>
   <button data-mode="swap" type="button">맞바꾸기</button>
   <button data-mode="move" type="button">순번 옮기기</button>
   <button id="undoBtn" type="button" hidden>되돌리기</button>

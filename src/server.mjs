@@ -12,7 +12,7 @@ import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './ana
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
-import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart } from './today.mjs';
+import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -1474,22 +1474,52 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
   const vp = outP.rawVerdict || {};
   const crewDuty = vp.crewDuty || {};
   const okRoster = Array.isArray(vp.part3Roster) && vp.part3Roster.length > 0;
+  // ★시간표만 있는 글이 명단을 통째로 덮지 못하게 한다 ─────────────────────────────
+  //  실사고 2026-08-19 2부: 본배치표가 명단 31명을 제대로 읽어놨는데, 그 뒤 올라온
+  //  "2부 8팀 시간표입니다"가 명단을 8명으로 덮었다. 근무 순번엔 엉뚱한 이름이 앉고
+  //  스페어는 통째로 사라졌다. 시간표 글은 티오프를 말하지 명단을 말하지 않는다.
+  //  ★같은 날 명단이 반토막 나는 일은 없다 — 명단은 그 부에 배정된 캐디 전원이라 하루 새 절반이
+  //   사라질 수 없다. 그러면 그건 '줄었다'가 아니라 '못 읽었다'다. 판단이 아니라 계수다.
+  //  ★그래도 티오프는 받는다 — 그게 이 글이 실제로 들고 온 새 사실이다.
+  //   [[board-snapshot-clobber-guard]] 정본 가드와 같은 종류(약한 글이 정본을 덮던 문제).
+  let keepRoster = null;
+  if (okRoster) {
+    try {
+      const prev = (loadBoardPartsStore()?.parts || {})[String(part)] || null;
+      const prevN = (prev?.roster || []).filter((x) => String(x || '').trim()).length;
+      const sameDay = prev && dayKey(prev.dateLabel || '') && dayKey(prev.dateLabel || '') === dayKey(vp.dateLabel || '');
+      if (sameDay && prevN >= 5 && vp.part3Roster.length < prevN * 0.6) {
+        keepRoster = prev.roster.slice();
+        console.warn(`⚠️ [단독 ${part}부 배치표] 명단 ${prevN}명 → ${vp.part3Roster.length}명은 줄어든 게 아니라 못 읽은 것으로 봅니다`
+          + ` — 명단은 그대로 두고 티오프만 갱신합니다(시간표 글 추정).`);
+        raiseBoardIssue({ kind: 'roster_shrink', part: Number(part), was: prevN, now: vp.part3Roster.length,
+          articleId: String(full.id || ''), note: `${part}부 명단이 ${prevN}명에서 ${vp.part3Roster.length}명으로 줄어 보입니다. 명단은 지키고 티오프만 갱신했어요 — 대조판에서 확인해주세요.` });
+      }
+    } catch (e) { console.error('[단독부 명단 보호 검사 오류]', e.message); }
+  }
   if (okRoster) {
     try {
       const partData = {
-        roster: vp.part3Roster.slice(), teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
+        roster: (keepRoster || vp.part3Roster).slice(), teeGrid: Array.isArray(vp.teeGrid) ? vp.teeGrid : [],
         teeTimes: Array.isArray(vp.teeTimes) ? vp.teeTimes : [],   // ★칸 전체 티오프 시각(검수 드롭다운용)
         teamCount: Number(vp.teamCount) || 0, internTees: Array.isArray(vp.internTees) ? vp.internTees : [],
         internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
         cutoffName: vp.cutoffName || '', crewDuty, rosterReliable: !!vp.rosterReliable, uncertain: vp._uncertain || '',
       };
+      // 명단을 지킨 경우 커트도 그 명단의 것이어야 한다 — 8명짜리 커트를 31명 명단에 얹으면 또 어긋난다.
+      if (keepRoster) {
+        const prev = (loadBoardPartsStore()?.parts || {})[String(part)] || {};
+        partData.cutoffName = prev.cutoffName || partData.cutoffName;
+        partData.rosterReliable = false;             // 사람이 한 번 봐야 한다
+      }
       // ★범위를 명시해 넘긴다 — 이 글은 '이 부'만 담은 배치표다. 저장소는 이 범위 밖 부를 절대 건드리지 않는다
       //  (단독 2부 수정본이 멀쩡한 1부를 지우던 사고의 근본 차단).
       const scope = boardScope(full, vp, part);
       const saved = setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || '', subject: full.subject || '',
         image: (full.images && full.images[0]) || '', url: full.url || '', scope: scope.parts, scopeSource: scope.source }, full, part, partData);
       const kept = Object.keys(saved.parts || {}).filter((k) => k !== String(part));
-      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${vp.part3Roster.length}명 (컷 ${vp.cutoffPosition || '-'})${kept.length ? ` · 보존 부: ${kept.join(',')}부` : ''}`);
+      console.log(`·  [단독 ${part}부 배치표] 모니터 반영: ${(keepRoster || vp.part3Roster).length}명 (컷 ${vp.cutoffPosition || '-'})`
+        + `${keepRoster ? ` · ★명단 보호(판독 ${vp.part3Roster.length}명 무시)` : ''}${kept.length ? ` · 보존 부: ${kept.join(',')}부` : ''}`);
       // ★부별 배치표 감시 등록 — 같은 글의 이미지 교체(수정본) 감지용(recheckPartBoards가 지문 비교 후 재판독).
       try { partBoardWatch[String(part)] = { id: String(full.id), fp: await imgFingerprint(full), dateLabel: vp.dateLabel || '', at: Date.now() }; saveJSON(PART_BOARD_WATCH_FILE, partBoardWatch); } catch { /* noop */ }
     } catch (e) { console.error('[단독부 board-parts 저장 오류]', e.message); }
