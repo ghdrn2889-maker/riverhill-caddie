@@ -553,6 +553,9 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const notify = !!req.body?.notify;
   const autoNotify = !!req.body?.autoNotify;
   const dutySet = (req.body?.dutySet && typeof req.body.dutySet === 'object') ? req.body.dutySet : null;
+  // 부 간 대바로 이 부를 떠난 사람 — '명단에서 빠짐'과 다른 사실이다(아래 movedTo 주석).
+  const movedOut = Array.isArray(req.body?.movedOut) ? req.body.movedOut : null;
+  const movedIn = Array.isArray(req.body?.movedIn) ? req.body.movedIn : null;
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
   // ★깨진 배치표는 저장 자체를 안 한다. 8/18에 같은 시각에 두세 명이 겹친 채로 반영돼
   //  다섯 명이 화면에서 사라졌다. 그때 막은 건 브라우저뿐이었다 — 브라우저는 우회할 수 있고,
@@ -621,9 +624,25 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번(이름·티오프·근태)
     const dk = dayKey(vpart.dateLabel);
     let updated = 0; const pending = [];
+    // ★부 간 대바로 이 부를 떠난 사람은 '휴무'가 아니라 '이 부엔 없음'이다.
+    //  명단에서 빠졌다는 이유로 다시 계산하면 off가 나오는데, 3부가 off면 대시보드가 그 회원의
+    //  다른 부 카드까지 지운다(rounds.mjs primaryOff). 대바로 옮겨간 사람이 앱에서 휴무가 되면
+    //  정확히 반대의 사실이 표시된다 — 그 사람은 오늘 출근한다.
+    const movedTo = new Map((movedOut || []).map((x) => [nkey(x && x.name), String((x && x.to) || '')]).filter(([k]) => k));
     for (const m of activeMembers()) {
       const today = loadToday(m.id, part) || {};
       const hadState = !!(today.myPosition || today.teeTime || (today.status && today.status !== 'unknown'));
+      if (movedTo.has(nkey(m.board_name))) {
+        const to = movedTo.get(nkey(m.board_name));
+        const next = { ...today, date: vpart.dateLabel || today.date || '', status: 'unknown',
+          myPosition: 0, teeTime: '', course: '', cutLine: null,
+          _swappedOut: { to: to, at: Date.now(), by: 'admin' }, updatedAt: Date.now() };
+        delete next.offType; delete next._offReason;
+        next._adminLock = { dk, articleId: String(bp.articleId), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by: 'admin', at: Date.now(), part };
+        saveToday(next, m.id, part); updated++;
+        console.log(`🔁 [monitor] ${m.board_name}: ${part}부 → ${to}부 대바(${part}부 상태 비움)`);
+        continue;
+      }
       if (!rosterNk.has(nkey(m.board_name)) && !hadState) continue;   // 이 부와 무관 + 기존 상태도 없음 → 건드리지 않음
       const member = { name: m.board_name, part, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
       let next;
@@ -658,14 +677,16 @@ app.post('/api/board-correct', gate, async (req, res) => {
       }
     }
     const notifyToken = (notify && pushReady) ? stashNotify(pending) : null;
-    console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`);
+    console.log(`📋 [monitor] ${part}부 배치표 #${bp.articleId} 교정: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명(발송대기)` : ''}`
+      + ((movedOut || []).length || (movedIn || []).length
+        ? ` · 부 간 대바 나감 ${(movedOut || []).map((x) => `${x.name}→${x.to}부`).join(',') || '-'} / 들어옴 ${(movedIn || []).map((x) => `${x.from}부→${x.name}`).join(',') || '-'}` : ''));
     const auto = autoNotify ? await autoNotifyPart(part, { rows, cutLine, by: '대조판 반영' }) : null;
     return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated,
       pending: pendingFor(pending, auto), notifyToken: tokenFor(pending, auto, notify, part), auto: autoBrief(auto) });
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
   let out;
-  try { out = correctPart3({ rows, interns, allInterns, cutLine, notify, dutySet }); }
+  try { out = correctPart3({ rows, interns, allInterns, cutLine, notify, dutySet, movedOut }); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const auto = autoNotify ? await autoNotifyPart('3', { rows, cutLine, by: '대조판 반영' }) : null;
   res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated,

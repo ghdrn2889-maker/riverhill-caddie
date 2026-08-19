@@ -37,7 +37,12 @@ export function correctionMsg(partLabel, name, s) {
 // allInterns: 화면이 들고 있는 인턴 '전부'. interns는 그중 실제 배치표에 팀이 있는 칸만이다.
 //  배치표(lastboard)에는 팀이 있는 칸만 넣고, 관리자 수동 지정에는 전부를 남긴다 —
 //  둘을 같은 목록으로 취급하면 넘길 수 없는 인턴이 지정 자체에서 지워진다(실사고).
-export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 0, notify = false, by = 'admin', dutySet = null }) {
+// movedOut: [{name, to}] — 이 부에서 '다른 부로 대바로 나간' 사람. 명단에서 빠진 것과는 다른 사실이다.
+//  ★빠진 사람을 그냥 다시 계산하면 판독이 '휴무(off)'로 적는다. 그런데 3부 휴무는 대시보드에서
+//   그 회원의 1·2부 카드까지 통째로 지운다(rounds.mjs primaryOff). 대바로 2부에 간 사람이
+//   앱에서 '오늘 휴무'가 되어버린다 — 정확히 반대의 사실이고, 그 사람은 출근한다.
+//   그래서 '이 부엔 없음(unknown)'으로 적는다. 휴무가 아니라 없음이다.
+export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 0, notify = false, by = 'admin', dutySet = null, movedOut = null }) {
   if (!Array.isArray(rows)) throw new Error('rows 필요');
   const lb = loadLastBoard();
   if (!lb || !lb.rawVerdict) throw new Error('현재 배치표가 없어요.');
@@ -113,9 +118,25 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
   const rosterNk = new Set(roster.map(nkey).filter(Boolean));
   const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번
   const dk = dayKey(v.dateLabel || lb.dateLabel || '');
+  const movedTo = new Map((Array.isArray(movedOut) ? movedOut : [])
+    .map((x) => [nkey(x && x.name), String((x && x.to) || '')]).filter(([k]) => k));
   let updated = 0; const pending = [];
   for (const m of activeMembers()) {
     const today = loadToday(m.id) || {};
+    // ── 부 간 대바로 이 부를 떠난 사람 ── 휴무가 아니라 '이 부엔 없음'이다.
+    if (movedTo.has(nkey(m.board_name))) {
+      const to = movedTo.get(nkey(m.board_name));
+      const next = { ...today, date: v.dateLabel || today.date || '', status: 'unknown',
+        myPosition: 0, teeTime: '', course: '', cutLine: null,
+        _swappedOut: { to: to, at: Date.now(), by: by }, updatedAt: Date.now() };
+      delete next.offType; delete next._offReason;
+      // 같은 배치표를 다시 읽어도 되살아나지 않게 잠근다 — 사진엔 아직 그 사람이 3부에 있다.
+      //  새 배치표(다른 글)가 오면 잠금은 저절로 풀린다(today.mjs applyAdminLock).
+      next._adminLock = { dk, articleId: String(lb.id), fields: { status: 1, teeTime: 1, course: 1, cutLine: 1, myPosition: 1, offType: 1 }, by, at: Date.now() };
+      saveToday(next, m.id); updated++;
+      console.log(`🔁 [교정] ${m.board_name}: 3부 → ${to}부 대바(3부 상태 비움)`);
+      continue;
+    }
     // 이 배치표에 없는 휴무자(다른 근태로 쉬는 사람)는 건드리지 않음 — 배치표에 이름이 있으면 재계산.
     if (today.status === 'off' && !rosterNk.has(nkey(m.board_name))) continue;
     const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };

@@ -392,6 +392,12 @@ body.editing td.c:hover{outline:2px solid var(--warn);outline-offset:-2px}
 td.c.picked{outline:2px solid var(--ok);outline-offset:-2px}
 td.c.edited{box-shadow:inset 3px 0 0 var(--ok)}
 td.c.moved{box-shadow:inset 3px 0 0 var(--warn)}
+/* 부 간 대바 — 다른 부에서 온 사람. 'edited' 초록 위에 얹히므로 자국은 글자로 남긴다
+   (색을 하나 더 만들면 이 화면의 색 규칙(출처)이 흐려진다). */
+td.c.xswap .xp,.sp.xswap .xp{display:inline-block;font-size:9px;margin-left:3px;padding:0 3px;
+  border-radius:3px;background:var(--warn);color:var(--panel);font-weight:700;letter-spacing:-.03em}
+td.c.xswap{box-shadow:inset 3px 0 0 var(--warn),inset -3px 0 0 var(--warn)}
+.sp.xswap{border-color:var(--warn)}
 /* ★끌어놓기 — 편집 모드일 때만 칸이 끌기를 잡는다. 평소엔 touch-action이 살아 있어야 폰에서 표를 스크롤한다. */
 body.editing td.c{touch-action:none;-webkit-user-select:none;user-select:none}
 body.dragging-now{cursor:grabbing}

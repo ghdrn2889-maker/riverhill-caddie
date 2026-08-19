@@ -43,7 +43,16 @@ class El {
     return null;
   }
   querySelectorAll() { return []; }
-  closest() { return this; }
+  // ★closest는 '아무거나 그렇다'고 답하면 안 된다. 예전 흉내는 무조건 자신을 돌려줬는데,
+  //  그러면 표의 칸이 근태 줄(.offlane)이자 스페어 줄(.spares)이기도 하다는 뜻이 되어
+  //  끌어놓기가 전부 근태 처리로 새어버린다(실제로 끌기 검사 8건이 그렇게 죽어 있었다).
+  _match(sel) {
+    const m = String(sel).match(/^([a-z]*)((?:\.[-\w]+)*)$/);
+    if (!m) return false;
+    if (m[1] && this.tag !== m[1]) return false;
+    return (m[2].match(/\.[-\w]+/g) || []).every((c) => this.classList.contains(c.slice(1)));
+  }
+  closest(sel) { let el = this; while (el) { if (el._match(sel)) return el; el = el.parent; } return null; }
   addEventListener(t, fn) { (this._ev ||= {})[t] = fn; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((x) => x !== this); }
 }
@@ -61,19 +70,28 @@ const doc = {
     return [];
   },
   querySelector: (sel) => {
-    const m = sel.match(/^\.spares\[data-p="(\d)"\]$/);
-    return m ? doc._spares[m[1]] : null;
+    const m = sel.match(/^\.(spares|offs|pool)\[data-p="(\d)"\]$/);
+    if (!m) return null;
+    return (m[1] === 'spares' ? doc._spares : m[1] === 'offs' ? doc._offs : doc._pools)[m[2]] || null;
   },
   addEventListener: (t, fn) => { (doc._ev ||= {})[t] = fn; },
   // 끌어놓기는 좌표로 대상을 찾는다 — 흉내에서는 '지금 무엇 위에 있는지'를 직접 정해준다.
   elementFromPoint: () => doc._over,
   _over: null,
-  _ids: {}, _spares: {},
+  _ids: {}, _spares: {}, _offs: {}, _pools: {},
 };
-for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'resetBtn', 'applyBtn', 'vProj', 'vReal', 'viewNote', 'tools']) doc._ids[id] = new El('span');
+// ★화면이 쓰는 id는 여기 전부 있어야 한다. 하나라도 빠지면 클라이언트가 로드 중에 던지고
+//  하네스가 통째로 못 돈다(실제로 알림 대상판 npParts가 빠져 이 테스트가 죽어 있었다).
+for (const id of ['hint', 'state', 'saveBtn', 'undoBtn', 'resetBtn', 'applyBtn', 'vProj', 'vReal', 'viewNote', 'tools',
+  'notifyBtn', 'pickBtn', 'npick', 'npParts', 'npList', 'npCount', 'npSend', 'npClose']) doc._ids[id] = new El('span');
 doc._ids.tools.hidden = true;   // 실제 HTML과 동일하게 — 대조 보기에서 편집 도구는 숨어 있다
-for (const p of ['1', '2', '3']) doc._spares[p] = new El('div');
-doc._modes = ['team', 'intern', 'name', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
+// 줄(구역)도 실제 화면처럼 클래스·부를 달고 있어야 한다 — closest가 이걸 보고 '어디에 놓았나'를 판단한다.
+for (const p of ['1', '2', '3']) {
+  for (const [k, cls] of [['_spares', 'spares'], ['_offs', 'offs'], ['_pools', 'pool']]) {
+    const el = new El('div'); el.className = cls; el.dataset.p = p; doc[k][p] = el;
+  }
+}
+doc._modes = ['team', 'intern', 'name', 'crew', 'swap', 'move'].map((m) => { const b = new El('button'); b.dataset.mode = m; return b; });
 
 const sched = J.sched;
 const toMin = (t) => { const m = String(t).match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : 0; };
@@ -89,6 +107,29 @@ for (const p of ['1', '2', '3']) {
     }
   }
 }
+// ── 부가 하나뿐인 날의 대비 ────────────────────────────────────────────
+//  ★부 간 대바는 두 부가 있어야 시험할 수 있는데, 개발 데이터에는 3부만 있는 날이 흔하다.
+//   그때 검사를 건너뛰면 '통과'라고 적히면서 실제로는 한 줄도 안 돌아본 게 된다.
+//   없으면 만든다 — 정본 명단에서 그날 어디에도 없는 사람을 데려와 작은 부 하나를 세운다.
+const SYNTH = [];
+{
+  const bare0 = (x) => String(x || '').replace(/\([^)]*\)/g, '').trim();
+  const used = new Set(['1', '2', '3'].flatMap((p) => (J.parts?.[p]?.roster || []).map(bare0)));
+  const spare = (J.officialRoster || []).map(bare0).filter((n) => n && !used.has(n));
+  const have = ['1', '2', '3'].filter((p) => (J.parts?.[p]?.roster || []).filter(Boolean).length);
+  for (const p of ['2', '1']) {
+    if (have.length >= 2) break;
+    if (have.includes(p) || spare.length < 6) continue;
+    const sp = J.sched.parts[p]; if (!sp) continue;
+    const t0 = toMin(sp.first);
+    const tees = [{ pos: 1, time: toHM(t0), course: 'OUT' }, { pos: 2, time: toHM(t0), course: 'IN' },
+      { pos: 3, time: toHM(t0 + J.sched.cadence), course: 'OUT' }];
+    J.parts[p] = { ...(J.parts[p] || {}), roster: spare.splice(0, 6), teeGrid: tees, cut: 3, crewDuty: {}, internTees: [], boardInternTees: [] };
+    have.push(p); SYNTH.push(p);
+  }
+}
+if (SYNTH.length) console.log(`(개발 데이터에 부가 하나뿐이라 ${SYNTH.join('·')}부를 시험용으로 세웠습니다 — 부 간 대바를 검사하려면 두 부가 필요합니다)`);
+
 globalThis.document = doc;
 // http: 라야 저장 경로가 실제로 돈다(file:이면 '샘플'로 빠진다) — 저장 후 상태도 검증 대상이다.
 globalThis.location = { protocol: 'http:', search: '?k=test' };
@@ -683,6 +724,91 @@ for (const VIEW of (HAS_KAKAO ? ['real', 'proj'] : ['real'])) {
   chk(doc._ids.undoBtn.hidden === true, `[${VIEW}] 저장했는데 되돌리기 버튼이 남아 있다`);
   chk(/저장됐습니다/.test(doc._ids.state.textContent), `[${VIEW}] 저장 완료 문구가 안 뜬다`);
   console.log(`  [${VIEW === 'real' ? '실제 배치표' : '카카오 예상'}] 저장 → 버튼 사라짐 확인`);
+}
+
+// ── ⑦ 부 간 맞바꾸기(크로스파트 대바) ──────────────────────────────────
+//  ★대바는 한 부 안에서만 일어나지 않는다(사용자). 이때 배치표 두 장이 동시에 바뀐다.
+//   부 안 맞바꾸기와 규칙은 같아야 한다 — 사람만 자리를 바꾸고 티오프는 자리에 남는다.
+//   그리고 서버에는 '나갔다'는 사실을 따로 알려야 한다. 명단에서 빠진 것만 보고 서버가 다시
+//   계산하면 '휴무'가 되는데, 3부 휴무는 그 회원의 다른 부 카드까지 지운다(rounds primaryOff) —
+//   대바로 출근하는 사람이 앱에서 휴무가 된다.
+console.log('\n부 간 맞바꾸기(대바)\n');
+{
+  doc._ids.vReal._ev.click();
+  const withPeople = ['3', '2', '1'].filter((p) => readGrid(p).filter((x) => !x.intern && x.name).length);
+  if (withPeople.length < 2) {
+    console.log('  (사람이 있는 부가 하나뿐이라 검사하지 못했습니다)');
+    chk(false, '부 간 대바 — 두 부를 세우지 못해 한 줄도 검사하지 못했다');
+  } else {
+    const [pa, pb] = withPeople;
+    const seat = (p) => Object.fromEntries(readGrid(p).filter((x) => !x.intern && x.pos).map((x) => [x.pos, x.slot]));
+    const names = (p) => [...readGrid(p).filter((x) => !x.intern && x.name).map((x) => x.name), ...readSpares(p).map((x) => x.name)].sort();
+    const cellNameAt = (p, slot) => (readGrid(p).find((x) => x.slot === slot) || {}).name || '';
+    const A = readGrid(pa).filter((x) => !x.intern && x.name)[0];
+    const B = readGrid(pb).filter((x) => !x.intern && x.name)[0];
+    const seatA0 = seat(pa), seatB0 = seat(pb), namesA0 = names(pa), namesB0 = names(pb);
+
+    clickMode('swap');
+    clickCell(cellOf(pa, ...A.slot.split(' ')));
+    clickCell(cellOf(pb, ...B.slot.split(' ')));
+
+    chk(cellNameAt(pa, A.slot) === B.name, `부 간 대바 — ${pa}부 ${A.slot}에 ${B.name}가 안 앉았다(지금 ${cellNameAt(pa, A.slot)})`);
+    chk(cellNameAt(pb, B.slot) === A.name, `부 간 대바 — ${pb}부 ${B.slot}에 ${A.name}가 안 앉았다(지금 ${cellNameAt(pb, B.slot)})`);
+    // ★순번↔티오프는 한 칸도 안 움직인다 — 움직이는 건 순번↔이름뿐이다.
+    chk(JSON.stringify(seat(pa)) === JSON.stringify(seatA0), `부 간 대바 — ${pa}부 티오프표가 움직였다`);
+    chk(JSON.stringify(seat(pb)) === JSON.stringify(seatB0), `부 간 대바 — ${pb}부 티오프표가 움직였다`);
+    // ★명단 인원수는 그대로다(한 명 나가고 한 명 들어온다). 그리고 한 부에 같은 사람이 둘일 수 없다.
+    const nA1 = names(pa), nB1 = names(pb);
+    chk(nA1.length === namesA0.length, `부 간 대바 — ${pa}부 인원이 ${namesA0.length}→${nA1.length}로 변했다`);
+    chk(nB1.length === namesB0.length, `부 간 대바 — ${pb}부 인원이 ${namesB0.length}→${nB1.length}로 변했다`);
+    chk(new Set(nA1).size === nA1.length, `부 간 대바 — ${pa}부에 같은 이름이 둘`);
+    chk(new Set(nB1).size === nB1.length, `부 간 대바 — ${pb}부에 같은 이름이 둘`);
+    chk(nA1.includes(B.name) && !nA1.includes(A.name), `부 간 대바 — ${pa}부 명단이 안 맞는다`);
+    chk(nB1.includes(A.name) && !nB1.includes(B.name), `부 간 대바 — ${pb}부 명단이 안 맞는다`);
+
+    // ★두 부에 다 이름이 있는 사람(실데이터의 '1,3' 근무자 13명이 그렇다)을 또 보내면 안 된다 —
+    //  한 사람이 그 부에서 두 순번을 차지하고, 명단이 조용히 한 명 늘어난다.
+    //  두 부에 같은 이름이 있는 상황을 화면 조작만으로 만들어 본다(이름 고치기).
+    const C = readGrid(pa).filter((x) => !x.intern && x.name && x.slot !== A.slot)[0];
+    const D = readGrid(pb).filter((x) => !x.intern && x.name && x.slot !== B.slot)[0];
+    if (C && D) {
+      clickMode('name');
+      globalThis.prompt = () => D.name;                 // pa의 한 칸을 pb 사람 이름으로 만든다
+      clickCell(cellOf(pa, ...C.slot.split(' ')));
+      globalThis.prompt = () => null;
+      clickMode('swap');
+      chk(cellNameAt(pa, C.slot) === D.name, `부 간 대바(중복 가드) 준비 실패 — ${pa}부 ${C.slot}가 ${D.name}가 아니다`);
+      clickCell(cellOf(pa, ...C.slot.split(' ')));
+      clickCell(cellOf(pb, ...B.slot.split(' ')));
+      chk(/이미 .*부 명단에 있습니다/.test(doc._ids.state.textContent),
+        `부 간 대바 — 같은 사람을 한 부에 둘로 만들 수 있다: ${doc._ids.state.textContent}`);
+      doc._ids.undoBtn._ev.click();                     // 이름 고치기 되돌리기
+    }
+
+    // ★되돌리기 한 번이 두 부를 같이 되돌린다 — 한 부만 되돌리면 사람이 양쪽에 둘이 되거나 어디에도 없다.
+    while (doc._ids.undoBtn.hidden === false && !(names(pa).join() === namesA0.join() && names(pb).join() === namesB0.join())) doc._ids.undoBtn._ev.click();
+    chk(names(pa).join() === namesA0.join() && names(pb).join() === namesB0.join(), '부 간 대바 — 되돌리기로 두 부가 원래대로 안 온다');
+
+    // ── 서버로 무엇이 가는가 ──
+    clickCell(cellOf(pa, ...A.slot.split(' ')));
+    clickCell(cellOf(pb, ...B.slot.split(' ')));
+    globalThis.__SENT.length = 0;
+    await doc._ids.applyBtn._ev.click();
+    const posts = globalThis.__SENT.filter((x) => x.url.endsWith('/api/board-correct'));
+    const byPart = Object.fromEntries(posts.map((x) => [String(x.body.part), x.body]));
+    chk(!!byPart[pa] && !!byPart[pb], `부 간 대바 — 두 부를 다 반영하지 않았다(보낸 부: ${Object.keys(byPart).join(',') || '없음'})`);
+    if (byPart[pa] && byPart[pb]) {
+      const outA = (byPart[pa].movedOut || []).map((x) => `${x.name}>${x.to}`);
+      const outB = (byPart[pb].movedOut || []).map((x) => `${x.name}>${x.to}`);
+      chk(outA.includes(`${A.name}>${pb}`), `부 간 대바 — ${pa}부 movedOut에 ${A.name}→${pb}부가 없다(${outA.join(',') || '비었음'})`);
+      chk(outB.includes(`${B.name}>${pa}`), `부 간 대바 — ${pb}부 movedOut에 ${B.name}→${pa}부가 없다(${outB.join(',') || '비었음'})`);
+      chk((byPart[pa].movedIn || []).some((x) => x.name === B.name && x.from === pb), `부 간 대바 — ${pa}부 movedIn에 ${B.name}가 없다`);
+      // 명단에 남아 있는 사람이 movedOut에 섞이면 그 사람 상태가 통째로 비워진다 — 절대 안 된다.
+      const still = new Set(names(pa));
+      chk(!(byPart[pa].movedOut || []).some((x) => still.has(x.name)), `부 간 대바 — ${pa}부 명단에 있는 사람이 movedOut에 섞였다`);
+      console.log(`  ${pa}부 ${A.name} ↔ ${pb}부 ${B.name} — 두 부 반영 · movedOut ${outA.concat(outB).join(' · ')}`);
+    }
+  }
 }
 
 console.log('');

@@ -35,7 +35,7 @@
     intern: '칸을 눌러 인턴을 켜고 끕니다. 인턴이 한 팀을 맡으면 그 뒤가 각자 다음 팀으로 밀리고, 맨 뒤 한 명은 스페어로 내려갑니다.',
     name: '칸을 눌러 그 순번의 이름을 고칩니다.',
     crew: '아래 서랍에서 사람을 눌러 고르고, 상태(스페어·휴무·휴가·병가)를 정해 한 번에 넣습니다. 표의 칸으로 끌어다 놓으면 그 순번에 바로 들어갑니다. 명단에 있는 사람을 누르면 빼거나 근태를 정합니다.',
-    swap: '두 칸을 차례로 눌러 두 사람을 맞바꿉니다(대바). 순번↔이름만 바뀌고 티오프는 그대로입니다.',
+    swap: '두 칸을 차례로 눌러 두 사람을 맞바꿉니다(대바). 다른 부의 칸을 골라도 됩니다 — 그러면 두 사람이 부를 맞바꿉니다. 순번↔이름만 바뀌고 티오프는 자리에 그대로 남습니다.',
     move: '옮길 사람을 누르고, 갈 티오프를 누르세요. 순번은 그대로고 티오프만 옮겨가며, 사이 순번들이 한 칸씩 따라 이동합니다.',
   };
   const PARTS = ['1', '2', '3'];
@@ -97,6 +97,13 @@
     const s = new Set(((BOARD[p] || {}).internTees || []).map((t) => K(t.time, t.course)));
     interns[p] = s; internsOrig[p] = new Set(s);
   }
+  // ── 부 간 맞바꾸기 자국 ── 어느 자리에 '다른 부에서 온 사람'이 앉아 있는지.
+  //  ★이 표시가 없으면 3부 표에 낯선 이름이 하나 나타난 것으로만 보인다. 어디서 왔는지를
+  //   화면이 말하지 않으면 관리자는 그게 대바인지 판독 오류인지 구분할 방법이 없다.
+  //  ★키는 순번이 아니라 '이름'이다. 자국은 자리가 아니라 사람에게 붙는다 — 그래야 캐디를
+  //   넣고 빼서 뒤 순번이 통째로 밀려도, 다시 맞바꿔도 자국이 엉뚱한 사람에게 옮겨가지 않는다.
+  const crossMark = {};                       // 부 → Map(이름 → 어느 부에서 왔나)
+  for (const p of PARTS) crossMark[p] = new Map();
   const stack = [];
   const cp = (x) => (x ? { time: x.time, course: x.course } : x);
   const sameTee = (a, b) => (!a && !b) || (!!a && !!b && K(a.time, a.course) === K(b.time, b.course));
@@ -357,6 +364,14 @@
       nm.textContent = bare(cell);
       if (tg0 && !dt) { dt = document.createElement('span'); dt.className = 'dt'; td.appendChild(dt); }
       if (dt) { dt.textContent = tg0; dt.style.display = tg0 ? '' : 'none'; }
+      // 부 간 대바 자국 — 이 자리에 앉은 사람이 어느 부에서 왔는지.
+      const from = crossMark[part].get(nkd(cell));
+      let xp = td.querySelector('.xp');
+      if (from) {
+        if (!xp) { xp = document.createElement('span'); xp.className = 'xp'; td.appendChild(xp); }
+        xp.textContent = from + '부↔'; xp.title = from + '부에서 대바로 온 사람입니다';
+      } else if (xp) xp.remove();
+      td.classList.toggle('xswap', !!from);
       td.classList.toggle('duty', !!dutyOf(part, cell));   // 근무 자리에 휴무가 앉아 있으면 눈에 띄어야 한다
       const nameChanged = cell !== (rosterOrig[part][pos - 1] || '');
       const teeChanged = !sameTee(tee[part][pos - 1], teeOrig[part][pos - 1]);
@@ -393,6 +408,8 @@
       const b = document.createElement('b'); b.textContent = p + '번'; ch.appendChild(b);
       const n = document.createElement('span'); n.className = 'nm'; n.textContent = bare(cell); ch.appendChild(n);
       if (tg) { const d = document.createElement('span'); d.className = 'dt'; d.textContent = tg; ch.appendChild(d); }
+      const xf = crossMark[part].get(nkd(cell));
+      if (xf) { ch.classList.add('xswap'); const x2 = document.createElement('span'); x2.className = 'xp'; x2.textContent = xf + '부↔'; ch.appendChild(x2); }
       const dy = dutyOf(part, cell);
       if (dy) { ch.classList.add('duty'); const e2 = document.createElement('span'); e2.className = 'dy'; e2.textContent = dy; ch.appendChild(e2); }
       out.push(ch);
@@ -555,14 +572,16 @@
   // ★두 보기의 배치를 모두 담는다. 인턴 하나를 켜면 양쪽 배치가 같이 움직이는데
   //  보고 있던 쪽만 되돌리면 반대편에 인턴이 남아 근무선이 조용히 줄어든다(실측: 1부 42→39).
   //  배치가 진실이 된 이상, 되돌리기도 진실 전부를 되돌려야 한다.
-  const push = (part) => {
-    stack.push({ part: part, roster: roster[part].slice(),
-      tee: { real: (teeV.real[part] || []).map(cp), proj: (teeV.proj[part] || []).map(cp) },
-      // 팀 목록도 담는다 — 티오프 추가·삭제가 이걸 바꾸므로 안 담으면 되돌려도 팀이 그대로 남는다.
-      occ: { real: (origOcc.real[part] || []).map(cp), proj: (origOcc.proj[part] || []).map(cp) },
-      interns: new Set(interns[part]), duty: { ...duty[part] }, touched: new Set(touchedDuty[part]),
-      memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
-  };
+  const snapOf = (part) => ({ part: part, roster: roster[part].slice(),
+    tee: { real: (teeV.real[part] || []).map(cp), proj: (teeV.proj[part] || []).map(cp) },
+    // 팀 목록도 담는다 — 티오프 추가·삭제가 이걸 바꾸므로 안 담으면 되돌려도 팀이 그대로 남는다.
+    occ: { real: (origOcc.real[part] || []).map(cp), proj: (origOcc.proj[part] || []).map(cp) },
+    interns: new Set(interns[part]), duty: { ...duty[part] }, touched: new Set(touchedDuty[part]),
+    cross: new Map(crossMark[part] || []),
+    memo: { real: new Map(idxMemo.real[part] || []), proj: new Map(idxMemo.proj[part] || []) } });
+  // ★한 번의 조작이 두 부를 건드릴 수 있다(부 간 맞바꾸기). 되돌리기는 '그 조작 전체'를 되돌려야 한다 —
+  //  한 부만 되돌리면 사람이 양쪽에 둘이 되거나 어느 쪽에도 없게 된다.
+  const push = (...parts) => { stack.push(parts.map(snapOf)); };
 
   // ★기본 화면은 '실제 배치표'다 — 고치는 곳이 기본이어야 한다.
   //  예전엔 예상이 기본이었는데, 예상 배치를 저장하지 않기로 한 뒤로는
@@ -593,6 +612,44 @@
     const t = a[from - 1]; a[from - 1] = a[pos0(to)]; a[pos0(to)] = t;
     paint(part);
     return part + '부 ' + from + '번 ↔ ' + to + '번 맞바꿈 (티오프는 그대로)';
+  }
+
+  // ── 부 간 맞바꾸기(크로스파트 대바) ──────────────────────────────────
+  //  ★대바는 한 부 안에서만 일어나지 않는다(사용자). 3부 사람이 2부 자리를 받고 2부 사람이
+  //   3부로 내려오는 일이 실제로 있다. 그때 배치표 두 장이 동시에 바뀐다.
+  //  규칙은 부 안 맞바꾸기와 똑같다 — 사람만 자리를 바꾸고, 티오프는 자리에 그대로 남는다.
+  //   (그래서 각 부의 순번↔티오프는 한 칸도 안 움직인다. 움직이는 건 순번↔이름뿐이다.)
+  //  ★막는 것 셋: 빈 자리 · 근태자 · 그 부에 이미 있는 사람.
+  //   특히 마지막이 중요하다 — 이미 2부에 있는 사람을 2부로 또 보내면 한 사람이 두 순번을
+  //   차지하고, 그 부 명단이 조용히 한 명 늘어난다.
+  function applyCrossSwap(pa, ia, pb, ib) {
+    if (pa === pb) return applySwap(pa, ia, ib);
+    if (!ia || !ib) return '두 자리 모두 사람이 있어야 부 간 맞바꿈이 됩니다.';
+    const A = roster[pa], B = roster[pb];
+    const na = String(A[ia - 1] || ''), nb = String(B[ib - 1] || '');
+    if (!bare(na) || !bare(nb)) return '두 자리 모두 사람이 있어야 부 간 맞바꿈이 됩니다.';
+    // ★같은 사람이다. 두 부에 다 이름이 있는 사람(2·3부 두 탕, (54)·(1,3) 태그)이 실제로 있어서
+    //  3부 1번과 2부 1번이 둘 다 표승완인 날이 있다(실측 8/19). 그대로 두면 아무 일도 안 일어나는데
+    //  화면은 '맞바꿨습니다'라고 말하고, 반영 목록에는 두 부가 올라간다 — 관리자를 속이는 것이다.
+    if (nkd(na) === nkd(nb)) return bare(na) + '은(는) ' + pa + '부와 ' + pb + '부에 다 있는 사람입니다 — 자기 자신과는 맞바꿀 수 없습니다.';
+    const da = dutyOf(pa, na), db = dutyOf(pb, nb);
+    if (da || db) return (da ? bare(na) : bare(nb)) + '은(는) ' + (da || db) + '입니다 — 근태를 먼저 푸세요.';
+    if (B.some((x, i) => i !== ib - 1 && nkd(x) && nkd(x) === nkd(na))) return bare(na) + '은(는) 이미 ' + pb + '부 명단에 있습니다.';
+    if (A.some((x, i) => i !== ia - 1 && nkd(x) && nkd(x) === nkd(nb))) return bare(nb) + '은(는) 이미 ' + pa + '부 명단에 있습니다.';
+    push(pa, pb);
+    A[ia - 1] = nb; B[ib - 1] = na;
+    // 자국은 사람에게 붙는다. 되돌아온 사람(원래 자기 부로 복귀)에게는 자국을 지운다.
+    const markOrClear = (p, cell, src) => {
+      const k = nkd(cell);
+      if (((BOARD[p] || {}).roster || []).some((x) => nkd(x) === k)) crossMark[p].delete(k);
+      else crossMark[p].set(k, src);
+    };
+    markOrClear(pa, nb, pb); markOrClear(pb, na, pa);
+    paint(pa); paint(pb);
+    const seat = (p, i) => { const t = (teeV.real[p] || [])[i - 1]; return t ? t.time + ' ' + t.course : '스페어'; };
+    return pa + '부 ' + ia + '번 ' + bare(na) + '(' + seat(pa, ia) + ') ↔ '
+      + pb + '부 ' + ib + '번 ' + bare(nb) + '(' + seat(pb, ib) + ') 부 간 맞바꿈'
+      + ' · 티오프는 자리에 그대로 · 두 부 모두 반영해야 합니다';
   }
   const pos0 = (p) => p - 1;
   function applyMove(part, from, to, target) {
@@ -682,7 +739,11 @@
     const zone = zoneUnder(e.clientX, e.clientY);
     if (zone && zone.dataset.p === drag.part) { zone.classList.add('drop-to'); return; }
     const over = cellUnder(e.clientX, e.clientY);
-    if (over && over !== drag.td && over.dataset.p === drag.part && !over.classList.contains('intern') && !isPool(over)) over.classList.add('drop-to');
+    // ★다른 부의 칸도 놓을 자리다 — 맞바꾸기이거나(부 간 대바), 스페어가 낀 경우.
+    //  받아주지 않을 자리에 불을 켜면 안 된다: 손가락은 불이 켜진 곳을 믿는다.
+    const crossable = mode === 'swap' || drag.spare;
+    const okPart = over && (over.dataset.p === drag.part || (crossable && !drag.crew && !drag.pool && over.dataset.p));
+    if (over && over !== drag.td && okPart && !over.classList.contains('intern') && !isPool(over)) over.classList.add('drop-to');
   }, { passive: false });
   document.addEventListener('pointerup', (e) => {
     if (!drag) return;
@@ -722,15 +783,17 @@
       return;
     }
     if (d.crew) { state.textContent = '근태 줄이나 스페어 줄에 놓아주세요.'; return; }
-    if (!over || over.dataset.p !== d.part || over.classList.contains('intern')) { state.textContent = '취소했습니다.'; return; }
-    const to = posAt(d.part, over);
+    if (!over || !over.dataset.p || over.classList.contains('intern')) { state.textContent = '취소했습니다.'; return; }
+    const toPart = over.dataset.p;
+    const to = posAt(toPart, over);
     // ★스페어가 끼면 티오프 이동은 뜻이 없다(가진 티오프가 없다) → 자동으로 맞바꾸기로 처리한다.
     const spareInvolved = d.spare || isSpare(over);
     if (mode === 'swap' || spareInvolved) {
-      const msg = to ? applySwap(d.part, d.from, to) : '맞바꾸려면 사람이 있는 칸에 놓아주세요.';
+      const msg = to ? applyCrossSwap(d.part, d.from, toPart, to) : '맞바꾸려면 사람이 있는 칸에 놓아주세요.';
       state.textContent = msg + (spareInvolved && mode !== 'swap' ? ' (스페어라 맞바꾸기로 처리했습니다)' : '');
       return;
     }
+    if (toPart !== d.part) { state.textContent = '순번 옮기기는 같은 부 안에서만 됩니다 — 부 간 이동은 ‘맞바꾸기’로 하세요.'; return; }
     const msg = applyMove(d.part, d.from, to, { time: toHM(toMin(over.dataset.t)), course: over.dataset.c });
     if (msg) state.textContent = msg + projNote();
   });
@@ -777,13 +840,16 @@
     b.addEventListener('click', () => setMode(mode === b.dataset.mode ? '' : b.dataset.mode));
   });
   undoBtn.addEventListener('click', () => {
-    const s = stack.pop(); if (!s) return;
-    roster[s.part] = s.roster;
-    teeV.real[s.part] = s.tee.real; teeV.proj[s.part] = s.tee.proj;
-    origOcc.real[s.part] = s.occ.real; origOcc.proj[s.part] = s.occ.proj;
-    interns[s.part] = s.interns; duty[s.part] = s.duty || {}; touchedDuty[s.part] = s.touched || new Set();
-    idxMemo.real[s.part] = s.memo.real; idxMemo.proj[s.part] = s.memo.proj;
-    paint(s.part);
+    const e0 = stack.pop(); if (!e0) return;
+    for (const s of (Array.isArray(e0) ? e0 : [e0])) {
+      roster[s.part] = s.roster;
+      teeV.real[s.part] = s.tee.real; teeV.proj[s.part] = s.tee.proj;
+      origOcc.real[s.part] = s.occ.real; origOcc.proj[s.part] = s.occ.proj;
+      interns[s.part] = s.interns; duty[s.part] = s.duty || {}; touchedDuty[s.part] = s.touched || new Set();
+      crossMark[s.part] = s.cross || new Map();
+      idxMemo.real[s.part] = s.memo.real; idxMemo.proj[s.part] = s.memo.proj;
+      paint(s.part);
+    }
     state.textContent = '되돌렸습니다.';
   });
 
@@ -954,12 +1020,13 @@
     // ── 맞바꾸기(대바) — 순번↔이름만 교환. 티오프는 자리에 그대로 남는다.
     if (mode === 'swap') {
       if (!pos) { state.textContent = '이 칸엔 배정된 순번이 없습니다.'; return; }
-      if (!pick) { pick = td; td.classList.add('picked'); state.textContent = part + '부 ' + pos + '번 ' + bare(roster[part][pos - 1]) + ' 선택 — 바꿀 상대를 누르세요'; return; }
-      if (pick.dataset.p !== part) { state.textContent = '같은 부 안에서만 됩니다.'; clearPick(); return; }
-      const from = posAt(part, pick);
+      if (!pick) { pick = td; td.classList.add('picked'); state.textContent = part + '부 ' + pos + '번 ' + bare(roster[part][pos - 1]) + ' 선택 — 바꿀 상대를 누르세요 (다른 부도 됩니다)'; return; }
+      const fromPart = pick.dataset.p;
+      const from = posAt(fromPart, pick);
       clearPick();
-      const msg = applySwap(part, from, pos);
-      if (msg) state.textContent = msg + projNote();
+      // ★부가 달라도 막지 않는다 — 대바는 부를 넘나든다(사용자). 규칙은 같다: 사람만 자리를 바꾼다.
+      const msg = applyCrossSwap(fromPart, from, part, pos);
+      if (msg) state.textContent = msg + (fromPart === part ? projNote() : '');
       return;
     }
 
@@ -980,10 +1047,10 @@
             + ' 선택 — 들어갈 자리를 누르세요 (스페어라 맞바꾸기로 처리됩니다)';
           return;
         }
-        if (pick.dataset.p !== part) { state.textContent = '같은 부 안에서만 됩니다.'; clearPick(); return; }
-        const from0 = posAt(part, pick); clearPick();
+        const fromP = pick.dataset.p;
+        const from0 = posAt(fromP, pick); clearPick();
         if (!pos) { state.textContent = '사람이 있는 자리에 놓아주세요 — 빈 티오프로는 맞바꿀 수 없습니다.'; return; }
-        const msg = applySwap(part, from0, pos);
+        const msg = applyCrossSwap(fromP, from0, part, pos);
         state.textContent = msg ? msg + ' (스페어라 맞바꾸기로 처리했습니다)' : '';
         return;
       }
@@ -993,7 +1060,9 @@
         state.textContent = part + '부 ' + pos + '번 ' + bare(roster[part][pos - 1]) + ' 선택 — 갈 티오프를 누르세요';
         return;
       }
-      if (pick.dataset.p !== part) { state.textContent = '같은 부 안에서만 됩니다.'; clearPick(); return; }
+      // ★순번 옮기기는 티오프표(순번↔티오프)를 만지는 조작이라 부를 넘을 수 없다 — 부마다 티오프표가 다르다.
+      //  부를 넘기고 싶으면 그건 '맞바꾸기'다. 막기만 하지 말고 어디로 가야 하는지 말해준다.
+      if (pick.dataset.p !== part) { state.textContent = '순번 옮기기는 같은 부 안에서만 됩니다 — 부 간 이동은 ‘맞바꾸기’로 하세요.'; clearPick(); return; }
       const from = posAt(part, pick);
       clearPick();
       const target = { time: toHM(toMin(td.dataset.t)), course: td.dataset.c };
@@ -1118,11 +1187,35 @@
   //   10팀 → 13팀으로 덮이고 커트가 10→13이 된 적이 있다(알림은 안 나갔지만 앱은 틀린 걸 보여줬다).
   //   그래서 rows는 언제나 teeV.real이고, 인턴도 '본배치표에 팀이 있는 칸'만 보낸다.
   //  ★그리고 조용히 일어나지 않는다 — 무엇이 어떻게 바뀌는지 먼저 보여주고 확인을 받는다.
+  // ── 부 간 이동을 서버에 '사실'로 알린다 ────────────────────────────────
+  //  ★명단에서 빠진 것만으로는 부족하다. 서버는 명단에 없는 회원을 다시 계산하면 '휴무(off)'로 적는데,
+  //   3부가 휴무면 대시보드가 그 사람의 1·2부 카드까지 통째로 지운다(primaryOff). 대바로 2부에
+  //   간 사람이 앱에서 '오늘 휴무'가 되어버린다 — 정확히 반대의 사실이다.
+  //   그래서 '나갔다(movedOut)'를 따로 실어, 서버가 휴무가 아니라 '이 부엔 없음'으로 적게 한다.
+  //  ★기준은 BOARD(서버가 지금 들고 있는 명단)다. rosterOrig는 테스트판에 저장하면 갱신되므로
+  //   그걸로 재면 이미 저장한 대바가 안 보인다.
+  const baseNames = (p) => new Set((((BOARD[p] || {}).roster) || []).map(nkd).filter(Boolean));
+  const nowNames = (p) => new Set((roster[p] || []).map(nkd).filter(Boolean));
+  function crossMoves(part) {
+    const was = baseNames(part), now = nowNames(part);
+    const out = [], into = [];
+    for (const other of PARTS) {
+      if (other === part) continue;
+      const wasT = baseNames(other), nowT = nowNames(other);
+      for (const n of was) if (!now.has(n) && nowT.has(n) && !wasT.has(n)) out.push({ name: n, to: other });
+      for (const n of now) if (!was.has(n) && wasT.has(n) && !nowT.has(n)) into.push({ name: n, from: other });
+    }
+    return { out: out, into: into };
+  }
+
   function realPayload(part) {
     const real = teeV.real[part] || [];
+    const mv = crossMoves(part);
     const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
     return {
       part: part,
+      // 이 부에서 다른 부로 대바로 나간 사람 / 다른 부에서 이 부로 들어온 사람.
+      movedOut: mv.out, movedIn: mv.into,
       // ★명단 밖 사람의 근태 — rows로는 말할 수 없다(rows는 순번 명단이다). 따로 싣는다.
       dutySet: Object.fromEntries([...touchedDuty[part]].map((k) => [k, String(duty[part][k] || '')])),
       // ★근태는 '내가 만진 사람'만 싣는다.
@@ -1194,6 +1287,14 @@
         + (p.interns.length ? ` · 인턴 ${p.interns.length}칸` : '')
         + (drop > 0 ? ` · 인턴 ${drop}칸은 배치표에 못 넘어갑니다(그 시각 팀이 없어요 — 지정은 여기 그대로 남습니다)` : ''));
     }
+    // ★부 간 대바는 따로 이름을 대고 확인받는다 — 사람이 부를 옮기는 일이고, 두 부의 회원 상태가
+    //  동시에 바뀐다. '3부 이름 2칸' 같은 숫자로는 누가 어디로 가는지 알 수 없다.
+    const moves = [];
+    for (const part of PARTS) {
+      if (!touched(part)) continue;
+      for (const x of crossMoves(part).out) moves.push(`${x.name} — ${part}부 → ${x.to}부`);
+    }
+    if (moves.length) lines.push('부 간 대바 ' + moves.length + '명 · ' + moves.join(' · '));
     return lines;
   }
   applyBtn.addEventListener('click', async () => {
