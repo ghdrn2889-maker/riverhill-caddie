@@ -4628,20 +4628,85 @@ async function main() {
 const MENU_ICONS = {
   shield: '<path d="M12 2.6 20 6v5.6c0 4.9-3.3 8.5-8 9.8-4.7-1.3-8-4.9-8-9.8V6z"/><polyline points="9 12 11.2 14.2 15.4 10"/>',
   rules: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/>',
+  // 과녁 — 이 달 얼마를 겨누고 있나
+  goal: '<circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>',
+  // 막대 — 부별·지출·세무를 갈라 보는 곳
+  chart: '<line x1="4" y1="20" x2="20" y2="20"/><rect x="6" y="12" width="3.4" height="6"/><rect x="11.3" y="8" width="3.4" height="10"/><rect x="16.6" y="14.5" width="3.4" height="3.5"/>',
+  // 접힌 귀가 있는 문서 — 출력해서 내는 종이
+  doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>',
+  // 아래가 톱니인 영수증
+  receipt: '<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><line x1="9.5" y1="8.5" x2="14.5" y2="8.5"/><line x1="9.5" y1="12.5" x2="14.5" y2="12.5"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5.5H5.5V7a3 3 0 0 0 3 3"/><path d="M16 5.5h2.5V7a3 3 0 0 1-3 3"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8.5 20h7"/><path d="M10 17h4v3h-4z"/>',
 };
+
+// ★정산 탭 안쪽으로 데려가는 바로가기들 — 탭을 켜는 것만으로는 안 된다. 그 안에서 시트를 열거나
+//  카드까지 굴려줘야 '한 번에 닿는다'가 성립한다. 그런데 정산 데이터는 탭에 들어가야 비로소 불러온다.
+//  그래서 데이터가 준비될 때까지 잠깐 기다렸다가 마저 한다 — 안 기다리면 시트가 빈 채로 열린다.
+function goSettle(then) {
+  menuClose();
+  showView('settle');
+  if (typeof then !== 'function') return;
+  const t0 = Date.now();
+  const tick = () => {
+    if (lgData) { try { then(); } catch (e) { console.error('[메뉴] 정산 바로가기 오류:', e.message); } return; }
+    if (Date.now() - t0 > 4000) return;          // 못 불러오면 정산 탭에 그냥 둔다(빈 시트를 열지 않는다)
+    setTimeout(tick, 120);
+  };
+  tick();
+}
+const scrollToCard = (id) => {
+  const el = $(id); if (!el) return;
+  const card = el.closest('.card') || el;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
 // ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
-//  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리). 지금은 앱 어디에도 없는 두 가지만.
+//  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리).
+//  ★목표·정산서·지출은 이 목록의 원래 취지 그대로다 — 셋 다 정산 탭에 들어가 스크롤해야 나온다.
+//  ★업적은 화면이 아직 없다. 그래서 끄고 '준비'를 달아 자리만 잡는다(홈 타일 자물쇠와 같은 처리) —
+//   눌러보고 나서 없다는 걸 알게 하지 않는다.
 const MENU_ITEMS = [
   { k: 'shield', t: '캐디 보험', page: 'ins' },
   { k: 'rules', t: '근무 수칙', page: 'rule' },
+  { k: 'goal', t: '이 달 목표', go: () => goSettle(() => lgwOpen()) },
+  { k: 'chart', t: '수익 분석', go: () => goSettle(() => { const r = $('lgAnalysisRow'); if (r) r.click(); }) },
+  { k: 'doc', t: '정산서', go: () => goSettle(() => scrollToCard('lgDocSeg')) },
+  { k: 'receipt', t: '지출 등록', go: () => goSettle(() => lgOpenExpenseToday()) },
+  { k: 'trophy', t: '업적', off: '준비' },
 ];
+
+// 오늘 칸을 펼치고 지출 입력을 연다.
+//  ★내역은 7일씩 쪽으로 나뉜다(LG_PAGE). 그래서 '오늘 칸을 펼쳐라'만으로는 안 된다 —
+//   오늘이 다른 쪽에 있으면 화면에 아예 그려져 있지 않다(실측: 19일인데 1쪽은 1~7일만 그려져 있었다).
+//   먼저 오늘이 몇 쪽인지 세어 그 쪽으로 넘긴 다음 펼친다. 쪽 계산은 목록을 만드는 그 함수를
+//   그대로 써서 낸다 — 순서를 여기서 따로 흉내내면 두 곳이 갈라진다.
+//  ★이 달에 오늘이 없으면(지난 달을 보고 있는 등) 아무것도 하지 않는다. 없는 날을 만들지 않는다.
+function lgOpenExpenseToday() {
+  const d = new Date();
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let entries;
+  try { entries = lgBuildEntries(); } catch { return; }
+  const idx = (entries || []).findIndex((e) => e && e.date === iso);
+  if (idx < 0) return;
+  lgPage = Math.floor(idx / LG_PAGE);
+  lgOpenDate = iso;
+  lgExpForm = { date: iso, category: '', amount: '', vendor: '', method: '' };
+  renderLgList();
+  setTimeout(() => {
+    const el = document.getElementById('dexp-' + iso);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 80);
+}
+
 function renderMenu() {
   const p = (meState && meState.profile) || {};
   $('mnuName').textContent = p.boardName || '회원';
   $('mnuTag').textContent = (caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디') + ' · 리버힐';
   $('mnuGrid').innerHTML = MENU_ITEMS.map((x, i) =>
-    `<button class="mnu-q" type="button" data-i="${i}">`
-    + `<span class="g"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[x.k]}</svg></span>`
+    `<button class="mnu-q${x.off ? ' off' : ''}" type="button" data-i="${i}"`
+    + `${x.off ? ` aria-disabled="true" aria-label="${esc(x.t)} — ${esc(x.off)} 중"` : ''}>`
+    + `<span class="g"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[x.k]}</svg>`
+    + `${x.off ? `<span class="bg">${esc(x.off)}</span>` : ''}</span>`
     + `<span class="lb">${esc(x.t)}</span></button>`).join('');
 }
 
@@ -4781,6 +4846,7 @@ function initMenu() {
     const b = e.target.closest('.mnu-q'); if (!b) return;
     const it = MENU_ITEMS[Number(b.dataset.i)];
     if (!it) return;
+    if (it.off) return;                            // 아직 화면이 없는 것 — 눌러도 아무 데도 안 간다
     if (it.page) openMenuPage(it.page);
     else if (typeof it.go === 'function') it.go();
   };
