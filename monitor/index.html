@@ -1697,7 +1697,17 @@
      +'.ob-hint{font-size:11.5px;color:var(--tx3);margin:-6px 0 10px}'
      +'.ob-kw{display:flex;align-items:center;gap:7px;margin-top:8px}'
      +'.ob-kw span{font-size:11px;font-weight:800;color:var(--tx3)}'
-     +'.ob-kw select{font:inherit;font-size:12px;background:var(--panel);color:var(--tx);border:1px solid var(--bord2);border-radius:6px;padding:3px 7px}';
+     +'.ob-kw select{font:inherit;font-size:12px;background:var(--panel);color:var(--tx);border:1px solid var(--bord2);border-radius:6px;padding:3px 7px}'
+     +'.ob-bulk{margin-bottom:9px}'
+     +'.ob-bt{width:100%;font:inherit;font-size:13px;font-weight:800;color:var(--tx);background:var(--panel);border:1px dashed var(--bord2);border-radius:9px;padding:10px;cursor:pointer}'
+     +'.ob-bt:hover:not(:disabled){border-color:var(--good);color:var(--good)}.ob-bt:disabled{opacity:.5;cursor:default}'
+     +'.ob-bf{display:flex;flex-direction:column;gap:7px;margin-top:8px;padding:11px;background:var(--panel);border:1px solid var(--bord2);border-radius:10px}'
+     +'.ob-bf input,.ob-bf textarea{font:inherit;font-size:13px;color:var(--tx);background:var(--panel2);border:1px solid var(--bord2);border-radius:7px;padding:8px 10px;resize:vertical}'
+     +'.ob-bn{font-size:11.5px;color:var(--tx3);line-height:1.5}'
+     +'.ob-brow{display:flex;gap:8px}'
+     +'.ob-bx,.ob-ba{flex:1;font:inherit;font-size:13px;font-weight:800;border-radius:8px;padding:9px;cursor:pointer;border:1px solid var(--bord2);background:var(--panel2);color:var(--tx2)}'
+     +'.ob-bx{flex:.5}'
+     +'.ob-ba{background:var(--good);border-color:var(--good);color:#fff}';
     document.head.appendChild(s);
   }
   // ── ★크로스파트 대바(자리 맞바꿈) ── 다른 부 캐디를 골라 두 좌석을 통째로 교환.
@@ -1824,17 +1834,51 @@
       +'<p class="rvnt-sub">보내기 전 마지막 확인입니다. <b>'+v.items.length+'명</b>분 문구가 아래 그대로 폰에 뜹니다.</p>'
       +'<p class="ob-hint">종류를 바꾸면 그 회원 상태로 문구가 다시 써집니다. 제목·내용은 눌러서 고칩니다. 체크를 풀면 그 회원에겐 안 갑니다.</p>'
       +banner
+      // ★여러 명에게 같은 말을 해야 하는 날이 있다 — 한 명씩 치게 하면 그중 한 줄이 달라진다.
+      +'<div class="ob-bulk"><button class="ob-bt" type="button"></button>'
+      +'<div class="ob-bf" hidden>'
+      +'<input class="ob-bti" type="text" maxlength="90" placeholder="제목 — 고른 회원 전부에게 똑같이 갑니다">'
+      +'<textarea class="ob-bbi" rows="3" maxlength="300" placeholder="내용을 적어주세요."></textarea>'
+      +'<div class="ob-bn">누르면 <b>체크된 회원</b>의 제목·내용을 이 글로 덮습니다. 덮은 뒤에도 한 명씩 다시 고칠 수 있습니다.</div>'
+      +'<div class="ob-brow"><button class="ob-bx" type="button">닫기</button><button class="ob-ba" type="button"></button></div>'
+      +'</div></div>'
       +'<div class="rvnt-list">'+v.items.map(function(x){ return obCard(x,v.kinds); }).join('')+'</div>'
       +'<div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button>'
       +'<button class="rvnt-go" type="button"></button></div></div>';
     document.body.appendChild(ov);
     var go=ov.querySelector('.rvnt-go');
+    var listEl=ov.querySelector('.rvnt-list');
+    var bt=ov.querySelector('.ob-bt'), bf=ov.querySelector('.ob-bf'), ba=ov.querySelector('.ob-ba');
     function paintGo(){
       var np=picks().length, nr=reach();
       go.disabled=!np;
       go.textContent=np? (nr===np? np+'명에게 보내기' : np+'명에게 보내기 (실제 도달 '+nr+'명)') : '보낼 회원이 없습니다';
+      bt.textContent='고른 '+np+'명에게 같은 문구로 쓰기';
+      bt.disabled=np<2;                       // 한 명뿐이면 그 카드에서 고치면 된다
+      ba.textContent=np+'명에게 이 문구로';
     }
+    function repaint(){ listEl.innerHTML=v.items.map(function(x){ return obCard(x,v.kinds); }).join(''); paintGo(); }
     paintGo();
+    bt.addEventListener('click',function(){ bf.hidden=!bf.hidden; if(!bf.hidden) ov.querySelector('.ob-bti').focus(); });
+    ov.querySelector('.ob-bx').addEventListener('click',function(){ bf.hidden=true; });
+    ba.addEventListener('click',async function(){
+      var title=ov.querySelector('.ob-bti').value.trim(), body=ov.querySelector('.ob-bbi').value.trim();
+      if(!title||!body){ rvToast('함께 쓰기는 제목과 내용을 모두 적어주세요'); return; }
+      var ids=picks().map(function(x){ return x.id; });
+      if(!ids.length){ rvToast('먼저 받을 회원을 고르세요'); return; }
+      ba.disabled=true;
+      try{
+        var r=await fetch(apiUrl('/api/outbox-bulk'),{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({token:token,ids:ids,title:title,body:body})});
+        var j=await r.json();
+        if(!j.ok) throw new Error(j.error||'함께 쓰기 실패');
+        var hit={}; (j.ids||ids).forEach(function(i){ hit[i]=1; });
+        v.items.forEach(function(x){ if(hit[x.id]){ x.title=title; x.body=body; x.kind='free'; x.edited=true; } });
+        repaint(); bf.hidden=true;
+        rvToast(j.changed+'명에게 같은 문구를 넣었습니다 — 아직 보내지 않았습니다');
+      }catch(e){ rvToast('함께 쓰기 실패: '+e.message); }
+      finally{ ba.disabled=false; }
+    });
     function save(id,patch){
       fetch(apiUrl('/api/outbox-edit'),{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(Object.assign({token:token,id:id},patch))}).catch(function(){ rvToast('수정 저장 실패'); });

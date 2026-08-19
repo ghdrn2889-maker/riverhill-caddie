@@ -123,6 +123,26 @@ export function editItem(token, id, { title, body, pick, kind } = {}) {
   return { id: it.id, title: it.title, body: it.body, pick: it.pick, edited: it.edited, kind: it.kind };
 }
 
+// ── 여러 명에게 같은 문구로 ──
+//  ★한 사람씩 고치는 것만으로는 모자란다. '내일 배치표가 늦습니다' 같은 말은 열 명에게 똑같이 가야 하는데,
+//   열 번 같은 글자를 치게 하면 그중 한 줄이 달라지고 그 한 줄이 제일 눈에 띈다.
+//  ★고른 사람만 덮는다. 체크를 푼 사람은 이 문구도 안 받는다 — 화면에서 뺀 사람이 글자만 받는 건 앞뒤가 안 맞는다.
+export function bulkEdit(token, { ids = null, title, body } = {}) {
+  sweep();
+  const e = box.get(String(token || ''));
+  if (!e) return null;
+  const only = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
+  const hit = e.items.filter((it) => (only ? only.has(it.id) : it.pick));
+  if (!hit.length) return { changed: 0, ids: [] };
+  for (const it of hit) {
+    if (title != null) it.title = clip(title, 90);
+    if (body != null) it.body = clip(body, 300);
+    it.kind = 'free';                 // 손으로 쓴 문구다 — 상태가 바뀌어도 다시 쓰지 않는다
+    it.edited = true;
+  }
+  return { changed: hit.length, ids: hit.map((it) => it.id) };
+}
+
 export function drop(token) { return box.delete(String(token || '')); }
 
 // ── 여러 초안을 한 장으로 ──

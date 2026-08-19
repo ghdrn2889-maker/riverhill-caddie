@@ -771,6 +771,14 @@ app.post('/api/outbox-compose', gate, (req, res) => {
   } catch (e) { console.error('outbox-compose 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ── 여러 명에게 같은 문구로 ── 고른 회원 전부의 제목·본문을 한 번에 덮는다.
+app.post('/api/outbox-bulk', gate, (req, res) => {
+  const { token, ids, title, body } = req.body || {};
+  if (!String(title || '').trim() || !String(body || '').trim()) return res.status(400).json({ ok: false, error: '제목과 내용을 모두 적어주세요.' });
+  const r = outbox.bulkEdit(String(token || ''), { ids: Array.isArray(ids) ? ids : null, title, body });
+  if (!r) return res.status(404).json({ ok: false, error: '대기 중인 알림이 없어요(이미 보냈거나 만료됐습니다).' });
+  res.json({ ok: true, ...r });
+});
 app.post('/api/outbox-merge', gate, (req, res) => {
   const tokens = Array.isArray(req.body?.tokens) ? req.body.tokens.map(String) : [];
   const token = outbox.merge(tokens);

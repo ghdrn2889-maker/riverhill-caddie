@@ -1245,6 +1245,16 @@
       '.ob-kw{display:flex;align-items:center;gap:7px;margin-top:8px}',
       '.ob-kw span{font-size:11px;font-weight:800;color:var(--dim)}',
       '.ob-kw select{font:inherit;font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 7px}',
+      '.ob-bulk{margin-bottom:9px}',
+      '.ob-bt{width:100%;font:inherit;font-size:13px;font-weight:800;color:var(--ink);background:var(--panel);border:1px dashed var(--line);border-radius:9px;padding:10px;cursor:pointer}',
+      '.ob-bt:hover{border-color:var(--ok);color:var(--ok)}',
+      '.ob-bf{display:flex;flex-direction:column;gap:7px;margin-top:8px;padding:11px;background:var(--panel);border:1px solid var(--line);border-radius:10px}',
+      '.ob-bf input,.ob-bf textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;resize:vertical}',
+      '.ob-bf .ob-bn{font-size:11.5px;color:var(--dim);line-height:1.5}',
+      '.ob-brow{display:flex;gap:8px}',
+      '.ob-bx,.ob-ba{flex:1;font:inherit;font-size:13px;font-weight:800;border-radius:8px;padding:9px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--dim)}',
+      '.ob-bx{flex:.5}',
+      '.ob-ba{background:var(--ok);border-color:var(--ok);color:var(--bg)}',
       '.ob-btns{display:flex;gap:9px;margin-top:12px}',
       '.ob-x,.ob-go{flex:1;font:inherit;font-weight:800;font-size:15px;border:1px solid var(--line);border-radius:11px;padding:12px;cursor:pointer;background:var(--panel);color:var(--dim)}',
       '.ob-x{flex:.55}',
@@ -1292,16 +1302,54 @@
       + `<p class="ob-sub">보내기 전 마지막 확인입니다. <b>${v.items.length}명</b>분 문구가 아래 그대로 폰에 뜹니다.</p>`
       + '<p class="ob-hint">종류를 바꾸면 그 회원 상태로 문구가 다시 써집니다. 제목·내용은 눌러서 고칩니다. 체크를 풀면 그 회원에겐 안 갑니다.</p>'
       + banner
+      // ★여러 명에게 같은 말을 해야 하는 날이 있다 — 그걸 한 명씩 치게 하면 그중 한 줄이 달라진다.
+      + '<div class="ob-bulk"><button class="ob-bt" type="button"></button>'
+      + '<div class="ob-bf" hidden>'
+      + '<input class="ob-bti" type="text" maxlength="90" placeholder="제목 — 고른 회원 전부에게 똑같이 갑니다">'
+      + '<textarea class="ob-bbi" rows="3" maxlength="300" placeholder="내용을 적어주세요."></textarea>'
+      + '<div class="ob-bn">누르면 <b>체크된 회원</b>의 제목·내용을 이 글로 덮습니다. 덮은 뒤에도 한 명씩 다시 고칠 수 있습니다.</div>'
+      + '<div class="ob-brow"><button class="ob-bx" type="button">닫기</button><button class="ob-ba" type="button"></button></div>'
+      + '</div></div>'
       + `<div class="ob-list">${v.items.map((x) => obCard(x, v.kinds)).join('')}</div>`
       + '<div class="ob-btns"><button class="ob-x" type="button">취소</button><button class="ob-go" type="button"></button></div></div>';
     document.body.appendChild(ov);
     const go = ov.querySelector('.ob-go');
+    const listEl = ov.querySelector('.ob-list');
+    const bt = ov.querySelector('.ob-bt');
+    const bf = ov.querySelector('.ob-bf');
+    const ba = ov.querySelector('.ob-ba');
     const paintGo = () => {
       const np = picks().length, nr = reach();
       go.disabled = !np;
       go.textContent = np ? (nr === np ? `${np}명에게 보내기` : `${np}명에게 보내기 (실제 도달 ${nr}명)`) : '보낼 회원이 없습니다';
+      bt.textContent = `고른 ${np}명에게 같은 문구로 쓰기`;
+      bt.disabled = np < 2;                       // 한 명뿐이면 그 카드에서 고치면 된다
+      ba.textContent = `${np}명에게 이 문구로`;
     };
+    const repaint = () => { listEl.innerHTML = v.items.map((x) => obCard(x, v.kinds)).join(''); paintGo(); };
     paintGo();
+    bt.addEventListener('click', () => { bf.hidden = !bf.hidden; if (!bf.hidden) ov.querySelector('.ob-bti').focus(); });
+    ov.querySelector('.ob-bx').addEventListener('click', () => { bf.hidden = true; });
+    ba.addEventListener('click', async () => {
+      const title = ov.querySelector('.ob-bti').value.trim();
+      const body = ov.querySelector('.ob-bbi').value.trim();
+      if (!title || !body) { state.textContent = '함께 쓰기는 제목과 내용을 모두 적어주세요.'; return; }
+      const ids = picks().map((x) => x.id);
+      if (!ids.length) { state.textContent = '먼저 받을 회원을 고르세요.'; return; }
+      ba.disabled = true;
+      try {
+        const j = await (await fetch(apiUrl('/api/outbox-bulk'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token, ids, title, body }),
+        })).json();
+        if (!j.ok) throw new Error(j.error || '함께 쓰기 실패');
+        const hit = new Set(j.ids || ids);
+        v.items.forEach((x) => { if (hit.has(x.id)) { x.title = title; x.body = body; x.kind = 'free'; x.edited = true; } });
+        repaint(); bf.hidden = true;
+        state.textContent = `${j.changed}명에게 같은 문구를 넣었습니다 — 아직 보내지 않았습니다.`;
+      } catch (e) { state.textContent = '함께 쓰기 실패: ' + e.message; }
+      finally { ba.disabled = false; }
+    });
     const save = (id, patch) => fetch(apiUrl('/api/outbox-edit'), {
       method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(Object.assign({ token, id }, patch)),
