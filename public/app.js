@@ -2927,9 +2927,9 @@ function initLedgerButtons() {
   $('lgwInput').oninput = () => { if (lgwLocked) return; const v = $('lgwInput').value.replace(/[^\d]/g, ''); $('lgwInput').value = v; lgwWorkGoal = Math.max(0, (Number(v) || 0) * 10000); lgwLiveUpdate(); };
   // 분석 시트
   const as = $('lgAnalysisSheet');
-  $('lgAnalysisRow').onclick = () => { lgRenderAnalysis(); as.classList.add('on'); setTimeout(() => as.querySelectorAll('.track i').forEach((i) => i.style.width = i.dataset.w), 90); };
-  $('lgAnaClose').onclick = () => { as.classList.remove('on'); as.querySelectorAll('.track i').forEach((i) => i.style.width = '0'); };
-  as.onclick = (e) => { if (e.target === as) { as.classList.remove('on'); as.querySelectorAll('.track i').forEach((i) => i.style.width = '0'); } };
+  $('lgAnalysisRow').onclick = () => { lgRenderAnalysis(); as.classList.add('on'); setTimeout(() => as.querySelectorAll('.abar i').forEach((i) => i.style.width = i.dataset.w), 90); };
+  $('lgAnaClose').onclick = () => { as.classList.remove('on'); as.querySelectorAll('.abar i').forEach((i) => i.style.width = '0'); };
+  as.onclick = (e) => { if (e.target === as) { as.classList.remove('on'); as.querySelectorAll('.abar i').forEach((i) => i.style.width = '0'); } };
   // 라이트박스
   $('lgLb').onclick = () => $('lgLb').classList.remove('on');
   // 정산서
@@ -2959,16 +2959,18 @@ function lgRenderAnalysis() {
   // 히어로(순이익) · 듀오(수입/지출) · 합계
   $('lgAnaNet').textContent = fmtN(S.netProfit);
   $('lgAnaDInc').textContent = fmtN(S.revenueTotal);
-  $('lgAnaDExp').textContent = '−' + fmtN(S.expTotal);
+  $('lgAnaDExp').textContent = fmtN(S.expTotal);
+  $('lgAnaPSum').textContent = wonKo(S.revenueTotal);
+  $('lgAnaESum').textContent = '−' + wonKo(S.expTotal);
   $('lgAnaTInc').textContent = wonKo(S.revenueTotal);
   $('lgAnaTExp').textContent = '−' + wonKo(S.expTotal);
   $('lgAnaTNet').textContent = wonKo(S.netProfit);
 }
-// 분석 항목 한 줄: 점선 리더(이름 ···· 금액) + 아래 막대(수치 강조)
+// 분석 항목 한 줄: 이름 — 금액(오른쪽 끝) + 아래 막대(비중)
 function lgAItem(k, v, mx, isExp) {
-  return `<div class="aitem"><div class="arow"><span class="k">${esc(String(k))}</span><span class="dots"></span><span class="v">${wonKo(v)}</span></div><div class="track${isExp ? ' exp' : ''}"><i data-w="${Math.round(v / mx * 100)}%"></i></div></div>`;
+  return `<div class="aitem"><div class="arow"><span class="k">${esc(String(k))}</span><span class="v${isExp ? ' e' : ''}">${wonKo(v)}</span></div><div class="abar${isExp ? ' exp' : ''}"><i data-w="${Math.round(v / mx * 100)}%"></i></div></div>`;
 }
-function lgAEmpty(t) { return `<div style="color:#8a8270;font-size:12px;font-style:italic;">${t}</div>`; }
+function lgAEmpty(t) { return `<div class="aempty">${t}</div>`; }
 
 function lgDocOpts() { const on = (o) => $('lgDocOpts').querySelector('[data-opt="' + o + '"]').classList.contains('on'); return { rev: on('rev'), tip: on('tip'), exp: on('exp') }; }
 function updateDocDesc() {

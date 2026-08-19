@@ -858,39 +858,67 @@
     .gact{ display:flex; gap:9px; }
     .gact button{ flex:1; font:inherit; font-size:15px; font-weight:800; border-radius:13px; padding:13px; border:0; cursor:pointer; }
     .gact .cancel{ background:#eef2ec; color:#657268; } .gact .save{ background:#0c8f6a; color:#fff; }
-    /* ── 분석 시트: 에디토리얼 장부 × 애널리틱스 수치 · 옥스블러드 단일 포인트 ── */
-    .amast{ text-align:center; padding:1px 0 11px; border-bottom:2px solid #241f18; }
-    .amast-k{ font-size:10px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#7c3a35; }
-    .amast-t{ font-family:Georgia,"Times New Roman",serif; font-style:italic; font-size:29px; font-weight:700; letter-spacing:-.02em; margin-top:5px; color:#241f18; }
-    .amast-s{ font-size:11.5px; color:#8a8270; font-weight:600; margin:6px 0 0; }
-    .ahero{ text-align:center; margin:13px 0 0; }
-    .ahero-l{ font-size:10px; font-weight:850; letter-spacing:.14em; text-transform:uppercase; color:#a06b66; }
-    .ahero-v{ margin-top:3px; }
-    .ahero-v b{ font-size:34px; font-weight:900; letter-spacing:-.04em; color:#7c3a35; font-variant-numeric:tabular-nums; }
-    .ahero-v small{ font-size:15px; color:#a87d78; font-weight:800; margin-left:2px; }
-    .aduo{ display:flex; gap:9px; margin:11px 0 2px; }
-    .aduo-c{ flex:1; border-radius:13px; padding:11px 13px; background:#ece3d4; }
-    .aduo-c .l{ font-size:10px; font-weight:850; letter-spacing:.08em; text-transform:uppercase; color:#94886f; }
-    .aduo-c b{ display:block; font-size:16px; font-weight:850; letter-spacing:-.02em; margin-top:4px; font-variant-numeric:tabular-nums; }
-    .aduo-c.inc b{ color:#7c3a35; } .aduo-c.exp b{ color:#3a3424; }
-    .asec{ margin-top:15px; } .asec-l{ font-family:Georgia,serif; font-style:italic; font-size:13px; font-weight:700; color:#7c3a35; margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid #ddd3bf; }
-    .aitem{ margin-bottom:9px; }
-    .arow{ display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
-    .arow .k{ font-size:13.5px; font-weight:700; color:#2b2619; min-width:36px; }
-    .arow .dots{ flex:1; border-bottom:1px dotted #c7bca4; transform:translateY(-4px); }
-    .arow .v{ font-size:13.5px; font-weight:800; color:#241f18; font-variant-numeric:tabular-nums; }
-    .track{ height:6px; border-radius:4px; background:#eae3d3; overflow:hidden; }
-    .track i{ display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#9a4a44,#7c3a35); width:0; transition:width .7s cubic-bezier(.22,1,.36,1); }
-    .track.exp i{ background:#caa8a3; }
-    .atot{ margin-top:15px; border-top:2px solid #241f18; border-bottom:2px solid #241f18; padding:11px 0; }
-    .atr{ display:flex; justify-content:space-between; align-items:baseline; padding:5px 0; font-size:13.5px; }
-    .atr .k{ font-weight:700; color:#3a3424; } .atr b{ font-weight:800; color:#241f18; font-variant-numeric:tabular-nums; }
-    .atr.net{ margin-top:3px; }
-    .atr.net .k{ font-family:Georgia,serif; font-style:italic; font-size:16px; color:#241f18; }
-    .atr.net b{ font-family:Georgia,serif; font-style:italic; font-size:21px; color:#7c3a35; }
-    .taxnote{ font-size:10.5px; color:#8a8270; line-height:1.55; margin-top:12px; border-left:3px solid #c99c96; padding:2px 0 2px 11px; font-style:italic; }
-    .taxnote b{ color:#5b5340; font-style:normal; font-weight:800; }
-    .aclose{ width:100%; font:inherit; font-size:15px; font-weight:800; color:#f3efe6; background:#7c3a35; border:0; border-radius:13px; padding:13px; cursor:pointer; margin-top:13px; }
+    /* ── 분석 시트(A안 · 카드 결산): 정산 탭의 다음 장 — 앱 카드·초록·Pretendard 그대로 ── */
+    /*  ★전부 .s2sheet.ana 아래로 가둔다 — .track/.arow 같은 이름은 홈 레일 등 다른 화면에도 있다. */
+    /*  ★시트는 body로 옮겨 붙어(정산 탭 밖) 글꼴 상속이 끊긴다 — 목표 시트(.lgw-bg)처럼 스택을 다시 선언한다. */
+    /*  ★아래 여백은 하단 탭(z-index 300)만큼 비운다 — 안 그러면 '닫기'를 눌러도 탭이 눌린다(옛 시트는 아예 화면 밖으로 나갔다). */
+    .s2sheet.ana{ background:#eef2ec; color:#17231d; display:flex; flex-direction:column; gap:11px;
+      padding-bottom:calc(72px + env(safe-area-inset-bottom));
+      font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif; }
+    /*  ★flex 자식은 기본이 '줄어들기'다 — 안 잠그면 긴 달에 카드가 찌그러지고 스크롤이 안 생긴다. */
+    .s2sheet.ana>*{ flex:none; }
+    .s2sheet.ana .gh{ background:#17231d; margin-bottom:2px; }
+    .s2sheet.ana .amast{ padding:0 2px; }
+    .s2sheet.ana .amast-k{ font-size:9px; font-weight:850; letter-spacing:.15em; text-transform:uppercase; color:#9aa39c; }
+    .s2sheet.ana .amast-t{ font-size:21px; font-weight:850; letter-spacing:-.035em; margin-top:5px; color:#17231d; }
+    .s2sheet.ana .amast-s{ font-size:11.5px; color:#8b948d; font-weight:700; margin:3px 0 0; }
+    /* 히어로 — 정산 탭 히어로의 낮 그라데이션 그대로(시트가 탭의 연장으로 읽히게) */
+    .s2sheet.ana .ahero{ position:relative; overflow:hidden; border-radius:18px; padding:17px 17px 18px;
+      background:linear-gradient(157deg,#eaf4e7,#d6e9d8 60%,#cbe4d1);
+      box-shadow:0 1px 2px rgba(20,40,26,.05),0 8px 20px rgba(20,40,26,.06); }
+    .s2sheet.ana .ahero::before{ content:''; position:absolute; right:-26px; top:-46px; width:150px; height:150px; border-radius:50%;
+      background:radial-gradient(circle,rgba(255,251,224,.9),rgba(255,251,224,0) 64%); }
+    .s2sheet.ana .ahero>*{ position:relative; z-index:2; }
+    .s2sheet.ana .ahero-l{ font-size:9px; font-weight:850; letter-spacing:.15em; text-transform:uppercase; color:#3f5849; }
+    .s2sheet.ana .ahero-v{ margin-top:10px; line-height:1; color:#12291d; }
+    .s2sheet.ana .ahero-v b{ font-size:33px; font-weight:850; letter-spacing:-.045em; font-variant-numeric:tabular-nums; }
+    .s2sheet.ana .ahero-v small{ font-size:15px; font-weight:800; margin-left:3px; opacity:.75; }
+    .s2sheet.ana .aduo{ display:flex; align-items:center; gap:9px; margin-top:14px; font-size:12.5px; font-weight:750;
+      color:#2f4a39; opacity:.9; font-variant-numeric:tabular-nums; }
+    .s2sheet.ana .aduo b{ font-weight:800; }
+    .s2sheet.ana .aduo .dot{ width:3px; height:3px; border-radius:50%; background:#2f4a39; opacity:.45; }
+    /* 카드(부별 수익 · 지출) — 앱 카드와 같은 모서리·그림자 */
+    .s2sheet.ana .acard{ background:#fff; border-radius:18px; box-shadow:0 1px 2px rgba(20,40,26,.04),0 6px 16px rgba(20,40,26,.04); }
+    .s2sheet.ana .ach{ display:flex; align-items:baseline; justify-content:space-between; padding:14px 16px 4px; }
+    .s2sheet.ana .ach .l{ font-size:9px; font-weight:850; letter-spacing:.15em; text-transform:uppercase; color:#9aa39c; }
+    .s2sheet.ana .ach .a{ font-size:12px; font-weight:800; color:#0c8f6a; font-variant-numeric:tabular-nums; }
+    .s2sheet.ana .ach .a.e{ color:#a37a6e; }
+    .s2sheet.ana .abody{ padding:4px 16px 14px; }
+    .s2sheet.ana .aitem{ padding:8px 0; border-bottom:1px solid #eef1ec; }
+    .s2sheet.ana .aitem:last-child{ border-bottom:0; padding-bottom:2px; }
+    .s2sheet.ana .arow{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:7px; }
+    .s2sheet.ana .arow .k{ font-size:14px; font-weight:750; color:#17231d; }
+    .s2sheet.ana .arow .v{ font-size:14.5px; font-weight:800; color:#0c8f6a; font-variant-numeric:tabular-nums; }
+    .s2sheet.ana .arow .v.e{ color:#a37a6e; }
+    /*  ★막대 이름은 .abar — 홈 레일이 전역 .track{position:absolute}를 쓰고 있어 같은 이름을 쓰면 흐름에서 빠진다. */
+    .s2sheet.ana .abar{ height:7px; border-radius:5px; background:#f1f4f0; overflow:hidden; }
+    .s2sheet.ana .abar i{ display:block; height:100%; border-radius:5px; background:#164a2c; opacity:.92; width:0;
+      transition:width .7s cubic-bezier(.22,1,.36,1); }
+    .s2sheet.ana .abar.exp i{ background:#a37a6e; opacity:.75; }
+    .s2sheet.ana .aempty{ font-size:12px; color:#8b948d; padding:6px 0 4px; }
+    /* 합계 */
+    .s2sheet.ana .atot{ padding:13px 16px 14px; }
+    .s2sheet.ana .atr{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; font-size:13.5px; }
+    .s2sheet.ana .atr .k{ font-weight:700; color:#8b948d; }
+    .s2sheet.ana .atr b{ font-weight:800; color:#17231d; font-variant-numeric:tabular-nums; }
+    .s2sheet.ana .atr b.e{ color:#a37a6e; }
+    .s2sheet.ana .atr.net{ border-top:1px solid #eef1ec; margin-top:4px; padding-top:11px; }
+    .s2sheet.ana .atr.net .k{ font-size:14px; font-weight:800; color:#17231d; }
+    .s2sheet.ana .atr.net b{ font-size:19px; color:#0c8f6a; letter-spacing:-.02em; }
+    .s2sheet.ana .taxnote{ font-size:10.5px; color:#8b948d; line-height:1.65; padding:0 4px; }
+    .s2sheet.ana .taxnote b{ color:#5a655c; font-weight:800; }
+    .s2sheet.ana .aclose{ width:100%; font:inherit; font-size:15px; font-weight:800; color:#fff; background:#0c8f6a; border:0;
+      border-radius:14px; padding:14px; cursor:pointer; box-shadow:0 4px 12px rgba(12,143,106,.22); }
     .s2lb{ position:fixed; inset:0; background:rgba(12,22,16,.72); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:.2s; z-index:130; padding:30px; }
     .s2lb.on{ opacity:1; pointer-events:auto; }
     .s2lb img{ max-width:82%; max-height:80%; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
@@ -2837,16 +2865,19 @@
         </div>
       </div>
 
-      <div class="s2sheet-bg" id="lgAnalysisSheet"><div class="s2sheet">
+      <div class="s2sheet-bg" id="lgAnalysisSheet"><div class="s2sheet ana">
         <div class="gh"></div>
-        <div class="amast"><div class="amast-k" id="lgAnaMast">캐디 월 결산</div><div class="amast-t" id="lgAnaTitle">2026. 8</div><div class="amast-s asub" id="lgAnaSub"></div></div>
-        <div class="ahero"><div class="ahero-l">이 달 순이익</div><div class="ahero-v"><b id="lgAnaNet">0</b><small>원</small></div></div>
-        <div class="aduo"><div class="aduo-c inc"><div class="l">수입</div><b id="lgAnaDInc">0</b></div><div class="aduo-c exp"><div class="l">지출</div><b id="lgAnaDExp">0</b></div></div>
-        <div class="asec"><div class="asec-l">부별 수익</div><div id="lgAnaParts"></div></div>
-        <div class="asec"><div class="asec-l">지출</div><div id="lgAnaExp"></div></div>
-        <div class="atot">
+        <div class="amast"><div class="amast-k" id="lgAnaMast">캐디 월 결산</div><div class="amast-t" id="lgAnaTitle">2026. 8</div><div class="amast-s" id="lgAnaSub"></div></div>
+        <div class="ahero">
+          <div class="ahero-l">이 달 순이익</div>
+          <div class="ahero-v"><b id="lgAnaNet">0</b><small>원</small></div>
+          <div class="aduo"><span>수입 <b id="lgAnaDInc">0</b></span><span class="dot"></span><span>지출 <b id="lgAnaDExp">0</b></span></div>
+        </div>
+        <div class="acard"><div class="ach"><span class="l">부별 수익</span><span class="a" id="lgAnaPSum">0원</span></div><div class="abody" id="lgAnaParts"></div></div>
+        <div class="acard"><div class="ach"><span class="l">지출</span><span class="a e" id="lgAnaESum">0원</span></div><div class="abody" id="lgAnaExp"></div></div>
+        <div class="acard atot">
           <div class="atr"><span class="k">수입 합계</span><b id="lgAnaTInc">0</b></div>
-          <div class="atr"><span class="k">지출 합계</span><b id="lgAnaTExp">0</b></div>
+          <div class="atr"><span class="k">지출 합계</span><b class="e" id="lgAnaTExp">0</b></div>
           <div class="atr net"><span class="k">순이익</span><b id="lgAnaTNet">0</b></div>
         </div>
         <div class="taxnote">캐디는 <b>사업소득(3.3% 원천징수)</b> — 세금은 매년 5월 <b>종합소득세</b>로 연 단위 정산됩니다. 이 화면은 <b>소명자료</b>이며 세액을 계산하진 않습니다. 정확한 세액은 <b>세무사 상담</b> 권장.</div>
