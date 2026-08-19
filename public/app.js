@@ -4696,9 +4696,22 @@ const MENU_ICONS = {
 // ★정산 탭 안쪽으로 데려가는 바로가기들 — 탭을 켜는 것만으로는 안 된다. 그 안에서 시트를 열거나
 //  카드까지 굴려줘야 '한 번에 닿는다'가 성립한다. 그런데 정산 데이터는 탭에 들어가야 비로소 불러온다.
 //  그래서 데이터가 준비될 때까지 잠깐 기다렸다가 마저 한다 — 안 기다리면 시트가 빈 채로 열린다.
+/* ★메뉴에서 탭으로 건너뛸 때는 menuClose()를 쓰면 안 된다.
+ *   menuClose()는 메뉴가 쌓아둔 히스토리 칸을 history.back()으로 비우는데, 그 pop이 '다음 차례'에
+ *   뒤늦게 도착해 onViewPop이 뷰를 홈으로 되돌린다 — 바로가기를 눌렀는데 홈으로 튕기던 원인.
+ *   되돌리는 대신 메뉴 칸을 목적지 탭으로 '갈아끼운다'. 되돌림도 깜빡임도 없다.
+ *   같은 탭으로 가는 경우엔 back()이 그 탭 칸에 그대로 내려앉으니 원래대로 둔다. */
+function menuGoView(view) {
+  const menuEntry = !!(menuPushed && history.state && history.state.mnu);
+  if (!menuEntry || curView === view) { menuClose(); showView(view); return; }
+  menuPushed = false;
+  menuCloseUI();
+  history.replaceState({ v: view }, '', '#' + view);
+  _viewPushed = true;
+  showView(view, { noHist: true });
+}
 function goSettle(then) {
-  menuClose();
-  showView('settle');
+  menuGoView('settle');
   if (typeof then !== 'function') return;
   const t0 = Date.now();
   const tick = () => {
