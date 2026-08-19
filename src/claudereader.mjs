@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadJSON, saveJSON } from './store.mjs';
+import { loadJSON, saveJSON, appendJSONL } from './store.mjs';
 
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const CLAUDE_TIMEOUT_MS = Number(process.env.CLAUDE_TIMEOUT_MS || 240000);
@@ -74,7 +74,7 @@ export async function readPart3Holistic(imagePath, opts = {}) {
     + (Array.isArray(opts.gapPositions) && opts.gapPositions.length ? HOLISTIC_GAP_NUDGE(opts.gapPositions) : '')
     + (Array.isArray(opts.conflictTimes) && opts.conflictTimes.length ? HOLISTIC_SLIP_NUDGE(opts.conflictTimes) : '');
   let out;
-  try { out = await runClaude(`${prompt}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${prompt}\nImage path: ${imagePath}`, '홀리스틱'); }
   catch (e) { console.error('[claude] 홀리스틱 호출 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -113,7 +113,7 @@ export async function readCropWithClaude(imagePath) {
   }
   let out;
   try {
-    out = await runClaude(`${READ_PROMPT}\nImage path: ${imagePath}`);
+    out = await runClaude(`${READ_PROMPT}\nImage path: ${imagePath}`, '전체판독');
   } catch (e) {
     console.error('[claude] 호출 오류:', e.message);
     return null;
@@ -142,7 +142,7 @@ export async function getPartBoundaries(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 경계 추정 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${BOUNDS_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${BOUNDS_PROMPT}\nImage path: ${imagePath}`, '부경계'); }
   catch (e) { console.error('[claude] 경계 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -209,7 +209,7 @@ export async function getRosterColumns(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 열경계 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${COLBOUNDS_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${COLBOUNDS_PROMPT}\nImage path: ${imagePath}`, '열경계'); }
   catch (e) { console.error('[claude] 열경계 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -227,7 +227,7 @@ export async function readColumnRoster(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 열 판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${COLUMN_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${COLUMN_PROMPT}\nImage path: ${imagePath}`, '열판독'); }
   catch (e) { console.error('[claude] 열 판독 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -267,7 +267,7 @@ export async function readTeeRows(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 티오프 줄판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${TEE_ROWS_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${TEE_ROWS_PROMPT}\nImage path: ${imagePath}`, '티오프줄'); }
   catch (e) { console.error('[claude] 티오프 줄판독 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -305,7 +305,7 @@ export async function readDutyBox(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 당번표 판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${DUTY_BOX_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${DUTY_BOX_PROMPT}\nImage path: ${imagePath}`, '당번표'); }
   catch (e) { console.error('[claude] 당번표 판독 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -345,7 +345,7 @@ export async function readRosterVerbatim(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 대바 verbatim 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${VERBATIM_ROSTER_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${VERBATIM_ROSTER_PROMPT}\nImage path: ${imagePath}`, '대바원문'); }
   catch (e) { console.error('[claude] 대바 verbatim 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -363,7 +363,7 @@ export async function readPartWithClaude(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 캡(${DAILY_CAP}) 도달 — 부 판독 스킵`); return null; }
   let out;
-  try { out = await runClaude(`${PART_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${PART_PROMPT}\nImage path: ${imagePath}`, '부판독'); }
   catch (e) { console.error('[claude] 부 판독 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -399,7 +399,7 @@ export async function readSummaryCounts(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 요약 판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${SUMMARY_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${SUMMARY_PROMPT}\nImage path: ${imagePath}`, '요약커트'); }
   catch (e) { console.error('[claude] 요약 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -433,7 +433,7 @@ export async function readOffList(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 근태 판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${OFF_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${OFF_PROMPT}\nImage path: ${imagePath}`, '근태'); }
   catch (e) { console.error('[claude] 근태 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/);
@@ -464,7 +464,7 @@ export async function getCrewColumns(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 조열경계 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${CREW_COLS_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${CREW_COLS_PROMPT}\nImage path: ${imagePath}`, '조열경계'); }
   catch (e) { console.error('[claude] 조열경계 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/); if (!m) return null;
@@ -490,7 +490,7 @@ export async function readCrewColumn(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 조 판독 스킵'); return null; }
   let out;
-  try { out = await runClaude(`${CREW_COL_PROMPT}\nImage path: ${imagePath}`); }
+  try { out = await runClaude(`${CREW_COL_PROMPT}\nImage path: ${imagePath}`, '조판독'); }
   catch (e) { console.error('[claude] 조 판독 오류:', e.message); return null; }
   bumpCalls();
   const m = String(out || '').match(/\{[\s\S]*\}/); if (!m) return null;
@@ -507,7 +507,7 @@ export async function readCrewColumn(imagePath) {
 export async function runClaudeText(prompt) {
   if (claudeBudgetLeft() <= 0) { console.warn(`[claude] 하루 하드캡(${DAILY_CAP}) 도달 — 텍스트 호출 스킵`); return null; }
   bumpCalls();
-  try { return await runClaude(prompt); }
+  try { return await runClaude(prompt, '텍스트'); }
   catch (e) { console.error('[claude] 텍스트 호출 오류:', e.message); return null; }
 }
 
@@ -516,8 +516,25 @@ export async function runClaudeText(prompt) {
 let _claudeTimeouts = 0;
 export function claudeTimeouts() { return _claudeTimeouts; }
 
-function runClaude(prompt) {
+// ── 호출 시간 기록 ────────────────────────────────────────────────────
+//  ★타임아웃을 몇 초로 잡아야 하는지는 재봐야 안다. 그런데 이 파일은 한 번도 '얼마나 걸렸나'를
+//   남기지 않았다 — 그래서 타임아웃이 뜰 때마다 원인을 추측할 수밖에 없었고, 로그의 타임아웃 줄이
+//   오늘 것인지 지난주 것인지조차 알 수 없었다(실제로 그것 때문에 한 번 틀리게 진단했다).
+//  이제 호출마다 걸린 시간·성패·종류를 날짜와 함께 남긴다. tools/claudetime.mjs가 그걸 표로 읽는다.
+//  ★느린 호출은 타임아웃이 나기 전에 먼저 말한다 — 한도의 60%를 넘으면 그때 경고한다.
+//   타임아웃은 '갑자기' 나지 않는다. 그 전에 느려지는 구간이 있고, 그걸 보면 손 쓸 시간이 생긴다.
+const SLOW_RATIO = 0.6;
+function noteCall(kind, ms, ok, extra = {}) {
+  try { appendJSONL('claude-calls.jsonl', { at: Date.now(), kind, ms, ok, capMs: CLAUDE_TIMEOUT_MS, ...extra }); }
+  catch { /* 기록 실패가 판독을 막지는 않는다 */ }
+  if (ok && ms > CLAUDE_TIMEOUT_MS * SLOW_RATIO) {
+    console.warn(`[claude] 느린 호출 — ${kind} ${Math.round(ms / 1000)}초 (한도 ${Math.round(CLAUDE_TIMEOUT_MS / 1000)}초의 ${Math.round((ms / CLAUDE_TIMEOUT_MS) * 100)}%)`);
+  }
+}
+
+function runClaude(prompt, kind = '기타') {
   return new Promise((resolve, reject) => {
+    const t0 = Date.now();
     // --allowedTools Read = 읽기 전용(파일 수정·실행 불가). 헤드리스 안전.
     const p = spawn(CLAUDE_BIN, ['-p', prompt, '--allowedTools', 'Read'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -525,13 +542,23 @@ function runClaude(prompt) {
       cwd: os.tmpdir(),
     });
     let out = '', err = '';
-    const timer = setTimeout(() => { p.kill('SIGKILL'); _claudeTimeouts += 1; reject(new Error('타임아웃')); }, CLAUDE_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      p.kill('SIGKILL'); _claudeTimeouts += 1;
+      noteCall(kind, Date.now() - t0, false, { why: 'timeout', got: out.length });
+      console.error(`[claude] 타임아웃 — ${kind} ${Math.round((Date.now() - t0) / 1000)}초 (한도 ${Math.round(CLAUDE_TIMEOUT_MS / 1000)}초, 받은 글자 ${out.length})`);
+      reject(new Error('타임아웃'));
+    }, CLAUDE_TIMEOUT_MS);
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { err += d; });
-    p.on('error', (e) => { clearTimeout(timer); reject(e); });
+    p.on('error', (e) => { clearTimeout(timer); noteCall(kind, Date.now() - t0, false, { why: 'spawn', msg: String(e.message).slice(0, 80) }); reject(e); });
     p.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== 0 && !out.trim()) return reject(new Error(`claude exit ${code}: ${err.slice(0, 200)}`));
+      const ms = Date.now() - t0;
+      if (code !== 0 && !out.trim()) {
+        noteCall(kind, ms, false, { why: `exit${code}`, msg: err.slice(0, 80) });
+        return reject(new Error(`claude exit ${code}: ${err.slice(0, 200)}`));
+      }
+      noteCall(kind, ms, true, { bytes: out.length });
       resolve(out);
     });
   });
