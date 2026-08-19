@@ -768,6 +768,18 @@ function disambiguateByWorking(parts, workingSet) {
   }
 }
 
+// 커트 안인데 티오프가 없는 순번 — '표가 잘렸다'의 유일하게 확실한 신호.
+//  ★3부는 grid_short로 오래전부터 잡아왔는데 1·2부는 아무 검사도 없었다. 그래서 2부 IN 열이
+//    통째로 빠진 날들이 기록 한 줄 없이 지나갔다(8/20 실측: 컷 16에 티오프 10칸 — 알림도 로그도 없음).
+export function teeGaps(tee, cut) {
+  const n = Number(cut) || 0;
+  if (!(n > 0)) return [];
+  const have = new Set((tee || []).map((t) => Number(t.pos)).filter((x) => x > 0));
+  const miss = [];
+  for (let i = 1; i <= n; i++) if (!have.has(i)) miss.push(i);
+  return miss;
+}
+
 // ── 채택 확정본의 손상만 관리자에게 알린다 ──
 //  재시도 중간 판독이 아니라 '실제로 저장·표시될' 명단을 다시 세기 때문에, 재시도로 스스로 나은 손상은
 //  알리지 않고(오경보 0) 끝까지 남은 손상만 사람에게 간다. 8/16 2부 21~25번은 여기서 잡힌다.
@@ -781,6 +793,9 @@ export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
       if (tconf.length) raiseBoardIssue({ kind: 'tee_conflict', part: Number(p), times: tconf });
       const off = _offGridTees(pd.tee || [], p, pd.dateKey || '');
       if (off.length) raiseBoardIssue({ kind: 'offgrid_tee', part: Number(p), times: off });
+      // ★티오프 짧음 — 구제(rescueTee)가 못 채운 것만 여기 남는다. 부를 가리지 않고 본다.
+      const gaps = teeGaps(pd.tee || [], pd.cut || 0);
+      if (gaps.length) raiseBoardIssue({ kind: 'grid_short', part: Number(p), teeMax: (pd.tee || []).length, cut: pd.cut || 0, miss: gaps.slice(0, 20) });
     }
     // 시도 단위로만 알 수 있는 손상(3부 홀리스틱 티오프 하단 누락) — 그 시도가 채택됐을 때만 전달됨.
     for (const it of attemptIssues) raiseBoardIssue(it);
