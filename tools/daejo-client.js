@@ -364,6 +364,7 @@
       td.classList.toggle('moved', teeChanged && !nameChanged);
     });
     paintSpares(part);
+    paintOffs(part);
     paintPool(part);
     saveBtn.hidden = !PARTS.some(changed);
     undoBtn.hidden = !stack.length;
@@ -384,6 +385,7 @@
     for (let p = 1; p <= roster[part].length; p++) {
       const cell = roster[part][p - 1];
       if (has.has(p) || !String(cell || '').trim()) continue;
+      if (dutyOf(part, cell)) continue;      // 근태자는 아래 근태 칸에 따로 선다 — 스페어가 아니다
       const tg = tagOf(cell);
       const ch = document.createElement('span');
       ch.className = 'sp' + (cell !== (rosterOrig[part][p - 1] || '') ? ' edited' : '');
@@ -418,6 +420,51 @@
     out.forEach((x) => box.appendChild(x));
     box.hidden = false;
   }
+  // ── 근태 칸 ── 휴무·휴가·병가. 스페어와 섞지 않는다.
+  //  ★그날 안 나오는 사람과 대기하는 사람은 하는 일이 정반대다. 같은 줄에 순번을 달고 섞여 있으면
+  //   순서를 만질 때 반드시 헷갈린다(사용자 지적). 칸을 나누는 것만으로 그 실수가 사라진다.
+  //  ★순번은 그대로 들고 있는다 — 배치표 명단에서 자리를 차지하는 건 사실이기 때문이다.
+  //   다만 그 자리를 '대기 줄'로 보여주지 않을 뿐이다.
+  function paintOffs(part) {
+    const box = document.querySelector('.offs[data-p="' + part + '"]');
+    if (!box) return;
+    const byDuty = {}; DUTIES.forEach((d2) => (byDuty[d2] = []));
+    for (let p = 1; p <= roster[part].length; p++) {
+      const cell = roster[part][p - 1];
+      const d2 = dutyOf(part, cell);
+      if (!d2) continue;
+      const key = DUTIES.find((x) => d2.includes(x)) || DUTIES[0];
+      byDuty[key].push({ pos: p, cell: cell });
+    }
+    const total = DUTIES.reduce((a2, d2) => a2 + byDuty[d2].length, 0);
+    // 편집 중이 아니고 근태자도 없으면 굳이 자리를 차지하지 않는다.
+    if (!total && mode !== 'crew') { box.hidden = true; return; }
+    box.innerHTML = '';
+    const lb = document.createElement('span');
+    lb.className = 'lb';
+    lb.textContent = '근태 ' + total + '명 — 끌어다 놓으면 그 상태가 되고, 스페어 줄로 끌면 풀립니다';
+    box.appendChild(lb);
+    for (const d2 of DUTIES) {
+      const lane = document.createElement('div');
+      lane.className = 'offlane'; lane.dataset.p = part; lane.dataset.off = d2;
+      const t = document.createElement('b'); t.textContent = d2; lane.appendChild(t);
+      if (!byDuty[d2].length) {
+        const n = document.createElement('span'); n.className = 'none';
+        n.textContent = mode === 'crew' ? '여기로 끌어다 놓으세요' : '없음';
+        lane.appendChild(n);
+      }
+      for (const x of byDuty[d2]) {
+        const c2 = document.createElement('span');
+        c2.className = 'offc'; c2.dataset.p = part; c2.dataset.pos = String(x.pos);
+        const b2 = document.createElement('b'); b2.textContent = x.pos + '번'; c2.appendChild(b2);
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = bare(x.cell); c2.appendChild(nm);
+        lane.appendChild(c2);
+      }
+      box.appendChild(lane);
+    }
+    box.hidden = false;
+  }
+
   // ── 미배치 캐디 서랍 ────────────────────────────────────────────────
   //  ★이름을 하나씩 쳐 넣는 건 스무 명이 넘어가면 사람이 할 일이 아니다.
   //   8/19 2부는 명단 31명이 8명으로 덮여 스물세 명이 통째로 사라졌다. 그걸 손으로 치게 두면
@@ -524,8 +571,11 @@
     tee[part].forEach((t, i) => { if (t) at.set(K(t.time, t.course), i + 1); });
     return at.get(K(el.dataset.t, el.dataset.c)) || 0;
   };
-  const unit = (el) => (el && el.closest ? (el.closest('td.c') || el.closest('.sp') || el.closest('.pk')) : null);
+  const unit = (el) => (el && el.closest ? (el.closest('td.c') || el.closest('.sp') || el.closest('.pk') || el.closest('.offc')) : null);
   const isPool = (el) => !!(el && el.classList && el.classList.contains('pk'));
+  const isOff = (el) => !!(el && el.classList && el.classList.contains('offc'));
+  // 놓는 '자리' — 근태 줄과 스페어 줄은 칸이 아니라 구역이다.
+  const zoneUnder = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest ? (el.closest('.offlane') || el.closest('.spares')) : null; };
   const isSpare = (el) => !!(el && el.classList && el.classList.contains('sp'));
 
   // ── 두 조작을 함수로 빼둔다 — 누르기와 끌기가 같은 길을 쓰게. ──────────────
@@ -588,7 +638,14 @@
       drag = { td: td, part: td.dataset.p, pool: td.dataset.pool, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
       return;
     }
-    if (mode === 'crew') return;                       // crew에서 기존 사람은 끌지 않는다(누르면 뺀다)
+    if (mode === 'crew') {
+      // 근태 칩·스페어 칩·표의 칸 모두 끌 수 있다 — 끌어서 근태를 주고, 스페어 줄로 끌어서 푼다.
+      if (!isOff(td) && !isSpare(td) && !td.dataset.t) return;
+      const part1 = td.dataset.p, from1 = posAt(part1, td);
+      if (!from1) return;
+      drag = { td: td, part: part1, from: from1, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, crew: true };
+      return;
+    }
     if (!isSpare(td) && !td.dataset.t) return;
     const part = td.dataset.p, from = posAt(part, td);
     if (!from) return;
@@ -610,6 +667,8 @@
     e.preventDefault();
     ghost.style.transform = 'translate(' + (e.clientX + 12) + 'px,' + (e.clientY - 14) + 'px)';
     document.querySelectorAll('.drop-to').forEach((x) => x.classList.remove('drop-to'));
+    const zone = zoneUnder(e.clientX, e.clientY);
+    if (zone && zone.dataset.p === drag.part) { zone.classList.add('drop-to'); return; }
     const over = cellUnder(e.clientX, e.clientY);
     if (over && over !== drag.td && over.dataset.p === drag.part && !over.classList.contains('intern') && !isPool(over)) over.classList.add('drop-to');
   }, { passive: false });
@@ -620,6 +679,29 @@
     const over = cellUnder(e.clientX, e.clientY);
     const d = drag;
     dragEnd(false);
+    const zone = zoneUnder(e.clientX, e.clientY);
+    // ── 근태 줄에 놓기 = 그 상태로 만들기 · 스페어 줄에 놓기 = 근태 풀기 ──
+    if (zone && zone.dataset.p === d.part) {
+      const lane = zone.classList.contains('offlane') ? String(zone.dataset.off || '') : '';
+      push(d.part);
+      if (d.pool) {                                  // 서랍에서 바로 근태로
+        const msg = addCrew(d.part, d.pool, 0, lane || '스페어');
+        paint(d.part);
+        state.textContent = msg;
+        return;
+      }
+      const cell = roster[d.part][d.from - 1] || '';
+      const who = bare(cell);
+      if (!who) { stack.pop(); state.textContent = '이름이 없는 자리입니다.'; return; }
+      const was = dutyOf(d.part, cell);
+      if (lane === was) { stack.pop(); state.textContent = `${who}은(는) 이미 ${lane}입니다.`; return; }
+      setDuty(d.part, cell, lane);
+      paint(d.part);
+      state.textContent = lane
+        ? `${d.part}부 ${d.from}번 ${who} — ${lane}` + (was ? ` (${was}에서 옮김)` : ' · 스페어 줄에서 뺐습니다')
+        : `${d.part}부 ${d.from}번 ${who} — 근태 해제, 스페어로 돌아왔습니다`;
+      return;
+    }
     // ★서랍에서 끌어온 사람 — 놓은 자리가 곧 순번이다. 표 밖(스페어 줄·서랍)에 놓으면 맨 뒤로 간다.
     if (d.pool) {
       const onBoard = over && over.dataset.p === d.part && !isPool(over) && !over.classList.contains('intern');
@@ -630,6 +712,7 @@
       state.textContent = msg || '넣지 못했습니다.';
       return;
     }
+    if (d.crew) { state.textContent = '근태 줄이나 스페어 줄에 놓아주세요.'; return; }
     if (!over || over.dataset.p !== d.part || over.classList.contains('intern')) { state.textContent = '취소했습니다.'; return; }
     const to = posAt(d.part, over);
     // ★스페어가 끼면 티오프 이동은 뜻이 없다(가진 티오프가 없다) → 자동으로 맞바꾸기로 처리한다.

@@ -174,6 +174,7 @@ function partTable(part) {
 ${body}
   </tbody></table>
   <div class="spares" data-p="${part}" hidden></div>
+  <div class="offs" data-p="${part}" hidden></div>
   <div class="pool" data-p="${part}" hidden></div>
 </section>`;
 }
@@ -338,6 +339,24 @@ td.c.none{background:repeating-linear-gradient(135deg,var(--open),var(--open) 5p
 .nrow.chg .nm{color:var(--warn)}
 .nrow.chg .nm::after{content:' 바뀜';font-size:9.5px;font-weight:600}
 .nempty{padding:14px;font-size:12px;color:var(--dim)}
+/* 근태 칸 — 휴무·휴가·병가는 스페어가 아니다.
+   ★스페어 줄에 순번을 달고 섞여 있으면 순서를 만질 때 헷갈린다(사용자 지적).
+    그날 안 나오는 사람과 대기하는 사람은 하는 일이 정반대인데 같은 줄에 있을 이유가 없다.
+   ★줄 자체가 놓는 자리다 — 끌어다 놓으면 그 상태가 되고, 스페어 줄로 끌면 풀린다. */
+.offs{padding:9px 11px;border-top:1px solid var(--line);background:var(--open)}
+.offs .lb{display:block;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.offlane{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 7px;margin-bottom:4px;
+  border:1px dashed var(--line);border-radius:7px;min-height:32px}
+.offlane:last-child{margin-bottom:0}
+.offlane>b{font-size:10px;font-weight:800;letter-spacing:.02em;min-width:34px;color:var(--miss)}
+.offlane.drop-to{border-style:solid;border-color:var(--warn);background:var(--warn-bg)}
+.offlane .none{font-size:11px;color:var(--dim);opacity:.7}
+.offc{display:inline-flex;align-items:center;gap:4px;background:var(--miss-bg);border:1px solid var(--miss);
+  border-radius:6px;padding:3px 8px;font-size:12px;color:var(--miss);cursor:grab;user-select:none}
+.offc b{font-size:10px;opacity:.7;font-weight:700}
+.offc.dragging{opacity:.4}
+body.editing .offc{touch-action:none}
+.spares.drop-to{outline:2px dashed var(--ok);outline-offset:-3px}
 /* 미배치 캐디 서랍 — 정본 명단에서 '오늘 이 부에 안 잡힌 사람'만. 끌어다 놓으면 명단에 들어간다.
    ★스페어 줄과 색을 나눈다: 스페어는 '오늘 이 부에 있는 사람', 서랍은 '아직 없는 사람'이다.
    둘이 같아 보이면 끌어다 놓는 방향을 헷갈린다. */
