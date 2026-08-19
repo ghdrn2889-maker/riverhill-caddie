@@ -62,6 +62,9 @@ function partsOf() {
         cut: Number(d.cutLine || d.cutoffPosition) || 0,
         teeGrid: (d.teeGrid || []).map((g) => ({ pos: Number(g.pos), time: norm(g.time), course: /IN/i.test(g.course) ? 'IN' : 'OUT' })).filter((g) => g.pos && g.time),
         internTees: (d.internTees || []).map((t) => ({ time: norm(t.time), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
+        // ★근태(휴무·휴가·병가) — 배치표의 별개 축이다. 이름은 명단에 있는데 그날 안 나오는 사람이 있다.
+        //  이걸 안 실으면 대조판은 그 사람을 스페어로 보여주고, 반영하면 근태가 통째로 지워진다.
+        crewDuty: { ...(d.crewDuty || {}) },
       };
       dateLabel = dateLabel || d.dateLabel || bp.dateLabel || '';
     }
@@ -75,6 +78,7 @@ function partsOf() {
         cut: Number(v.cutoffPosition) || 0,
         teeGrid: (v.teeGrid || []).map((g) => ({ pos: Number(g.pos), time: norm(g.time), course: /IN/i.test(g.course) ? 'IN' : 'OUT' })).filter((g) => g.pos && g.time),
         internTees: [],   // 아래에서 수동 지정을 얹는다
+        crewDuty: { ...(v.crewDuty || {}) },
         _autoInterns: (v.internTees || []).map((t) => ({ time: norm(t.time), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
       };
       dateLabel = v.dateLabel || lb.dateLabel || dateLabel;

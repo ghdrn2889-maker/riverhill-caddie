@@ -344,9 +344,18 @@ td.c.none{background:repeating-linear-gradient(135deg,var(--open),var(--open) 5p
 .pool{padding:9px 11px;border-top:1px dashed var(--line);background:var(--panel)}
 .pool .lb{display:block;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .pool .lb b{color:var(--ink)}
-.pool .all{float:right;text-transform:none;letter-spacing:0;background:var(--panel);color:var(--ok);
-  border:1px solid var(--ok);border-radius:5px;padding:1px 8px;font-size:10.5px;font-family:inherit;cursor:pointer}
-.pool .all:hover{background:var(--ok-bg)}
+/* 상태 고르기 — 넣는 사람이 그날 스페어인지 휴무인지는 사람만 안다. 기본값으로 지어내지 않는다. */
+.pool .pseg{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:0 0 8px}
+.pool .pseg button{background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;
+  padding:2px 10px;font-size:11.5px;font-family:inherit;cursor:pointer}
+.pool .pseg button.on{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);font-weight:700}
+.pool .pseg button.go{margin-left:auto;background:var(--ok);color:var(--panel);border-color:var(--ok);font-weight:700}
+.pool .pseg button.go:disabled{background:var(--panel);color:var(--dim);border-color:var(--line);font-weight:400;cursor:default}
+.pk.on{border-style:solid;border-color:var(--ok);background:var(--ok-bg);color:var(--ok);font-weight:700}
+/* 근태 — 명단에 있지만 그날 안 나오는 사람. 스페어와 한눈에 갈려야 한다. */
+.sp.duty{opacity:.75;border-style:dashed}
+.sp .dy{font-size:9px;padding:0 4px;border-radius:3px;background:var(--miss-bg);color:var(--miss);font-weight:700}
+td.c.duty{opacity:.65;box-shadow:inset 3px 0 0 var(--miss)}
 .pool .wrap2{display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow-y:auto}
 .pk{display:inline-flex;align-items:center;gap:4px;background:var(--open);border:1px dashed var(--dim);
   border-radius:6px;padding:3px 9px;font-size:12px;cursor:grab;user-select:none;color:var(--dim)}
