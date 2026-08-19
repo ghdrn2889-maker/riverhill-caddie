@@ -328,6 +328,7 @@
       td.classList.toggle('moved', teeChanged && !nameChanged);
     });
     paintSpares(part);
+    paintPool(part);
     saveBtn.hidden = !PARTS.some(changed);
     undoBtn.hidden = !stack.length;
     // 반영할 게 있으면(테스트판이 덮여 있거나 방금 고쳤으면) 반영 버튼을 낸다.
@@ -379,6 +380,64 @@
     out.forEach((x) => box.appendChild(x));
     box.hidden = false;
   }
+  // ── 미배치 캐디 서랍 ────────────────────────────────────────────────
+  //  ★이름을 하나씩 쳐 넣는 건 스무 명이 넘어가면 사람이 할 일이 아니다.
+  //   8/19 2부는 명단 31명이 8명으로 덮여 스물세 명이 통째로 사라졌다. 그걸 손으로 치게 두면
+  //   오타가 섞이고, 오타 섞인 이름은 회원 매칭이 안 돼 알림이 안 간다 — 조용히 틀리는 쪽이다.
+  //  ★그래서 정본 명단에서 고르게 한다. 고른 이름은 반드시 정본 철자다.
+  //   서랍에는 '오늘 이 부에 아직 없는 사람'만 둔다. 이미 있는 사람을 또 넣는 게 가장 흔한 실수다.
+  //  ★다른 부에 잡힌 사람도 서랍에 남긴다 — (54)·(1,3)처럼 두 부를 뛰는 캐디가 실제로 있다.
+  //   다만 어느 부에 있는지 표시해서, 넣기 전에 사람이 알고 넣게 한다.
+  const OFFICIAL = (window.__DAEJO_ROSTER || []).slice();
+  const nk = (x) => bare(x).replace(/\s/g, '');
+  const placedIn = (part) => new Set(roster[part].map(nk).filter(Boolean));
+  const elsewhere = (name) => PARTS.filter((p) => placedIn(p).has(nk(name)));
+  function paintPool(part) {
+    const box = document.querySelector('.pool[data-p="' + part + '"]');
+    if (!box) return;
+    if (mode !== 'crew') { box.hidden = true; return; }
+    const here = placedIn(part);
+    const left = OFFICIAL.filter((n) => n && !here.has(nk(n)));
+    box.innerHTML = '';
+    const lb = document.createElement('span');
+    lb.className = 'lb';
+    lb.innerHTML = '오늘 ' + part + '부에 없는 캐디 <b>' + left.length + '</b>명 — 끌어다 놓거나 눌러서 넣습니다';
+    if (left.length) {
+      const all = document.createElement('button');
+      all.type = 'button'; all.className = 'all'; all.dataset.poolall = part;
+      all.textContent = left.length + '명 전부 스페어로';
+      lb.appendChild(all);
+    }
+    box.appendChild(lb);
+    const wrap = document.createElement('div');
+    wrap.className = 'wrap2';
+    for (const n of left) {
+      const c = document.createElement('span');
+      c.className = 'pk'; c.dataset.p = part; c.dataset.pool = n;
+      c.textContent = n;
+      const el = elsewhere(n);
+      if (el.length) { const t = document.createElement('span'); t.className = 'el'; t.textContent = el.join('·') + '부'; c.appendChild(t); }
+      wrap.appendChild(c);
+    }
+    box.appendChild(wrap);
+    box.hidden = false;
+  }
+
+  // 명단에 사람을 넣는다 — 서랍·손입력·끌어놓기가 모두 이 한 곳을 지난다.
+  //  ★티오프 배열은 건드리지 않는다. 티오프는 '순번 자리'에 붙어 있어서, 사람이 하나 끼면
+  //   뒤가 한 칸씩 밀리며 맨 뒤 근무자가 스페어로 내려간다 — 배치표에서 실제로 일어나는 일이다.
+  function addCrew(part, name, at) {
+    const nm = String(name || '').trim();
+    if (!nm) return '';
+    const n = roster[part].filter((x) => String(x || '').trim()).length;
+    const pos = Math.min(Math.max(1, Number(at) || (n + 1)), n + 1);
+    roster[part].splice(pos - 1, 0, nm);
+    const work = teeV.real[part].length;
+    return part + '부 ' + pos + '번에 ' + nm + ' 넣음'
+      + (pos <= work ? ' — 뒤 순번이 한 칸씩 밀렸고 맨 뒤 근무자가 스페어로 내려갔습니다' : ' — 스페어로 들어갔습니다')
+      + ' · 명단 ' + n + ' → ' + (n + 1) + '명';
+  }
+
   // ★두 보기의 배치를 모두 담는다. 인턴 하나를 켜면 양쪽 배치가 같이 움직이는데
   //  보고 있던 쪽만 되돌리면 반대편에 인턴이 남아 근무선이 조용히 줄어든다(실측: 1부 42→39).
   //  배치가 진실이 된 이상, 되돌리기도 진실 전부를 되돌려야 한다.
@@ -405,7 +464,8 @@
     tee[part].forEach((t, i) => { if (t) at.set(K(t.time, t.course), i + 1); });
     return at.get(K(el.dataset.t, el.dataset.c)) || 0;
   };
-  const unit = (el) => (el && el.closest ? (el.closest('td.c') || el.closest('.sp')) : null);
+  const unit = (el) => (el && el.closest ? (el.closest('td.c') || el.closest('.sp') || el.closest('.pk')) : null);
+  const isPool = (el) => !!(el && el.classList && el.classList.contains('pk'));
   const isSpare = (el) => !!(el && el.classList && el.classList.contains('sp'));
 
   // ── 두 조작을 함수로 빼둔다 — 누르기와 끌기가 같은 길을 쓰게. ──────────────
@@ -458,10 +518,17 @@
     //  폰에서는 끌어놓기 뒤 click이 안 따라오는 경우가 있어, 그 표시가 남으면 다음 탭 한 번이
     //  통째로 먹힌다(아무 반응 없음). 여기서 반드시 지운다.
     suppressClick = false;
-    if (mode !== 'swap' && mode !== 'move') return;
+    if (mode !== 'swap' && mode !== 'move' && mode !== 'crew') return;
     if (e.button != null && e.button > 0) return;
     const td = unit(e.target);
     if (!td || td.classList.contains('intern')) return;
+    // ★서랍 칩 — 아직 명단에 없는 사람이라 순번이 없다. 끌어다 놓는 자리가 곧 순번이 된다.
+    if (isPool(td)) {
+      if (mode !== 'crew') return;
+      drag = { td: td, part: td.dataset.p, pool: td.dataset.pool, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
+      return;
+    }
+    if (mode === 'crew') return;                       // crew에서 기존 사람은 끌지 않는다(누르면 뺀다)
     if (!isSpare(td) && !td.dataset.t) return;
     const part = td.dataset.p, from = posAt(part, td);
     if (!from) return;
@@ -476,7 +543,7 @@
       document.body.classList.add('dragging-now');
       ghost = document.createElement('div');
       ghost.className = 'ghost';
-      ghost.textContent = drag.from + '번 ' + bare(roster[drag.part][drag.from - 1]);
+      ghost.textContent = drag.pool ? ('＋ ' + drag.pool) : (drag.from + '번 ' + bare(roster[drag.part][drag.from - 1]));
       document.body.appendChild(ghost);
       try { drag.td.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
     }
@@ -484,7 +551,7 @@
     ghost.style.transform = 'translate(' + (e.clientX + 12) + 'px,' + (e.clientY - 14) + 'px)';
     document.querySelectorAll('.drop-to').forEach((x) => x.classList.remove('drop-to'));
     const over = cellUnder(e.clientX, e.clientY);
-    if (over && over !== drag.td && over.dataset.p === drag.part && !over.classList.contains('intern')) over.classList.add('drop-to');
+    if (over && over !== drag.td && over.dataset.p === drag.part && !over.classList.contains('intern') && !isPool(over)) over.classList.add('drop-to');
   }, { passive: false });
   document.addEventListener('pointerup', (e) => {
     if (!drag) return;
@@ -493,6 +560,16 @@
     const over = cellUnder(e.clientX, e.clientY);
     const d = drag;
     dragEnd(false);
+    // ★서랍에서 끌어온 사람 — 놓은 자리가 곧 순번이다. 표 밖(스페어 줄·서랍)에 놓으면 맨 뒤로 간다.
+    if (d.pool) {
+      const onBoard = over && over.dataset.p === d.part && !isPool(over) && !over.classList.contains('intern');
+      const at = onBoard ? posAt(d.part, over) : 0;
+      push(d.part);
+      const msg = addCrew(d.part, d.pool, at || 0);
+      paint(d.part);
+      state.textContent = msg || '넣지 못했습니다.';
+      return;
+    }
     if (!over || over.dataset.p !== d.part || over.classList.contains('intern')) { state.textContent = '취소했습니다.'; return; }
     const to = posAt(d.part, over);
     // ★스페어가 끼면 티오프 이동은 뜻이 없다(가진 티오프가 없다) → 자동으로 맞바꾸기로 처리한다.
@@ -561,7 +638,35 @@
   document.addEventListener('click', async (e) => {
     if (suppressClick) { suppressClick = false; return; }   // 방금 끌어놓았다 — 누르기로 두 번 처리하지 않는다
     if (!mode) return;
+    // ★'남은 전부 스페어로' — 이게 진짜 '한 번에'다. 8/19 2부처럼 스물세 명이 통째로 사라진 날,
+    //  하나씩 끌어 넣는 것도 스물세 번이다. 순서는 정본 명단 그대로 맨 뒤에 붙는다.
+    const allBtn = e.target && e.target.closest ? e.target.closest('button[data-poolall]') : null;
+    if (allBtn && mode === 'crew') {
+      const part0 = allBtn.dataset.poolall;
+      const here = placedIn(part0);
+      const left = OFFICIAL.filter((n) => n && !here.has(nk(n)));
+      if (!left.length) return;
+      if (!confirm([part0 + '부 명단 맨 뒤에 ' + left.length + '명을 한 번에 넣습니다(전부 스페어).', '',
+        left.slice(0, 12).join(' · ') + (left.length > 12 ? ' 외 ' + (left.length - 12) + '명' : ''), '',
+        '순서는 정본 명단 차례입니다 — 넣은 뒤 순번 옮기기·맞바꾸기로 고칠 수 있습니다.',
+        '계속할까요?'].join(String.fromCharCode(10)))) return;
+      push(part0);
+      const n0 = roster[part0].filter((x) => String(x || '').trim()).length;
+      for (const n of left) roster[part0].push(n);
+      paint(part0);
+      state.textContent = part0 + '부에 ' + left.length + '명을 스페어로 넣었습니다 — 명단 ' + n0 + ' → ' + (n0 + left.length) + '명';
+      return;
+    }
     const td = unit(e.target); if (!td) return;
+    // 서랍 칩을 그냥 누르면 맨 뒤(스페어)로 — 폰에서 끌기가 어려울 때의 빠른 길.
+    if (isPool(td)) {
+      if (mode !== 'crew') { state.textContent = '‘캐디 추가·삭제’ 모드에서 넣을 수 있습니다.'; return; }
+      push(td.dataset.p);
+      const msg = addCrew(td.dataset.p, td.dataset.pool, 0);
+      paint(td.dataset.p);
+      state.textContent = msg;
+      return;
+    }
     if (!isSpare(td) && !td.dataset.t) return;
     if (td.dataset.add && mode !== 'crew') return;         // '＋ 캐디 추가'는 그 모드에서만 뜻이 있다
 
@@ -627,12 +732,9 @@
         if (atStr == null) return;
         const at = Math.min(Math.max(1, Number(atStr) || (n + 1)), n + 1);
         push(part0);
-        roster[part0].splice(at - 1, 0, nm.trim());
+        const msg = addCrew(part0, nm, at);          // 서랍·끌기와 같은 길
         paint(part0);
-        const work = tee[part0].length;
-        state.textContent = `${part0}부 ${at}번에 ${nm.trim()} 넣음 — 뒤 순번이 한 칸씩 밀렸습니다`
-          + (at <= work ? ` · 맨 뒤 근무자 한 명이 스페어로 내려갔습니다(팀 수는 그대로 ${work})` : '')
-          + ` · 명단 ${n} → ${n + 1}명`;
+        state.textContent = msg;
         return;
       }
       const pos0 = posAt(part0, td);

@@ -174,6 +174,7 @@ function partTable(part) {
 ${body}
   </tbody></table>
   <div class="spares" data-p="${part}" hidden></div>
+  <div class="pool" data-p="${part}" hidden></div>
 </section>`;
 }
 
@@ -337,6 +338,22 @@ td.c.none{background:repeating-linear-gradient(135deg,var(--open),var(--open) 5p
 .nrow.chg .nm{color:var(--warn)}
 .nrow.chg .nm::after{content:' 바뀜';font-size:9.5px;font-weight:600}
 .nempty{padding:14px;font-size:12px;color:var(--dim)}
+/* 미배치 캐디 서랍 — 정본 명단에서 '오늘 이 부에 안 잡힌 사람'만. 끌어다 놓으면 명단에 들어간다.
+   ★스페어 줄과 색을 나눈다: 스페어는 '오늘 이 부에 있는 사람', 서랍은 '아직 없는 사람'이다.
+   둘이 같아 보이면 끌어다 놓는 방향을 헷갈린다. */
+.pool{padding:9px 11px;border-top:1px dashed var(--line);background:var(--panel)}
+.pool .lb{display:block;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.pool .lb b{color:var(--ink)}
+.pool .all{float:right;text-transform:none;letter-spacing:0;background:var(--panel);color:var(--ok);
+  border:1px solid var(--ok);border-radius:5px;padding:1px 8px;font-size:10.5px;font-family:inherit;cursor:pointer}
+.pool .all:hover{background:var(--ok-bg)}
+.pool .wrap2{display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow-y:auto}
+.pk{display:inline-flex;align-items:center;gap:4px;background:var(--open);border:1px dashed var(--dim);
+  border-radius:6px;padding:3px 9px;font-size:12px;cursor:grab;user-select:none;color:var(--dim)}
+.pk:hover{border-style:solid;border-color:var(--ok);color:var(--ink);background:var(--ok-bg)}
+.pk.dragging{opacity:.4}
+.pk .el{font-size:9px;padding:0 3px;border-radius:3px;background:var(--warn-bg);color:var(--warn)}
+body.editing .pk{touch-action:none}
 /* 알림은 회원 폰으로 나간다 — 이 화면에서 유일하게 '밖으로' 나가는 버튼이라 색을 따로 준다.
    반영은 되돌릴 수 있지만 보낸 알림은 못 거둔다. */
 .tools button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
@@ -517,6 +534,7 @@ ${['1', '2', '3'].filter((p) => CMP[p].newCut > CMP[p].cut && CMP[p].cut > 0).ma
 window.__DAEJO_DATE = ${JSON.stringify(String(J.dateKey || ''))};
 window.__DAEJO_SANDBOX = ${JSON.stringify((J.sandbox && J.sandbox.edited) || [])};
 window.__DAEJO_FRAME = ${JSON.stringify(sched.declared || {})};
+window.__DAEJO_ROSTER = ${JSON.stringify(J.officialRoster || [])};
 window.__DAEJO_CAD = ${JSON.stringify(cadence)};
 window.__DAEJO_BOARD = ${JSON.stringify(Object.fromEntries(['1', '2', '3'].map((p) => [p, {
   ...(J.parts?.[p] || {}),

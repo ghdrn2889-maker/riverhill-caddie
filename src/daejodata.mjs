@@ -13,6 +13,7 @@ import { keyFromLabel } from './boardpending.mjs';
 import { internTeesFor } from './interns.mjs';
 import { applySandbox } from './daejosandbox.mjs';
 import { dayFrameParts } from './dayframe.mjs';
+import { OFFICIAL_ROSTER } from './roster-official.mjs';
 
 const norm = (t) => (String(t || '').match(/\d{1,2}:\d{2}/) || [''])[0];
 
@@ -142,6 +143,10 @@ export function buildDaejoData(date = '') {
     // 당일은 판정하지 않는다(카카오가 지나간 티오프를 목록에서 빼므로 '안 뜸 = 찼다'가 성립하지 않는다).
     judgeNote: snap.judgeableFrom || '',
     parts: sb.parts,
+    // ★정본 캐디 명단 — 오늘 어느 부에도 안 잡힌 사람을 대조판이 골라 보여줄 수 있게.
+    //  판독이 명단을 크게 놓치는 날(8/19 2부: 31명 → 8명), 관리자가 이름을 하나씩 쳐 넣는 건
+    //  스무 명이 넘어가면 사람이 할 일이 아니다. 있는 명단에서 끌어다 놓게 한다.
+    officialRoster: OFFICIAL_ROSTER.slice(),
     sandbox: { edited: sb.edited, at: sb.at, by: sb.by || '' },
     snap,
     sched,
