@@ -2913,6 +2913,54 @@ function lgTriggerScan(date) {
   inp.click();
 }
 
+/* ── 바텀시트 손잡이: 아래로 밀면 내려가고, 그냥 눌러도 내려간다 ──
+ *  ★손잡이에서만 잡는다 — 본문에서 잡으면 시트 안 스크롤과 싸운다.
+ *  ★닫기는 넘겨받은 close()에 맡긴다(목표 시트는 물을 비우는 뒷정리가 따로 있다). */
+function attachSheetGrip(grip, sheet, scrim, close) {
+  if (!grip || !sheet || grip._gripOn) return;
+  grip._gripOn = true;
+  grip.style.touchAction = 'none';
+  let pid = null, y0 = 0, t0 = 0, dy = 0, moved = false;
+  const H = () => sheet.offsetHeight || 520;
+  const clear = () => { sheet.style.transition = ''; sheet.style.transform = ''; if (scrim) { scrim.style.transition = ''; scrim.style.opacity = ''; } };
+  const put = (y) => {
+    sheet.style.transform = y ? `translateY(${y}px)` : 'translateY(0)';
+    if (scrim) scrim.style.opacity = String(Math.max(0, 1 - (y / H()) * 1.5));
+  };
+  grip.addEventListener('pointerdown', (e) => {
+    if (pid !== null) return;
+    pid = e.pointerId; y0 = e.clientY; t0 = Date.now(); dy = 0; moved = false;
+    sheet.style.transition = 'none'; if (scrim) scrim.style.transition = 'none';
+    try { grip.setPointerCapture(pid); } catch {}
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== pid) return;
+    dy = Math.max(0, e.clientY - y0);
+    if (dy > 3) moved = true;
+    if (moved) { e.preventDefault(); put(dy); }
+  });
+  const end = (e) => {
+    if (e.pointerId !== pid) return;
+    try { grip.releasePointerCapture(pid); } catch {}
+    pid = null;
+    const v = dy / Math.max(1, Date.now() - t0);            // px/ms
+    // 그냥 누른 것 · 충분히 내린 것 · 짧아도 튕겨 내린 것 — 셋 다 닫는다.
+    const go = !moved || dy > 80 || (dy > 24 && v > 0.5);
+    if (scrim) scrim.style.transition = 'opacity .26s ease';
+    if (go) {
+      sheet.style.transition = 'transform .26s cubic-bezier(.4,0,.9,.4)';
+      put(H() + 40);
+      setTimeout(() => { close(); clear(); }, 260);
+    } else {
+      sheet.style.transition = 'transform .26s cubic-bezier(.22,1,.36,1)';
+      put(0);
+      setTimeout(clear, 280);
+    }
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+}
+
 function initLedgerButtons() {
   // 바텀시트·라이트박스는 body 직속으로 옮겨 position:fixed가 뷰 스크롤/transform에 안 갇히게(오프스크린 방지).
   ['lgGoalSheet', 'lgAnalysisSheet', 'lgLb'].forEach((id) => { const el = $(id); if (el && el.parentElement !== document.body) document.body.appendChild(el); });
@@ -2927,9 +2975,13 @@ function initLedgerButtons() {
   $('lgwInput').oninput = () => { if (lgwLocked) return; const v = $('lgwInput').value.replace(/[^\d]/g, ''); $('lgwInput').value = v; lgwWorkGoal = Math.max(0, (Number(v) || 0) * 10000); lgwLiveUpdate(); };
   // 분석 시트
   const as = $('lgAnalysisSheet');
+  const anaClose = () => { as.classList.remove('on'); as.querySelectorAll('.abar i').forEach((i) => i.style.width = '0'); };
   $('lgAnalysisRow').onclick = () => { lgRenderAnalysis(); as.classList.add('on'); setTimeout(() => as.querySelectorAll('.abar i').forEach((i) => i.style.width = i.dataset.w), 90); };
-  $('lgAnaClose').onclick = () => { as.classList.remove('on'); as.querySelectorAll('.abar i').forEach((i) => i.style.width = '0'); };
-  as.onclick = (e) => { if (e.target === as) { as.classList.remove('on'); as.querySelectorAll('.abar i').forEach((i) => i.style.width = '0'); } };
+  $('lgAnaClose').onclick = anaClose;
+  as.onclick = (e) => { if (e.target === as) anaClose(); };
+  // 손잡이: 밀어 내리기 · 탭
+  attachSheetGrip(as.querySelector('.gh'), as.querySelector('.s2sheet'), as, anaClose);
+  attachSheetGrip($('lgwSheet').querySelector('.lgw-grip'), $('lgwSheet'), $('lgwScrim'), lgwClose);
   // 라이트박스
   $('lgLb').onclick = () => $('lgLb').classList.remove('on');
   // 정산서

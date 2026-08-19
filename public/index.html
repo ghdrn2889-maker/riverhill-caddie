@@ -847,7 +847,11 @@
     .s2sheet-bg.on{ opacity:1; pointer-events:auto; }
     .s2sheet{ width:100%; max-width:520px; margin:0 auto; max-height:100dvh; overflow-y:auto; background:#f3efe6; color:#241f18; border-radius:22px 22px 0 0; padding:0 20px calc(16px + env(safe-area-inset-bottom)); transform:translateY(101%); transition:transform .32s cubic-bezier(.22,1,.36,1); }
     .s2sheet-bg.on .s2sheet{ transform:translateY(0); }
-    .s2sheet .gh{ width:38px; height:5px; border-radius:3px; background:#241f18; opacity:.14; margin:10px auto 0; }
+    /*  ★막대는 5px라 손가락이 못 잡는다 — 보이는 크기는 그대로 두고 누를 넓이만 가짜 요소로 넓힌다. */
+    .s2sheet .gh{ width:38px; height:5px; border-radius:3px; background:#241f18; opacity:.14; margin:10px auto 0;
+      position:relative; cursor:grab; touch-action:none; }
+    .s2sheet .gh::after{ content:''; position:absolute; left:50%; top:-9px; width:132px; height:32px; transform:translateX(-50%); }
+    .s2sheet .gh:active{ opacity:.3; }
     .s2sheet h4{ font-size:17px; font-weight:850; margin:0 0 4px; color:#241f18; }
     .s2sheet .gp,.s2sheet .asub{ font-size:12px; color:#8a8270; margin:0 0 17px; line-height:1.5; }
     .s2 .ginput,.ginput{ display:flex; align-items:baseline; gap:6px; border-bottom:2px solid #0c8f6a; padding:4px 2px 10px; margin-bottom:15px; }
@@ -1829,6 +1833,8 @@
     body:has(#loginOv:not([hidden])) nav.nav,
     body:has(.ldg-screen:not(.hide)) nav.nav,
     body:has(.lgw-bg.on) nav.nav { display:none; }
+    /* ★분석 시트는 화면 끝까지 올라와 손잡이가 맨 위에 온다 — 설치 배너가 그 위를 덮으면 못 잡는다. */
+    body:has(.s2sheet-bg.on) #installBar { display:none; }
     @media (prefers-reduced-motion:reduce) { .rc2-stampov.slam .rc2-stamp { animation:none; } }
 
     /* 지난기록 소지품 점검(선택) 접이식 */
@@ -2787,7 +2793,9 @@
           transform:translateY(103%);transition:transform .6s cubic-bezier(.16,.84,.34,1);will-change:transform}
         .lgw-sheet.up{transform:translateY(0)}
         .lgw-bg.fast .lgw-sheet{transition:transform .32s cubic-bezier(.5,0,.9,.35)}
-        .lgw-grip{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:40px;height:5px;border-radius:3px;background:#0e6fbf;opacity:.3;z-index:8}
+        .lgw-grip{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:40px;height:5px;border-radius:3px;background:#0e6fbf;opacity:.3;z-index:8;cursor:grab;touch-action:none}
+        .lgw-grip::after{content:'';position:absolute;left:50%;top:-10px;width:132px;height:32px;transform:translateX(-50%)}
+        .lgw-grip:active{opacity:.55}
         .lgw-glass{position:relative;height:300px;overflow:hidden;background:#c4dced}
         .lgw-glass::before{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(4,22,44,.22),rgba(0,0,0,0) 46%)}
         .lgw-water{position:absolute;left:0;right:0;bottom:0;height:100%;z-index:2;transform:translateY(100%);will-change:transform;
