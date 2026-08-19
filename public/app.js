@@ -37,6 +37,9 @@ let _viewPushed = false;        // 홈 위에 뷰 한 칸만 쌓는다 → 뒤�
 let _homeBack = false;          // 홈 탭이 쌓아둔 칸을 회수하는 중(back()은 비동기라 표시해 둔다)
 function showView(name, opts = {}) {
   if (!VIEWS.includes(name)) name = 'today';
+  // 바로가기가 깔아둔 바닥은 탭을 옮기는 순간 걷는다 — 안 그러면 다시 돌아왔을 때 빈 공간만 남는다.
+  //  (바로가기는 showView 뒤에 다시 깔므로 여기서 지워도 안전하다.)
+  if (typeof dropScrollPad === 'function') dropScrollPad();
   // 탭 순서 기준 방향성 슬라이드: 오른쪽 탭으로 가면 오른쪽에서, 왼쪽 탭이면 왼쪽에서 들어옴.
   const from = VIEWS.indexOf(curView), to = VIEWS.indexOf(name);
   // 잔류 애니 클래스는 매 전환마다 전부 제거 → 뷰 재표시(hidden→display) 때 애니가 재시작되는 걸 원천 차단.
@@ -4723,19 +4726,41 @@ function goSettle(then) {
 }
 /* ★부드러운 스크롤(behavior:'smooth')은 '탭이 열린 뒤 아래로 훑어 내려가는' 두 번째 움직임을 만든다.
  *   바로가기는 목적지에 '이미 도착해 있어야' 한다 — 즉시 자리를 잡고, 칸을 화면 맨 위에 붙인다.
- *   진입 페이드(.s2.pgin)가 도는 동안은 rect가 16px 뜬 채로 잡힌다 → 다음 프레임·페이드 종료 뒤 한 번씩 더 앉힌다. */
+ * ★그런데 정산서는 정산 탭의 '마지막 카드'다. 아래에 밀어 올릴 내용이 없어 아무리 내려도 화면
+ *   가운데쯤에 선다(실측 412×915: 스크롤 여유 269px뿐, 카드는 508px에 섬 = '맨 아래로 갔다'로 보인다).
+ *   그래서 잠깐 바닥을 깔아 카드를 위로 올려놓고, 사용자가 다시 스크롤해 카드를 지나치면 걷어낸다 —
+ *   빈 공간이 계속 남지 않고, 걷는 순간에도 화면이 안 튄다(이미 그 위로 올라간 뒤에만 걷으므로).
+ * ★진입 페이드(.s2.pgin)가 도는 동안은 rect가 16px 뜬 채로 잡히므로 다음 프레임·페이드 종료 뒤 한 번씩 더 앉힌다. */
+const SCROLL_PAD_ID = 'lgScrollPad';
+function dropScrollPad() { const p = document.getElementById(SCROLL_PAD_ID); if (p) p.remove(); }
 const scrollToCard = (id, gap = 10) => {
   const el = $(id); if (!el) return;
   const card = el.closest('.card') || el;
   const sc = card.closest('main'); if (!sc) return;
+  const host = card.parentElement; if (!host) return;
+  dropScrollPad();
+  const topInContent = () => sc.scrollTop + card.getBoundingClientRect().top - sc.getBoundingClientRect().top;
   const place = () => {
     if (!document.body.contains(card)) return;
-    const y = sc.scrollTop + card.getBoundingClientRect().top - sc.getBoundingClientRect().top - gap;
-    sc.scrollTo({ top: Math.max(0, y), behavior: 'auto' });
+    const at = topInContent();
+    // 카드 윗금 아래로 남은 내용이 화면 한 장에 못 미치면, 모자란 만큼만 바닥을 깐다.
+    const need = Math.max(0, sc.clientHeight - (sc.scrollHeight - at) - gap);
+    let pad = document.getElementById(SCROLL_PAD_ID);
+    if (need > 0) {
+      if (!pad) { pad = document.createElement('div'); pad.id = SCROLL_PAD_ID; pad.setAttribute('aria-hidden', 'true'); host.appendChild(pad); }
+      pad.style.height = need + 'px';
+    } else if (pad) pad.remove();
+    sc.scrollTo({ top: Math.max(0, topInContent() - gap), behavior: 'auto' });
   };
   place();
   requestAnimationFrame(place);
   setTimeout(place, 460);
+  // 카드보다 위로 올라가면 바닥을 걷는다 — 그 아래는 이미 화면 밖이라 걷어도 안 튄다.
+  const off = () => {
+    if (!document.getElementById(SCROLL_PAD_ID)) { sc.removeEventListener('scroll', off); return; }
+    if (sc.scrollTop < Math.max(0, topInContent() - gap) - 8) { dropScrollPad(); sc.removeEventListener('scroll', off); }
+  };
+  setTimeout(() => sc.addEventListener('scroll', off, { passive: true }), 520);
 };
 
 // ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
