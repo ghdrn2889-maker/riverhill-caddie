@@ -58,6 +58,7 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     //  전에는 안 보내는 것과 '해제하라'가 같았다 — 근태를 안 싣는 화면이 반영하면
     //  판독이 제대로 읽어둔 휴무가 통째로 지워졌다(대조판이 정확히 그 상태였다).
     //  판독이 잡아낸 것을 수동 화면이 조용히 지우는 일은 없어야 한다.
+    const key = nkey(nm);
     if (key && r.duty !== undefined) {
       const d = String(r.duty || '');
       if (/병가|휴무|휴가/.test(d)) { if (crew[key] !== d) cellDiffs.push({ pos: p, field: 'duty', model: crew[key] || '', admin: d }); crew[key] = d; }
