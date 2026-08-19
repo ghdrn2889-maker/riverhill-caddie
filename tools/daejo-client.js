@@ -1190,14 +1190,14 @@
   // ── 정정 알림 ── 이 화면에서 유일하게 '밖으로' 나가는 버튼이다.
   //
   //  ★반영과 한 버튼에 묶지 않는다. 반영은 틀리면 다시 고치면 되지만, 보낸 알림은 못 거둔다.
-  //   그래서 반영은 문구를 '만들어 두기만' 하고(서버가 15분짜리 토큰에 담는다), 발송은 따로 누른다.
+  //   그래서 반영은 문구를 '만들어 두기만' 하고(서버 대기함이 30분 들고 있다), 발송은 따로 누른다.
   //  ★그리고 누구에게 무엇이 가는지 전부 보여주고 확인을 받는다. 몇 명인지만 말하는 확인은
   //   확인이 아니다 — 엉뚱한 사람에게 '티오프 변경!'이 가는 걸 막을 방법이 없다.
   //  ★대상은 서버가 고른다. '실제로 상태가 바뀐 회원'만이다(correctionMsg). 화면이 다시 세면
   //   두 곳이 갈라지고, 갈라지면 반드시 한쪽이 틀린다.
   const NOTIFY = { items: [], tokens: [], at: 0, noPush: false };
   const AUTO = [];                                   // 이번 반영에서 서버가 자동으로 보낸 결과(부별)
-  const NOTIFY_TTL = 15 * 60 * 1000;                 // 서버 토큰 수명과 같다
+  const NOTIFY_TTL = 30 * 60 * 1000;                 // 서버 대기함(outbox) 수명과 같다 — 어긋나면 버튼만 먼저 사라진다
   const notifyLeft = () => (NOTIFY.at ? NOTIFY_TTL - (Date.now() - NOTIFY.at) : 0);
   function resetNotify() { NOTIFY.items = []; NOTIFY.tokens = []; NOTIFY.at = 0; NOTIFY.noPush = false; paintNotify(); }
   function paintNotify() {
@@ -1207,38 +1207,175 @@
     notifyBtn.hidden = !alive;
     if (alive) notifyBtn.textContent = `정정 알림 보내기 (${n}명)`;
   }
-  setInterval(paintNotify, 30000);                   // 15분이 지나면 스스로 사라진다(서버도 그때 버린다)
+  setInterval(paintNotify, 30000);                   // 수명이 지나면 스스로 사라진다(서버도 그때 버린다)
+
+
+  // ── 발송 관문 ──────────────────────────────────────────────────────
+  //  ★알림은 거둘 수 없다. 그런데 여기서 보내는 길은 confirm() 한 장이 전부였다 —
+  //   무엇이 갈지 읽을 수는 있어도 고칠 수는 없었고, 진짜 물어야 할 것도 안 물었다:
+  //   그 회원 폰에 구독 기기가 있는가, 지금이 조용시간인가, 오늘 이미 같은 말을 하지 않았는가.
+  //  ★그래서 보내기 전에 이 시트를 지난다. 문구는 그 자리에서 고친다.
+  function obStyle() {
+    if (document.getElementById('obStyle')) return;
+    const st = document.createElement('style'); st.id = 'obStyle';
+    st.textContent = [
+      '.ob-ov{position:fixed;inset:0;z-index:9000;background:rgba(12,16,18,.55);display:flex;align-items:flex-end;justify-content:center}',
+      '.ob-sheet{width:100%;max-width:600px;max-height:88vh;display:flex;flex-direction:column;background:var(--bg);border-radius:16px 16px 0 0;padding:16px 14px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:0 -14px 44px rgba(0,0,0,.28)}',
+      '.ob-h{margin:0 0 3px;font-size:17px;font-weight:800;color:var(--ink)}',
+      '.ob-sub{margin:0 0 3px;font-size:13px;color:var(--dim);line-height:1.55}',
+      '.ob-hint{margin:0 0 10px;font-size:11.5px;color:var(--dim);opacity:.85}',
+      '.ob-warn{font-size:12.5px;font-weight:700;line-height:1.5;padding:9px 11px;border-radius:9px;margin-bottom:8px;border:1px solid}',
+      '.ob-warn.bad{background:var(--miss-bg);color:var(--miss);border-color:var(--miss)}',
+      '.ob-warn.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}',
+      '.ob-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:0 -3px}',
+      '.ob-it{padding:10px 11px;margin:7px 3px;background:var(--panel);border:1px solid var(--line);border-radius:11px}',
+      '.ob-it.off{opacity:.42}',
+      '.ob-hd{display:flex;align-items:center;gap:9px;cursor:pointer}',
+      '.ob-hd input{width:18px;height:18px;flex:none;accent-color:var(--ok)}',
+      '.ob-nm{font-weight:800;font-size:14px;color:var(--ink);flex:1}',
+      '.ob-chip{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:20px;background:var(--idle);color:var(--dim);border:1px solid var(--line)}',
+      '.ob-chip.zero{background:var(--miss-bg);color:var(--miss);border-color:var(--miss)}',
+      '.ob-chip.ed{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}',
+      '.ob-phone{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-top:8px}',
+      '.ob-app{font-size:9.5px;font-weight:800;letter-spacing:.14em;color:var(--dim);margin-bottom:6px}',
+      '.ob-t{display:block;width:100%;font:inherit;font-weight:800;font-size:14px;color:var(--ink);background:transparent;border:0;border-bottom:1px dashed var(--line);padding:2px 0}',
+      '.ob-b{display:block;width:100%;font:inherit;font-size:12.5px;color:var(--dim);line-height:1.55;background:transparent;border:0;border-bottom:1px dashed var(--line);padding:4px 0 3px;margin-top:6px;resize:vertical}',
+      '.ob-t:focus,.ob-b:focus{outline:0;border-bottom-color:var(--ok)}',
+      '.ob-note{font-size:11.5px;color:var(--dim);margin-top:7px;line-height:1.5}',
+      '.ob-kw{display:flex;align-items:center;gap:7px;margin-top:8px}',
+      '.ob-kw span{font-size:11px;font-weight:800;color:var(--dim)}',
+      '.ob-kw select{font:inherit;font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 7px}',
+      '.ob-btns{display:flex;gap:9px;margin-top:12px}',
+      '.ob-x,.ob-go{flex:1;font:inherit;font-weight:800;font-size:15px;border:1px solid var(--line);border-radius:11px;padding:12px;cursor:pointer;background:var(--panel);color:var(--dim)}',
+      '.ob-x{flex:.55}',
+      // 글자색은 바탕색을 쓴다 — 밝은 화면에선 흰 글자, 어두운 화면에선 검은 글자가 되어 양쪽 다 읽힌다.
+      '.ob-go{background:var(--ok);border-color:var(--ok);color:var(--bg)}',
+      '.ob-go:disabled{opacity:.55;cursor:default}',
+    ].join('');
+    document.head.appendChild(st);
+  }
+  const obEsc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function obCard(it, kinds) {
+    const notes = [];
+    if (!it.devices) notes.push('구독 기기가 없습니다 — 이 회원 폰엔 뜨지 않습니다.');
+    if (it.sentToday && it.sentToday.length) notes.push(`오늘 이미 ${it.sentToday.length}건 갔습니다 · 마지막 "${obEsc(it.sentToday[0].title)}"`);
+    return `<div class="ob-it${it.pick ? '' : ' off'}" data-id="${it.id}">`
+      + `<label class="ob-hd"><input type="checkbox" class="ob-ck"${it.pick ? ' checked' : ''}>`
+      + `<span class="ob-nm">${obEsc(it.name)}</span>`
+      + `<span class="ob-chip${it.devices ? '' : ' zero'}">기기 ${it.devices}</span>`
+      + (it.edited ? '<span class="ob-chip ed">수정됨</span>' : '')
+      + '</label>'
+      // ★종류를 바꾸면 그 회원의 지금 상태로 문구를 다시 쓴다 — 고쳐 쓰는 것과 '다른 말을 하는 것'은 다르다.
+      + ((kinds || []).length ? '<div class="ob-kw"><span>종류</span><select class="ob-k">'
+        + kinds.map((k) => `<option value="${k.key}"${k.key === it.kind ? ' selected' : ''}>${obEsc(k.label)}</option>`).join('')
+        + '</select></div>' : '')
+      + '<div class="ob-phone"><div class="ob-app">리버힐 캐디</div>'
+      + `<input class="ob-t" type="text" maxlength="90" value="${obEsc(it.title)}">`
+      + `<textarea class="ob-b" rows="2" maxlength="300">${obEsc(it.body)}</textarea></div>`
+      + (notes.length ? `<div class="ob-note">${notes.join('<br>')}</div>` : '')
+      + '</div>';
+  }
+  const obQ = (pth, q) => { const u = apiUrl(pth); return u + (u.indexOf('?') >= 0 ? '&' : '?') + q; };
+  async function obPreview(token, onDone) {
+    obStyle();
+    let v = null;
+    try { v = await (await fetch(obQ('/api/outbox', 'token=' + encodeURIComponent(token)), { credentials: 'include' })).json(); } catch { /* 아래서 처리 */ }
+    if (!v || !v.ok) { state.textContent = (v && v.error) || '미리보기를 불러오지 못했습니다.'; return; }
+    const ov = document.createElement('div'); ov.className = 'ob-ov';
+    const picks = () => v.items.filter((x) => x.pick);
+    const reach = () => v.items.filter((x) => x.pick && x.devices).length;
+    let banner = '';
+    if (v.pushOff) banner += `<div class="ob-warn bad">이 서버는 지금 알림을 보내지 않습니다(${obEsc(v.pushOff)}) — 눌러도 폰엔 뜨지 않습니다.</div>`;
+    if (v.quiet) banner += '<div class="ob-warn warn">지금은 조용시간입니다 — 바로 가지 않고 아침에 한꺼번에 발송됩니다.</div>';
+    ov.innerHTML = '<div class="ob-sheet">'
+      + `<h3 class="ob-h">${obEsc(v.kind)}${v.part ? ' · ' + obEsc(v.part) + '부' : ''}</h3>`
+      + `<p class="ob-sub">보내기 전 마지막 확인입니다. <b>${v.items.length}명</b>분 문구가 아래 그대로 폰에 뜹니다.</p>`
+      + '<p class="ob-hint">종류를 바꾸면 그 회원 상태로 문구가 다시 써집니다. 제목·내용은 눌러서 고칩니다. 체크를 풀면 그 회원에겐 안 갑니다.</p>'
+      + banner
+      + `<div class="ob-list">${v.items.map((x) => obCard(x, v.kinds)).join('')}</div>`
+      + '<div class="ob-btns"><button class="ob-x" type="button">취소</button><button class="ob-go" type="button"></button></div></div>';
+    document.body.appendChild(ov);
+    const go = ov.querySelector('.ob-go');
+    const paintGo = () => {
+      const np = picks().length, nr = reach();
+      go.disabled = !np;
+      go.textContent = np ? (nr === np ? `${np}명에게 보내기` : `${np}명에게 보내기 (실제 도달 ${nr}명)`) : '보낼 회원이 없습니다';
+    };
+    paintGo();
+    const save = (id, patch) => fetch(apiUrl('/api/outbox-edit'), {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ token, id }, patch)),
+    }).catch(() => { state.textContent = '수정 저장 실패 — 다시 눌러주세요.'; });
+    const close = (drop) => {
+      if (drop) fetch(apiUrl('/api/outbox-drop'), { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) }).catch(() => {});
+      ov.remove();
+    };
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(false); });
+    ov.querySelector('.ob-x').addEventListener('click', () => { close(true); state.textContent = '보내지 않았습니다.'; });
+    // 손을 뗄 때 저장한다 — 글자마다 부르면 서버가 시끄럽다.
+    ov.addEventListener('change', (e) => {
+      const boxEl = e.target.closest('.ob-it'); if (!boxEl) return;
+      const id = Number(boxEl.getAttribute('data-id'));
+      const it = v.items.find((x) => x.id === id); if (!it) return;
+      if (e.target.classList.contains('ob-ck')) { it.pick = e.target.checked; boxEl.classList.toggle('off', !it.pick); save(id, { pick: it.pick }); paintGo(); return; }
+      if (e.target.classList.contains('ob-k')) {
+        const kind = e.target.value;
+        fetch(apiUrl('/api/outbox-retext'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token, id, kind }),
+        }).then((r) => r.json()).then((j) => {
+          if (!j.ok) { state.textContent = j.error || '종류를 바꾸지 못했습니다.'; return; }
+          it.kind = j.item.kind; it.title = j.item.title; it.body = j.item.body;
+          boxEl.querySelector('.ob-t').value = it.title;
+          boxEl.querySelector('.ob-b').value = it.body;
+        }).catch(() => { state.textContent = '종류를 바꾸지 못했습니다.'; });
+        return;
+      }
+      if (e.target.classList.contains('ob-t')) { it.title = e.target.value; save(id, { title: it.title }); }
+      if (e.target.classList.contains('ob-b')) { it.body = e.target.value; save(id, { body: it.body }); }
+    });
+    go.addEventListener('click', async () => {
+      const ids = picks().map((x) => x.id);
+      if (!ids.length) { state.textContent = '보낼 회원을 골라주세요.'; return; }
+      go.disabled = true; go.textContent = '보내는 중…';
+      try {
+        const j = await (await fetch(apiUrl('/api/board-notify'), {
+          method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token, ids }),
+        })).json();
+        if (!j.ok) throw new Error(j.error || '발송 실패');
+        state.textContent = `알림을 보냈습니다 — ${j.sent}명 도달`
+          + (j.none ? ` · 기기 없어 미도달 ${j.none}명` : '')
+          + (j.failed ? ` · 실패 ${j.failed}명` : '');
+        close(false);
+        if (typeof onDone === 'function') onDone(j);
+      } catch (e) { paintGo(); state.textContent = '알림 실패: ' + e.message; }
+    });
+  }
 
   if (notifyBtn) notifyBtn.addEventListener('click', async () => {
     if (!live) { state.textContent = '샘플에서는 보낼 수 없습니다.'; return; }
     if (!NOTIFY.items.length || !NOTIFY.tokens.length) { state.textContent = '보낼 알림이 없습니다.'; return; }
-    if (notifyLeft() <= 0) { resetNotify(); state.textContent = '알림이 만료됐습니다(15분) — 다시 반영해주세요.'; return; }
-    const NL = String.fromCharCode(10);
-    const lines = NOTIFY.items.map((x) => `· ${x.name} — ${x.body}`);
-    const min = Math.max(1, Math.round(notifyLeft() / 60000));
-    const msg = [`회원 ${NOTIFY.items.length}명에게 정정 알림을 보냅니다. 보낸 알림은 거둘 수 없습니다.`, '']
-      .concat(lines).concat(['', `(남은 시간 약 ${min}분) 보낼까요?`]).join(NL);
-    if (!confirm(msg)) return;
+    if (notifyLeft() <= 0) { resetNotify(); state.textContent = '알림이 만료됐습니다 — 다시 반영해주세요.'; return; }
     notifyBtn.disabled = true;
-    state.textContent = '알림 보내는 중…';
-    let sent = 0, total = 0, err = '';
-    for (const token of NOTIFY.tokens) {
+    state.textContent = '미리보기를 여는 중…';
+    // ★부마다 초안이 하나씩 생긴다 — 한 장으로 합쳐 한 번에 훑게 한다.
+    //  따로 두면 관리자가 세 번 확인해야 하고, 그중 하나를 빠뜨리면 그 부만 조용히 안 간다.
+    let token = NOTIFY.tokens[0];
+    if (NOTIFY.tokens.length > 1) {
       try {
-        const r = await fetch(apiUrl('/api/board-notify'), {
+        const j = await (await fetch(apiUrl('/api/outbox-merge'), {
           method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token: token }),
-        });
-        const j = await r.json();
-        if (!j.ok) throw new Error(j.error || '발송 실패');
-        sent += Number(j.sent) || 0; total += Number(j.total) || 0;
-      } catch (e) { err = e.message; }
+          body: JSON.stringify({ tokens: NOTIFY.tokens }),
+        })).json();
+        if (j.ok) token = j.token;
+      } catch { /* 합치기 실패면 첫 장이라도 연다 */ }
     }
-    // ★토큰은 한 번 쓰면 서버가 지운다 — 두 번 눌러 두 번 가는 일이 없게 여기서도 비운다.
+    // 토큰은 한 번 쓰면 서버가 지운다 — 두 번 눌러 두 번 가는 일이 없게 여기서도 비운다.
     resetNotify();
     notifyBtn.disabled = false;
-    state.textContent = err
-      ? `알림 일부 실패 — 보냄 ${sent}/${total}명 · ${err}`
-      : `정정 알림을 보냈습니다 — ${sent}/${total}명`;
+    state.textContent = '';
+    await obPreview(token);
   });
 
   // ── 앱에 반영 ── 실제 배치표 축만, 그것도 이 버튼을 눌렀을 때만 넘어간다.
@@ -1300,7 +1437,7 @@
       //  커트가 24가 됐다(8/18). 화면은 커트만큼 줄을 그리니 뒤 세 줄이 빈칸으로 남았다.
       cutLine: Math.min(real.filter(Boolean).length, roster[part].filter((x) => String(x || '').trim()).length),
       // ★문구는 만들되 보내지는 않는다. 서버는 '실제 바뀐 회원'만 골라 문구를 짜서
-      //  토큰에 담아두고(15분), 관리자가 /api/board-notify로 확인해야 그때 나간다.
+      //  대기함에 담아두고(30분), 관리자가 미리보기에서 확인해야 그때 나간다.
       //  반영과 발송을 한 버튼에 묶지 않는 이유: 반영은 되돌릴 수 있고 알림은 못 거둔다.
       notify: true,
       // ★자동 발송 — 반영은 이미 명시적 행위다. 바뀐 회원에게 그 자리에서 나간다(사용자 결정).
@@ -1620,6 +1757,30 @@
   const npCount = document.getElementById('npCount');
   const npParts = document.getElementById('npParts');
   const npSend = document.getElementById('npSend');
+  const npKind = document.getElementById('npKind');
+  const npKindHint = document.getElementById('npKindHint');
+  const npFree = document.getElementById('npFree');
+  const npFreeTitle = document.getElementById('npFreeTitle');
+  const npFreeBody = document.getElementById('npFreeBody');
+  // ★종류 목록은 서버가 준다 — 화면이 따로 들고 있으면 문구 규칙을 고쳐도 여기만 옛말을 한다.
+  let npKinds = [];
+  async function npLoadKinds() {
+    if (npKinds.length || !npKind) return;
+    try {
+      const u = apiUrl('/api/notify-kinds');
+      const j = await (await fetch(u, { credentials: 'include' })).json();
+      npKinds = j.kinds || [];
+    } catch { npKinds = []; }
+    npKind.innerHTML = npKinds.map((k) => `<option value="${k.key}">${k.label}</option>`).join('');
+    npPaintKind();
+  }
+  function npPaintKind() {
+    if (!npKind) return;
+    const k = npKinds.find((x) => x.key === npKind.value);
+    if (npKindHint) npKindHint.textContent = (k && k.hint) || '';
+    if (npFree) npFree.hidden = npKind.value !== 'free';
+  }
+  if (npKind) npKind.addEventListener('change', npPaintKind);
   let npPart = '3', npCands = [];
 
   function npPaintCount() {
@@ -1672,7 +1833,7 @@
   });
   if (pickBtn) pickBtn.addEventListener('click', () => {
     if (!live) { state.textContent = '샘플에서는 대상을 불러올 수 없습니다 — 모니터의 /daejo 에서 열어주세요.'; return; }
-    if (npick.hidden) { npick.hidden = false; npLoad(npPart); npick.scrollIntoView({ block: 'nearest' }); }
+    if (npick.hidden) { npick.hidden = false; npLoadKinds(); npLoad(npPart); npick.scrollIntoView({ block: 'nearest' }); }
     else npick.hidden = true;
   });
   document.getElementById('npClose').addEventListener('click', () => { npick.hidden = true; });
@@ -1687,22 +1848,23 @@
     const boxes = [...npList.querySelectorAll('input:checked')];
     if (!boxes.length) { state.textContent = '받을 회원을 골라주세요.'; return; }
     const ids = boxes.map((b) => Number(b.value));
-    const picked = npCands.filter((c) => ids.includes(c.id));
-    const NL = String.fromCharCode(10);
-    const msg = [`${npPart}부 회원 ${picked.length}명에게 지금 상태를 알립니다. 보낸 알림은 거둘 수 없습니다.`, '']
-      .concat(picked.map((c) => `· ${c.name} — ${c.body}`)).concat(['', '보낼까요?']).join(NL);
-    if (!confirm(msg)) return;
+    const kind = npKind ? npKind.value : 'state';
+    if (kind === 'free' && !(npFreeTitle.value.trim() && npFreeBody.value.trim())) {
+      state.textContent = '자유 문구는 제목과 내용을 모두 적어주세요.'; return;
+    }
     npSend.disabled = true;
-    state.textContent = '알림 보내는 중…';
+    state.textContent = '미리보기를 여는 중…';
     try {
-      const r = await fetch(apiUrl('/api/board-notify-adhoc'), {
+      const r = await fetch(apiUrl('/api/outbox-compose'), {
         method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ part: npPart, ids: ids }),
+        body: JSON.stringify({ part: npPart, ids: ids, kind,
+          title: npFreeTitle ? npFreeTitle.value : '', body: npFreeBody ? npFreeBody.value : '' }),
       });
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || '발송 실패');
-      state.textContent = `${npPart}부 알림을 보냈습니다 — ${j.sent}/${ids.length}명`;
-      npick.hidden = true;
+      if (!j.ok) throw new Error(j.error || '초안을 만들지 못했습니다');
+      state.textContent = '';
+      // ★고른 즉시 보내지 않는다 — 무엇이 갈지 보고, 고치고, 그다음에 보낸다.
+      await obPreview(j.notifyToken, () => { npick.hidden = true; });
     } catch (err) { state.textContent = '알림 실패: ' + err.message; }
     finally { npSend.disabled = false; npPaintCount(); }
   });

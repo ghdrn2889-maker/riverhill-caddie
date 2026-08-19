@@ -1285,7 +1285,7 @@
     try{
       var r=await fetch(apiUrl('/api/member-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,fields:fields,notify:notify})});
       var j=await r.json();
-      if(j.ok){ if(msg){ msg.className='ude-msg ok'; msg.textContent='저장됨'+(j.notified?' · 알림 발송':'')+(j.changed?'':' (값 동일)'); } udEditing=0; setTimeout(loadUserDash,800); }
+      if(j.ok){ if(msg){ msg.className='ude-msg ok'; msg.textContent='저장됨'+(j.notifyToken?' · 알림 확인 필요':'')+(j.changed?'':' (값 동일)'); } udEditing=0; if(j.notifyToken) obPreview(j.notifyToken); setTimeout(loadUserDash,800); }
       else { if(msg){ msg.className='ude-msg err'; msg.textContent=j.error||'실패'; } btn.disabled=false; }
     }catch(e){ if(msg){ msg.className='ude-msg err'; msg.textContent='통신 오류'; } btn.disabled=false; }
   }
@@ -1507,7 +1507,7 @@
       msg.className='rv-msg ok'; msg.textContent='저장됨 · '+(res.updated||0)+'명 재계산'+moveMsg;
       save.disabled=false; brDirty=false; brSig='';
       if(notify){
-        if(res.notifyToken && res.pending && res.pending.length){ rvNotifyPreview(res.notifyToken, res.pending); }
+        if(res.notifyToken){ obPreview(res.notifyToken); }
         else { rvToast('상태가 바뀐 회원이 없어 보낼 정정 알림이 없어요.'); }
       }
       setTimeout(function(){ loadBoardReview(true); },900);
@@ -1675,7 +1675,29 @@
      +'.rvnt-x{flex:.6;background:var(--panel2);color:var(--tx2);border:1px solid var(--bord2)}'
      +'.rvnt-go{background:var(--good);color:#fff}.rvnt-go:disabled{opacity:.6}'
      +'.rvnt-ck{display:flex;align-items:flex-start;gap:11px;cursor:pointer}'
-     +'.rvnt-ck input{margin-top:2px;width:19px;height:19px;flex:none;accent-color:var(--good)}';
+     +'.rvnt-ck input{margin-top:2px;width:19px;height:19px;flex:none;accent-color:var(--good)}'
+     /* 발송 관문 — 폰에 뜰 모양 그대로 보여주고, 그 자리에서 고치게 한다. */
+     +'.ob-warn{font-size:12.5px;font-weight:700;line-height:1.5;padding:9px 11px;border-radius:9px;margin-bottom:8px}'
+     +'.ob-warn.bad{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad);border:1px solid color-mix(in srgb,var(--bad) 35%,transparent)}'
+     +'.ob-warn.warn{background:color-mix(in srgb,var(--warn) 12%,transparent);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent)}'
+     +'.ob-it{padding:11px 12px;margin:7px 4px;background:var(--panel2);border:1px solid var(--bord2);border-radius:11px}'
+     +'.ob-it.off{opacity:.45}'
+     +'.ob-hd{display:flex;align-items:center;gap:9px;cursor:pointer}'
+     +'.ob-hd input{width:19px;height:19px;flex:none;accent-color:var(--good)}'
+     +'.ob-nm{font-weight:800;font-size:14px;color:var(--tx);flex:1}'
+     +'.ob-chip{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:20px;background:var(--panel);color:var(--tx2);border:1px solid var(--bord2)}'
+     +'.ob-chip.zero{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}'
+     +'.ob-chip.ed{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent)}'
+     +'.ob-phone{background:var(--panel);border:1px solid var(--bord);border-radius:12px;padding:10px 11px;margin-top:8px}'
+     +'.ob-app{font-size:9.5px;font-weight:800;letter-spacing:.14em;color:var(--tx3);margin-bottom:6px}'
+     +'.ob-t{display:block;width:100%;font:inherit;font-weight:800;font-size:14px;color:var(--tx);background:transparent;border:0;border-bottom:1px dashed var(--bord2);padding:2px 0}'
+     +'.ob-b{display:block;width:100%;font:inherit;font-size:12.5px;color:var(--tx2);line-height:1.55;background:transparent;border:0;border-bottom:1px dashed var(--bord2);padding:4px 0 3px;margin-top:6px;resize:vertical}'
+     +'.ob-t:focus,.ob-b:focus{outline:0;border-bottom-color:var(--acc)}'
+     +'.ob-note{font-size:11.5px;color:var(--tx3);margin-top:7px;line-height:1.5}'
+     +'.ob-hint{font-size:11.5px;color:var(--tx3);margin:-6px 0 10px}'
+     +'.ob-kw{display:flex;align-items:center;gap:7px;margin-top:8px}'
+     +'.ob-kw span{font-size:11px;font-weight:800;color:var(--tx3)}'
+     +'.ob-kw select{font:inherit;font-size:12px;background:var(--panel);color:var(--tx);border:1px solid var(--bord2);border-radius:6px;padding:3px 7px}';
     document.head.appendChild(s);
   }
   // ── ★크로스파트 대바(자리 맞바꿈) ── 다른 부 캐디를 골라 두 좌석을 통째로 교환.
@@ -1732,7 +1754,7 @@
         var j=await r.json();
         if(!j.ok){ go.disabled=false; go.textContent='맞바꾸기'; rvToast(j.error||'대바 실패'); return; }
         ov.remove(); rvToast('대바 반영: '+j.aName+' ↔ '+j.bName);
-        if(notify && j.notifyToken && j.pending && j.pending.length){ rvNotifyPreview(j.notifyToken, j.pending); }
+        if(notify && j.notifyToken){ obPreview(j.notifyToken); }
         brSig=''; setTimeout(function(){ loadBoardReview(true); },700);
       }catch(e){ go.disabled=false; go.textContent='맞바꾸기'; rvToast('통신 오류'); }
     });
@@ -1757,27 +1779,102 @@
       if(!ids.length){ rvToast('보낼 회원을 선택하세요'); return; }
       var go=ov.querySelector('.rvnt-go'); go.disabled=true; go.textContent='보내는 중…';
       try{ var r=await fetch(apiUrl('/api/board-notify-adhoc'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:brPart,ids:ids})}); var j=await r.json();
-        if(j.ok){ rvToast('정정 알림 '+(j.sent||0)+'명 발송 완료'); ov.remove(); }
+        if(j.ok){ ov.remove(); if(j.notifyToken) obPreview(j.notifyToken); else rvToast('보낼 내용이 없습니다'); }
         else{ go.disabled=false; go.textContent='다시 보내기'; rvToast(j.error||'발송 실패'); }
       }catch(e){ go.disabled=false; go.textContent='다시 보내기'; rvToast('통신 오류'); }
     });
   }
-  function rvNotifyPreview(token, pending){
+  // ── ★발송 관문 ── 보내기 전에 '무엇이 누구 폰에 뜨는지' 보고, 고치고, 그다음 보낸다.
+  //  알림은 되돌릴 수 없다. 그래서 수동 발송은 전부 이 화면을 지난다.
+  //  문구만 보여주면 반쪽이다 — 구독 기기가 0이면 눌러도 안 가고, 조용시간이면 아침에 간다.
+  //  그 사실을 같이 안 보여주면 관리자는 '보냈다'고 믿고 넘어간다.
+  function obQ(pth,q){ var u=apiUrl(pth); return u+(u.indexOf('?')>=0?'&':'?')+q; }
+  function obCard(it,kinds){
+    var notes=[];
+    if(!it.devices) notes.push('구독 기기가 없습니다 — 이 회원 폰엔 뜨지 않습니다.');
+    if(it.sentToday&&it.sentToday.length) notes.push('오늘 이미 '+it.sentToday.length+'건 갔습니다 · 마지막 "'+esc(it.sentToday[0].title)+'"');
+    return '<div class="ob-it'+(it.pick?'':' off')+'" data-id="'+it.id+'">'
+      +'<label class="ob-hd"><input type="checkbox" class="ob-ck"'+(it.pick?' checked':'')+'>'
+      +'<span class="ob-nm">'+esc(it.name)+'</span>'
+      +'<span class="ob-chip'+(it.devices?'':' zero')+'">기기 '+it.devices+'</span>'
+      +(it.edited?'<span class="ob-chip ed">수정됨</span>':'')
+      +'</label>'
+      // ★종류를 바꾸면 그 회원의 지금 상태로 문구를 다시 쓴다.
+      +((kinds&&kinds.length)?'<div class="ob-kw"><span>종류</span><select class="ob-k">'
+        +kinds.map(function(k){ return '<option value="'+k.key+'"'+(k.key===it.kind?' selected':'')+'>'+esc(k.label)+'</option>'; }).join('')
+        +'</select></div>':'')
+      +'<div class="ob-phone"><div class="ob-app">리버힐 캐디</div>'
+      +'<input class="ob-t" type="text" maxlength="90" value="'+esc(it.title)+'">'
+      +'<textarea class="ob-b" rows="2" maxlength="300">'+esc(it.body)+'</textarea></div>'
+      +(notes.length?'<div class="ob-note">'+notes.join('<br>')+'</div>':'')
+      +'</div>';
+  }
+  async function obPreview(token){
     rvNtInjectStyle();
+    var v=null;
+    try{ var r=await fetch(obQ('/api/outbox','token='+encodeURIComponent(token))); v=await r.json(); }catch(e){}
+    if(!v||!v.ok){ rvToast((v&&v.error)||'미리보기를 불러오지 못했습니다'); return; }
     var ov=document.createElement('div'); ov.className='rvnt-ov'; ov.id='rvntOv';
-    var items=pending.map(function(p){ return '<div class="rvnt-it"><div class="rvnt-nm">'+esc(p.name)+'</div><div class="rvnt-bd">'+esc(p.body)+'</div></div>'; }).join('');
-    ov.innerHTML='<div class="rvnt-sheet"><h3>정정 알림 미리보기</h3><p class="rvnt-sub">아래 <b>'+pending.length+'명</b>에게 정정 알림이 발송됩니다. 문구를 확인하고 보내세요.</p><div class="rvnt-list">'+items+'</div><div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button><button class="rvnt-go" type="button">'+pending.length+'명에게 보내기</button></div></div>';
+    var reach=function(){ var n=0; v.items.forEach(function(x){ if(x.pick&&x.devices)n++; }); return n; };
+    var picks=function(){ return v.items.filter(function(x){ return x.pick; }); };
+    var banner='';
+    if(v.pushOff) banner+='<div class="ob-warn bad">이 서버는 지금 알림을 보내지 않습니다('+esc(v.pushOff)+') — 눌러도 폰엔 뜨지 않습니다.</div>';
+    if(v.quiet) banner+='<div class="ob-warn warn">지금은 조용시간입니다 — 바로 가지 않고 아침에 한꺼번에 발송됩니다.</div>';
+    ov.innerHTML='<div class="rvnt-sheet"><h3>'+esc(v.kind)+(v.part?' · '+esc(v.part)+'부':'')+'</h3>'
+      +'<p class="rvnt-sub">보내기 전 마지막 확인입니다. <b>'+v.items.length+'명</b>분 문구가 아래 그대로 폰에 뜹니다.</p>'
+      +'<p class="ob-hint">종류를 바꾸면 그 회원 상태로 문구가 다시 써집니다. 제목·내용은 눌러서 고칩니다. 체크를 풀면 그 회원에겐 안 갑니다.</p>'
+      +banner
+      +'<div class="rvnt-list">'+v.items.map(function(x){ return obCard(x,v.kinds); }).join('')+'</div>'
+      +'<div class="rvnt-btns"><button class="rvnt-x" type="button">취소</button>'
+      +'<button class="rvnt-go" type="button"></button></div></div>';
     document.body.appendChild(ov);
-    ov.addEventListener('click',function(e){ if(e.target===ov)ov.remove(); });
-    ov.querySelector('.rvnt-x').addEventListener('click',function(){ ov.remove(); });
-    ov.querySelector('.rvnt-go').addEventListener('click',async function(){
-      var go=ov.querySelector('.rvnt-go'); go.disabled=true; go.textContent='보내는 중…';
+    var go=ov.querySelector('.rvnt-go');
+    function paintGo(){
+      var np=picks().length, nr=reach();
+      go.disabled=!np;
+      go.textContent=np? (nr===np? np+'명에게 보내기' : np+'명에게 보내기 (실제 도달 '+nr+'명)') : '보낼 회원이 없습니다';
+    }
+    paintGo();
+    function save(id,patch){
+      fetch(apiUrl('/api/outbox-edit'),{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(Object.assign({token:token,id:id},patch))}).catch(function(){ rvToast('수정 저장 실패'); });
+    }
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(false); });
+    ov.querySelector('.rvnt-x').addEventListener('click',function(){ close(true); });
+    function close(drop){
+      if(drop) fetch(apiUrl('/api/outbox-drop'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})}).catch(function(){});
+      ov.remove();
+    }
+    // 문구 수정 — 손을 뗄 때 저장한다(글자마다 부르면 서버가 시끄럽다).
+    ov.addEventListener('change',function(e){
+      var box=e.target.closest('.ob-it'); if(!box) return;
+      var id=Number(box.getAttribute('data-id'));
+      var it=v.items.filter(function(x){ return x.id===id; })[0]; if(!it) return;
+      if(e.target.classList.contains('ob-ck')){ it.pick=e.target.checked; box.classList.toggle('off',!it.pick); save(id,{pick:it.pick}); paintGo(); return; }
+      if(e.target.classList.contains('ob-k')){
+        var kind=e.target.value;
+        fetch(apiUrl('/api/outbox-retext'),{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({token:token,id:id,kind:kind})})
+          .then(function(r){ return r.json(); }).then(function(j){
+            if(!j.ok){ rvToast(j.error||'종류를 바꾸지 못했습니다'); return; }
+            it.kind=j.item.kind; it.title=j.item.title; it.body=j.item.body;
+            box.querySelector('.ob-t').value=it.title; box.querySelector('.ob-b').value=it.body;
+          }).catch(function(){ rvToast('종류를 바꾸지 못했습니다'); });
+        return;
+      }
+      if(e.target.classList.contains('ob-t')){ it.title=e.target.value; save(id,{title:it.title}); }
+      if(e.target.classList.contains('ob-b')){ it.body=e.target.value; save(id,{body:it.body}); }
+    });
+    go.addEventListener('click',async function(){
+      var ids=picks().map(function(x){ return x.id; });
+      if(!ids.length){ rvToast('보낼 회원을 선택하세요'); return; }
+      go.disabled=true; go.textContent='보내는 중…';
       try{
-        var r=await fetch(apiUrl('/api/board-notify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})});
+        var r=await fetch(apiUrl('/api/board-notify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,ids:ids})});
         var j=await r.json();
-        if(j.ok){ rvToast('정정 알림 '+(j.sent||0)+'명 발송 완료'); ov.remove(); }
-        else { go.disabled=false; go.textContent='다시 보내기'; rvToast(j.error||'발송 실패'); }
-      }catch(e){ go.disabled=false; go.textContent='다시 보내기'; rvToast('통신 오류'); }
+        if(j.ok){ rvToast('발송 '+(j.sent||0)+'명 도달'+(j.none?' · 기기 없어 미도달 '+j.none+'명':'')+(j.failed?' · 실패 '+j.failed+'명':'')); close(false); }
+        else { paintGo(); rvToast(j.error||'발송 실패'); }
+      }catch(e){ paintGo(); rvToast('통신 오류'); }
     });
   }
 

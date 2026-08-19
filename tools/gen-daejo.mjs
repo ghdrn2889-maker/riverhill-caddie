@@ -321,6 +321,11 @@ td.c.none{background:repeating-linear-gradient(135deg,var(--open),var(--open) 5p
 .nhead button:hover{border-color:var(--warn)}
 .nhead button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
 .nhead button:disabled{opacity:.45;cursor:default}
+.nkind{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line)}
+.nkind select{font:inherit;font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+.nkhint{font-size:11.5px;color:var(--dim)}
+.nfree{display:flex;flex-direction:column;gap:7px;padding:10px 13px;border-bottom:1px solid var(--line)}
+.nfree input,.nfree textarea{font:inherit;font-size:13px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 10px;resize:vertical}
 .nseg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .nseg button{border:0;border-right:1px solid var(--line);border-radius:0;color:var(--dim);padding:3px 11px}
 .nseg button:last-child{border-right:0}
@@ -520,7 +525,16 @@ ${['1', '2', '3'].map(partTable).join('\n')}
     <button type="button" id="npSend" class="notify">보내기</button>
     <button type="button" id="npClose">닫기</button>
   </div>
-  <p class="nnote">지금 <b>그 회원의 현재 상태</b>를 그대로 알립니다(근무·티오프·순번 또는 스페어·휴무).
+  <div class="nkind">
+    <span class="nt">알림 종류</span>
+    <select id="npKind"></select>
+    <span class="nkhint" id="npKindHint"></span>
+  </div>
+  <div class="nfree" id="npFree" hidden>
+    <input id="npFreeTitle" type="text" maxlength="90" placeholder="제목 &mdash; 예: 내일 배치표 지연 안내">
+    <textarea id="npFreeBody" rows="3" maxlength="300" placeholder="내용을 적어주세요."></textarea>
+  </div>
+  <p class="nnote">고른 종류로 <b>회원마다 문구를 지어</b> 미리보기에 올립니다. 거기서 문구를 고치고 보냅니다 &mdash; 여기서는 아무것도 나가지 않습니다.
   방금 무엇이 어떻게 바뀌었는지를 알리려면 <b>정정 알림 보내기</b>를 쓰세요 &mdash; 그건 반영 직후에만 나옵니다.</p>
   <div class="nlist" id="npList"></div>
 </div>

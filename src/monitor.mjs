@@ -19,6 +19,8 @@ import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
+import * as outbox from './outbox.mjs';
+import { KINDS as NOTIFY_KINDS, compose as composeNotify, contextOf as notifyContext } from './notifytext.mjs';
 import * as dutyMod from './duty.mjs';
 import { summarize as dayboardSummary, listDayboardDates, loadDayboard } from './dayboard.mjs';
 import { buildDaejoData } from './daejodata.mjs';
@@ -322,14 +324,15 @@ app.post('/api/member-correct', gate, async (req, res) => {
     try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); }
     catch (e) { console.error('교정로그 기록 실패:', e.message); }
   }
-  let notified = false;
+  // ★교정하자마자 쏘지 않는다. 교정은 되돌릴 수 있어도 알림은 못 되돌린다.
+  //  초안만 세우고, 관리자가 문구를 보고 고친 뒤 보낸다.
+  let notifyToken = null;
   if (notify && pushReady) {
     const { title, body } = correctionMessage(name, next, changes);
-    try { await broadcast({ title, body, url: '/', level: 'high', bypassQuiet: true }, id); notified = true; }
-    catch (e) { console.error('교정 알림 발송 실패:', e.message); }
+    notifyToken = outbox.stage({ kind: '회원 교정', by: '관리자', items: [{ id, name, title, body, meta: { part: '3' } }] });
   }
-  console.log(`✏️ [monitor] 회원 #${id}(${name}) 관리자 교정: ${changes.map((c) => `${c.field} ${c.from || '-'}→${c.to || '-'}`).join(', ') || '(값 동일·잠금만)'}${notified ? ' · 알림발송' : ''}`);
-  res.json({ ok: true, changed: changes.length, notified, locked: Object.keys(lockFields) });
+  console.log(`✏️ [monitor] 회원 #${id}(${name}) 관리자 교정: ${changes.map((c) => `${c.field} ${c.from || '-'}→${c.to || '-'}`).join(', ') || '(값 동일·잠금만)'}${notifyToken ? ' · 알림 초안 대기' : ''}`);
+  res.json({ ok: true, changed: changes.length, notifyToken, locked: Object.keys(lockFields) });
 });
 // 교정 이력 조회(정확도 진단용) — 최근 200건.
 app.get('/api/corrections', gate, (req, res) => {
@@ -463,7 +466,6 @@ app.get('/api/board-review', gate, (req, res) => {
 });
 // ★교정 정정알림 — 저장 시 '실제 바뀐 회원'만 골라 문구를 만들되, 즉시 발송하지 않고
 //  토큰에 담아 관리자에게 미리보기로 돌려준다. /api/board-notify 로 확인해야 실제 발송.
-const pendingNotify = {};
 // currentStateMsg는 boardpush.mjs에 있다 — 자동 발송과 손으로 보내는 알림이 같은 문구를 써야 한다.
 function boardCtxForPart(part) {
   if (part === '3') { const lb = loadLastBoard(); if (!lb || !lb.rawVerdict) return null; const v = lb.rawVerdict; return { articleId: String(lb.id), dk: dayKey(v.dateLabel || lb.dateLabel || ''), roster: v.part3Roster || [], dateLabel: v.dateLabel || lb.dateLabel || '' }; }
@@ -501,14 +503,13 @@ function leaveMemberPart(userId, part, dateLabel, articleId) {
   saveToday(t, userId, '3');
 }
 const bareName = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
-function stashNotify(pending, part = '3') {
-  // 오래된 대기건 정리(15분 초과)
-  const now = Date.now();
-  for (const k of Object.keys(pendingNotify)) { if (now - (pendingNotify[k].at || 0) > 15 * 60 * 1000) delete pendingNotify[k]; }
-  if (!pending.length) return null;
-  const token = 'nt_' + now.toString(36) + Math.random().toString(36).slice(2, 7);
-  pendingNotify[token] = { at: now, part: String(part), items: pending };
-  return token;
+// ★발송은 전부 이 관문을 지난다(outbox) — 초안 → 미리보기 → 수정 → 발송.
+//  meta에 부를 실어 두면 발송 뒤 같은 장부(markNotified)에 적을 수 있다.
+function stashNotify(pending, part = '3', kind = '배치표 정정') {
+  return outbox.stage({
+    kind, part, by: '관리자',
+    items: (pending || []).map((x) => ({ ...x, meta: { part: String(part) } })),
+  });
 }
 // ★당번·벌당 수동 교정 — 하단 배정표 판독이 틀렸거나(부분 크롭 등) 구두 지시로 바뀌었을 때.
 //  body: { userId, kind:'당번'|'벌당'|'', part:'1'|'2'|'3' } · kind 빈값 = 해제.
@@ -696,21 +697,88 @@ app.post('/api/board-correct', gate, async (req, res) => {
 // ★교정 정정알림 확정 발송 — board-correct가 돌려준 notifyToken을 관리자가 미리보기 후 확인하면 실제 발송.
 app.post('/api/board-notify', gate, async (req, res) => {
   const token = String(req.body?.token || req.query.token || '');
-  const entry = pendingNotify[token];
-  if (!entry) return res.status(404).json({ ok: false, error: '대기 중인 알림이 없어요(이미 보냈거나 만료됨).' });
-  if (Date.now() - (entry.at || 0) > 15 * 60 * 1000) { delete pendingNotify[token]; return res.status(410).json({ ok: false, error: '알림이 만료됐어요. 다시 저장해주세요.' }); }
-  delete pendingNotify[token];   // 재발송 방지 — 먼저 제거
-  let sent = 0;
-  for (const it of entry.items) {
-    try {
-      await broadcast({ title: it.title, body: it.body, url: '/', level: 'high', bypassQuiet: true }, it.id); sent++;
-      // ★보냈다는 사실을 자동 경로와 같은 장부에 적는다 — 안 적으면 자동이 곧바로 같은 말을 또 한다.
-      const t = (entry.part === '3' ? loadToday(it.id) : loadToday(it.id, entry.part)) || {};
-      markNotified(it.id, entry.part || '3', t);
-    } catch (e) { console.error('정정알림 발송 실패:', e.message); }
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : null;
+  const r = await outbox.send(token, ids);
+  if (r.error) return res.status(r.code || 400).json({ ok: false, error: r.error });
+  // ★보냈다는 사실을 자동 경로와 같은 장부에 적는다 — 안 적으면 자동이 곧바로 같은 말을 또 한다.
+  //  기기가 없어 못 닿은 사람도 적는다: 알림을 만들었다는 사실은 같고, 안 적으면 자동이 다시 시도한다.
+  for (const it of r.ok.concat(r.none)) {
+    const part = String((it.meta && it.meta.part) || '3');
+    const t = (part === '3' ? loadToday(it.id) : loadToday(it.id, part)) || {};
+    markNotified(it.id, part, t);
   }
-  console.log(`📢 [monitor] 정정 알림 발송: ${sent}/${entry.items.length}명`);
-  res.json({ ok: true, sent, total: entry.items.length });
+  res.json({ ok: true, sent: r.sent, total: r.total, none: r.none.length, failed: r.failed.length });
+});
+
+// ── 발송 관문 — 미리보기 · 문구 수정 · 취소 ──
+//  ★보내기 전에 '무엇이 누구 폰에 뜨는지'를 볼 수 있어야 한다. 발송은 되돌릴 수 없다.
+app.get('/api/outbox', gate, (req, res) => {
+  const v = outbox.peek(String(req.query.token || ''));
+  if (!v) return res.status(404).json({ ok: false, error: '대기 중인 알림이 없어요(이미 보냈거나 만료됐습니다).' });
+  res.json({ ok: true, ...v, kinds: NOTIFY_KINDS });   // 종류 목록도 같이 — 화면이 또 물으러 오지 않게
+});
+app.post('/api/outbox-edit', gate, (req, res) => {
+  const { token, id, title, body, pick } = req.body || {};
+  const v = outbox.editItem(String(token || ''), id, { title, body, pick });
+  if (!v) return res.status(404).json({ ok: false, error: '그 대기건을 찾을 수 없어요.' });
+  res.json({ ok: true, item: v });
+});
+// 회원 한 명의 문구 재료 — 그 부의 오늘 상태에서 뽑는다.
+//  ★종류를 바꿀 때 문구를 화면이 짓지 않는다. 화면이 지으면 서버가 보내는 말과 갈라진다.
+function notifyCtx(id, part) {
+  const p = String(part || '3');
+  const m = activeMembers().find((x) => x.id === Number(id)) || {};
+  const t = (p === '3' ? loadToday(Number(id)) : loadToday(Number(id), p)) || {};
+  return notifyContext(p, m.board_name || '회원', t);
+}
+app.get('/api/notify-kinds', gate, (req, res) => res.json({ ok: true, kinds: NOTIFY_KINDS }));
+
+// ── 종류 바꾸기 ── 그 회원의 지금 상태로 문구를 다시 쓴다.
+//  ★'자유 문구'는 글자를 지우지 않는다 — 직접 쓰겠다는 뜻이지 비우겠다는 뜻이 아니다.
+app.post('/api/outbox-retext', gate, (req, res) => {
+  const { token, id, kind } = req.body || {};
+  const cur = outbox.peek(String(token || ''));
+  if (!cur) return res.status(404).json({ ok: false, error: '대기 중인 알림이 없어요(이미 보냈거나 만료됐습니다).' });
+  const it = cur.items.find((x) => x.id === Number(id));
+  if (!it) return res.status(404).json({ ok: false, error: '그 회원을 찾을 수 없어요.' });
+  const patch = String(kind) === 'free' ? { kind: 'free' } : { kind, ...composeNotify(kind, notifyCtx(id, it.part)) };
+  const v = outbox.editItem(token, id, patch);
+  if (!v) return res.status(404).json({ ok: false, error: '그 대기건을 찾을 수 없어요.' });
+  res.json({ ok: true, item: v });
+});
+
+// ── 새 알림 쓰기 ── 종류와 받는 사람을 골라 처음부터 만든다(관제 화면).
+app.post('/api/outbox-compose', gate, (req, res) => {
+  try {
+    const part = String(req.body?.part || '3');
+    const kind = String(req.body?.kind || 'state');
+    const ids = new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Boolean));
+    const freeTitle = String(req.body?.title || '').trim();
+    const freeBody = String(req.body?.body || '').trim();
+    if (!ids.size) return res.status(400).json({ ok: false, error: '받는 회원을 한 명 이상 고르세요.' });
+    if (!pushReady) return res.status(400).json({ ok: false, error: '푸시 발송 준비가 안 됐어요(VAPID 키 확인).' });
+    if (kind === 'free' && !(freeTitle && freeBody)) return res.status(400).json({ ok: false, error: '자유 문구는 제목과 내용을 모두 적어주세요.' });
+    const items = [];
+    for (const m of activeMembers()) {
+      if (!ids.has(m.id)) continue;
+      const t = kind === 'free' ? { title: freeTitle, body: freeBody } : composeNotify(kind, notifyCtx(m.id, part));
+      if (!t.title && !t.body) continue;
+      items.push({ id: m.id, name: m.board_name, title: t.title, body: t.body, kind, meta: { part } });
+    }
+    const token = outbox.stage({ kind: '직접 작성', part, by: '관리자', items });
+    if (!token) return res.status(400).json({ ok: false, error: '보낼 내용이 없어요.' });
+    res.json({ ok: true, notifyToken: token, count: items.length });
+  } catch (e) { console.error('outbox-compose 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post('/api/outbox-merge', gate, (req, res) => {
+  const tokens = Array.isArray(req.body?.tokens) ? req.body.tokens.map(String) : [];
+  const token = outbox.merge(tokens);
+  if (!token) return res.status(404).json({ ok: false, error: '합칠 대기건이 없어요(이미 보냈거나 만료됐습니다).' });
+  res.json({ ok: true, token });
+});
+app.post('/api/outbox-drop', gate, (req, res) => {
+  res.json({ ok: true, dropped: outbox.drop(String(req.body?.token || '')) });
 });
 
 // ★사후 정정 알림 — 이미 저장된 교정에 대해, 현재 배치표 기준 대상 회원 목록을 돌려준다.
@@ -742,18 +810,18 @@ app.post('/api/board-notify-adhoc', gate, async (req, res) => {
     if (!ids.length) return res.status(400).json({ ok: false, error: '받는 회원을 한 명 이상 선택해주세요.' });
     if (!pushReady) return res.status(400).json({ ok: false, error: '푸시 발송 준비가 안 됐어요(VAPID 키 확인).' });
     const pl = part === '1' ? '1부(조출)' : `${part}부`;
-    const idset = new Set(ids); let sent = 0;
+    const idset = new Set(ids);
+    // ★고른 즉시 보내지 않는다 — 초안만 세운다. 무엇이 갈지 보고 고친 뒤에 보낸다.
+    const items = [];
     for (const m of activeMembers()) {
       if (!idset.has(m.id)) continue;
       const today = (part === '3' ? loadToday(m.id) : loadToday(m.id, part)) || {};
       const cm = currentStateMsg(pl, m.board_name, today);
-      try {
-        await broadcast({ title: cm.title, body: cm.body, url: '/', level: 'high', bypassQuiet: true }, m.id); sent++;
-        markNotified(m.id, part, today);      // 같은 장부 — 자동이 뒤따라 또 보내지 않게
-      } catch (e) { console.error('사후 정정알림 발송 실패:', e.message); }
+      items.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body, meta: { part } });
     }
-    console.log(`📢 [monitor] 사후 정정 알림(수동 선택) 발송: ${sent}/${ids.length}명`);
-    res.json({ ok: true, sent });
+    const token = outbox.stage({ kind: '배치표 정정(수동 선택)', part, by: '관리자', items });
+    if (!token) return res.status(400).json({ ok: false, error: '보낼 내용이 없어요.' });
+    res.json({ ok: true, notifyToken: token, count: items.length });
   } catch (e) { console.error('notify-adhoc 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -827,8 +895,19 @@ app.post('/api/notice', gate, (req, res) => {
     if (audience === 'users' && !(Array.isArray(userIds) && userIds.length)) return res.status(400).json({ ok: false, error: '받는 회원을 한 명 이상 선택해주세요.' });
     const n = addNotice({ title, body, admin: admin || '관리자 김홍구', audience, userIds, tags, noticeDate });
     const audKo = n.audience === 'all' ? '전체' : (n.audience === 'users' ? `지정 ${n.userIds.length}명` : '관리자만');
-    console.log(`[notice] 공지 발송 — "${n.title}" (대상 ${audKo})`);
-    res.json({ ok: true, notice: n, audience: n.audience, count: n.userIds.length });
+    // ★공지는 원래 '앱을 열면 보이는' 것이라 폰은 조용했다 — 긴급으로 체크해도 그랬다.
+    //  긴급일 때만 푸시까지 보낸다. 평소 회람까지 울리면 알림이 흔해지고, 흔해진 알림은 안 읽힌다.
+    //  그리고 그 푸시도 관문을 지난다 — 무엇이 뜰지 보고 고친 뒤에 보낸다.
+    let notifyToken = null;
+    if (n.tags.includes('긴급') && pushReady) {
+      const only = n.audience === 'users' ? new Set(n.userIds) : null;
+      const items = activeMembers()
+        .filter((m) => (n.audience === 'all' ? true : (only ? only.has(m.id) : m.role === 'admin')))
+        .map((m) => ({ id: m.id, name: m.board_name || '회원', title: `긴급 공지 — ${n.title}`, body: n.body, meta: { notice: n.id } }));
+      notifyToken = outbox.stage({ kind: '긴급 공지', by: n.admin, items, url: '/' });
+    }
+    console.log(`[notice] 공지 등록 — "${n.title}" (대상 ${audKo})${notifyToken ? ' · 긴급 푸시 초안 대기' : ''}`);
+    res.json({ ok: true, notice: n, audience: n.audience, count: n.userIds.length, notifyToken });
   } catch (e) { console.error('notice 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 app.get('/api/notice/list', gate, (req, res) => {
