@@ -278,6 +278,8 @@ async function teeShadow(crop, rcols, part, oldTee, cut) {
 //    구제 크롭에 OUT이 안 들어온다. 부 크롭 자체를 오른쪽으로 조금 넓혀 같은 부 판독을 한 번 더 돌린다.
 //  ★넓힌 크롭에서 '명단은 버리고 티오프만' 가져온다 — 옆 부 이름이 섞여 들어와도 쓰지 않으므로
 //    교차 부 오염이 구조적으로 불가능하다(과거 사고의 재발 경로를 원천 차단).
+//  ★그리고 '빈 자리만' 채운다 — 넓힌 판독은 기존 칸을 틀리게 읽을 수 있다(8/20 실측: 16칸을 다 찾았지만
+//    기존 10칸 중 3개의 시각이 틀렸다). 통째로 갈아끼우면 멀쩡한 값이 망가진다.
 //  ★증거가 있을 때만(컷 안에 빈 순번이 있을 때만) 돈다. 멀쩡하면 호출을 안 태운다.
 const TEE_RESCUE_SPILL = 0.02;            // 다음 부 시작점 너머로 더 보는 폭
 async function rescueTee({ img, tee, bx0, next, part, cut }) {
@@ -297,20 +299,37 @@ async function rescueTee({ img, tee, bx0, next, part, cut }) {
     const wide = await readPartWithClaude(tmp);              // ★명단은 안 쓴다 — tee만 꺼낸다
     try { fs.unlinkSync(tmp); } catch { /* noop */ }
     if (!wide || !Array.isArray(wide.tee)) return tee;
-    const pos = wide.tee.map((t) => Number(t.pos)).filter((n) => n > 0);
-    const fresh = new Set(pos);
+    // ★덮어쓰지 않는다 — 빈 자리만 채운다.
+    //   실측 8/20: 넓힌 판독이 16칸을 다 찾았지만 기존 순번 3개의 시각을 틀리게 읽었다(원래 10개가 정답).
+    //   통째로 갈아끼우면 멀쩡한 값이 망가진다. 원래 값은 그대로 두고 없는 순번만 더한다.
     const d = teeDiff(tee, wide.tee);
-    // ★채택 조건 셋 — 하나라도 어기면 원래 판독을 그대로 둔다(구제가 사고가 되면 안 된다).
-    //   ①원래 있던 순번의 시각이 하나도 안 바뀔 것(줄 밀림 없음) ②컷을 넘는 순번이 없을 것(옆 부 숫자 유입)
-    //   ③실제로 더 채웠을 것.
-    const over = pos.filter((n) => n > cut);
-    const ok = d.diff.length === 0 && !over.length && fresh.size > have.size;
-    console.log(`·  [티오프 구제] 부${part} 컷${cut} · 빈 순번 ${miss.join(',')} → 재판독 ${fresh.size}칸(기존 ${have.size}) ${ok ? '채택' : '거부'}`
-      + `${d.diff.length ? ' | 시각 어긋남 ' + d.diff.slice(0, 3).join(', ') : ''}`
-      + `${over.length ? ' | 컷 초과 순번 ' + over.slice(0, 5).join(',') : ''}`);
+    // ★정렬 증거 — 기존 순번의 시각을 크게 어기면 줄이 밀린 판독이다. 그런 판독의 여분도 못 믿는다.
+    const misaligned = d.diff.length > Math.floor(have.size * 0.4);
+    // ★간격(cadence)은 '믿는 쪽'(원래 판독)에서 얻는다 — 채워 넣을 시각이 같은 사다리 위에 있어야 한다.
+    const mins = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+    const base = (tee || []).map((t) => mins(t.time)).filter((n) => n != null).sort((a, b) => a - b);
+    const gaps = {};
+    for (let n = 1; n < base.length; n++) { const g = base[n] - base[n - 1]; if (g > 0) gaps[g] = (gaps[g] || 0) + 1; }
+    const cadence = Number(Object.keys(gaps).sort((a, b) => gaps[b] - gaps[a])[0]) || 0;
+    const onLadder = (t) => { const m = mins(t); if (m == null || !base.length) return false; return cadence > 0 ? (m - base[0]) % cadence === 0 : true; };
+    const want = new Set(miss);
+    const add = []; const dropped = []; const taken = new Set();
+    for (const t of wide.tee) {
+      const n = Number(t.pos);
+      if (!(n > 0) || !want.has(n) || taken.has(n)) continue;   // 빈 자리만 · 한 번만
+      if (!onLadder(t.time)) { dropped.push(`${n}번 ${t.time}(사다리 밖)`); continue; }
+      taken.add(n);
+      add.push({ pos: n, time: String(t.time), course: String(t.course) === 'IN' ? 'IN' : 'OUT' });
+    }
+    const ok = !misaligned && add.length > 0;
+    console.log(`·  [티오프 구제] 부${part} 컷${cut} · 빈 순번 ${miss.join(',')} → ${ok ? `${add.length}칸 채움(${have.size}→${have.size + add.length}, 기존 값은 안 건드림)` : '채움 없음'}`
+      + `${misaligned ? ` | 줄 밀림 의심(기존 ${have.size}칸 중 ${d.diff.length}개 시각 어긋남) — 여분도 안 씀` : ''}`
+      + `${dropped.length ? ' | 버림 ' + dropped.slice(0, 4).join(', ') : ''}`);
     appendJSONL('tee-rescue.jsonl', { at: Date.now(), part: Number(part), cut, missBefore: miss, before: have.size,
-      after: fresh.size, adopted: ok, diffN: d.diff.length, over, x0: bx0, x1 });
-    return ok ? wide.tee : tee;
+      added: add.map((t) => `${t.pos}:${t.time}${t.course}`), adopted: ok, misaligned, diffN: d.diff.length,
+      cadence, dropped: dropped.slice(0, 8), x0: bx0, x1 });
+    if (!ok) return tee;
+    return tee.concat(add).sort((a, b) => (Number(a.pos) || 0) - (Number(b.pos) || 0));
   } catch (e) { console.error('[티오프 구제] 오류:', e.message); return tee; }
 }
 
