@@ -158,5 +158,25 @@ console.log('\n[★비착취 원칙이 코드에 되살아나지 않았다]');
   ok(!/days\.reduce\([^)]*parts\.length/.test(src), '근무 일수에 부 개수를 더하지 않는다');
 }
 
+console.log('\n[부팅 순서 — 앱이 로딩 화면에서 멈추지 않게]');
+{
+  // ★2026-08-20 사고: 성장 공간 블록을 main() '뒤'에 붙였더니 앱이 통째로 안 떴다.
+  //  main() → initNav() → showView() → gwSeen()이 아직 초기화 안 된 const를 건드려 ReferenceError.
+  //  그 예외가 main()을 끊어 hideSplash 안전장치까지 못 돌았고, 화면은 '일정 불러오는 중'에 얼어붙었다.
+  //  node --check로는 안 잡힌다 — 문법은 멀쩡하고 실행 순서만 틀렸기 때문이다.
+  const app = fs.readFileSync(path.join(ROOT, 'public/app.js'), 'utf8').replace(/\r\n/g, '\n');
+  const call = app.lastIndexOf('\nmain();');
+  const blk = app.indexOf('══ 성장 공간(업적)');
+  ok(call > -1, 'app.js가 main()을 부른다');
+  ok(blk > -1 && blk < call, '성장 공간 정의가 main() 앞에 있다',
+    'const/let은 선언줄을 지나야 산다 — 뒤에 있으면 부팅 중 ReferenceError로 앱이 멈춘다');
+  ok(app.slice(call + 8).trim() === '', 'main()이 파일의 마지막이다',
+    '뒤에 무언가를 더 붙이는 순간 같은 사고가 반복된다');
+
+  const idx = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
+  ok(idx.indexOf('id="growOv"') < idx.indexOf('script src="/app.js"'), '성장 공간 마크업이 script보다 앞에 있다',
+    'app.js는 문서 중간에서 바로 실행된다 — 뒤에 있으면 initGrowth가 화면을 못 찾는다');
+}
+
 console.log(bad ? `\n${bad}건 실패\n` : '\n전부 통과\n');
 process.exit(bad ? 1 : 0);
