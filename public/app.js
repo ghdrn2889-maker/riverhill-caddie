@@ -4671,6 +4671,7 @@ async function main() {
   loadMe();
   loadToday(); loadWatchHealth(); loadHomeWidgets();
   setTimeout(hideSplash, 2000);   // 안전장치: 어떤 이유로든 2초 뒤엔 대기화면 해제(무한 대기 방지)
+  setTimeout(() => { gwBootCheck(); }, 2600);   // 업적 축하 — 첫 화면이 뜬 뒤에(부팅을 막지 않는다)
   // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
   registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
   setInterval(() => { loadToday(); loadWatchHealth(); refreshPushHealth(); }, 30000);
@@ -5202,50 +5203,65 @@ function startHeartbeat() {
     $('platOv').classList.add('on');
   }
 
-  // ── 해금 팝업 — 새로 열린 트로피를 한 개씩 보여준다 ──
-  //  ★소급분은 여기 오지 않는다(서버가 첫 조회 때 전부 '본 것'으로 덮는다).
-  //   안 그러면 처음 들어온 회원 화면에 축하 팝업이 열 몇 개 연달아 터진다.
-  let gwQueue = [];
+  // ── 해금 팝업 ─────────────────────────────────────────
+  //  ★대표 하나를 크게, 함께 열린 나머지는 그 아래 한 번에. 하나씩 넘기게 하면
+  //   축하가 '확인 버튼 누르기'가 된다. 순서(등급 → 최신)는 서버가 정해서 보낸다.
+  //  ★소급분은 여기 오지 않는다 — 서버가 첫 판정 때 전부 '본 것'으로 덮는다.
+  let gwShown = [];
   function gwCelebrate(list) {
-    gwQueue = (list || []).slice();
-    gwNextToast();
-  }
-  function gwNextToast() {
-    const host = $('gwToastHost'); if (!host) return;
-    const a = gwQueue.shift();
-    if (!a) { host.classList.remove('on'); setTimeout(() => { if (!host.classList.contains('on')) host.hidden = true; }, 280); return; }
-    host.querySelector('.t-ribbon').textContent = TKO[a.tier] || '';
-    host.querySelector('.t-ribbon').style.background = TGRAD[a.tier] || '';
-    host.querySelector('.t-name').textContent = a.name;
-    host.querySelector('.t-xp').textContent = '경험치 +' + fmt(a.xp || 0) + ' XP';
-    host.querySelector('.t-msg').textContent = a.msg || a.short || '';
+    const arr = (list || []).filter(Boolean);
+    const host = $('gwToastHost');
+    if (!arr.length || !host) return;
+    gwShown = arr;
+    const head = arr[0], rest = arr.slice(1);
+
+    host.querySelector('.t-cup').className = 't-cup ' + head.tier;
     host.querySelector('.t-cup').innerHTML = CUP;
-    host.querySelector('.t-cup').className = 't-cup ' + a.tier;
+    const rb = host.querySelector('.t-ribbon');
+    rb.textContent = TKO[head.tier] || '';
+    rb.style.background = TGRAD[head.tier] || '';
+    const yr = (head.rep === 'year' && head.date) ? String(head.date).slice(0, 4) + ' ' : '';
+    host.querySelector('.t-name').textContent = yr + head.name;
+    host.querySelector('.t-xp').textContent = '경험치 +' + fmt(arr.reduce((n, a) => n + (a.xp || 0), 0)) + ' XP';
+    host.querySelector('.t-msg').textContent = head.msg || head.short || '';
+    $('gwTEyebrow').textContent = rest.length ? `새 트로피 ${arr.length}개` : '새 트로피';
+
+    const also = $('gwAlso');
+    if (rest.length) {
+      also.hidden = false;
+      also.innerHTML = '<div class="k">함께 달성한 업적</div>' + rest.map((a) => {
+        const y = (a.rep === 'year' && a.date) ? String(a.date).slice(0, 4) + ' ' : '';
+        return `<div class="t-also-r"><span class="c ${a.tier}">${CUP}</span>`
+          + `<span class="n">${gwEsc(y + a.name)}</span>`
+          + `<span class="x">+${fmt(a.xp || 0)}</span></div>`;
+      }).join('');
+    } else { also.hidden = true; also.innerHTML = ''; }
+
     host.hidden = false;
     void host.offsetWidth;
     host.classList.add('on');
   }
 
-  // 그 화면을 '처음' 연 날만 서버에 남긴다. 브라우저에도 표시를 남겨 매번 요청하지 않는다.
-  //  ★몇 번 봤는지는 세지 않는다 — 업적은 자부심의 공간이지 이용 감시 장부가 아니다.
-  const GW_SEEN = ['board', 'journal', 'settle', 'profile'];
-  function gwSeen(what) {
-    if (!GW_SEEN.includes(what)) return;
-    const k = 'gwseen:' + what;
-    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch { /* 사생활 모드 */ }
-    postJSON('/api/first-view', { what }).catch(() => {});
+  // 닫으면 '봤다'고 서버에 알린다 — 다 보여준 뒤에 지워야 중간에 꺼져도 다시 축하한다.
+  function gwCelebrateClose() {
+    const host = $('gwToastHost'); if (!host) return;
+    host.classList.remove('on');
+    setTimeout(() => { if (!host.classList.contains('on')) host.hidden = true; }, 280);
+    const ids = gwShown.map((a) => a.id).filter(Boolean);
+    gwShown = [];
+    if (ids.length) postJSON('/api/trophies/ack', { ids }).catch(() => {});
+    if (gwData) { gwData = { ...gwData, new: [] }; }
   }
 
-  // 못 불러왔을 때 — 왜 비었는지 말해준다.
-  function gwFail(e) {
-    const box = $('gotList');
-    if (box) box.innerHTML = '<div class="gw-fail">업적을 불러오지 못했어요.<br>잠시 뒤 다시 열어보세요.</div>';
-    if ($('gotHd')) $('gotHd').style.display = 'none';
-    if ($('lockHd')) $('lockHd').style.display = 'none';
-    if ($('lockList')) $('lockList').innerHTML = '';
-    if ($('gotMore')) $('gotMore').style.display = 'none';
-    if ($('lockMore')) $('lockMore').style.display = 'none';
-    if ($('totCount')) $('totCount').textContent = '—';
+  // 앱을 열자마자 — 성장 공간에 들어가지 않아도 축하는 뜬다.
+  //  부팅을 막지 않게 뒤로 미룬다(첫 화면이 먼저 떠야 한다).
+  async function gwBootCheck() {
+    try {
+      const d = await (await fetch('/api/trophies')).json();
+      if (!d || !d.ok) return;
+      gwData = d;
+      if (d.new && d.new.length && !$('gwToastHost').classList.contains('on')) gwCelebrate(d.new);
+    } catch { /* 업적은 앱을 막지 않는다 */ }
   }
 
   // ── 열고 닫기 ──
@@ -5303,7 +5319,7 @@ function startHeartbeat() {
     $('platX').onclick = () => platOv.classList.remove('on');
     platOv.addEventListener('click', (e) => { if (e.target === platOv) platOv.classList.remove('on'); });
     const host = $('gwToastHost');
-    if (host) host.querySelector('.t-btn').onclick = gwNextToast;
+    if (host) host.querySelector('.t-btn').onclick = gwCelebrateClose;
   }
 
 main();

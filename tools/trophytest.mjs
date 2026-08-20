@@ -7,7 +7,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CATALOG, TIER_XP, rankFor, seasonOf } from '../src/trophy.mjs';
+import { CATALOG, TIER_XP, rankFor, seasonOf, isSettled, rankFresh } from '../src/trophy.mjs';
+import { trophyNotice } from '../src/notifytext.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let bad = 0;
@@ -156,6 +157,71 @@ console.log('\n[★비착취 원칙이 코드에 되살아나지 않았다]');
   }
   // 근무 일수를 세는 곳이 '하루 1일'을 지키는지 — parts를 길이로 더하면 54가 3일이 된다.
   ok(!/days\.reduce\([^)]*parts\.length/.test(src), '근무 일수에 부 개수를 더하지 않는다');
+}
+
+console.log('\n[언제 열리는가 — 마친 근무만 센다]');
+{
+  // ★배치표는 전날 밤에 올라온다. 그때 세면 아직 나가지도 않은 근무로 '첫 출근'이 하루 먼저 열린다.
+  const noonKST = Date.UTC(2026, 7, 20, 3, 0);          // 2026-08-20 12:00 KST
+  ok(isSettled('2026-08-19', [], noonKST), '어제 근무는 마친 근무다');
+  ok(!isSettled('2026-08-21', ['06:30'], noonKST), '내일 근무는 아직 근무가 아니다',
+    '배치표가 올라온 밤에 트로피가 먼저 터지면 축하가 거짓말이 된다');
+  ok(!isSettled('2026-08-20', ['12:20'], noonKST), '오늘 12:20 티오프는 정오엔 아직 안 끝났다');
+  ok(isSettled('2026-08-20', ['06:30'], noonKST), '오늘 06:30 티오프는 정오면 끝났다');
+  ok(!isSettled('2026-08-20', [], noonKST), '티오프를 모르는 오늘 근무는 아직 안 한 것으로 본다',
+    '먼저 축하하느니 늦게 축하한다');
+  // 두 탕이면 마지막 티오프 기준.
+  ok(!isSettled('2026-08-20', ['06:30', '12:20'], noonKST), '두 탕은 마지막 티오프가 기준이다');
+}
+
+console.log('\n[대표 트로피 — 높은 등급 먼저, 같으면 최신 먼저]');
+{
+  const list = [
+    { id: 'b1', name: '동1', tier: 'bronze', date: '2026-08-20' },
+    { id: 'g1', name: '금1', tier: 'gold', date: '2026-08-18' },
+    { id: 's1', name: '은1', tier: 'silver', date: '2026-08-20' },
+    { id: 'b2', name: '동2', tier: 'bronze', date: '2026-08-21' },
+    { id: 'p1', name: '플1', tier: 'platinum', date: '2026-08-01' },
+  ];
+  const r = rankFresh(list).map((x) => x.id);
+  ok(r[0] === 'p1', '플래티넘이 대표다(날짜가 가장 옛날이어도)');
+  ok(r.join() === 'p1,g1,s1,b2,b1', `등급 → 최신 순으로 줄 선다 — 지금 ${r.join()}`);
+  ok(rankFresh([]).length === 0, '빈 목록도 안전하다');
+  // 같은 등급·같은 날짜여도 순서가 흔들리면 안 된다(볼 때마다 대표가 바뀐다).
+  const tie = [{ id: 'b', tier: 'bronze', date: '2026-08-20' }, { id: 'a', tier: 'bronze', date: '2026-08-20' }];
+  ok(rankFresh(tie).map((x) => x.id).join() === rankFresh(tie).map((x) => x.id).join(), '순서가 매번 같다');
+}
+
+console.log('\n[알림 — 여러 개를 달성해도 한 통]');
+{
+  ok(trophyNotice([]) === null, '달성한 게 없으면 알림도 없다');
+  const one = trophyNotice([{ name: '서른 고개', tier: 'bronze', short: '근무 30일' }]);
+  ok(/서른 고개/.test(one.title) && !/외 /.test(one.title), '하나면 그 이름만');
+  const many = trophyNotice([{ name: '사계의 일기', tier: 'gold' }, { name: '서른 고개', tier: 'bronze' }, { name: '첫 3부', tier: 'bronze' }]);
+  ok(/외 2개/.test(many.title), '여러 개면 대표 + 나머지 개수', '트로피마다 울리면 축하가 성가심이 된다');
+  ok(/3개가 열렸습니다/.test(many.body), '본문이 전체 개수를 말한다');
+  // 받침에 맞는 조사 — 이름이 계속 늘어나므로 손으로 쓰면 언젠가 틀린다.
+  ok(/일기를 비롯해/.test(many.body), '받침 없는 이름엔 를');
+  ok(/고개를 비롯해/.test(trophyNotice([{ name: '서른 고개', tier: 'bronze' }, { name: 'x' }]).body), '고개 → 를');
+  ok(/발자국을 비롯해/.test(trophyNotice([{ name: '3부의 발자국', tier: 'bronze' }, { name: 'x' }]).body), '받침 있는 이름엔 을');
+  // 문구 규칙(이모지·느낌표 금지)은 notifylint가 소스를 보지만, 조립된 결과도 지켜야 한다.
+  for (const m of [one, many]) {
+    ok(!/[!]/.test(m.title + m.body), '느낌표를 쓰지 않는다');
+    ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(m.title + m.body), '이모지를 쓰지 않는다');
+  }
+}
+
+console.log('\n[축하는 소급분에 뜨지 않는다]');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'src/trophy.mjs'), 'utf8');
+  ok(/const first = !store;/.test(src) && /first \? \[\] :/.test(src),
+    '첫 판정에서는 새로 열린 것이 없다고 본다', '안 그러면 폰에 축하가 열 몇 개씩 터진다');
+  ok(/export function ackCelebrated/.test(src), '축하를 보여준 뒤에야 대기에서 지운다');
+  const srv = fs.readFileSync(path.join(ROOT, 'src/server.mjs'), 'utf8');
+  ok(/new: r\.pending/.test(srv), '조회는 대기를 비우지 않는다',
+    '조회하자마자 비우면 축하가 뜨기 전에 앱이 꺼졌을 때 그 순간이 사라진다');
+  ok(/bypassQuiet: false/.test(srv.slice(srv.indexOf('async function sweepTrophies'), srv.indexOf('async function sweepTrophies') + 1600)),
+    '업적 알림은 조용시간에 울리지 않는다', '급한 알림이 아니다 — 아침 대기열로 간다');
 }
 
 console.log('\n[부팅 순서 — 앱이 로딩 화면에서 멈추지 않게]');

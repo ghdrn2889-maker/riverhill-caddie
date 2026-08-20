@@ -15,7 +15,7 @@ import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
-import { compose as composeNotify, contextOf as notifyContextOf, partLabel as notifyPartLabel } from './notifytext.mjs';
+import { compose as composeNotify, contextOf as notifyContextOf, partLabel as notifyPartLabel, trophyNotice } from './notifytext.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
@@ -125,13 +125,53 @@ app.get('/api/trophies', (req, res) => {
   if (!req.user) return res.status(401).json({ ok: false });
   try {
     const prof = getProfile(req.user.id) || {};
-    const r = trophy.syncAndDiff(req.user.id);
-    res.json({ ok: true, name: prof.board_name || '', ...r.growth, new: r.fresh, backfilled: r.backfilled });
+    const r = trophy.sweep(req.user.id);
+    // ★대기(pending)를 여기서 비우지 않는다 — 화면이 축하를 다 보여준 뒤 /api/trophies/ack 로 지운다.
+    //  조회하자마자 비우면, 축하가 뜨기 전에 앱이 꺼졌을 때 그 순간이 영영 사라진다.
+    res.json({ ok: true, name: prof.board_name || '', ...r.growth, new: r.pending, backfilled: r.backfilled });
   } catch (e) {
     console.error('[업적] 조회 실패:', e.message);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
+// 축하 화면을 다 보여줬다 — 그 트로피들을 대기에서 지운다.
+app.post('/api/trophies/ack', (req, res) => {
+  if (!req.user) return res.status(401).json({ ok: false });
+  const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+  let n = 0;
+  try { n = trophy.ackCelebrated(req.user.id, ids); } catch { /* noop */ }
+  res.json({ ok: true, cleared: n });
+});
+
+// ── 앱을 안 켜도 가는 업적 알림 ────────────────────────────
+//  ★트로피는 '근무를 마친 뒤'에 열린다(배치표가 올라온 밤이 아니라). 그래서 판정 시점이
+//   회원의 앱 사용과 무관하다 — 주기적으로 서버가 대신 봐야 한다.
+//  ★한 회원이 한 번에 여러 개를 달성해도 알림은 한 통이다. 트로피마다 울리면
+//   축하가 성가심이 된다(방금 걷어낸 '중구난방'으로 되돌아가는 길).
+//  ★조용시간이면 push.mjs가 아침 대기열로 돌린다(bypassQuiet 안 켠다) — 급한 알림이 아니다.
+let _trophyBusy = false;
+async function sweepTrophies({ notify = true } = {}) {
+  if (_trophyBusy) return { checked: 0, notified: 0 };
+  _trophyBusy = true;
+  let checked = 0, notified = 0;
+  try {
+    for (const m of activeMembers()) {
+      try {
+        const r = trophy.sweep(m.id);
+        checked++;
+        if (r.first) { console.log(`[업적] 회원 ${m.id} 첫 판정 — ${r.backfilled}개 소급(알리지 않음)`); continue; }
+        if (!notify || !r.fresh.length) continue;
+        const msg = trophyNotice(r.fresh);
+        if (!msg) continue;
+        await broadcast({ ...msg, bypassQuiet: false }, m.id);
+        notified++;
+        console.log(`[업적] 회원 ${m.id} — ${r.fresh.map((e) => e.label || e.name).join(', ')}`);
+      } catch (e) { console.error(`[업적] 회원 ${m.id} 판정 오류:`, e.message); }
+    }
+  } finally { _trophyBusy = false; }
+  return { checked, notified };
+}
 
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
@@ -1085,6 +1125,11 @@ app.post('/api/notice/seen', requireAuth, (req, res) => {
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ★한 시간마다 업적을 본다 — 3부는 밤늦게 끝나고 배치표는 그 전에 올라오므로,
+//  배치표 한 번만으로는 '오늘 마친 근무'를 놓친다. 새 게 없으면 아무 일도 안 일어난다.
+setInterval(() => { sweepTrophies().catch(() => {}); }, 60 * 60 * 1000);
+setTimeout(() => { sweepTrophies({ notify: false }).catch(() => {}); }, 20 * 1000);  // 기동 직후 1회는 조용히(재시작 스팸 방지)
+
 app.listen(PORT, HOST, () => console.log(`🌐 서버 실행: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`));
 
 function saveRecent(article, result, ai) {
@@ -1923,6 +1968,10 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
   if (opts.previewMode) { try { await sendDailyPreview(boardISO, full, opts); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
+
+  // ★배치표 한 판이 끝나면 업적을 본다 — 어제 마친 근무가 여기서 반영된다.
+  //  판독 중에 끼어들지 않게 맨 끝에서 한 번만(전 회원 한 바퀴는 파일 몇 개 읽는 정도).
+  try { await sweepTrophies(); } catch (e) { console.error('[업적] 배치표 후 판정 오류:', e.message); }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)
 }

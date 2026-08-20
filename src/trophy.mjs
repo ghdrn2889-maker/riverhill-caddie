@@ -49,6 +49,24 @@ function weekKey(iso) {
   d.setDate(d.getDate() - day);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// ── '마친 근무인가' ────────────────────────────────────────
+//  ★배치표는 전날 밤에 올라오고 그때 일지에 '근무'로 적힌다. 그대로 세면
+//   아직 나가지도 않은 근무로 '첫 출근'이 하루 먼저 열린다.
+//  기준은 정산과 같다 — 마지막 티오프 + 라운드 소요(4시간 30분)가 지나야 마친 것으로 본다.
+//  티오프를 모르는 오늘 근무는 아직 안 한 것으로 본다(먼저 축하하느니 늦게 축하한다).
+export const ROUND_MIN = 270;
+export function isSettled(dateISO, tees = [], now = Date.now()) {
+  const k = new Date(now + 9 * 3600 * 1000);          // KST
+  const today = k.toISOString().slice(0, 10);
+  if (dateISO < today) return true;
+  if (dateISO > today) return false;                  // 내일 근무는 아직 근무가 아니다
+  const mins = (tees || [])
+    .map((t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; })
+    .filter((v) => v != null);
+  if (!mins.length) return false;
+  return (k.getUTCHours() * 60 + k.getUTCMinutes()) >= Math.max(...mins) + ROUND_MIN;
+}
+
 // 조건을 만족한 '그 순간의 날짜'를 준다. 없으면 빈 문자열.
 const firstWhere = (arr, fn) => { const hit = (arr || []).find(fn); return hit ? hit.date : ''; };
 // n번째로 조건을 만족한 날 — "다섯 걸음"처럼 '몇 번째에 열렸나'를 정확히 집는다.
@@ -70,6 +88,7 @@ export function buildContext(userId = 1) {
     const worked = rounds.filter((x) => x && x.kind === 'work');
     const isWork = r.kind === 'work' || worked.length > 0;
     if (!isWork) continue;
+    if (!isSettled(date, [r.teeTime, ...worked.map((x) => x.teeTime)])) continue;
     // rounds가 비었는데 kind만 work인 옛 기록은 대표 부(3부)로 본다 — 기록을 버리지 않는다.
     const parts = worked.length ? [...new Set(worked.map((x) => String(x.part)))].sort() : ['3'];
     // ★인·아웃은 별도 필드가 아니라 course에 그대로 들어 있다('IN'/'OUT').
@@ -445,15 +464,53 @@ function todayISO() {
 }
 
 // ── 새로 열린 트로피 찾기 ──────────────────────────────────
-//  ★지난 기록으로 소급된 것은 알리지 않는다. 처음 판정하는 순간 이미 딴 것들을 전부 '본 것'으로
-//   덮어둔다 — 안 그러면 회원 폰에 축하 알림이 열 몇 개씩 한꺼번에 터진다.
+//  ★두 가지를 따로 센다.
+//   seen    = 지금까지 판정해 본 것(새로 열린 게 있는지 가르는 기준)
+//   pending = 열렸지만 아직 회원에게 '축하 화면'을 못 보여준 것
+//  나눠야 하는 이유: 알림은 앱 밖에서 먼저 나간다. 알림이 seen만 갱신하면
+//  회원이 앱을 열었을 때 축하할 거리가 이미 사라져 있다.
+//
+//  ★지난 기록으로 소급된 것은 알리지도 축하하지도 않는다. 처음 판정하는 순간
+//   이미 딴 것들을 전부 본 것으로 덮어둔다 — 안 그러면 폰에 축하가 열 몇 개씩 터진다.
 const SEEN_FILE = 'trophies.json';
-export function syncAndDiff(userId = 1, { announce = true } = {}) {
+
+// 대표 트로피 뽑는 순서 — 높은 등급 먼저, 같으면 최신 먼저.
+export function rankFresh(list) {
+  return [...(list || [])].sort((a, b) => (TIER_XP[b.tier] || 0) - (TIER_XP[a.tier] || 0)
+    || String(b.date).localeCompare(String(a.date))
+    || String(a.id).localeCompare(String(b.id)));
+}
+
+// 한 회원을 판정하고, 새로 열린 것을 '축하 대기'에 쌓는다.
+//  announce=false면 대기에만 쌓고 알림은 부르는 쪽이 알아서 한다.
+export function sweep(userId = 1) {
   const g = growthFor(userId);
   const store = loadUserJSON(userId, SEEN_FILE, null);
-  const known = new Set((store && store.seen) || []);
   const first = !store;
+  const known = new Set((store && store.seen) || []);
   const fresh = first ? [] : g.earned.filter((e) => !known.has(e.id));
-  saveUserJSON(userId, SEEN_FILE, { seen: g.earned.map((e) => e.id), at: Date.now(), backfilledAt: (store && store.backfilledAt) || Date.now() });
-  return { growth: g, fresh: announce ? fresh : [], backfilled: first ? g.earned.length : 0 };
+
+  // 대기는 id로만 들고 있는다 — 문구·등급은 늘 지금 판정에서 가져온다(옛 값이 굳지 않게).
+  const pendIds = new Set([...((store && store.pending) || []), ...fresh.map((e) => e.id)]);
+  const byId = new Map(g.earned.map((e) => [e.id, e]));
+  const pending = rankFresh([...pendIds].map((id) => byId.get(id)).filter(Boolean));   // 사라진 건 조용히 버린다
+
+  saveUserJSON(userId, SEEN_FILE, {
+    seen: g.earned.map((e) => e.id),
+    pending: pending.map((e) => e.id),
+    at: Date.now(),
+    backfilledAt: (store && store.backfilledAt) || Date.now(),
+  });
+  return { growth: g, fresh: rankFresh(fresh), pending, first, backfilled: first ? g.earned.length : 0 };
+}
+
+// 축하를 보여줬다 — 대기에서 지운다. 화면이 끝난 뒤에 부른다(중간에 꺼져도 다시 축하하도록).
+export function ackCelebrated(userId = 1, ids = []) {
+  const store = loadUserJSON(userId, SEEN_FILE, null);
+  if (!store) return 0;
+  const drop = new Set(ids.map(String));
+  const left = (store.pending || []).filter((id) => !drop.has(String(id)));
+  const n = (store.pending || []).length - left.length;
+  saveUserJSON(userId, SEEN_FILE, { ...store, pending: left, at: Date.now() });
+  return n;
 }

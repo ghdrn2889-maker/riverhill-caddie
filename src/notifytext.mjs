@@ -78,6 +78,32 @@ export function statusTitle(status, part) {
 }
 
 // 종류 + 재료 → { title, body }. 재료가 모자라면 아는 만큼만 말한다(지어내지 않는다).
+// ── 업적 달성 ──────────────────────────────────────────────
+//  ★한 번에 여러 개를 달성해도 알림은 한 통이다. 트로피 하나마다 울리면
+//   축하가 아니라 성가심이 된다(방금 걷어낸 '중구난방'으로 되돌아가는 길).
+//  ★급한 알림이 아니다 — 조용시간이면 아침 대기열로 간다(부르는 쪽에서 bypassQuiet:false).
+// 받침을 보고 을/를을 고른다 — 트로피 이름이 늘어나므로 손으로 쓰면 언젠가 틀린다.
+const eul = (w) => {
+  const c = String(w || '').trim().slice(-1).charCodeAt(0);
+  if (!(c >= 0xac00 && c <= 0xd7a3)) return '를';        // 한글이 아니면 무난한 쪽으로
+  return (c - 0xac00) % 28 ? '을' : '를';
+};
+export function trophyNotice(list = []) {
+  const arr = [...list].filter(Boolean);
+  if (!arr.length) return null;
+  const head = arr[0];                       // 대표 = 이미 등급·최신순으로 정렬돼 온다
+  const rest = arr.length - 1;
+  const tier = { bronze: '브론즈', silver: '실버', gold: '골드', hidden: '히든', platinum: '플래티넘' }[head.tier] || '';
+  return {
+    title: rest ? `업적 달성 — ${head.name} 외 ${rest}개` : `업적 달성 — ${head.name}`,
+    body: rest
+      ? `${tier} ${head.name}${eul(head.name)} 비롯해 ${arr.length}개가 열렸습니다. 성장 공간에 새 트로피가 놓였습니다.`
+      : `${tier} 트로피입니다. ${String(head.short || '').replace(/[.!?]+$/, '')} — 성장 공간에 새 트로피가 놓였습니다.`,
+    url: '/',
+    level: 'normal',
+  };
+}
+
 export function compose(kind, ctx) {
   const k = KIND_KEYS.includes(String(kind)) ? String(kind) : 'state';
   if (k === 'free') return { title: '', body: '' };
