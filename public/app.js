@@ -5236,6 +5236,18 @@ function startHeartbeat() {
     postJSON('/api/first-view', { what }).catch(() => {});
   }
 
+  // 못 불러왔을 때 — 왜 비었는지 말해준다.
+  function gwFail(e) {
+    const box = $('gotList');
+    if (box) box.innerHTML = '<div class="gw-fail">업적을 불러오지 못했어요.<br>잠시 뒤 다시 열어보세요.</div>';
+    if ($('gotHd')) $('gotHd').style.display = 'none';
+    if ($('lockHd')) $('lockHd').style.display = 'none';
+    if ($('lockList')) $('lockList').innerHTML = '';
+    if ($('gotMore')) $('gotMore').style.display = 'none';
+    if ($('lockMore')) $('lockMore').style.display = 'none';
+    if ($('totCount')) $('totCount').textContent = '—';
+  }
+
   // ── 열고 닫기 ──
   async function gwOpen() {
     const ov = $('growOv'); if (!ov) return;
@@ -5244,10 +5256,18 @@ function startHeartbeat() {
     ov.classList.add('on');
     ov.scrollTop = 0;
     if (!(history.state && history.state.gw)) { history.pushState({ gw: 1 }, ''); gwPushed = true; }
+    // ★앱의 방식 그대로 부른다(getJSON 같은 건 이 앱에 없다).
+    //  전에 없는 이름을 불렀다가 조용히 실패해 진열장이 빈 채로 떴다 — 화면은 멀쩡한데 아무것도 없었다.
     try {
-      const d = await getJSON('/api/trophies');
-      if (d && d.ok) { gwData = d; gwPaint(); if (d.new && d.new.length) gwCelebrate(d.new); }
-    } catch (e) { console.warn('[업적] 조회 실패', e); }
+      const d = await (await fetch('/api/trophies')).json();
+      if (!d || !d.ok) throw new Error(d && d.error ? d.error : '응답 없음');
+      gwData = d; gwPaint();
+      if (d.new && d.new.length) gwCelebrate(d.new);
+    } catch (e) {
+      console.warn('[업적] 조회 실패', e);
+      // ★빈 화면으로 두지 않는다. 아무것도 없는 진열장은 '아직 못 땄나 보다'로 읽혀 오해를 낳는다.
+      gwFail(e);
+    }
   }
   function gwCloseUI() {
     const ov = $('growOv'); if (!ov) return;
