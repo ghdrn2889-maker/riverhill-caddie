@@ -23,15 +23,48 @@ function hamming1(a, b) {
   return d === 1;
 }
 
-// 확정 이름(자주 등장 + 3글자 이상) — 스냅 후보군.
+// ── 이름 모양인가 ─────────────────────────────────────────
+//  ★사전이 이름 아닌 것을 71개나 배워놨다(실측 2026-08-21): '찾근'(22회) '조출'(13회) 같은 근무태그,
+//   '서동환(정진영)' 같은 대바 셀 통째, '박선하정용호'처럼 두 이름이 붙은 것, 공백 낀 '신 철'.
+//   셀을 파서에 넣기 전에 수확이 통째로 삼킨 흔적이다. 배우는 자리에서 막는다.
+const DUTY_WORD = /^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근|마감|대리|주임|마샬|휴무|휴가|병가|연차|반차|월차|격리|스페어|대기)$/;
+export function isNameShape(name) {
+  const s = String(name || '').trim();
+  return /^[가-힣]{2,4}$/.test(s) && !DUTY_WORD.test(s) && !/테스트/.test(s);
+}
+
+// ── 확정인가 ──────────────────────────────────────────────
+//  정본이면 무조건 확정. 그 밖은 자주 등장해야 확정 — 단, ★정본 코앞(1글자 차)의 이름은 확정하지 않는다.
+//  오독이 확정으로 굳으면 두 번 해롭다: 그 이름은 다시 안 고쳐지고(이미 확정), 남의 후보를 하나 더
+//  늘려 '유일하지 않다'며 스냅을 포기하게 만든다. 실측: '김수륭'이 '김수원'의 후보를 5개로 불렸다.
+//  ★진짜 새 캐디가 여기 걸릴 수 있다 — 그래서 조용히 넘기지 않고 한 번 알린다(정본에 넣으면 풀린다).
+const _nearWarned = new Set();
+function nearOfficial(db, name) {
+  return Object.keys(db).some((k) => db[k]?.official && hamming1(name, k));
+}
+function isConfirmed(db, name) {
+  if (db[name]?.official) return true;
+  if (name.length < 3 || (db[name]?.n || 0) < CONFIRM_MIN) return false;
+  if (nearOfficial(db, name)) {
+    if (!_nearWarned.has(name)) {
+      _nearWarned.add(name);
+      console.log(`[명단] '${name}' — 정본과 1글자 차이라 확정하지 않습니다(오독으로 봅니다). 실존 캐디면 정본 명단에 넣어주세요.`);
+    }
+    return false;
+  }
+  return true;
+}
+
+// 확정 이름(스냅 후보군).
 function confirmedFrom(db) {
-  return Object.keys(db).filter((n) => n.length >= 3 && (db[n]?.n || 0) >= CONFIRM_MIN);
+  return Object.keys(db).filter((n) => isConfirmed(db, n));
 }
 
 // 한 이름 등장 1회 기록(+근무태그 빈도).
 function bump(db, name, duty) {
   const n = String(name || '').trim();
   if (!n) return;
+  if (!isNameShape(n)) return;              // ★이름 모양이 아니면 아예 안 배운다(태그·대바셀·붙은 이름)
   const e = db[n] || (db[n] = { n: 0, duties: {} });
   e.n = (e.n || 0) + 1;
   const d = String(duty || '').trim();
@@ -105,7 +138,7 @@ export function officialNearCandidates(name) {
   if (s.length < 3) return [];
   const db = load();
   // ★정본이거나 '이미 확정된 실존 캐디'면 손대지 않음 — 곽호완처럼 정확히 읽힌 실명이 딴사람으로 치환되던 오탐 차단.
-  if (db[s]?.official || (db[s]?.n || 0) >= CONFIRM_MIN) return [];
+  if (isConfirmed(db, s)) return [];
   // ★같은길이 1글자차(시각유사 오독: 련↔현·원↔임) 정본만. 편집거리2(곽호완↔전호성)는 딴사람이라 제외.
   return Object.keys(db).filter((k) => db[k]?.official && hamming1(s, k));
 }

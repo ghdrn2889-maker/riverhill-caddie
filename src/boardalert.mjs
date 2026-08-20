@@ -52,6 +52,19 @@ function describe(it) {
     }
     // ★끝점 검사 — '배치표를 봤는데 반영이 안 됐다'. 원인은 몰라도 이 사실만으로 사람이 움직여야 한다.
     //  2026-08-16: 8/17 배치표가 6번 판독 실패하고 조용히 넘어갔고, 사흘을 아무도 몰랐다.
+    // ★2026-08-21: 3부에 '김예원'이 두 번, 1부에 '강경순'이 잘못 — 둘 다 어떤 검사에도 안 걸렸다.
+    case 'dup_name':
+      return { title: `${p} 명단에 같은 이름이 두 번`,
+        body: `${(it.names || []).join(', ')} — 한 사람이 두 순번을 먹고 있습니다. 원본과 대조해 검수에서 지워주세요.` };
+    case 'cut_overflow':
+      return { title: `${p} 커트가 명단보다 큽니다`,
+        body: `커트 ${it.cut}인데 명단은 ${it.rosterLen}명입니다. 명단 아래가 잘렸을 수 있습니다.` };
+    case 'tag_no_counterpart':
+      return { title: '두 부 근무 표시와 명단이 어긋납니다',
+        body: `${(it.names || []).join(' / ')} — 태그가 가리키는 부에 그 이름이 없습니다. 이름을 흘려 읽었을 수 있습니다.` };
+    case 'cross_untagged':
+      return { title: '표시 없이 두 부에서 근무로 잡힌 사람',
+        body: `${(it.names || []).join(' / ')} — 두 부를 뛰면 (54)·(1,3) 표시가 붙습니다. 한쪽은 잘못 들어간 이름일 수 있습니다.` };
     case 'board_not_reflected':
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':
@@ -84,7 +97,8 @@ export async function raiseBoardIssue(it) {
     //  알림까지 삼킨다(중복차단은 '같은 손상'을 막으려는 것이지 '다음 사고'를 막으려는 게 아니다).
     const detail = it.kind === 'roster_holes' ? (it.holes || []).join(',')
       : it.kind === 'tee_conflict' ? (it.times || []).join(',')
-        : String(it.articleId || it.purged || it.cut || '');
+        : Array.isArray(it.names) ? it.names.join(',')
+          : String(it.articleId || it.purged || it.cut || '');
     const sig = `${it.kind}|${it.part || ''}|${detail}`;
     if (seenRecently(sig, now)) return false;
     const { title, body } = describe(it);

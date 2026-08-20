@@ -768,6 +768,100 @@ function disambiguateByWorking(parts, workingSet) {
   }
 }
 
+// ★부 태그 교차 티브레이크 — 애매한 이름을 '그 사람이 반드시 있어야 할 다른 부'가 가려낸다.
+//  (1,3)이 붙은 사람은 정의상 1부와 3부 명단에 둘 다 있다. 그러니 3부에서 이름이 흐려도
+//  1부 명단이 정답을 들고 있다. 실측 2026-08-21 3부: '강예영(1,3)'·'김수원(1,3)'.
+//   · 강예영 → 정본 후보 강혜영·천예영 둘 → 스냅은 '유일하지 않다'며 포기. 1부엔 강혜영만 있다 → 확정.
+//   · 김수원 → 후보 최수원·김수룡·김수안·김예원 넷 → 포기. 1부엔 김수룡만 있다 → 확정.
+//  기존 티브레이크(disambiguateByWorking)는 근태·조편성 크롭에서 '오늘 근무자'를 얻는데,
+//  카톡 캡처는 부분 크롭이라 그 영역이 안 들어온다(로그: '근태 판독: 0명'). 재료가 없어 한 번도 안 돌았다.
+//  이건 재료가 명단 안에 있다 — 다른 부의 명단이다.
+// nearOf를 갈아끼울 수 있게 둔다 — 검사에서 진짜 사전을 건드리지 않고 이 판단만 시험하려고.
+export function disambiguateByCrossPart(parts, nearOf = officialNearCandidates) {
+  const PARTS_OF = (tag) => {
+    const t = String(tag || '').replace(/\s/g, '');
+    if (t === '54') return ['1', '2', '3'];
+    const m = t.match(/^([123])[,、]([123])$/);
+    return m ? [m[1], m[2]] : [];
+  };
+  const bareOf = (p2) => new Set((parts[p2]?.roster || []).map(_bare).filter(Boolean));
+  const bareCache = {};
+  const bareIn = (p2) => (bareCache[p2] ||= bareOf(p2));
+  let fixed = 0;
+  for (const p2 of Object.keys(parts)) {
+    const roster = parts[p2].roster || [];
+    const present = new Set(roster.map(_bare).filter(Boolean));
+    for (let i = 0; i < roster.length; i++) {
+      const cell = String(roster[i] || ''); if (!cell) continue;
+      const tag = _tag(cell);
+      const others = PARTS_OF(tag).filter((x) => x !== p2 && parts[x]);
+      if (!others.length) continue;                       // 부 태그가 없으면 교차할 상대가 없다
+      const bare = _bare(cell);
+      if (!/^[가-힣]{2,4}$/.test(bare)) continue;
+      const cands = nearOf(bare);
+      if (cands.length < 2) continue;                     // 유일하면 스냅이 이미 처리했다
+      const hit = cands.filter((c) => !present.has(c) && others.some((x) => bareIn(x).has(c)));
+      if (hit.length !== 1) continue;
+      const repl = `${hit[0]}(${tag})`;
+      console.log(`[boardreader] 부태그 티브레이크: ${p2}부 순번${i + 1} '${cell}'→'${repl}' (${others.join('·')}부 명단에 유일)`);
+      roster[i] = repl; present.add(hit[0]); bareCache[p2] = null; delete bareCache[p2];
+      fixed++;
+    }
+  }
+  if (fixed) console.log(`[boardreader] 부태그 티브레이크 ${fixed}건`);
+  return fixed;
+}
+
+// ★명단 자체의 앞뒤가 맞는가 — 고치지 않고 '이상하다'고만 말한다.
+//  실측 2026-08-21에 어떤 검사에도 안 걸린 것들:
+//   · 3부에 '김예원'이 17번과 37번, 두 번. 스냅은 '고치다가 중복 만들기'만 막지 판독이 처음부터
+//     같은 이름을 두 번 뱉으면 그대로 통과한다.
+//   · 1부에 '강경순'이 잘못 들어갔다(2부 4번에도 근무자로 있다). 티오프 칸도 하나 같이 늘어
+//     13명/13칸으로 '짝이 맞아' 기존 검사(teeGaps)를 전부 통과했다 — 짝이 맞는 건 옳다는 뜻이 아니다.
+//  ★부 태그 없이 두 부에 있는 것 자체는 정상이다(한 부는 스페어일 수 있다).
+//   이상한 건 '태그 없이 두 부 모두에서 근무자(순번 ≤ 커트)'인 경우다.
+export function rosterSanity(parts) {
+  const out = [];
+  const cutOf = (pd) => Number(pd?.cut) || 0;
+  const seat = {};                      // 이름 → [{part, pos, tagged, working}]
+  for (const p2 of Object.keys(parts || {})) {
+    const pd = parts[p2] || {};
+    const roster = pd.roster || [];
+    const cut = cutOf(pd);
+    const dup = new Map();
+    roster.forEach((cell, i) => {
+      const nm = _bare(cell); if (!nm) return;
+      dup.set(nm, (dup.get(nm) || 0) + 1);
+      (seat[nm] ||= []).push({ part: p2, pos: i + 1, tag: _tag(cell), working: cut > 0 && (i + 1) <= cut });
+    });
+    const twice = [...dup.entries()].filter(([, n]) => n > 1).map(([nm, n]) => `${nm}×${n}`);
+    if (twice.length) out.push({ kind: 'dup_name', part: Number(p2), names: twice.slice(0, 10) });
+    if (cut > roster.length) out.push({ kind: 'cut_overflow', part: Number(p2), cut, rosterLen: roster.length });
+  }
+  // 태그가 가리키는 부에 그 사람이 없다 — (1,3)이면 1부와 3부 명단에 둘 다 있어야 한다.
+  const PARTS_OF = (tag) => {
+    const t = String(tag || '').replace(/\s/g, '');
+    if (t === '54') return ['1', '2', '3'];
+    const m = t.match(/^([123])[,、]([123])$/);
+    return m ? [m[1], m[2]] : [];
+  };
+  const missing = [], ghosts = [];
+  for (const [nm, rows] of Object.entries(seat)) {
+    for (const r of rows) {
+      const want = PARTS_OF(r.tag).filter((x) => x !== r.part && parts[x] && (parts[x].roster || []).length);
+      for (const x of want) if (!rows.some((y) => y.part === x)) missing.push(`${nm}(${r.tag}) — ${x}부 명단에 없음`);
+    }
+    // 태그 하나 없이 두 부에서 '근무자'로 잡힌 사람. 두 부를 뛰면 리버힐은 태그를 단다.
+    const work = rows.filter((r) => r.working);
+    if (work.length > 1 && rows.every((r) => !r.tag)) {
+      ghosts.push(`${nm} — ${work.map((r) => `${r.part}부 ${r.pos}번`).join(' · ')}`);
+    }
+  }
+  if (missing.length) out.push({ kind: 'tag_no_counterpart', names: [...new Set(missing)].slice(0, 10) });
+  if (ghosts.length) out.push({ kind: 'cross_untagged', names: [...new Set(ghosts)].slice(0, 10) });
+  return out;
+}
+
 // 커트 안인데 티오프가 없는 순번 — '표가 잘렸다'의 유일하게 확실한 신호.
 //  ★3부는 grid_short로 오래전부터 잡아왔는데 1·2부는 아무 검사도 없었다. 그래서 2부 IN 열이
 //    통째로 빠진 날들이 기록 한 줄 없이 지나갔다(8/20 실측: 컷 16에 티오프 10칸 — 알림도 로그도 없음).
@@ -797,6 +891,8 @@ export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
       const gaps = teeGaps(pd.tee || [], pd.cut || 0);
       if (gaps.length) raiseBoardIssue({ kind: 'grid_short', part: Number(p), teeMax: (pd.tee || []).length, cut: pd.cut || 0, miss: gaps.slice(0, 20) });
     }
+    // ★명단 자체의 앞뒤 — 부를 가로질러 봐야 보이는 것들이라 부별 루프 밖에서 한 번에 본다.
+    for (const it of rosterSanity(parts || {})) raiseBoardIssue(it);
     // 시도 단위로만 알 수 있는 손상(3부 홀리스틱 티오프 하단 누락) — 그 시도가 채택됐을 때만 전달됨.
     for (const it of attemptIssues) raiseBoardIssue(it);
   } catch (e) { console.error('[판독손상] 채택본 점검 오류:', e.message); }
@@ -973,6 +1069,8 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       if (workingSet.size) disambiguateByWorking(best, workingSet);
     } catch (e) { console.error('[boardreader] 근태 판독 실패:', e.message); }
   }
+  // ★근태 크롭이 없어도 돈다 — 재료가 명단 안에 있기 때문이다.
+  try { disambiguateByCrossPart(best); } catch (e) { console.error('[boardreader] 부태그 티브레이크 실패:', e.message); }
   // ★당번·벌당 배정표(하단 주황 박스) — 순번 근무와 별개인 '그날의 역할'.
   //  조편성 근태칸에도 '당번' 태그는 찍히지만 거기엔 '몇 부'가 없어 시각을 못 정한다. 그래서 이 박스를 따로 읽는다.
   //  실패해도 판독 전체를 망치지 않게 완전 격리(당번만 비고 나머지는 정상).
