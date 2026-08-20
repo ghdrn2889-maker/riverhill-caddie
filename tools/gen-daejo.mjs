@@ -426,9 +426,10 @@ td.c.empty{background:var(--open)}
 .sp.add:hover{background:var(--ok-bg)}
 body.editing .sp{touch-action:none}
 
-.stalebar{margin:10px 0 0;padding:11px 13px;border-radius:11px;background:#fff6e6;border:1px solid #f0d9a8;
-  color:#6b4d16;font-size:12.5px;line-height:1.7;font-weight:600}
-.stalebar b{font-weight:850;color:#8a5f12}
+/* 어두운 화면 위의 경고 — 위 안내박스와 같은 결로. 흰 판을 얹으면 여기만 튄다. */
+.stalebar{margin:10px 0 0;padding:11px 13px;border-radius:11px;background:rgba(220,150,40,.10);
+  border:1px solid rgba(220,150,40,.42);color:#e6c07a;font-size:12.5px;line-height:1.7;font-weight:600}
+.stalebar b{font-weight:850;color:#f5cf88}
 .ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;
   background:var(--ok);color:var(--panel);font-size:12px;font-weight:600;
   padding:4px 10px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,.28);white-space:nowrap}
