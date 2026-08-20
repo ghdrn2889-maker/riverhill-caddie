@@ -3,6 +3,7 @@ import { loadEnv, ROOT_DIR } from './env.mjs';
 loadEnv();
 
 import express from 'express';
+import compression from 'compression';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -62,6 +63,10 @@ const app = express();
 // ★테스터 킷 — 별도 인스턴스 없이 '테스터 계정'(role='tester')으로만 켜진다(팀장·테스터 시연용).
 //  실제 캐디/회원은 전혀 영향 없음(activeMembers에서 제외). 테스터는 배치표 대시보드를 고른 회원 기준으로 본다(읽기전용).
 const isTester = (u) => !!(u && u.role === 'tester');
+// ★압축 — 이게 없어서 앱을 열 때마다 745KB를 통째로 받고 있었다(index.html 364KB + app.js 381KB).
+//  둘 다 텍스트라 gzip이면 208KB로 준다(3.6배). 폰 데이터로 여는 사람에겐 이게 곧 대기 시간이다.
+//  express.json보다 앞에 둔다 — 뒤에 두면 이미 보내진 응답은 못 줄인다.
+app.use(compression());
 app.use(express.json({ limit: '12mb' }));         // 계기판 사진(base64) 업로드 허용
 app.use(express.urlencoded({ extended: true })); // 폼 전송(MacroDroid 등) 지원
 app.use(attachUser);                              // req.user 채움(세션 쿠키 or 솔로 폴백)

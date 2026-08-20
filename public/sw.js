@@ -1,6 +1,6 @@
 // 서비스워커: (1)백그라운드 푸시 알림 (2)network-first로 항상 최신 앱 서빙 + 자동 갱신.
 //  ★버전 문자열을 바꾸면 브라우저가 이 파일의 변경을 감지해 새 SW를 설치→활성화한다.
-const SW_VERSION = 'v9-netfirst-2026-08-11-icon';
+const SW_VERSION = 'v10-revalidate-2026-08-20';
 const SHELL_CACHE = 'rh-shell-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -17,7 +17,11 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
   //  열려 있던 PWA는 다음에 다시 열 때 network-first로 자연히 최신 코드로 갱신된다.
 })()));
 
-// network-first: 문서(HTML)·스크립트·스타일은 항상 서버에서 최신을 받는다(캐시 무시).
+// network-first: 문서(HTML)·스크립트·스타일은 항상 서버에 물어본다.
+//  ★'no-store'가 아니라 'no-cache'다. 둘 다 매번 서버에 묻지만 결과가 다르다.
+//   no-store  = 캐시를 아예 안 쓴다 → 안 바뀌었어도 745KB를 통째로 다시 받는다.
+//   no-cache  = 캐시를 쓰되 반드시 확인한다 → 안 바뀌었으면 304(본문 0바이트)로 끝난다.
+//   '항상 최신'은 그대로고, 앱을 두 번째 열 때부터 받는 양만 사라진다.
 //  네트워크 실패 시에만 마지막으로 받은 셸 캐시로 폴백(오프라인 최소 동작).
 //  /api/* 는 SW가 관여하지 않는다(OAuth 리다이렉트·로그인 흐름을 그대로 통과).
 self.addEventListener('fetch', (event) => {
@@ -31,7 +35,7 @@ self.addEventListener('fetch', (event) => {
   const isAsset = /\.(js|css|webmanifest)$/.test(url.pathname);
   if (!isDoc && !isAsset) return;                      // 이미지 등은 브라우저 기본 처리
   event.respondWith(
-    fetch(req, { cache: 'no-store' })
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         try { const clone = res.clone(); caches.open(SHELL_CACHE).then((c) => c.put(req, clone)).catch(() => {}); } catch {}
         return res;

@@ -16,6 +16,7 @@
     "probe": "node spike/probe.mjs"
   },
   "dependencies": {
+    "compression": "^1.8.1",
     "express": "^4.19.2",
     "web-push": "^3.6.7"
   }
