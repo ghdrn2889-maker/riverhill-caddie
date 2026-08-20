@@ -477,6 +477,12 @@ ${(J.judgeNote === '판정안함(당일)') ? `<div class="note">
   반영해도 <b>알림은 나가지 않습니다</b>. 정정 알림은 모니터의 <b>배치표 검수</b> 탭에서 미리보기 후 보냅니다.
   ${(J.sandbox?.edited || []).length ? `<span class="sbon">지금 ${J.sandbox.edited.map((p) => p + '부').join('·')}는 테스트판이 덮여 있습니다${J.sandbox.at ? ` (${esc(new Date(J.sandbox.at).toLocaleString('ko-KR'))})` : ''}.</span>` : ''}
 </div>
+${(J.sandbox?.stale || []).length ? `<div class="stalebar">
+  <b>${(J.sandbox.stale).map((x) => x.part + '부').join(' · ')} 테스트판이 검수보다 낡아 화면에 덮지 않았습니다.</b>
+  아래는 <b>지금 실제 배치표</b>입니다 &mdash; 검수에서 고친 내용이 그대로 보입니다.
+  낡은 테스트판(${new Date((J.sandbox.stale[0].sandboxAt) + 9 * 3600 * 1000).toISOString().slice(5, 16).replace('T', ' ')} 저장)은 남아 있습니다.
+  더 볼 일이 없으면 <b>실제 판독으로 초기화</b>로 지우세요 &mdash; 되돌릴 수 없습니다.
+</div>` : ''}
 
 <div class="bar">
   <div class="stat ${engineOk ? 'live' : 'dead'}"><b>${engineOk ? '가동' : '중단'}</b><span>카카오 엔진</span></div>
@@ -500,12 +506,6 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <span id="viewNote" class="vnote">사진이 <b>실제로 읽은</b> 배치표입니다. 고치는 곳이자 앱으로 넘어가는 곳입니다.</span>
 </div>
 
-${(J.sandbox?.stale || []).length ? `<div class="stalebar">
-  <b>${(J.sandbox.stale).map((x) => x.part + '부').join(' · ')} 테스트판이 검수보다 낡아 화면에 덮지 않았습니다.</b>
-  아래는 <b>지금 실제 배치표</b>입니다 &mdash; 검수에서 고친 내용이 그대로 보입니다.
-  낡은 테스트판(${new Date((J.sandbox.stale[0].sandboxAt) + 9 * 3600 * 1000).toISOString().slice(5, 16).replace('T', ' ')} 저장)은 남아 있습니다.
-  더 볼 일이 없으면 <b>실제 판독으로 초기화</b>로 지우세요 &mdash; 되돌릴 수 없습니다.
-</div>` : ''}
 <div class="tools" id="tools" hidden>
   <button data-mode="team" type="button">티오프 추가·삭제</button>
   <button data-mode="intern" type="button">인턴 지정</button>
