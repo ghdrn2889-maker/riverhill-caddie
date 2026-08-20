@@ -49,8 +49,10 @@ function schedShape(dateKey = '') {
 }
 
 // 부별 배치표 — 3부는 lastboard, 1·2부는 board-parts-store.
+//  freshAt: 그 부의 실제 배치표가 마지막으로 갱신된 시각(판독 또는 검수 교정) — 테스트판 신선도 판정용.
 function partsOf() {
   const out = {};
+  const freshAt = {};
   let dateLabel = '';
   try {
     const bp = loadBoardPartsStore();
@@ -66,6 +68,7 @@ function partsOf() {
         //  이걸 안 실으면 대조판은 그 사람을 스페어로 보여주고, 반영하면 근태가 통째로 지워진다.
         crewDuty: { ...(d.crewDuty || {}) },
       };
+      freshAt[p] = Math.max(Number(d._adminCorrected?.at) || 0, Number(d._at) || 0, Number(bp.at) || 0);
       dateLabel = dateLabel || d.dateLabel || bp.dateLabel || '';
     }
   } catch { /* 1·2부가 아직 없을 수 있다 — 3부만으로도 대조는 성립한다 */ }
@@ -81,10 +84,11 @@ function partsOf() {
         crewDuty: { ...(v.crewDuty || {}) },
         _autoInterns: (v.internTees || []).map((t) => ({ time: norm(t.time), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
       };
+      freshAt['3'] = Math.max(Number(v._adminCorrected?.at) || 0, Number(lb.at) || 0);
       dateLabel = v.dateLabel || lb.dateLabel || dateLabel;
     }
   } catch { /* noop */ }
-  return { parts: out, dateLabel };
+  return { parts: out, dateLabel, freshAt };
 }
 
 // 스냅샷이 있는 날짜들 — 대조판 날짜 이동에 쓴다.
@@ -97,7 +101,7 @@ export function snapshotDates() {
 
 // 대조판 한 장에 필요한 전부. date를 주면 그 날짜, 안 주면 배치표가 말하는 날짜.
 export function buildDaejoData(date = '') {
-  const { parts, dateLabel } = partsOf();
+  const { parts, dateLabel, freshAt } = partsOf();
   const boardKey = keyFromLabel(dateLabel) || '';
   const dateKey = String(date || '').replace(/\D/g, '').slice(0, 8) || boardKey || '';
   // ★다른 날짜를 볼 때는 배치표를 붙이지 않는다. 8/17 배치표 위에 8/18 예약을 겹치면
@@ -115,7 +119,7 @@ export function buildDaejoData(date = '') {
   }
   for (const p of ['1', '2']) if (parts[p]) parts[p].boardInternTees = parts[p].internTees.slice();
   // ★관리자 테스트판을 마지막에 덮는다 — 이 값은 대조판 밖으로 나가지 않는다(회원 앱·알림·엔진 무관).
-  const sb = applySandbox(parts, dateKey);
+  const sb = applySandbox(parts, dateKey, freshAt);
   const sched = schedShape(dateKey);
   // ★원웨이 선언은 즉시 화면에 보여야 한다 — 엔진은 5분마다 돌지만 관리자는 지금 눌렀다.
   //  (판정 자체는 엔진이 같은 선언을 읽어서 한다. 여긴 그 결과를 기다리지 않고 그릴 뿐이다.)
@@ -151,7 +155,9 @@ export function buildDaejoData(date = '') {
     //  판독이 명단을 크게 놓치는 날(8/19 2부: 31명 → 8명), 관리자가 이름을 하나씩 쳐 넣는 건
     //  스무 명이 넘어가면 사람이 할 일이 아니다. 있는 명단에서 끌어다 놓게 한다.
     officialRoster: OFFICIAL_ROSTER.slice(),
-    sandbox: { edited: sb.edited, at: sb.at, by: sb.by || '' },
+    // ★stale = 테스트판이 있는데 실제 배치표가 더 새것이라 덮지 않은 부. 화면이 이 사실을 말해야
+    //  관리자가 '검수가 왜 안 보이지'로 헤매지 않는다.
+    sandbox: { edited: sb.edited, stale: sb.stale || [], at: sb.at, by: sb.by || '' },
     snap,
     sched,
     health: kakaoHealth() || {},

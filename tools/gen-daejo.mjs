@@ -426,6 +426,9 @@ td.c.empty{background:var(--open)}
 .sp.add:hover{background:var(--ok-bg)}
 body.editing .sp{touch-action:none}
 
+.stalebar{margin:10px 0 0;padding:11px 13px;border-radius:11px;background:#fff6e6;border:1px solid #f0d9a8;
+  color:#6b4d16;font-size:12.5px;line-height:1.7;font-weight:600}
+.stalebar b{font-weight:850;color:#8a5f12}
 .ghost{position:fixed;left:0;top:0;z-index:99;pointer-events:none;
   background:var(--ok);color:var(--panel);font-size:12px;font-weight:600;
   padding:4px 10px;border-radius:6px;box-shadow:0 3px 12px rgba(0,0,0,.28);white-space:nowrap}
@@ -497,6 +500,12 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <span id="viewNote" class="vnote">사진이 <b>실제로 읽은</b> 배치표입니다. 고치는 곳이자 앱으로 넘어가는 곳입니다.</span>
 </div>
 
+${(J.sandbox?.stale || []).length ? `<div class="stalebar">
+  <b>${(J.sandbox.stale).map((x) => x.part + '부').join(' · ')} 테스트판이 검수보다 낡아 화면에 덮지 않았습니다.</b>
+  아래는 <b>지금 실제 배치표</b>입니다 &mdash; 검수에서 고친 내용이 그대로 보입니다.
+  낡은 테스트판(${new Date((J.sandbox.stale[0].sandboxAt) + 9 * 3600 * 1000).toISOString().slice(5, 16).replace('T', ' ')} 저장)은 남아 있습니다.
+  더 볼 일이 없으면 <b>실제 판독으로 초기화</b>로 지우세요 &mdash; 되돌릴 수 없습니다.
+</div>` : ''}
 <div class="tools" id="tools" hidden>
   <button data-mode="team" type="button">티오프 추가·삭제</button>
   <button data-mode="intern" type="button">인턴 지정</button>
@@ -509,7 +518,7 @@ ${['1', '2', '3'].map(partTable).join('\n')}
   <button id="applyBtn" type="button" class="apply" hidden>실제 배치표를 앱에 반영</button>
   <button id="notifyBtn" type="button" class="notify" hidden>정정 알림 보내기</button>
   <button id="pickBtn" type="button">알림 대상 고르기</button>
-  <button id="resetBtn" type="button" ${(J.sandbox?.edited || []).length ? '' : 'hidden'}>실제 판독으로 초기화</button>
+  <button id="resetBtn" type="button" ${((J.sandbox?.edited || []).length || (J.sandbox?.stale || []).length) ? '' : 'hidden'}>실제 판독으로 초기화</button>
   <span id="hint" class="hint">모드를 고르고 칸을 누르거나 끌어놓으세요.</span>
   <span id="state" class="hint"></span>
 </div>

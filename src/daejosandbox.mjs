@@ -81,16 +81,28 @@ export function clearSandbox(date, part = '', axis = '') {
 }
 
 // 실제 판독 위에 테스트판을 덮어씌운다. 어느 부가 덮였는지도 함께 알려준다.
-export function applySandbox(parts, date) {
+//  ★freshAt[부] = 그 부의 '실제 배치표'가 마지막으로 갱신된 시각(판독 또는 검수 교정).
+//   테스트판이 그보다 낡았으면 덮지 않는다 — 낡은 스냅샷이 관리자가 방금 손으로 고친 걸
+//   화면에서 지워버린다. 실측 2026-08-21: 테스트판 22:38 저장 뒤 22:51·22:54·22:58~23:08·06:11에
+//   1·2·3부를 검수로 고쳤는데, 대조판은 여섯 번의 교정을 전부 가리고 22:38짜리를 그리고 있었다.
+//   관리자는 '검수가 반영이 안 된다'고 보게 된다 — 실제로는 반영됐고 화면만 낡은 것이다.
+//  ★지우지는 않는다. 지우는 건 되돌릴 수 없고, 되돌릴 수 없는 일은 사람이 눌러서 한다.
+export function applySandbox(parts, date, freshAt = {}) {
   const sb = loadSandbox(date);
-  const edited = [];
-  if (!sb) return { parts, edited, at: 0 };
+  const edited = [], stale = [];
+  if (!sb) return { parts, edited, stale, at: 0 };
   for (const [p, v] of Object.entries(sb.parts || {})) {
     if (!parts[p]) continue;                     // 판독이 없는 부는 테스트판도 의미가 없다
+    const mine = Number(v.at || sb.at || 0);
+    const real = Number(freshAt[p] || 0);
+    if (real && mine && real > mine) {           // 실제 배치표가 더 새것 → 덮지 않는다
+      stale.push({ part: p, sandboxAt: mine, boardAt: real });
+      continue;
+    }
     // 예상 배치만 남은 항목(앱에 반영한 뒤)은 실제 축을 덮지 않는다.
     if (!v.roster) { parts[p] = { ...parts[p], projGrid: v.projGrid || [] }; continue; }
     parts[p] = { ...parts[p], roster: v.roster, teeGrid: v.teeGrid, projGrid: v.projGrid || [], boardInternTees: v.boardInternTees, internTees: v.internTees, cut: v.cut || parts[p].cut };
     edited.push(p);
   }
-  return { parts, edited, at: sb.at || 0, by: sb.by || '' };
+  return { parts, edited, stale, at: sb.at || 0, by: sb.by || '' };
 }
