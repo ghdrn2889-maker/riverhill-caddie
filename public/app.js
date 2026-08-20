@@ -4977,8 +4977,13 @@ function startHeartbeat() {
   document.addEventListener('visibilitychange', () => (document.hidden ? leave() : alive()));
   window.addEventListener('pagehide', leave);
 }
-main();
 
+
+/* ★부팅 순서 — 정의는 전부 main() "앞"에 둔다.
+   성장 공간 블록을 main() 뒤에 붙였다가 앱이 로딩 화면에서 멈췄다:
+   main() → initNav() → showView() → gwSeen()이 아직 초기화되지 않은 const를 건드려
+   ReferenceError가 났고, 그 예외가 main()을 끊어 hideSplash 안전장치까지 못 돌았다.
+   const/let은 선언줄을 지나야 살아난다(호이스팅되는 function과 다르다) — node --check로는 안 잡힌다. */
 // ══ 성장 공간(업적) ══════════════════════════════════════════════════════
 //  ★진열장·등급·경험치. 데이터는 서버가 판정한다(src/trophy.mjs) — 화면은 그리기만 한다.
 //   판정을 화면에서 하면 회원마다 다른 결과가 나오고, 무엇보다 되짚기(retroactive)가 불가능하다.
@@ -5281,3 +5286,4 @@ main();
     if (host) host.querySelector('.t-btn').onclick = gwNextToast;
   }
 
+main();

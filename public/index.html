@@ -3502,9 +3502,8 @@
     </div>
   </div>
 
-  <script src="/html2pdf.bundle.min.js"></script>
-  <script src="/app.js"></script>
-
+  <!-- 성장 공간(업적) — ★스크립트보다 앞에 둔다.
+       app.js는 여기서 바로 실행되므로, 마크업이 뒤에 있으면 initGrowth가 화면을 못 찾는다. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <linearGradient id="lite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".74"/><stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
   <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".4"/></linearGradient>
@@ -3872,6 +3871,9 @@
     </div>
   </div>
 </div>
+
+  <script src="/html2pdf.bundle.min.js"></script>
+  <script src="/app.js"></script>
 
 </body>
 </html>
