@@ -64,6 +64,7 @@ function showView(name, opts = {}) {
   }
   curView = name;
   if (!opts.noHist) syncViewHistory(name);
+  gwSeen(name === 'worklog' ? 'journal' : name);   // 그 화면을 '처음 연 날'만 서버에 남긴다
   // ★근무 기록·라운드 점검도 같은 원칙 — 첫 진입만 그리고, 재진입은 조용히 확인만(바뀌면 갱신).
   if (name === 'worklog') { if (jCache.year == null) loadJournal(); else loadJournal(jCache.year, { quiet: true }); }
   if (name === 'cart') { if (!ccDate) loadCartCheck(); else loadCartCheck(undefined, { quiet: true }); }
@@ -135,6 +136,8 @@ function syncViewHistory(name) {
 }
 function onViewPop(e) {
   const st = e.state || null;
+  // ★성장 공간이 열려 있으면 뒤로가기는 그것부터 닫는다 — 안 그러면 뒤에서 탭만 바뀌고 화면은 덮인 채 남는다.
+  { const g = document.getElementById('growOv'); if (g && g.classList.contains('on')) { gwPushed = false; gwCloseUI(); return; } }
   if (st && (st.ov || st.mnu || st.mpg || st.rcgal)) return;        // 팝업이 쌓은 칸 — 각자의 리스너가 닫는다
   if (_homeBack) {                                                  // 홈 탭이 회수하려던 칸이 이제 돌아왔다
     _homeBack = false;
@@ -4540,7 +4543,9 @@ function initFax() {
   stage.addEventListener('click', faxPrint);       // 버튼 못 찾아도 화면 아무 데나 탭하면 출력(faxPrint가 가드)
   ok.addEventListener('click', faxConfirm);
 }
+// ★프로필을 처음 연 날 = 업적 '나의 자리'. 한 번만 기록된다.
 function openAccount() {
+  gwSeen('profile');
   $('obOv').hidden = true;           // 가입 화면과 겹치지 않게
   hideTesterGuide();                 // 프로필을 열면 유도 가이드는 닫기
   // ★테스터: 계정/프로필 옵션 대신 '어떤 회원 배치표로 볼지' 선택 UI를 바로 띄운다.
@@ -4641,6 +4646,8 @@ function initAccount() {
   });
   $('ovEnableBtn').onclick = enableNotifications;
   initMenu();
+  initGrowth();
+  { const t = $('hwTrophy'); if (t) t.onclick = () => gwOpen(); }
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
@@ -4766,8 +4773,7 @@ const scrollToCard = (id, gap = 10) => {
 // ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
 //  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리).
 //  ★목표·정산서·지출은 이 목록의 원래 취지 그대로다 — 셋 다 정산 탭에 들어가 스크롤해야 나온다.
-//  ★업적은 화면이 아직 없다. 그래서 끄고 '준비'를 달아 자리만 잡는다(홈 타일 자물쇠와 같은 처리) —
-//   눌러보고 나서 없다는 걸 알게 하지 않는다.
+//  ★업적(성장 공간)은 이제 열린다 — 홈 타일과 여기 둘 다에서 닿는다.
 const MENU_ITEMS = [
   { k: 'shield', t: '캐디 보험', page: 'ins' },
   { k: 'rules', t: '근무 수칙', page: 'rule' },
@@ -4775,7 +4781,7 @@ const MENU_ITEMS = [
   { k: 'chart', t: '수익 분석', go: () => goSettle(() => { const r = $('lgAnalysisRow'); if (r) r.click(); }) },
   { k: 'doc', t: '정산서', go: () => goSettle(() => scrollToCard('lgDocSeg')) },
   { k: 'receipt', t: '지출 등록', go: () => goSettle(() => lgOpenExpenseToday()) },
-  { k: 'trophy', t: '업적', off: '준비' },
+  { k: 'trophy', t: '업적', go: () => gwOpen() },
 ];
 
 // 오늘 칸을 펼치고 지출 입력을 연다.
@@ -4972,3 +4978,306 @@ function startHeartbeat() {
   window.addEventListener('pagehide', leave);
 }
 main();
+
+// ══ 성장 공간(업적) ══════════════════════════════════════════════════════
+//  ★진열장·등급·경험치. 데이터는 서버가 판정한다(src/trophy.mjs) — 화면은 그리기만 한다.
+//   판정을 화면에서 하면 회원마다 다른 결과가 나오고, 무엇보다 되짚기(retroactive)가 불가능하다.
+//  ★아래 '그림' 함수들(rankMedal·ART·CUP·CHALICE…)은 시안 trophy-space-v3.html에서 그대로 가져왔다.
+//   손대야 하면 시안을 고치고 다시 뽑아라(tools/growbuild) — 두 벌을 각자 고치면 반드시 갈라진다.
+  function fmt(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+  // ── 티어 명예 메달 렌더러(확정 디자인: 금속 프레임 + 우주 일러스트 인레이) ──
+  function mhx(c){ c=c.replace('#',''); return [parseInt(c.substr(0,2),16),parseInt(c.substr(2,2),16),parseInt(c.substr(4,2),16)]; }
+  function mToHex(a){ return '#'+a.map(function(v){ v=Math.max(0,Math.min(255,Math.round(v))); return ('0'+v.toString(16)).slice(-2); }).join(''); }
+  function mMix(c,w,amt){ var a=mhx(c); return mToHex(a.map(function(v){ return v+((w?255:0)-v)*amt; })); }
+  function mLighten(c,a){ return mMix(c,true,a); } function mDarken(c,a){ return mMix(c,false,a); }
+  var MR=Math.PI/180;
+  function mStar(cx,cy,r,fill,op){ var i=r*0.34; return '<path d="M'+cx+' '+(cy-r)+' L'+(cx+i)+' '+(cy-i)+' L'+(cx+r)+' '+cy+' L'+(cx+i)+' '+(cy+i)+' L'+cx+' '+(cy+r)+' L'+(cx-i)+' '+(cy+i)+' L'+(cx-r)+' '+cy+' L'+(cx-i)+' '+(cy-i)+' Z" fill="'+fill+'"'+(op?' opacity="'+op+'"':'')+'/>'; }
+  function mSP(cx,cy,rO,rI,n,fill){ var p=''; for(var i=0;i<2*n;i++){ var r=i%2?rI:rO; var a=(i*180/n-90)*MR; p+=(i?'L':'M')+(cx+r*Math.cos(a)).toFixed(1)+' '+(cy+r*Math.sin(a)).toFixed(1)+' '; } return '<path d="'+p+'Z" fill="'+fill+'"/>'; }
+  function mBg(){ return '<g fill="#fff"><circle cx="17" cy="20" r=".7" opacity=".6"/><circle cx="40" cy="18" r=".6" opacity=".5"/><circle cx="19" cy="38" r=".6" opacity=".45"/><circle cx="41" cy="38" r=".7" opacity=".55"/><circle cx="33" cy="15" r=".5" opacity=".5"/><circle cx="14" cy="29" r=".5" opacity=".4"/></g>'; }
+  var ART={
+    moon:function(){ return mBg()+'<circle cx="28" cy="28" r="10" fill="#c8ced6"/><circle cx="28" cy="28" r="10" fill="url(#gShade)"/><path d="M28 18a10 10 0 0 1 0 20 7.6 10 0 0 0 0-20z" fill="#fff" opacity=".16"/><circle cx="24.5" cy="24.5" r="1.9" fill="#9aa2ab" opacity=".55"/><circle cx="31.5" cy="31" r="1.5" fill="#9aa2ab" opacity=".5"/><circle cx="30" cy="23" r="1.1" fill="#9aa2ab" opacity=".45"/>'; },
+    planet:function(){ return mBg()+'<ellipse cx="28" cy="28" rx="14.5" ry="4.2" fill="none" stroke="#a9c2ee" stroke-width="2.1" opacity=".55" transform="rotate(-18 28 28)"/><circle cx="28" cy="27.5" r="9" fill="url(#gPlanet)"/><path d="M20 25 Q28 23 36 25" stroke="#3f63ac" stroke-width="1.4" fill="none" opacity=".5"/><path d="M19.5 30 Q28 32.5 36.5 30" stroke="#2c4a86" stroke-width="1.6" fill="none" opacity=".5"/><ellipse cx="24.5" cy="24" rx="2.2" ry="3" fill="#fff" opacity=".3" transform="rotate(-20 24.5 24)"/><path d="M14.2 30.4A14.5 4.2 0 0 0 41.8 32.2" fill="none" stroke="#d6e6ff" stroke-width="2.1" transform="rotate(-18 28 28)"/>'; },
+    star:function(){ var r=''; for(var k=0;k<12;k++){ var a=k*30*MR; r+='<line x1="'+(28+8*Math.cos(a)).toFixed(1)+'" y1="'+(28+8*Math.sin(a)).toFixed(1)+'" x2="'+(28+(k%2?14:11)*Math.cos(a)).toFixed(1)+'" y2="'+(28+(k%2?14:11)*Math.sin(a)).toFixed(1)+'"/>'; } return mBg()+'<circle cx="28" cy="28" r="14" fill="url(#gSunGlow)"/><g stroke="#ffd35a" stroke-width="1.5" stroke-linecap="round" opacity=".8">'+r+'</g><circle cx="28" cy="28" r="7.2" fill="url(#gSun)"/><circle cx="25.4" cy="25.4" r="2" fill="#fff" opacity=".55"/>'; },
+    giant:function(){ return mBg()+'<circle cx="28" cy="28" r="15" fill="url(#gGiantGlow)"/><circle cx="28" cy="28" r="10" fill="url(#gGiant)"/><circle cx="24" cy="24.5" r="2.4" fill="#fff" opacity=".4"/><circle cx="32" cy="31" r="2.6" fill="#c23a22" opacity=".28"/><circle cx="26" cy="32" r="1.9" fill="#c23a22" opacity=".22"/>'; },
+    nova:function(){ var sp=''; for(var k=0;k<16;k++){ var a=k*22.5*MR; sp+='<line x1="'+(28+5*Math.cos(a)).toFixed(1)+'" y1="'+(28+5*Math.sin(a)).toFixed(1)+'" x2="'+(28+(k%2?15:11)*Math.cos(a)).toFixed(1)+'" y2="'+(28+(k%2?15:11)*Math.sin(a)).toFixed(1)+'"/>'; } return mBg()+'<circle cx="28" cy="28" r="15.5" fill="url(#gNovaGlow)"/><circle cx="28" cy="28" r="11.5" fill="none" stroke="#ffd0e4" stroke-width="1" opacity=".5"/><g stroke="#ffd8e8" stroke-width="1.1" stroke-linecap="round" opacity=".85">'+sp+'</g>'+mStar(28,28,11,'#fff','.95')+mStar(28,28,6,'#ffe4f0','1')+'<circle cx="28" cy="28" r="3" fill="#fff"/>'; },
+    cluster:function(){ return '<circle cx="28" cy="28" r="15" fill="url(#gClusterGlow)"/>'+mStar(28,20.5,4.6,'#f6ecff','.98')+mStar(19.5,30,3.4,'#ddccff','.9')+mStar(36.5,31,3.6,'#e6d8ff','.92')+mStar(26,37,2.6,'#d4c2ff','.82')+mStar(35,23,2.2,'#efe4ff','.86')+mStar(30,29,2,'#fff','.95')+mStar(23,25,1.7,'#e6d8ff','.72')+'<circle cx="40" cy="27" r="1" fill="#fff" opacity=".7"/><circle cx="17" cy="26" r=".9" fill="#fff" opacity=".6"/>'; },
+    nebula:function(){ return '<ellipse cx="24" cy="26" rx="14" ry="10.5" fill="url(#gNeb1)" transform="rotate(-22 24 26)"/><ellipse cx="34" cy="31" rx="11.5" ry="9" fill="url(#gNeb2)" transform="rotate(14 34 31)"/><ellipse cx="29" cy="24" rx="9" ry="8" fill="url(#gNeb3)"/>'+mStar(21,22,2.2,'#fff','.95')+mStar(38,25,1.8,'#fff','.85')+mStar(35,37,1.9,'#fff','.9')+mStar(24,37,1.5,'#fff','.8')+'<circle cx="41" cy="30" r="1" fill="#fff" opacity=".65"/><circle cx="18" cy="32" r=".9" fill="#fff" opacity=".6"/>'; },
+    apex:function(){ var r=''; for(var k=0;k<12;k++){ var a=k*30*MR; r+='<line x1="'+(28+8*Math.cos(a)).toFixed(1)+'" y1="'+(28+8*Math.sin(a)).toFixed(1)+'" x2="'+(28+(k%2?15:11.5)*Math.cos(a)).toFixed(1)+'" y2="'+(28+(k%2?15:11.5)*Math.sin(a)).toFixed(1)+'"/>'; } return '<circle cx="28" cy="28" r="15.5" fill="url(#apexGlow)"/>'+mStar(14,17,1.6,'#e6eef8','.9')+mStar(42,18,1.4,'#e6eef8','.8')+mStar(41,39,1.5,'#e6eef8','.85')+mStar(16,39,1.3,'#e6eef8','.75')+'<g stroke="#dfe8f4" stroke-width="1.5" stroke-linecap="round" opacity=".85">'+r+'</g><circle cx="28" cy="28" r="11.5" fill="none" stroke="#eaf1fa" stroke-width="1" opacity=".5"/>'+mSP(28,28,12,4.4,4,'url(#apexStar)')+'<g transform="rotate(45 28 28)">'+mSP(28,28,7,2.6,4,'url(#apexStar)')+'</g><circle cx="28" cy="28" r="3" fill="#fff"/>'; }
+  };
+  function rankMedal(t){
+    var master=t.apex, base=master?'url(#apexG)':t.c, body=master?'apex':t.body;
+    var edge=master?'#727c88':mDarken(t.c,.32), bezel=master?'#6a7480':mDarken(t.c,.26), bezelHi=master?'#f2f6fa':mLighten(t.c,.5);
+    var s='<svg viewBox="0 0 56 56">';
+    if(master) s+='<circle cx="28" cy="28" r="26.5" fill="url(#apexGlow)" opacity=".55"/>';
+    s+='<circle cx="28" cy="28" r="22" fill="'+base+'"/><circle cx="28" cy="28" r="22" fill="url(#mLo)"/><circle cx="28" cy="28" r="22" fill="url(#mHi)"/>';
+    s+='<circle cx="28" cy="28" r="22" fill="none" stroke="'+edge+'" stroke-width="1.4"/>';
+    s+='<circle cx="28" cy="28" r="15.5" fill="#0e1330"/>';
+    s+='<g clip-path="url(#mfld)">'+ART[body]()+'<circle cx="28" cy="28" r="15.5" fill="url(#fieldRecess)"/></g>';
+    s+='<circle cx="28" cy="28" r="15.5" fill="none" stroke="'+bezel+'" stroke-width="1.8"/><circle cx="28" cy="28" r="16.6" fill="none" stroke="'+bezelHi+'" stroke-width="1" opacity=".5"/>';
+    return s+'</svg>';
+  }
+  var TKO={bronze:'브론즈',silver:'실버',gold:'골드',hidden:'히든',platinum:'플래티넘'};
+  var TGRAD={bronze:'linear-gradient(90deg,#a2632f,#c9873f)',silver:'linear-gradient(90deg,#8a95a2,#b7bec6)',gold:'linear-gradient(90deg,#a9781c,#dcac37)',hidden:'linear-gradient(90deg,#9aa0a8,#b8bec6)',platinum:'linear-gradient(90deg,#6a5cd6,#4ac6ff)'};
+  var TINT={
+    gold:{hero:'linear-gradient(180deg,#fdf6e6,#f9eed4)',spot:'radial-gradient(circle,rgba(220,171,60,.34),transparent 66%)'},
+    silver:{hero:'linear-gradient(180deg,#f5f8fb,#e8edf2)',spot:'radial-gradient(circle,rgba(150,165,180,.3),transparent 66%)'},
+    bronze:{hero:'linear-gradient(180deg,#fbf2e9,#f4e5d3)',spot:'radial-gradient(circle,rgba(190,125,66,.3),transparent 66%)'},
+    hidden:{hero:'linear-gradient(180deg,#eef0f3,#e3e7ec)',spot:'radial-gradient(circle,rgba(150,160,175,.22),transparent 66%)'},
+    platinum:{hero:'linear-gradient(180deg,#efeaff,#e1dbf8)',spot:'radial-gradient(circle,rgba(123,108,255,.34),transparent 66%)'}
+  };
+  var PLAT_LOCK={orbSym:'orbLock',galSym:'galLock',tessSym:'tessLock'};
+  var CUP='<svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg>';
+  var CHALICE='<svg class="cup" viewBox="0 0 48 60"><use href="#t2"/><g clip-path="url(#dsShineClip)"><g transform="rotate(18 24 20)"><rect class="dsShine" x="6" y="-1" width="8" height="44" fill="url(#shineG)"/></g></g></svg>';
+  var LKB='<div class="lk"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>';
+  var LKC='<svg class="lkc" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  // 등급색·XP는 서버(src/trophy.mjs TIER_XP)와 같은 값이어야 한다 — 화면에만 있는 숫자가 아니다.
+  var ACC = { bronze: '#bd7a41', silver: '#b7bec6', gold: '#dcac37', hidden: '#9aa0a8', platinum: '#8b7bea' };
+  var XP_MAP = { bronze: 20, silver: 60, gold: 160, hidden: 100, platinum: 500 };
+  const GW_RANKC = { moon: '#9099a2', planet: '#5f7ba0', star: '#c9a24a', giant: '#b8862f',
+    nova: '#b05a6a', cluster: '#8a6fa8', nebula: '#5f5ba0', apex: '#c3ccd6' };
+  const GW_SYM = { orb: 'orbSym', galaxy: 'galSym', cube: 'tessSym' };
+
+  let gwData = null, gwFilter = 'all', gwGotExp = false, gwLockExp = false, gwPushed = false;
+  const GW_LIMIT = 10;
+  const gwEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const gwDot = (d) => String(d || '').replace(/-/g, '.');
+
+  // 한 줄 그리기 — 획득/미획득/플래티넘/히든이 각기 다른 모양이다.
+  function gwRow(a) {
+    const got = !!a.date;
+    if (a.tier === 'platinum') {
+      const sym = got ? (GW_SYM[a.sym] || 'orbSym') : (PLAT_LOCK[GW_SYM[a.sym] || 'orbSym'] || 'orbLock');
+      return `<div class="trow platrow${got ? '' : ' locked'}" data-id="${gwEsc(a.id)}" style="--acc:#8b7bea">`
+        + `<div class="thero plat${got ? '' : ' platlock'}"><svg viewBox="0 0 48 60"><use href="#stand" style="color:#aab4bd"/><use href="#${sym}"/></svg></div>`
+        + `<div class="tinfo"><div class="tn">${gwEsc(a.name)}</div><div class="td">${gwEsc(a.short)}</div></div>`
+        + `<div class="tside"><span class="platTag">연간 1인</span></div></div>`;
+    }
+    if (!got && a.tier === 'hidden') {
+      return `<div class="trow locked" data-id="${gwEsc(a.id)}"><div class="hq"><div>?</div></div>`
+        + `<div class="tinfo"><div class="tn">숨겨진 이야기</div><div class="td">특별한 순간에 조용히 찾아오는 트로피예요.</div></div>`
+        + `<div class="tside">${LKC}</div></div>`;
+    }
+    if (got) {
+      const yr = (a.rep === 'year') ? `<span class="yr">${String(a.date).slice(0, 4)}</span>` : '';
+      const cnt = (a.rep === 'month' && a.round) ? `<span class="cntb">${a.round}회</span>` : '';
+      return `<div class="trow" data-id="${gwEsc(a.id)}" style="--acc:${ACC[a.tier] || '#bd7a41'}">`
+        + `<div class="thero ${a.tier}">${CUP}</div>`
+        + `<div class="tinfo"><div class="tn">${yr}${gwEsc(a.name)}${cnt}</div><div class="td">${gwEsc(a.msg || a.short)}</div></div>`
+        + `<div class="tside"><div class="dt">${gwEsc(gwDot(a.date).slice(2))}</div></div></div>`;
+    }
+    return `<div class="trow locked" data-id="${gwEsc(a.id)}"><div class="thero lock ${a.tier}">${CUP}${LKB}</div>`
+      + `<div class="tinfo"><div class="tn">${gwEsc(a.name)}</div><div class="td">${gwEsc(a.short)}</div></div>`
+      + `<div class="tside">${LKC}</div></div>`;
+  }
+
+  function gwGroup(listEl, arr, exp, moreEl, hdEl, cntEl) {
+    cntEl.textContent = arr.length;
+    const shown = exp ? arr : arr.slice(0, GW_LIMIT);
+    listEl.innerHTML = shown.map(gwRow).join('');
+    hdEl.style.display = arr.length ? '' : 'none';
+    listEl.style.display = arr.length ? '' : 'none';
+    const rem = arr.length - shown.length;
+    if (exp && arr.length > GW_LIMIT) { moreEl.style.display = ''; moreEl.textContent = '접기'; }
+    else if (rem > 0) { moreEl.style.display = ''; moreEl.textContent = rem + '개 더 보기'; }
+    else { moreEl.style.display = 'none'; }
+  }
+
+  function gwPaint() {
+    const d = gwData; if (!d) return;
+    const fits = (a) => gwFilter === 'all' || a.tier === gwFilter;
+    // ★진열장은 '최근에 딴 것'이 위로 온다 — 오래된 첫걸음보다 지금의 성취가 먼저 보이게.
+    const got = (d.earned || []).filter(fits).slice().reverse();
+    const lock = (d.locked || []).filter(fits);
+    gwGroup($('gotList'), got, gwGotExp, $('gotMore'), $('gotHd'), $('gotCnt'));
+    gwGroup($('lockList'), lock, gwLockExp, $('lockMore'), $('lockHd'), $('lockCnt'));
+    $('totCount').textContent = (d.earned || []).length + ' / ' + (d.catalogTotal || 0);
+
+    const r = d.rank || {};
+    const medal = { c: GW_RANKC[r.body] || '#9099a2', body: r.body || 'moon', apex: !!r.apex };
+    $('lvlEmblem').innerHTML = rankMedal(medal);
+    $('lvlRank').textContent = r.name || '위성 캐디';
+    $('lvlNo').textContent = 'Lv.' + (r.level || 1);
+    $('lvlPct').textContent = (r.pct || 0) + '%';
+    $('lvlGot').textContent = (d.earned || []).length;
+    $('xpFill').style.width = (r.pct || 0) + '%';
+    $('xpNums').textContent = fmt(d.xp || 0) + (r.next ? ' / ' + fmt(r.next.min) : '') + ' XP';
+    //  ★정점은 XP만으로 오르지 않는다(플래티넘 보유가 조건) — 그 사실을 숨기지 않고 적는다.
+    $('xpNext').textContent = r.next ? ('다음 · ' + r.next.name + (r.next.locked ? ' (플래티넘 필요)' : '')) : '최고 등급';
+    const c = d.counts || {};
+    $('cupPlat').textContent = c.platinum || 0; $('cupGold').textContent = c.gold || 0;
+    $('cupSilver').textContent = c.silver || 0; $('cupBronze').textContent = c.bronze || 0;
+    $('gwHallCnt').textContent = d.season + ' · ' + (c.platinum || 0) + ' / 3';
+    // 명예의 전당 명패는 셋 — id가 아니라 class다(같은 id를 셋 붙이면 문서가 어긋난다).
+    document.querySelectorAll('#growOv .gwYear').forEach((e) => { e.textContent = d.season; });
+    $('gwWho').textContent = (d.name ? d.name + ' 캐디의 ' : '') + '발자취';
+    $('lvlSeason') && ($('lvlSeason').textContent = d.season + ' 시즌');
+  }
+
+  // ── 상세 ──
+  function gwFind(id) {
+    const d = gwData; if (!d) return null;
+    return (d.earned || []).find((x) => x.id === id) || (d.locked || []).find((x) => x.id === id) || null;
+  }
+  function gwDetail(id) {
+    const a = gwFind(id); if (!a) return;
+    if (a.tier === 'platinum') return gwPlat(a);
+    const got = !!a.date, hiddenLocked = (a.tier === 'hidden' && !got);
+    $('dsHero').style.background = TINT[a.tier].hero;
+    const spot = $('dsSpot');
+    spot.style.background = TINT[a.tier].spot;
+    spot.style.opacity = got ? '1' : '.4';
+    $('dsSpk').style.display = got ? '' : 'none';
+    const dt = $('dsDate');
+    if (got) { dt.style.color = '#0b5d34'; dt.innerHTML = '<span class="dot"></span>' + gwDot(a.date) + (a.round ? ' · ' + a.round + '회 획득' : ' 획득'); }
+    else { dt.style.color = '#9aa0a8'; dt.textContent = a.pending ? '기준 준비 중' : '미획득'; }
+    const cup = $('dsCup');
+    if (hiddenLocked) { cup.className = 'ds-cup'; cup.innerHTML = '<div class="ds-q">?</div>'; }
+    else { cup.className = 'ds-cup ' + a.tier + (got ? '' : ' dslock'); cup.innerHTML = CHALICE; }
+    const rb = $('dsRibbon'); rb.textContent = TKO[a.tier]; rb.style.background = TGRAD[a.tier];
+    const yr = (a.rep === 'year' && got) ? '<span class="yr">' + String(a.date).slice(0, 4) + '</span>' : '';
+    $('dsName').innerHTML = hiddenLocked ? '???' : (yr + gwEsc(a.name));
+    let cond = hiddenLocked ? '조건은 아직 비밀이에요. 특별한 순간에 조용히 찾아옵니다.' : a.cond;
+    if (!hiddenLocked && a.rep === 'year') cond += ' 해마다 다시 도전할 수 있어요.';
+    if (!hiddenLocked && a.rep === 'month') cond += ' 달마다 다시 쌓을 수 있어요.';
+    $('dsCond').textContent = cond;
+    const xpSec = $('dsXpSec');
+    if (hiddenLocked) xpSec.style.display = 'none';
+    else {
+      xpSec.style.display = '';
+      const per = XP_MAP[a.tier] || 0;
+      $('dsXp').textContent = (a.rep === 'month')
+        ? ('회당 +' + fmt(per) + ' XP · 반복할수록 조금씩 줄어요')
+        : ('+' + fmt(a.xp || per) + ' XP');
+    }
+    const msgSec = $('dsMsgSec');
+    if (got && a.msg) { msgSec.style.display = ''; $('dsMsg').innerHTML = '<span class="q">“</span>' + gwEsc(a.msg) + '<span class="q">”</span>'; }
+    else msgSec.style.display = 'none';
+    $('dsOv').classList.add('on');
+  }
+
+  let gwStarsDrawn = false;
+  function gwStars() {
+    if (gwStarsDrawn) return; gwStarsDrawn = true;
+    const seed = [[8,10],[20,6],[33,13],[48,7],[62,11],[74,5],[86,12],[92,22],[14,24],[27,30],[41,20],[55,26],[70,22],[83,32],[6,40],
+      [19,46],[36,42],[52,50],[66,44],[80,52],[90,60],[11,58],[24,66],[44,62],[60,70],[76,66],[88,74],[16,78],[30,84],[50,80],
+      [64,88],[82,86],[38,74],[58,58],[72,38],[46,36],[26,54],[68,54],[34,64],[54,44]];
+    $('platStars').innerHTML = seed.map((p, i) =>
+      `<i class="${i % 4 === 0 ? 'b ' : ''}${i % 3 !== 0 ? 'tw' : ''}" style="left:${p[0]}%;top:${p[1]}%;animation-delay:${((i * 0.17) % 2.6).toFixed(2)}s"></i>`).join('');
+  }
+  const GW_PLAT_TINT = {
+    orbSym: { halo: 'rgba(123,108,255,.4)', a: 'rgba(123,108,255,.52)', b: 'rgba(90,110,230,.3)', c: 'rgba(160,92,255,.24)' },
+    galSym: { halo: 'rgba(226,92,196,.38)', a: 'rgba(226,92,196,.5)', b: 'rgba(255,143,206,.28)', c: 'rgba(154,92,255,.26)' },
+    tessSym: { halo: 'rgba(74,198,255,.4)', a: 'rgba(74,198,255,.5)', b: 'rgba(122,244,255,.26)', c: 'rgba(90,120,255,.26)' },
+  };
+  const GW_PLAT_COPY = {
+    orbSym: { hero: '“완벽한 하나의 구(球). 흔들림 없이 빛나는 이에게.”', about: '한 해 동안 가장 단단하고 한결같았던 캐디에게 바치는, 우주에서 가장 귀한 오브예요. 주인을 만나면 비로소 스스로 빛을 냅니다.' },
+    galSym: { hero: '“수억 개의 순간이 모여 이룬 하나의 나선.”', about: '한 해의 모든 라운드가 별처럼 모여 하나의 은하가 된, 그 광활한 여정에게 바치는 트로피예요. 주인을 만나면 비로소 나선이 돌기 시작합니다.' },
+    tessSym: { hero: '“차원을 넘어 쌓아 올린 성취의 탑.”', about: '누구도 쉬이 닿지 못한 높이까지 쌓아 올린, 한 차원 위의 성취에게 바치는 트로피예요. 주인을 만나면 비로소 큐브가 차원을 엽니다.' },
+  };
+  function gwPlat(a) {
+    gwStars();
+    const key = GW_SYM[a.sym] || 'orbSym';
+    const locked = !a.date, tint = GW_PLAT_TINT[key], copy = GW_PLAT_COPY[key];
+    const sheet = $('platSheet');
+    sheet.style.setProperty('--phalo', tint.halo);
+    sheet.style.setProperty('--pnebA', tint.a);
+    sheet.style.setProperty('--pnebB', tint.b);
+    sheet.style.setProperty('--pnebC', tint.c);
+    $('platHalo').style.background = 'radial-gradient(circle,' + tint.halo + ',transparent 62%)';
+    $('platStatus').textContent = locked ? '아직 주인을 기다리는 트로피예요' : (gwDot(a.date) + ' 수상');
+    const tr = $('platTrophy');
+    tr.className = 'pl-trophy ' + (locked ? 'locked' : 'lit');
+    tr.innerHTML = '<svg viewBox="0 0 48 60"><use href="#stand" style="color:#aab4bd"/><use href="#' + (locked ? PLAT_LOCK[key] : key) + '"/></svg>';
+    $('platName').textContent = a.name;
+    $('platTag').textContent = a.short;
+    $('platHero').textContent = copy.hero;
+    $('platCond').textContent = a.cond;
+    $('platAbout').textContent = copy.about + ' 수여 시 +' + fmt(XP_MAP.platinum) + ' XP의 경험치를 얻어요.';
+    const sc = $('platOv').querySelector('.plat-scroll'); if (sc) sc.scrollTop = 0;
+    $('platOv').classList.add('on');
+  }
+
+  // ── 해금 팝업 — 새로 열린 트로피를 한 개씩 보여준다 ──
+  //  ★소급분은 여기 오지 않는다(서버가 첫 조회 때 전부 '본 것'으로 덮는다).
+  //   안 그러면 처음 들어온 회원 화면에 축하 팝업이 열 몇 개 연달아 터진다.
+  let gwQueue = [];
+  function gwCelebrate(list) {
+    gwQueue = (list || []).slice();
+    gwNextToast();
+  }
+  function gwNextToast() {
+    const host = $('gwToastHost'); if (!host) return;
+    const a = gwQueue.shift();
+    if (!a) { host.classList.remove('on'); setTimeout(() => { if (!host.classList.contains('on')) host.hidden = true; }, 280); return; }
+    host.querySelector('.t-ribbon').textContent = TKO[a.tier] || '';
+    host.querySelector('.t-ribbon').style.background = TGRAD[a.tier] || '';
+    host.querySelector('.t-name').textContent = a.name;
+    host.querySelector('.t-xp').textContent = '경험치 +' + fmt(a.xp || 0) + ' XP';
+    host.querySelector('.t-msg').textContent = a.msg || a.short || '';
+    host.querySelector('.t-cup').innerHTML = CUP;
+    host.querySelector('.t-cup').className = 't-cup ' + a.tier;
+    host.hidden = false;
+    void host.offsetWidth;
+    host.classList.add('on');
+  }
+
+  // 그 화면을 '처음' 연 날만 서버에 남긴다. 브라우저에도 표시를 남겨 매번 요청하지 않는다.
+  //  ★몇 번 봤는지는 세지 않는다 — 업적은 자부심의 공간이지 이용 감시 장부가 아니다.
+  const GW_SEEN = ['board', 'journal', 'settle', 'profile'];
+  function gwSeen(what) {
+    if (!GW_SEEN.includes(what)) return;
+    const k = 'gwseen:' + what;
+    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch { /* 사생활 모드 */ }
+    postJSON('/api/first-view', { what }).catch(() => {});
+  }
+
+  // ── 열고 닫기 ──
+  async function gwOpen() {
+    const ov = $('growOv'); if (!ov) return;
+    ov.hidden = false;
+    void ov.offsetWidth;
+    ov.classList.add('on');
+    ov.scrollTop = 0;
+    if (!(history.state && history.state.gw)) { history.pushState({ gw: 1 }, ''); gwPushed = true; }
+    try {
+      const d = await getJSON('/api/trophies');
+      if (d && d.ok) { gwData = d; gwPaint(); if (d.new && d.new.length) gwCelebrate(d.new); }
+    } catch (e) { console.warn('[업적] 조회 실패', e); }
+  }
+  function gwCloseUI() {
+    const ov = $('growOv'); if (!ov) return;
+    ov.classList.remove('on');
+    setTimeout(() => { if (!ov.classList.contains('on')) ov.hidden = true; }, 260);
+  }
+  function gwClose() {
+    gwCloseUI();
+    if (gwPushed && history.state && history.state.gw) { gwPushed = false; history.back(); }
+  }
+
+  function initGrowth() {
+    const ov = $('growOv'); if (!ov) return;
+    $('gwBack').onclick = gwClose;
+    ['gotList', 'lockList'].forEach((id) => {
+      $(id).addEventListener('click', (e) => {
+        const row = e.target.closest('.trow'); if (row) gwDetail(row.getAttribute('data-id'));
+      });
+    });
+    ov.querySelectorAll('.fchip').forEach((c) => {
+      c.onclick = () => {
+        ov.querySelectorAll('.fchip').forEach((x) => x.classList.remove('on'));
+        c.classList.add('on'); gwFilter = c.getAttribute('data-f');
+        gwGotExp = false; gwLockExp = false; gwPaint();
+      };
+    });
+    $('gotMore').onclick = () => { gwGotExp = !gwGotExp; gwPaint(); };
+    $('lockMore').onclick = () => { gwLockExp = !gwLockExp; gwPaint(); };
+    const dsOv = $('dsOv'), platOv = $('platOv');
+    $('dsClose').onclick = () => dsOv.classList.remove('on');
+    dsOv.addEventListener('click', (e) => { if (e.target === dsOv) dsOv.classList.remove('on'); });
+    $('platClose').onclick = () => platOv.classList.remove('on');
+    $('platX').onclick = () => platOv.classList.remove('on');
+    platOv.addEventListener('click', (e) => { if (e.target === platOv) platOv.classList.remove('on'); });
+    const host = $('gwToastHost');
+    if (host) host.querySelector('.t-btn').onclick = gwNextToast;
+  }
+

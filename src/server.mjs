@@ -19,6 +19,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as ledger from './ledger.mjs';
+import * as trophy from './trophy.mjs';
 import * as dutyMod from './duty.mjs';
 import { analyzeReceiptLocal } from './ollama.mjs';
 import * as cheer from './cheer.mjs';
@@ -100,11 +101,40 @@ app.get('/api/login/poll', pollLoginHandoffRoute);
 app.post('/api/login/exchange', exchangeLoginHandoff);
 // ★무인증 '테스터 체험' 진입(비공개 링크 ?tester=<토큰> 전용, 게이트 앞 통과). OAuth 없이 데모 테스터 세션 발급.
 app.post('/api/tester/enter', testerEnter);
+// ── 업적(성장 공간) ────────────────────────────────────────
+//  ★'처음 열어본 날'만 적는다. 화면을 몇 번 봤는지는 남기지 않는다 —
+//   업적은 캐디 본인의 자부심 공간이지, 누가 얼마나 앱을 쓰는지 보는 창이 아니다.
+const FIRST_VIEWS = ['board', 'journal', 'settle', 'profile'];
+app.post('/api/first-view', (req, res) => {
+  if (!req.user) return res.json({ ok: false });
+  const what = String((req.body || {}).what || '');
+  if (!FIRST_VIEWS.includes(what)) return res.json({ ok: false });
+  let fresh = false;
+  try { fresh = trophy.markFirst(req.user.id, what); } catch { /* noop */ }
+  res.json({ ok: true, fresh });
+});
+
+// 성장 공간 한 판 — 진열장·등급·XP. new[]는 '지난번 본 뒤에 새로 열린 것'.
+//  ★처음 조회하는 회원은 지금까지 딴 걸 전부 '본 것'으로 덮는다(소급분으로 축하가 열 몇 개씩 터지지 않게).
+app.get('/api/trophies', (req, res) => {
+  if (!req.user) return res.status(401).json({ ok: false });
+  try {
+    const prof = getProfile(req.user.id) || {};
+    const r = trophy.syncAndDiff(req.user.id);
+    res.json({ ok: true, name: prof.board_name || '', ...r.growth, new: r.fresh, backfilled: r.backfilled });
+  } catch (e) {
+    console.error('[업적] 조회 실패:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
   const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
   if (!req.user) return res.json({ ...base, authed: false });
   recordVisit(req.user.id, { role: req.user.role, status: req.user.status }); // 방문(앱 오픈) 기록 — 10분 스로틀
+  //  ★'처음 온 날'만 남긴다 — 몇 번 왔는지는 세지 않는다(업적은 자부심의 공간이지 감시 장부가 아니다).
+  try { trophy.markFirst(req.user.id, 'app'); } catch { /* 업적은 앱을 멈추게 하지 않는다 */ }
   recordPresence(req.user.id); // 접속 상태(마지막 활동) 갱신
   const prof = getProfile(req.user.id) || {};
   const needsOnboarding = !prof.board_name;
@@ -903,7 +933,14 @@ app.get('/api/ledger/report', (req, res) => {
   const include = { revenue: on(req.query.rev), tips: on(req.query.tips), expenses: on(req.query.exp) };
   if (!include.revenue && !include.expenses) include.revenue = true; // 최소 하나
   const isWord = req.query.fmt === 'doc' || req.query.fmt === 'word';
-  const html = ledger.incomeReportHTML({ year, month, include, photos: on(req.query.photos), forWord: isWord }, req.user?.id || 1);
+  const uid = req.user?.id || 1;
+  const html = ledger.incomeReportHTML({ year, month, include, photos: on(req.query.photos), forWord: isWord }, uid);
+  //  발급을 남긴다 — '돌아보기'는 그달 근무 10일 조건이, '반년의 장부'는 여섯 달 조건이 붙어 있다.
+  try {
+    const s = ledger.summary({ year, month }, uid) || {};
+    const ym = year && month ? `${year}-${String(month).padStart(2, '0')}` : '';
+    trophy.markFirst(uid, 'report', undefined, { ym, days: Number(s.workedDays) || 0 });
+  } catch { /* noop */ }
   if (isWord) {
     const fn = `수익계산서_${year || ''}${month ? '-' + month : ''}.doc`;
     res.setHeader('Content-Type', 'application/msword; charset=utf-8');

@@ -2386,6 +2386,345 @@
     .mpg-todo li{font-size:12px;line-height:1.75;color:#7a6a4a;}
     .mpg-note{font-size:12px;line-height:1.7;color:#67726d;  /* 2.8→4.5:1 */margin:14px 2px 0;word-break:keep-all;}
     @media (prefers-reduced-motion:reduce){ .mpg{transition:none;} }
+/* ── 성장 공간(업적) ──────────────────────────────────────
+   ★이 블록은 시안 trophy-space-v3.html에서 기계로 뽑아 #growOv 아래로 범위를 좁힌 것이다.
+    손으로 옮겨 적지 않았다 — 시안과 앱이 조금씩 어긋나는 걸 막으려고 생성기를 거쳤다.
+    고칠 일이 있으면 시안을 고치고 다시 뽑는 편이 안전하다. ── */
+#growOv{position:fixed;inset:0;z-index:70;background:#e2e5e9;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Malgun Gothic",system-ui,sans-serif;color:#1b1d21;
+  opacity:0;pointer-events:none;transition:opacity .24s ease}
+#growOv.on{opacity:1;pointer-events:auto}
+#growOv[hidden]{display:none}
+#growOv *{box-sizing:border-box;margin:0;padding:0}
+#growOv{--bg:#eceef1; --card:#fff; --ink:#1b1d21; --mut:#8b9199; --line:#e6e8ec; --green:#0b5d34;}
+#growOv .grow{max-width:520px;margin:0 auto;background:var(--bg);min-height:100%;padding-bottom:28px}
+#growOv svg{display:block}
+#growOv .gold{color:#dcac37}
+#growOv .silver{color:#b7bec6}
+#growOv .bronze{color:#bd7a41}
+#growOv .plat{color:#8e97d6}
+#growOv .cup .base{filter:none}
+#growOv .tbar{display:flex;align-items:center;gap:12px;padding:16px 16px 8px}
+#growOv .tbar .bk{width:34px;height:34px;border-radius:50%;background:var(--card);display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.08);flex:none}
+#growOv .tbar .bk svg{width:18px;height:18px;stroke:#444;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+#growOv .tbar h1{font-size:19px;font-weight:850;letter-spacing:-.02em}
+#growOv .tbar .sub{font-size:11.5px;color:var(--mut);font-weight:600;margin-top:1px}
+#growOv .sum{background:var(--card);margin:8px 12px 0;border-radius:18px;padding:18px 18px 14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+#growOv .lvl-head{display:flex;align-items:center;gap:12px}
+#growOv .lvl-emblem{width:50px;height:50px;flex:none}
+#growOv .lvl-emblem svg{width:100%;height:100%;filter:drop-shadow(0 2px 3px rgba(0,0,0,.22))}
+#growOv .lvl-season{font-size:10px;font-weight:850;letter-spacing:.16em;color:#9aa0a8;text-transform:uppercase}
+#growOv .lvl-rank{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+#growOv .lvl-rank b{font-size:19px;font-weight:850;letter-spacing:-.02em;color:#20242a}
+#growOv .lvl-rank .lv{font-size:10.5px;font-weight:850;color:#0b5d34;background:#e7f2ec;padding:2px 8px;border-radius:20px;font-variant-numeric:tabular-nums}
+#growOv .lvl-stats{display:flex;align-items:flex-end;justify-content:space-between;margin-top:16px;padding:0 6px}
+#growOv .st-lb{font-size:10.5px;color:var(--mut);font-weight:750;margin-top:4px}
+#growOv .st-l{text-align:left}
+#growOv .st-r{text-align:right}
+#growOv .st-pct{font-size:40px;font-weight:850;letter-spacing:-.03em;line-height:.9;display:inline-block;font-variant-numeric:tabular-nums;
+    background:linear-gradient(180deg,#1aa15e 0%,#0b5d34 82%);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 1.5px 0 rgba(6,58,32,.85)) drop-shadow(0 3px 3px rgba(0,0,0,.2))}
+#growOv .st-num{font-size:40px;font-weight:850;letter-spacing:-.03em;line-height:.9;font-variant-numeric:tabular-nums;color:#17351f;
+    text-shadow:0 1.5px 0 rgba(255,255,255,.9),0 3px 3px rgba(0,0,0,.18)}
+#growOv .xp-bar{height:10px;border-radius:6px;background:#eef0f2;overflow:hidden;margin-top:16px}
+#growOv .xp-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,#0b5d34,#18a05c);box-shadow:0 1px 2px rgba(11,93,52,.4) inset}
+#growOv .xp-cap{display:flex;justify-content:space-between;margin-top:8px;font-size:10.5px;color:var(--mut);font-weight:750;font-variant-numeric:tabular-nums}
+#growOv .xp-cap #xpNext{color:#0b5d34;font-weight:850}
+#growOv .sum-div{height:1px;background:var(--line);margin:16px 0 16px}
+#growOv .sum-cups{display:flex;justify-content:space-between}
+#growOv .sum-cup{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+#growOv .sum-cup .slot{height:36px;display:flex;align-items:flex-end;justify-content:center}
+#growOv .sum-cup .mc{width:26px;height:33px}
+#growOv .sum-cup b{font-size:17px;font-weight:850;font-variant-numeric:tabular-nums;color:#17351f;text-shadow:0 1px 0 rgba(255,255,255,.9),0 1.5px 1px rgba(0,0,0,.16)}
+#growOv .sum-cup>span{font-size:9.5px;color:var(--mut);font-weight:750}
+#growOv .sum-cup+.sum-cup{border-left:1px solid var(--line)}
+#growOv .mc{display:block}
+#growOv .mc .cup{width:100%;height:100%;filter:drop-shadow(0 2px 2px rgba(0,0,0,.16))}
+#growOv .tn .yr{color:#8a9aa5;font-weight:750;margin-right:5px;font-variant-numeric:tabular-nums}
+#growOv .cntb{display:inline-block;margin-left:6px;font-size:10px;font-weight:850;color:#0b5d34;background:#e7f2ec;border-radius:20px;padding:1px 7px;vertical-align:middle;font-variant-numeric:tabular-nums}
+#growOv .ds-name .yr{color:#9aa6ad;font-weight:600}
+#growOv .shd{display:flex;align-items:center;justify-content:space-between;padding:20px 20px 9px}
+#growOv .shd .l{display:flex;align-items:center;gap:8px}
+#growOv .shd .mc{width:16px;height:20px}
+#growOv .shd .t{font-size:15px;font-weight:850}
+#growOv .shd .c{font-size:11.5px;color:var(--mut);font-weight:800;font-variant-numeric:tabular-nums}
+#growOv .list{display:flex;flex-direction:column;gap:9px;padding:0 12px}
+#growOv .trow{display:flex;align-items:center;gap:13px;background:var(--card);border-radius:14px;padding:11px 14px 11px 12px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.05);overflow:hidden}
+#growOv .trow::after{content:'';position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--acc,#e2e5e9)}
+#growOv .trow.locked{background:#f5f6f8;box-shadow:none}
+#growOv .trow.locked::after{background:#e6e8ec}
+#growOv .thero{width:44px;height:55px;flex:none;position:relative}
+#growOv .thero .cup{width:100%;height:100%;filter:drop-shadow(0 3px 3px rgba(0,0,0,.2))}
+#growOv .thero.lock .cup{filter:grayscale(.5) brightness(1.03);opacity:.5}
+#growOv .thero .lk{position:absolute;right:-3px;bottom:6px;width:19px;height:19px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.16)}
+#growOv .thero .lk svg{width:10px;height:10px;stroke:#9aa0a8;fill:none;stroke-width:2}
+#growOv .tinfo{flex:1;min-width:0}
+#growOv .tinfo .tn{font-size:14px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#growOv .trow.locked .tinfo .tn{color:#9299a1}
+#growOv .tinfo .td{font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#growOv .tside{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:40px}
+#growOv .tside .dt{font-size:10px;color:#b0b6bd;font-weight:750;font-variant-numeric:tabular-nums}
+#growOv .tside .lkc{width:15px;height:15px;stroke:#c2c8cf;fill:none;stroke-width:2}
+#growOv .plat-sec{margin:20px 12px 0;border-radius:18px;padding:16px 14px 14px;position:relative;overflow:hidden;
+    background:radial-gradient(130% 100% at 50% -20%,#2a2456 0%,#161634 46%,#0c0d1e 100%)}
+#growOv .plat-sec .stars i{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;opacity:.5}
+#growOv .plat-hd{position:relative;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+#growOv .plat-hd .t{font-size:13.5px;font-weight:850;color:#e7e2ff;letter-spacing:.06em}
+#growOv .plat-hd .c{font-size:11px;color:#8a83be;font-weight:800}
+#growOv .prow{position:relative;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:9px 13px 9px 9px;margin-bottom:8px}
+#growOv .prow:last-child{margin-bottom:0}
+#growOv .phero{width:50px;height:62px;flex:none}
+#growOv .phero svg{width:100%;height:100%}
+#growOv .aura-v svg{filter:drop-shadow(0 0 8px rgba(123,108,255,.6)) drop-shadow(0 3px 4px rgba(0,0,0,.3))}
+#growOv .aura-m svg{filter:drop-shadow(0 0 8px rgba(226,92,196,.55)) drop-shadow(0 3px 4px rgba(0,0,0,.3))}
+#growOv .aura-c svg{filter:drop-shadow(0 0 8px rgba(74,198,255,.6)) drop-shadow(0 3px 4px rgba(0,0,0,.3))}
+#growOv .prow .pn{flex:1;min-width:0}
+#growOv .prow .pn b{font-size:14px;font-weight:850;color:#eae6ff}
+#growOv .prow .pn div{font-size:11px;color:#948dc6;margin-top:2px}
+#growOv .prow .pst{flex:none;font-size:9.5px;font-weight:800;color:#7a74a8;letter-spacing:.05em;display:flex;align-items:center;gap:4px}
+#growOv .pl-v{color:#8a7bea}
+#growOv .pl-m{color:#d768be}
+#growOv .pl-c{color:#4aa6dd}
+#growOv .plat-hd .yr{font-size:10px;font-weight:850;color:#cabcff;background:rgba(255,255,255,.1);padding:3px 10px;border-radius:20px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+#growOv .plat-tl{position:relative;font-size:11px;color:#9a93cc;margin:-4px 0 14px;line-height:1.45}
+#growOv .rare{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;width:44px}
+#growOv .rare svg{width:19px;height:19px;color:#ecd07a}
+#growOv .rare .rk{font-size:8.5px;font-weight:850;letter-spacing:.02em;color:#dcca8a;white-space:nowrap}
+#growOv .holder{font-size:10px;color:#b3a9ee;margin-top:5px;font-weight:750}
+#growOv .plat-note{position:relative;margin-top:13px;font-size:10px;line-height:1.65;color:#8880bb;text-align:center;border-top:1px solid rgba(255,255,255,.08);padding-top:12px}
+#growOv .hall-tl{padding:0 20px 13px;font-size:11.5px;color:var(--mut);margin-top:-4px;line-height:1.45}
+#growOv .stars i{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;opacity:.5}
+#growOv .stage{position:relative;margin:0 12px 12px;border-radius:20px;overflow:hidden;padding:24px 18px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;border:1px solid rgba(255,255,255,.07);box-shadow:0 6px 22px rgba(18,14,38,.2)}
+#growOv .sh-v{background:radial-gradient(120% 92% at 50% 18%,#3a2f7d 0%,#1a1742 46%,#0b0b1e 100%)}
+#growOv .sh-m{background:radial-gradient(120% 92% at 50% 18%,#5c2563 0%,#2a1644 46%,#0d0a1e 100%)}
+#growOv .sh-c{background:radial-gradient(120% 92% at 50% 18%,#124063 0%,#112a45 46%,#0a0e1e 100%)}
+#growOv .sh-glow{position:absolute;top:33%;left:50%;width:210px;height:210px;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none}
+#growOv .sh-v .sh-glow{background:radial-gradient(circle,rgba(123,108,255,.42),transparent 64%)}
+#growOv .sh-m .sh-glow{background:radial-gradient(circle,rgba(226,92,196,.38),transparent 64%)}
+#growOv .sh-c .sh-glow{background:radial-gradient(circle,rgba(74,198,255,.4),transparent 64%)}
+#growOv .sh-badge{position:absolute;top:13px;right:13px;font-size:9px;font-weight:850;letter-spacing:.07em;color:#f0e6b0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);padding:4px 10px;border-radius:20px;display:flex;align-items:center;gap:5px}
+#growOv .sh-badge svg{width:11px;height:11px;color:#ecd07a}
+#growOv .sh-trophy{width:124px;height:148px;position:relative;z-index:1}
+#growOv .sh-trophy svg{width:100%;height:100%}
+#growOv .sh-v .sh-trophy svg{filter:drop-shadow(0 0 16px rgba(123,108,255,.62)) drop-shadow(0 6px 8px rgba(0,0,0,.4))}
+#growOv .sh-m .sh-trophy svg{filter:drop-shadow(0 0 16px rgba(226,92,196,.55)) drop-shadow(0 6px 8px rgba(0,0,0,.4))}
+#growOv .sh-c .sh-trophy svg{filter:drop-shadow(0 0 16px rgba(74,198,255,.6)) drop-shadow(0 6px 8px rgba(0,0,0,.4))}
+#growOv .sh-name{position:relative;margin-top:2px;font-size:22px;font-weight:850;letter-spacing:-.01em;color:#fff}
+#growOv .sh-poem{position:relative;margin-top:6px;font-size:12.5px;line-height:1.5}
+#growOv .sh-v .sh-poem{color:#b7abef}
+#growOv .sh-m .sh-poem{color:#e6acdc}
+#growOv .sh-c .sh-poem{color:#9fd2f0}
+#growOv .sh-plaque{position:relative;margin-top:16px;font-size:11px;font-weight:750;color:#d3ccf0;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.12);padding:7px 16px;border-radius:10px;display:inline-flex;align-items:center;gap:8px}
+#growOv .sh-plaque b{color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.03em}
+#growOv .sh-plaque .hallName{display:inline-block;min-width:46px;text-align:center;color:#fff;font-weight:850;transition:opacity .35s ease;border-bottom:1px dashed rgba(255,255,255,.35);padding:0 2px}
+#growOv .hall-note{padding:6px 22px 2px;text-align:center;font-size:10.5px;color:#9aa0a7;line-height:1.65}
+#growOv .throb, #growOv .pcl-a, #growOv .pcl-b, #growOv .pcl-c, #growOv .pcl-d, #growOv .galSway, #growOv .cubeInner, #growOv .cubeCore, #growOv .cubeEmerge{transform-box:fill-box;transform-origin:center}
+@media (prefers-reduced-motion: no-preference){
+  #growOv .floaty{animation:floaty 3.8s ease-in-out infinite}
+  #growOv .starTw{animation:starTw 1.9s ease-in-out infinite}
+  #growOv .pcl-a{animation:conv-a 8s linear infinite}
+  #growOv .pcl-b{animation:conv-b 8s linear infinite}
+  #growOv .pcl-c{animation:conv-c 8s linear infinite}
+  #growOv .pcl-d{animation:conv-d 8s linear infinite}
+  #growOv .throb{animation:throb 8s ease-in-out infinite}
+  #growOv .flash{animation:flash 8s ease-in-out infinite}
+  #growOv .sh-glowB{animation:orbGlow 8s ease-in-out infinite}
+  #growOv .galSway{animation:sway 4.2s ease-in-out infinite}
+  #growOv .armLight{animation:armLight 3.4s linear infinite}
+  #growOv .cubeInner{animation:cubePulse 3.2s ease-in-out infinite}
+  #growOv .cubeCore{animation:corePulse 3.2s ease-in-out infinite}
+  #growOv .cubeEmerge{animation:cubeEmerge 3.2s ease-in-out infinite}
+}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes starTw{0%,100%{opacity:.2;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+@keyframes conv-a{0%{transform:translate(var(--tx),var(--ty)) scale(.4);opacity:0}3%{transform:translate(var(--tx),var(--ty)) scale(1.6);opacity:1}6%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}12%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}23%{transform:translate(calc(var(--tx)*.82),calc(var(--ty)*.82)) scale(1);opacity:1}30%{transform:translate(calc(var(--tx)*.5),calc(var(--ty)*.5)) scale(.92);opacity:1}34%{transform:translate(0,0) scale(.35);opacity:.9}37%,100%{transform:translate(0,0) scale(.1);opacity:0}}
+@keyframes conv-b{0%{transform:translate(var(--tx),var(--ty)) scale(.4);opacity:0}3%{transform:translate(var(--tx),var(--ty)) scale(1.6);opacity:1}6%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}12%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}25%{transform:translate(calc(var(--tx)*.82),calc(var(--ty)*.82)) scale(1);opacity:1}32.5%{transform:translate(calc(var(--tx)*.5),calc(var(--ty)*.5)) scale(.92);opacity:1}37.5%{transform:translate(0,0) scale(.35);opacity:.9}40.5%,100%{transform:translate(0,0) scale(.1);opacity:0}}
+@keyframes conv-c{0%{transform:translate(var(--tx),var(--ty)) scale(.4);opacity:0}3.5%{transform:translate(var(--tx),var(--ty)) scale(1.6);opacity:1}6.5%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}12%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}27%{transform:translate(calc(var(--tx)*.82),calc(var(--ty)*.82)) scale(1);opacity:1}35.5%{transform:translate(calc(var(--tx)*.5),calc(var(--ty)*.5)) scale(.92);opacity:1}41%{transform:translate(0,0) scale(.35);opacity:.9}44%,100%{transform:translate(0,0) scale(.1);opacity:0}}
+@keyframes conv-d{0%{transform:translate(var(--tx),var(--ty)) scale(.4);opacity:0}3.5%{transform:translate(var(--tx),var(--ty)) scale(1.6);opacity:1}6.5%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}12%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:1}29%{transform:translate(calc(var(--tx)*.82),calc(var(--ty)*.82)) scale(1);opacity:1}38.5%{transform:translate(calc(var(--tx)*.5),calc(var(--ty)*.5)) scale(.92);opacity:1}44.5%{transform:translate(0,0) scale(.35);opacity:.9}47.5%,100%{transform:translate(0,0) scale(.1);opacity:0}}
+@keyframes flash{0%,12%{opacity:0}27%{opacity:.1}42%{opacity:.32}47%{opacity:1}50%{opacity:.92}64%{opacity:0}100%{opacity:0}}
+@keyframes throb{0%,43%{transform:scale(1)}47.5%{transform:scale(1.07)}64%{transform:scale(1)}100%{transform:scale(1)}}
+@keyframes orbGlow{0%,42%{opacity:.5;transform:translate(-50%,-50%) scale(1)}47%{opacity:1;transform:translate(-50%,-50%) scale(1.2)}64%{opacity:.5;transform:translate(-50%,-50%) scale(1)}100%{opacity:.5;transform:translate(-50%,-50%) scale(1)}}
+@keyframes armLight{to{stroke-dashoffset:-100}}
+@keyframes sway{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+@keyframes cubePulse{0%,100%{transform:scale(1)}50%{transform:scale(.5)}}
+@keyframes corePulse{0%,100%{opacity:.9;transform:scale(1)}50%{opacity:.45;transform:scale(.62)}}
+@keyframes cubeEmerge{0%{transform:scale(.3);opacity:0}45%{opacity:.85}100%{transform:scale(1.55);opacity:0}}
+#growOv .filterbar{display:flex;gap:7px;padding:14px 14px 10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#growOv .filterbar::-webkit-scrollbar{display:none}
+#growOv .fchip{flex:none;font:inherit;font-size:12px;font-weight:800;padding:7px 14px;border-radius:20px;border:1px solid var(--line);background:var(--card);color:#6b7178;cursor:pointer;white-space:nowrap}
+#growOv .fchip.on{background:var(--green);border-color:var(--green);color:#fff}
+#growOv .listdiv{display:flex;align-items:center;gap:10px;margin:8px 6px 2px;color:#a7adb4;font-size:10px;font-weight:800;letter-spacing:.05em}
+#growOv .listdiv::before, #growOv .listdiv::after{content:'';flex:1;height:1px;background:var(--line)}
+#growOv .trow{cursor:pointer}
+#growOv .morebtn{display:block;width:calc(100% - 24px);margin:11px 12px 0;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:#5b6168;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+#growOv .morebtn:active{background:#f4f5f7}
+#growOv .grpHd{display:flex;align-items:center;gap:8px;padding:20px 20px 9px;font-size:14.5px;font-weight:850}
+#growOv .grpHd span{font-size:11.5px;font-weight:800;color:var(--mut);font-variant-numeric:tabular-nums}
+#growOv .thero.plat{width:44px;height:55px;flex:none}
+#growOv .thero.plat svg{width:100%;height:100%;filter:drop-shadow(0 0 6px rgba(123,108,255,.45)) drop-shadow(0 3px 3px rgba(0,0,0,.16))}
+#growOv .thero.plat.platlock svg{filter:grayscale(.55) brightness(.82) drop-shadow(0 3px 3px rgba(0,0,0,.18));opacity:.72}
+#growOv .platTag{font-size:9px;font-weight:850;letter-spacing:.03em;color:#6b5bbf;background:#efeaff;border:1px solid #ded4ff;padding:4px 9px;border-radius:20px;white-space:nowrap}
+#growOv .ds-cup.platcup svg{width:100%;height:100%;filter:drop-shadow(0 0 12px rgba(123,108,255,.55)) drop-shadow(0 5px 6px rgba(0,0,0,.18))}
+#growOv .dsheet-ov{position:fixed;inset:0;z-index:9000;background:rgba(20,24,30,.5);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .22s}
+#growOv .dsheet-ov.on{opacity:1;pointer-events:auto}
+#growOv .dsheet{width:100%;max-width:432px;background:#fff;border-radius:24px 24px 0 0;padding:0;transform:translateY(100%);transition:transform .32s cubic-bezier(.2,.85,.3,1);max-height:92vh;overflow-y:auto}
+#growOv .dsheet-ov.on .dsheet{transform:translateY(0)}
+#growOv .ds-hero{position:relative;padding:0 20px 22px;text-align:center;border-radius:24px 24px 0 0;overflow:hidden}
+#growOv .ds-grip{position:relative;z-index:3;width:40px;height:4px;border-radius:3px;background:rgba(0,0,0,.14);margin:10px auto 0}
+#growOv .ds-date{position:relative;z-index:3;font-size:11.5px;font-weight:850;letter-spacing:.04em;margin-top:16px;display:inline-flex;align-items:center;gap:6px}
+#growOv .ds-date .dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+#growOv .ds-cupwrap{position:relative;height:118px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+#growOv .ds-spot{position:absolute;width:158px;height:158px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1}
+#growOv .ds-spk{position:absolute;inset:0;z-index:2;pointer-events:none}
+#growOv .ds-spk svg{position:absolute;color:#fff;filter:drop-shadow(0 0 3px rgba(255,240,200,.9))}
+@media (prefers-reduced-motion: no-preference){
+  #growOv .ds-spk svg{animation:dsTw 2.1s ease-in-out infinite}
+  #growOv .dsShine{animation:dsShineSweep 4.6s ease-in-out infinite}
+}
+@keyframes dsTw{0%,100%{opacity:.25;transform:scale(.6)}50%{opacity:1;transform:scale(1.2)}}
+@keyframes dsShineSweep{0%{transform:translateX(-2px);opacity:0}10%{opacity:.9}24%{transform:translateX(28px);opacity:.9}32%,100%{transform:translateX(28px);opacity:0}}
+#growOv .ds-cup{position:relative;z-index:2;width:82px;height:100px}
+#growOv .ds-cup .cup{width:100%;height:100%;filter:drop-shadow(0 6px 8px rgba(0,0,0,.2))}
+#growOv .ds-cup.gold{color:#dcac37}
+#growOv .ds-cup.silver{color:#b7bec6}
+#growOv .ds-cup.bronze{color:#bd7a41}
+#growOv .ds-cup.lockc{color:#c6ccd3}
+#growOv .ds-cup.dslock .cup{filter:grayscale(.45) brightness(1.03);opacity:.6}
+#growOv .ds-q{width:70px;height:70px;border-radius:18px;background:rgba(255,255,255,.72);display:grid;place-items:center;font:800 34px Georgia,serif;color:#aab0b8;box-shadow:inset 0 1px 2px rgba(255,255,255,.6)}
+#growOv .ds-ribbon{position:relative;z-index:3;display:inline-block;font-size:9.5px;font-weight:850;letter-spacing:.13em;color:#fff;padding:4px 13px;border-radius:20px;text-transform:uppercase}
+#growOv .ds-name{position:relative;z-index:3;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;margin-top:11px;color:#2b2a24;letter-spacing:-.01em}
+#growOv .ds-body{padding:4px 20px 24px}
+#growOv .ds-sec{margin-top:18px}
+#growOv .ds-sec .k{font-size:10.5px;font-weight:850;color:#aab0b6;letter-spacing:.08em;margin-bottom:8px;text-transform:uppercase}
+#growOv .ds-sec .v{font-size:14px;line-height:1.65;color:#3a3f44}
+#growOv .ds-msg{font-family:Georgia,serif;font-style:italic;font-size:15px;color:#4a463a;background:#faf7f0;border:1px solid #f0e9d8;border-radius:14px;padding:15px 17px;line-height:1.55}
+#growOv .ds-msg .q{color:#cdbf98;font-weight:800;font-style:normal}
+#growOv .ds-close{margin-top:22px;width:100%;padding:14px;border:none;border-radius:14px;background:var(--green);color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+#growOv .hq{width:44px;height:55px;flex:none;display:grid;place-items:center}
+#growOv .hq div{width:44px;height:44px;border-radius:12px;background:#eef0f3;display:grid;place-items:center;font-size:22px;font-weight:800;color:#aeb4bc;font-family:Georgia,serif}
+#growOv .foot{padding:20px 22px 24px;text-align:center;font-size:10.5px;color:#9aa0a7;line-height:1.6}
+#growOv .toast-scene{position:relative;padding:30px 16px 34px;background:radial-gradient(130% 80% at 50% 0%,rgba(11,93,52,.12),transparent 60%),#eef0f2}
+#growOv .toast{max-width:336px;margin:0 auto;background:#fff;border-radius:22px;padding:24px 22px 20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(30,40,25,.24)}
+#growOv .toast .glow{position:absolute;left:50%;top:0;width:210px;height:210px;transform:translateX(-50%);background:radial-gradient(circle,rgba(220,171,60,.3),transparent 62%);pointer-events:none}
+#growOv .spk{position:absolute;color:#e8c452;opacity:.9}
+#growOv .t-eyebrow{position:relative;font-size:10.5px;font-weight:850;letter-spacing:.2em;color:#c39a2c;text-transform:uppercase}
+#growOv .t-cup{position:relative;width:86px;height:108px;margin:10px auto 2px;color:#bd7a41}
+#growOv .t-cup .cup{width:100%;height:100%;filter:drop-shadow(0 5px 6px rgba(0,0,0,.22))}
+#growOv .t-ribbon{position:relative;display:inline-block;margin-top:6px;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;padding:4px 12px;border-radius:20px;text-transform:uppercase;background:linear-gradient(90deg,#a2632f,#c9873f)}
+#growOv .t-name{position:relative;font-size:22px;font-weight:850;margin-top:11px;letter-spacing:-.01em}
+#growOv .t-xp{position:relative;margin-top:7px;display:inline-block;font-size:11px;font-weight:850;color:#0b5d34;background:#e7f2ec;padding:3px 11px;border-radius:20px;font-variant-numeric:tabular-nums}
+#growOv .t-msg{position:relative;font-size:13px;color:#70767e;margin-top:7px;line-height:1.55}
+#growOv .t-btn{position:relative;margin-top:18px;width:100%;padding:13px;border:none;border-radius:13px;background:var(--green);color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+#growOv .t-more{position:relative;margin-top:9px;font-size:11px;color:#a2a8af;font-weight:700}
+@media (prefers-reduced-motion: no-preference){
+  #growOv .toast .glow{animation:pulse 3.4s ease-in-out infinite}
+  #growOv .t-cup{animation:pop .6s cubic-bezier(.2,1.4,.4,1) both}
+  #growOv .spk{animation:tw 2.2s ease-in-out infinite}
+}
+@keyframes pulse{0%,100%{opacity:.7;transform:translateX(-50%) scale(1)}50%{opacity:1;transform:translateX(-50%) scale(1.08)}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes tw{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1.1)}}
+#growOv .plat-ov{position:fixed;inset:0;z-index:9500;background:rgba(6,7,17,.72);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .28s}
+#growOv .plat-ov.on{opacity:1;pointer-events:auto}
+#growOv .plat-sheet{position:relative;width:100%;max-width:468px;height:96vh;border-radius:26px 26px 0 0;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.19,.86,.28,1);
+    background:
+      radial-gradient(120% 60% at 50% 8%,var(--pnebA,rgba(123,108,255,.5)),transparent 58%),
+      radial-gradient(90% 44% at 82% 30%,var(--pnebB,rgba(74,198,255,.28)),transparent 60%),
+      radial-gradient(100% 50% at 14% 62%,var(--pnebC,rgba(226,92,196,.22)),transparent 62%),
+      linear-gradient(180deg,#141234 0%,#0c0a22 42%,#07061a 100%)}
+#growOv .plat-ov.on .plat-sheet{transform:translateY(0)}
+#growOv .plat-scroll{position:relative;z-index:3;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:40px}
+#growOv .plat-stars{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+#growOv .plat-stars i{position:absolute;background:#fff;border-radius:50%;width:2px;height:2px;opacity:.55}
+#growOv .plat-stars i.b{width:3px;height:3px}
+#growOv .plat-vig{position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(130% 78% at 50% 26%,transparent 46%,rgba(4,4,14,.62) 100%)}
+#growOv .pl-grip{width:44px;height:4px;border-radius:3px;background:rgba(255,255,255,.28);margin:12px auto 0;position:relative;z-index:4}
+#growOv .pl-x{position:absolute;top:14px;right:16px;z-index:6;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);display:grid;place-items:center;cursor:pointer}
+#growOv .pl-x svg{width:16px;height:16px;stroke:#dfe3ff;stroke-width:2.2;fill:none}
+#growOv .pl-eyebrow{text-align:center;margin-top:26px;font-size:11px;font-weight:850;letter-spacing:.26em;text-transform:uppercase;color:#b9b2ff}
+#growOv .pl-eyebrow .sep{display:inline-block;width:4px;height:4px;border-radius:50%;background:#8f80ff;vertical-align:middle;margin:0 9px 2px}
+#growOv .pl-status{text-align:center;margin-top:9px;font-size:12px;font-weight:800;letter-spacing:.03em;color:#8b93c8}
+#growOv .pl-stage{position:relative;height:264px;display:flex;align-items:center;justify-content:center;margin-top:4px}
+#growOv .pl-halo{position:absolute;top:46%;left:50%;width:280px;height:280px;transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle,var(--phalo,rgba(123,108,255,.34)),transparent 62%);pointer-events:none;filter:blur(2px)}
+#growOv .pl-ring{position:absolute;top:46%;left:50%;width:206px;height:206px;transform:translate(-50%,-50%);border-radius:50%;
+    border:1px solid rgba(255,255,255,.1);box-shadow:0 0 40px rgba(140,150,255,.14) inset;pointer-events:none}
+#growOv .pl-ring.r2{width:262px;height:262px;opacity:.6}
+#growOv .pl-trophy{position:relative;z-index:2;width:172px;height:215px}
+#growOv .pl-trophy svg{width:100%;height:100%}
+#growOv .pl-trophy.locked svg{filter:grayscale(.5) brightness(.8) drop-shadow(0 10px 16px rgba(0,0,0,.5));opacity:.82}
+#growOv .pl-trophy.lit svg{filter:drop-shadow(0 0 22px var(--phalo,rgba(123,108,255,.6))) drop-shadow(0 10px 16px rgba(0,0,0,.5))}
+#growOv .pl-plinth{position:absolute;bottom:24px;left:50%;width:184px;height:30px;transform:translateX(-50%);z-index:1;border-radius:50%;
+    background:radial-gradient(ellipse at 50% 40%,rgba(150,160,220,.28),transparent 70%);filter:blur(1px)}
+#growOv .pl-ribbon{display:block;width:max-content;margin:2px auto 0;position:relative;z-index:4;font-size:10px;font-weight:850;letter-spacing:.16em;text-transform:uppercase;color:#f3f0ff;
+    padding:5px 16px;border-radius:22px;background:linear-gradient(90deg,#6a5cd6,#4ac6ff);box-shadow:0 6px 18px rgba(90,80,220,.4)}
+#growOv .pl-name{text-align:center;position:relative;z-index:4;font-family:Georgia,'Times New Roman',serif;font-size:32px;font-weight:700;letter-spacing:-.01em;
+    margin-top:15px;color:#fff;text-shadow:0 2px 20px rgba(140,140,255,.5)}
+#growOv .pl-tag{text-align:center;position:relative;z-index:4;font-size:13px;color:#a9b0e6;margin-top:8px;font-weight:600}
+#growOv .pl-hero-line{position:relative;z-index:4;max-width:340px;margin:26px auto 0;text-align:center;font-family:Georgia,serif;font-style:italic;
+    font-size:17px;line-height:1.7;color:#e8e6ff}
+#growOv .pl-roulette{position:relative;z-index:4;max-width:360px;margin:28px auto 0;padding:20px 18px;border-radius:18px;
+    background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);text-align:center}
+#growOv .pl-roulette .k{font-size:10.5px;font-weight:850;letter-spacing:.16em;text-transform:uppercase;color:#8f95cf}
+#growOv .pl-roulette .who{margin-top:12px;font-size:22px;font-weight:850;color:#fff;letter-spacing:-.01em}
+#growOv .pl-roulette .who b{color:#8fe6ff;transition:opacity .32s}
+#growOv .pl-roulette .q{color:#b9b2ff}
+#growOv .pl-roulette .sub{margin-top:10px;font-size:12px;color:#8b93c8;line-height:1.6}
+#growOv .pl-sec{position:relative;z-index:4;max-width:392px;margin:24px auto 0;padding:0 22px}
+#growOv .pl-sec .k{font-size:10.5px;font-weight:850;letter-spacing:.14em;text-transform:uppercase;color:#8f95cf;margin-bottom:9px}
+#growOv .pl-sec .v{font-size:14px;line-height:1.72;color:#d6d9f4}
+#growOv .pl-cond{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px 18px}
+#growOv .pl-close{position:relative;z-index:4;display:block;width:calc(100% - 44px);max-width:392px;margin:30px auto 0;padding:15px;border:none;border-radius:15px;
+    background:linear-gradient(90deg,#6a5cd6,#4ac6ff);color:#fff;font:inherit;font-size:14.5px;font-weight:850;letter-spacing:.02em;cursor:pointer;box-shadow:0 10px 26px rgba(80,80,220,.4)}
+@media (prefers-reduced-motion: no-preference){
+  #growOv .pl-trophy{animation:plFloat 5.2s ease-in-out infinite}
+  #growOv .pl-halo{animation:plHalo 5.2s ease-in-out infinite}
+  #growOv .pl-ring{animation:plSpin 44s linear infinite}
+  #growOv .pl-ring.r2{animation:plSpin 60s linear infinite reverse}
+  #growOv .plat-stars i.tw{animation:plTw 2.6s ease-in-out infinite}
+}
+@keyframes plFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@keyframes plHalo{0%,100%{opacity:.7;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}}
+@keyframes plSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes plTw{0%,100%{opacity:.2;transform:scale(.7)}50%{opacity:1;transform:scale(1.25)}}
+
+/* 해금 팝업 — 성장 공간이 닫혀 있어도 떠야 하므로 같은 규칙을 이 뿌리에도 건다. */
+#gwToastHost{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:18px;
+  background:rgba(12,16,20,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Malgun Gothic",system-ui,sans-serif;
+  opacity:0;pointer-events:none;transition:opacity .26s ease}
+#gwToastHost.on{opacity:1;pointer-events:auto}
+#gwToastHost[hidden]{display:none}
+#gwToastHost *{box-sizing:border-box;margin:0;padding:0}
+/* ★변수를 여기에도 둔다 — 성장 공간 밖이라 그쪽 뿌리의 값을 못 받는다.
+   안 주면 '확인' 버튼이 배경 없는 흰 글자가 돼 통째로 사라진다. */
+#gwToastHost{--bg:#eceef1;--card:#fff;--ink:#1b1d21;--mut:#8b9199;--line:#e6e8ec;--green:#0b5d34;color:var(--ink)}
+#gwToastHost .cup .base{filter:none}
+#gwToastHost .mc .cup{width:100%;height:100%;filter:drop-shadow(0 2px 2px rgba(0,0,0,.16))}
+#gwToastHost .thero .cup{width:100%;height:100%;filter:drop-shadow(0 3px 3px rgba(0,0,0,.2))}
+#gwToastHost .thero.lock .cup{filter:grayscale(.5) brightness(1.03);opacity:.5}
+#gwToastHost .ds-cup .cup{width:100%;height:100%;filter:drop-shadow(0 6px 8px rgba(0,0,0,.2))}
+#gwToastHost .ds-cup.dslock .cup{filter:grayscale(.45) brightness(1.03);opacity:.6}
+#gwToastHost .toast-scene{position:relative;padding:30px 16px 34px;background:radial-gradient(130% 80% at 50% 0%,rgba(11,93,52,.12),transparent 60%),#eef0f2}
+#gwToastHost .toast{max-width:336px;margin:0 auto;background:#fff;border-radius:22px;padding:24px 22px 20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(30,40,25,.24)}
+#gwToastHost .toast .glow{position:absolute;left:50%;top:0;width:210px;height:210px;transform:translateX(-50%);background:radial-gradient(circle,rgba(220,171,60,.3),transparent 62%);pointer-events:none}
+#gwToastHost .spk{position:absolute;color:#e8c452;opacity:.9}
+#gwToastHost .t-eyebrow{position:relative;font-size:10.5px;font-weight:850;letter-spacing:.2em;color:#c39a2c;text-transform:uppercase}
+#gwToastHost .t-cup{position:relative;width:86px;height:108px;margin:10px auto 2px;color:#bd7a41}
+#gwToastHost .t-cup .cup{width:100%;height:100%;filter:drop-shadow(0 5px 6px rgba(0,0,0,.22))}
+#gwToastHost .t-ribbon{position:relative;display:inline-block;margin-top:6px;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;padding:4px 12px;border-radius:20px;text-transform:uppercase;background:linear-gradient(90deg,#a2632f,#c9873f)}
+#gwToastHost .t-name{position:relative;font-size:22px;font-weight:850;margin-top:11px;letter-spacing:-.01em}
+#gwToastHost .t-xp{position:relative;margin-top:7px;display:inline-block;font-size:11px;font-weight:850;color:#0b5d34;background:#e7f2ec;padding:3px 11px;border-radius:20px;font-variant-numeric:tabular-nums}
+#gwToastHost .t-msg{position:relative;font-size:13px;color:#70767e;margin-top:7px;line-height:1.55}
+#gwToastHost .t-btn{position:relative;margin-top:18px;width:100%;padding:13px;border:none;border-radius:13px;background:var(--green);color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+#gwToastHost .t-more{position:relative;margin-top:9px;font-size:11px;color:#a2a8af;font-weight:700}
+#gwToastHost .toast .glow{animation:pulse 3.4s ease-in-out infinite}
+#gwToastHost .t-cup{animation:pop .6s cubic-bezier(.2,1.4,.4,1) both}
+#gwToastHost .spk{animation:tw 2.2s ease-in-out infinite}
+/* 시안에선 폰 틀 안이라 바탕이 필요했다 — 진짜 앵에선 카드만 뜨면 된다.
+   ★복제된 규칙 '뒤'에 놓는다 — 특정도가 같으니 순서가 이긴다. */
+#gwToastHost .toast-scene{background:none;padding:0;min-height:0}
+
   </style>
 </head>
 <body>
@@ -2656,8 +2995,7 @@
         </button>
       </div>
 
-      <!-- 작은 타일 — 숫자가 없고 '갈 곳'만 있는 것들. 업적은 아직 화면이 없어 자물쇠로 둔다
-           (눌러보고 나서 없다는 걸 알게 하지 않는다). 트로피 화면이 생기면 이 자리에서 켜진다. -->
+      <!-- 작은 타일 — 숫자가 없고 '갈 곳'만 있는 것들. -->
       <div class="tl" id="homeTiles">
         <button class="tl-b rul" id="hwRule" type="button" aria-label="근무 수칙 열기">
           <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg></span>
@@ -2667,11 +3005,10 @@
           <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg></span>
           <span><span class="tn">전체 배치표</span><span class="ts">1·2부 보기</span></span>
         </button>
-        <div class="tl-b tro lock" aria-disabled="true" aria-label="업적 — 준비 중">
-          <span class="lk"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+        <button class="tl-b tro" id="hwTrophy" type="button" aria-label="업적 — 성장 공간 열기">
           <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5v2a3 3 0 0 0 3 3"/><path d="M16 5h3v2a3 3 0 0 1-3 3"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="9" y1="20" x2="15" y2="20"/></svg></span>
-          <span><span class="tn">업적</span><span class="ts">준비 중</span></span>
-        </div>
+          <span><span class="tn">업적</span><span class="ts" id="hwTrophySub">성장 공간</span></span>
+        </button>
       </div>
 
       <!-- ★오늘의 기록 위젯 — 안 썼으면 한 줄을 청하고, 썼으면 표정과 그 말이 그대로 남는다.
@@ -3167,5 +3504,374 @@
 
   <script src="/html2pdf.bundle.min.js"></script>
   <script src="/app.js"></script>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="lite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".74"/><stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".4"/></linearGradient>
+  <radialGradient id="spec" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="auraV" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#7b6cff" stop-opacity=".5"/><stop offset=".55" stop-color="#7b6cff" stop-opacity=".12"/><stop offset="1" stop-color="#7b6cff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="auraM" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#e25cc4" stop-opacity=".5"/><stop offset=".55" stop-color="#a25cff" stop-opacity=".14"/><stop offset="1" stop-color="#a25cff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="auraC" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4ac6ff" stop-opacity=".5"/><stop offset=".55" stop-color="#4ac6ff" stop-opacity=".13"/><stop offset="1" stop-color="#4ac6ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="orbBody" cx=".38" cy=".3" r=".86"><stop offset="0" stop-color="#f2f8ff"/><stop offset=".22" stop-color="#a9d4ff"/><stop offset=".55" stop-color="#5b6ee6"/><stop offset=".82" stop-color="#3a2f9e"/><stop offset="1" stop-color="#231a5c"/></radialGradient>
+  <linearGradient id="irid" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ff0e0"/><stop offset=".5" stop-color="#b58cff"/><stop offset="1" stop-color="#ff9ecb"/></linearGradient>
+  <radialGradient id="flashG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset=".38" stop-color="#c3d6ff" stop-opacity=".75"/><stop offset="1" stop-color="#8f80ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="pglowG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset=".45" stop-color="#d3e2ff" stop-opacity=".4"/><stop offset="1" stop-color="#bcd0ff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="shineG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <clipPath id="dsShineClip"><path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z"/><path d="M23 27h2v14h-2z"/><path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z"/><ellipse cx="24" cy="46.5" rx="9" ry="2.3"/></clipPath>
+  <radialGradient id="galNeb" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff0cf" stop-opacity=".9"/><stop offset=".3" stop-color="#ff8fce" stop-opacity=".85"/><stop offset=".62" stop-color="#9a5cff" stop-opacity=".6"/><stop offset="1" stop-color="#2a1c66" stop-opacity="0"/></radialGradient>
+  <linearGradient id="arm" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ff8fce"/></linearGradient>
+  <radialGradient id="galCore" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff9ec9" stop-opacity="0"/></radialGradient>
+  <linearGradient id="tessEdge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ff4ff"/><stop offset=".5" stop-color="#4aa6ff"/><stop offset="1" stop-color="#8a7bff"/></linearGradient>
+  <radialGradient id="tessCore" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#c8fbff" stop-opacity=".9"/><stop offset=".5" stop-color="#4ac6ff" stop-opacity=".45"/><stop offset="1" stop-color="#6a5cff" stop-opacity="0"/></radialGradient>
+  <clipPath id="orbClip"><circle cx="24" cy="16" r="11"/></clipPath>
+  <radialGradient id="sphL" cx=".36" cy=".3" r=".72"><stop offset="0" stop-color="#fff" stop-opacity=".92"/><stop offset=".45" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="sphD" cx=".64" cy=".74" r=".78"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#0a1a30" stop-opacity=".16"/><stop offset="1" stop-color="#0a1a30" stop-opacity=".55"/></radialGradient>
+  <radialGradient id="cosmo" cx=".5" cy=".5" r=".55"><stop offset="0" stop-color="#bfe0ff" stop-opacity="0"/><stop offset=".68" stop-color="#7fb0e0" stop-opacity=".05"/><stop offset="1" stop-color="#3f6db0" stop-opacity=".3"/></radialGradient>
+
+  <!-- 챌리스(성배) -->
+  <symbol id="t2" viewBox="0 0 48 60">
+    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="currentColor"/>
+    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="url(#lite)"/>
+    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="url(#shade)"/>
+    <ellipse cx="24" cy="8" rx="9" ry="2.4" fill="currentColor"/><ellipse cx="24" cy="7.6" rx="9" ry="2" fill="url(#lite)"/>
+    <ellipse cx="20.5" cy="14" rx="2.4" ry="5.2" fill="url(#spec)" transform="rotate(-16 20.5 14)"/>
+    <path d="M23 27h2v14h-2z" fill="currentColor"/><path d="M23 27h2v14h-2z" fill="url(#shade)"/>
+    <ellipse cx="24" cy="33" rx="3.4" ry="2.4" fill="currentColor"/><ellipse cx="24" cy="32.3" rx="3.4" ry="1.6" fill="url(#lite)"/>
+    <path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z" fill="currentColor"/><path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z" fill="url(#lite)"/>
+    <ellipse cx="24" cy="46.5" rx="9" ry="2.3" fill="currentColor"/><ellipse cx="24" cy="46.9" rx="9" ry="1.8" fill="url(#shade)"/>
+  </symbol>
+  <!-- 플래티넘 스탠드 -->
+  <symbol id="stand" viewBox="0 0 48 60">
+    <path d="M20.5 34h7l-1 4h-5z" fill="currentColor"/><path d="M20.5 34h7l-1 4h-5z" fill="url(#shade)"/>
+    <rect x="22.6" y="38" width="2.8" height="5" fill="currentColor"/><rect x="22.6" y="38" width="1.1" height="5" fill="url(#lite)"/>
+    <ellipse cx="24" cy="43" rx="3.3" ry="2.1" fill="currentColor"/><ellipse cx="24" cy="42.4" rx="3.3" ry="1.4" fill="url(#lite)"/>
+    <path d="M17 45h14l2 4H15z" fill="currentColor"/><path d="M17 45h14l2 4H15z" fill="url(#lite)"/>
+    <rect x="12" y="49" width="24" height="5" rx="1.9" fill="currentColor"/><rect x="12" y="51.5" width="24" height="2.5" rx="1" fill="url(#shade)"/>
+  </symbol>
+  <!-- 오브 -->
+  <symbol id="orbSym" viewBox="0 0 48 60">
+    <circle cx="24" cy="16" r="17" fill="url(#auraV)"/>
+    <ellipse cx="24" cy="16" rx="16.5" ry="5" fill="none" stroke="url(#irid)" stroke-width="2" opacity=".4" transform="rotate(-14 24 16)"/>
+    <circle cx="24" cy="16" r="11" fill="url(#orbBody)"/>
+    <circle cx="24" cy="16" r="11" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".65"/>
+    <ellipse cx="20" cy="11.5" rx="3" ry="4.3" fill="url(#spec)" transform="rotate(-20 20 11.5)"/>
+    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="url(#irid)" stroke-width="2.2" transform="rotate(-14 24 16)"/>
+    <g fill="#fff"><circle cx="9" cy="7" r=".8" opacity=".9"/><circle cx="39" cy="9" r=".7" opacity=".8"/><circle cx="37" cy="25" r=".55" opacity=".7"/><circle cx="12" cy="27" r=".5" opacity=".6"/></g>
+  </symbol>
+  <!-- 은하 -->
+  <symbol id="galSym" viewBox="0 0 48 60">
+    <circle cx="24" cy="16" r="18" fill="url(#auraM)"/>
+    <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#galNeb)" transform="rotate(-24 24 16)"/>
+    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="24" cy="16" r="4" fill="url(#galCore)"/>
+    <circle cx="24" cy="16" r="1.8" fill="#fff"/>
+    <g fill="#fff"><circle cx="12" cy="8" r=".8" opacity=".9"/><circle cx="37" cy="9" r=".7" opacity=".8"/><circle cx="34" cy="25" r=".6" opacity=".75"/><circle cx="13" cy="25" r=".5" opacity=".65"/><circle cx="24" cy="3.5" r=".6" opacity=".7"/><circle cx="40" cy="17" r=".5" opacity=".6"/></g>
+  </symbol>
+  <!-- 테서랙트 큐브 -->
+  <symbol id="tessSym" viewBox="0 0 48 60">
+    <circle cx="24" cy="16" r="18" fill="url(#auraC)"/>
+    <rect x="18" y="10" width="12" height="12" rx="1" fill="url(#tessCore)"/>
+    <g fill="none" stroke="url(#tessEdge)" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
+      <rect x="10" y="2" width="28" height="28" rx="1.6"/>
+      <rect x="18" y="10" width="12" height="12" rx="1"/>
+      <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
+    </g>
+    <g fill="none" stroke="#e6ffff" stroke-opacity=".55" stroke-width="1" stroke-linejoin="round"><path d="M10 2h28M10 2v28M18 10h12M18 10v12"/></g>
+    <g fill="#eafdff"><circle cx="10" cy="2" r="1.5"/><circle cx="38" cy="2" r="1.5"/><circle cx="10" cy="30" r="1.5"/><circle cx="38" cy="30" r="1.5"/></g>
+  </symbol>
+  <!-- 잠긴 오브(무광 금속) -->
+  <symbol id="orbLock" viewBox="0 0 48 60">
+    <ellipse cx="24" cy="16" rx="16.5" ry="5" fill="none" stroke="currentColor" stroke-width="2" opacity=".5" transform="rotate(-14 24 16)"/>
+    <circle cx="24" cy="16" r="11" fill="currentColor"/>
+    <circle cx="24" cy="16" r="11" fill="url(#sphL)"/>
+    <circle cx="24" cy="16" r="11" fill="url(#cosmo)"/>
+    <circle cx="24" cy="16" r="11" fill="url(#sphD)"/>
+    <ellipse cx="20" cy="11.5" rx="3.1" ry="4.4" fill="url(#spec)" transform="rotate(-20 20 11.5)"/>
+    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="currentColor" stroke-width="2.1" transform="rotate(-14 24 16)"/>
+    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="url(#lite)" stroke-width="2.1" transform="rotate(-14 24 16)"/>
+  </symbol>
+  <!-- 잠긴 테서랙트 큐브(무광 금속) -->
+  <symbol id="tessLock" viewBox="0 0 48 60">
+    <rect x="18" y="10" width="12" height="12" rx="1" fill="url(#cosmo)"/>
+    <g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+      <rect x="10" y="2" width="28" height="28" rx="1.5"/>
+      <rect x="18" y="10" width="12" height="12" rx="1"/>
+      <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
+    </g>
+    <g fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" transform="translate(-.6 -.6)">
+      <path d="M10 2h28M10 2v28"/><path d="M18 10h12M18 10v12"/>
+    </g>
+  </symbol>
+  <!-- 잠긴 네뷸라 은하(무광 금속) -->
+  <symbol id="galLock" viewBox="0 0 48 60">
+    <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#cosmo)" transform="rotate(-24 24 16)"/>
+    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#lite)" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="24" cy="16" r="3.6" fill="currentColor"/><circle cx="24" cy="16" r="3.6" fill="url(#sphL)"/>
+    <circle cx="24" cy="16" r="2" fill="url(#spec)"/>
+  </symbol>
+  <!-- 티어 명예 메달 그라디언트 -->
+  <radialGradient id="mLo" cx=".33" cy=".27" r=".78"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".55" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="mHi" cx=".72" cy=".8" r=".72"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset=".7" stop-color="#000" stop-opacity=".05"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+  <radialGradient id="fieldRecess" cx=".5" cy=".42" r=".55"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
+  <radialGradient id="gShade" cx=".62" cy=".68" r=".7"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".6" stop-color="#3c434c" stop-opacity=".3"/><stop offset="1" stop-color="#20262e" stop-opacity=".62"/></radialGradient>
+  <radialGradient id="gPlanet" cx=".38" cy=".32" r=".82"><stop offset="0" stop-color="#cfe6ff"/><stop offset=".4" stop-color="#6f9be6"/><stop offset=".8" stop-color="#3a5aa0"/><stop offset="1" stop-color="#22356e"/></radialGradient>
+  <radialGradient id="gSunGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffdf7a" stop-opacity=".85"/><stop offset=".55" stop-color="#ffb43a" stop-opacity=".2"/><stop offset="1" stop-color="#ffb43a" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gSun" cx=".4" cy=".35" r=".78"><stop offset="0" stop-color="#fff7dc"/><stop offset=".5" stop-color="#ffce4a"/><stop offset="1" stop-color="#ee9326"/></radialGradient>
+  <radialGradient id="gGiantGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff9a5a" stop-opacity=".85"/><stop offset=".55" stop-color="#ff6a3a" stop-opacity=".22"/><stop offset="1" stop-color="#ff6a3a" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gGiant" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffe6bf"/><stop offset=".45" stop-color="#ff9a52"/><stop offset="1" stop-color="#cf3f24"/></radialGradient>
+  <radialGradient id="gNovaGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe0ec" stop-opacity=".95"/><stop offset=".42" stop-color="#ff7fb0" stop-opacity=".3"/><stop offset="1" stop-color="#c86cff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gClusterGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#dcc4ff" stop-opacity=".6"/><stop offset=".6" stop-color="#9a7fd0" stop-opacity=".16"/><stop offset="1" stop-color="#9a7fd0" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gNeb1" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff8fce" stop-opacity=".9"/><stop offset="1" stop-color="#ff8fce" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gNeb2" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#6f8fff" stop-opacity=".85"/><stop offset="1" stop-color="#6f8fff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gNeb3" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#b98fff" stop-opacity=".85"/><stop offset="1" stop-color="#b98fff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="apexG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f5f9"/><stop offset=".5" stop-color="#c3ccd6"/><stop offset="1" stop-color="#8f99a5"/></linearGradient>
+  <radialGradient id="apexGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#eaf1fa" stop-opacity=".9"/><stop offset=".5" stop-color="#c6d3e4" stop-opacity=".25"/><stop offset="1" stop-color="#c6d3e4" stop-opacity="0"/></radialGradient>
+  <radialGradient id="apexStar" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#e2e9f1"/><stop offset="1" stop-color="#a9b4c0"/></radialGradient>
+  <clipPath id="mfld"><circle cx="28" cy="28" r="15.5"/></clipPath>
+</defs></svg>
+
+<!-- 성장 공간(업적) — 시안 v3에서 기계로 옮긴 화면. 데이터는 /api/trophies. -->
+<div id="growOv" hidden>
+<div class="grow">
+  <div class="tbar">
+    <div class="bk" id="gwBack"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div><h1>성장 공간</h1><div class="sub" id="gwWho">발자취</div></div>
+  </div>
+
+  <div class="sum">
+    <div class="lvl-head">
+      <div class="lvl-emblem" id="lvlEmblem"></div>
+      <div>
+        <div class="lvl-season">2026 시즌</div>
+        <div class="lvl-rank"><b id="lvlRank">—</b><span class="lv" id="lvlNo">—</span></div>
+      </div>
+    </div>
+    <div class="lvl-stats">
+      <div class="st-l"><div class="st-pct" id="lvlPct">0%</div><div class="st-lb">다음 티어까지</div></div>
+      <div class="st-r"><div class="st-num" id="lvlGot">0</div><div class="st-lb">획득 트로피</div></div>
+    </div>
+    <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
+    <div class="xp-cap"><span id="xpNums">0 XP</span><span id="xpNext"></span></div>
+    <div class="sum-div"></div>
+    <div class="sum-cups">
+      <div class="sum-cup"><div class="slot"><span class="mc plat"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupPlat">0</b><span>플래티넘</span></div>
+      <div class="sum-cup"><div class="slot"><span class="mc gold"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupGold">0</b><span>골드</span></div>
+      <div class="sum-cup"><div class="slot"><span class="mc silver"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupSilver">0</b><span>실버</span></div>
+      <div class="sum-cup"><div class="slot"><span class="mc bronze"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupBronze">0</b><span>브론즈</span></div>
+    </div>
+  </div>
+
+  <!-- 명예의 전당 — 개별 대형 스테이지 -->
+  <div class="shd"><div class="l"><span class="t">명예의 전당</span></div><span class="c" id="gwHallCnt"></span></div>
+  <div class="hall-tl">한 해, 리버힐 캐디 중 <b style="color:#7a5cff">단 한 분</b>께만 — 그 해의 정점에게 바치는 트로피.</div>
+
+  <div class="stage sh-v">
+    <div class="stars"><i class="starTw" style="left:16%;top:20%"></i><i class="starTw" style="left:74%;top:16%;animation-delay:.6s"></i><i class="starTw" style="left:40%;top:11%;animation-delay:1.2s"></i><i class="starTw" style="left:86%;top:46%;animation-delay:.3s"></i><i class="starTw" style="left:12%;top:54%;animation-delay:.9s"></i><i class="starTw" style="left:60%;top:64%;animation-delay:1.5s"></i></div>
+    <div class="sh-glow sh-glowB"></div>
+    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
+    <div class="sh-trophy aura-v"><svg viewBox="0 -13 48 75">
+      <use href="#stand" style="color:#aab4bd" transform="translate(0 -6)"/>
+      <g class="floaty">
+        <g class="throb">
+          <circle cx="24" cy="16" r="17" fill="url(#auraV)"/>
+          <g transform="rotate(-12 24 16)"><ellipse cx="24" cy="16" rx="17" ry="5.4" fill="none" stroke="url(#irid)" stroke-width="2" opacity=".3"/></g>
+          <circle cx="24" cy="16" r="11" fill="url(#orbBody)"/>
+          <circle cx="24" cy="16" r="11" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".6"/>
+          <ellipse cx="20" cy="11.5" rx="3" ry="4.3" fill="url(#spec)"/>
+          <g transform="rotate(-12 24 16)">
+            <ellipse cx="24" cy="16" rx="17" ry="5.4" fill="none" stroke="url(#irid)" stroke-width="2.4" opacity=".8"/>
+            <ellipse cx="24" cy="16" rx="13.4" ry="4.1" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".45"/>
+          </g>
+          <circle class="flash" cx="24" cy="16" r="15" fill="url(#flashG)" opacity="0"/>
+        </g>
+        <g>
+          <g class="pcl-a" style="--tx:20px;--ty:0px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:17.3px;--ty:10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:10px;--ty:17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:0px;--ty:20px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-a" style="--tx:-10px;--ty:17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:-17.3px;--ty:10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:-20px;--ty:0px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:-17.3px;--ty:-10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-a" style="--tx:-10px;--ty:-17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:0px;--ty:-20px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:10px;--ty:-17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:17.3px;--ty:-10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
+          <g class="pcl-a" style="--tx:11.6px;--ty:3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:8.5px;--ty:8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:3.1px;--ty:11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:-3.1px;--ty:11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-a" style="--tx:-8.5px;--ty:8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:-11.6px;--ty:3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:-11.6px;--ty:-3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:-8.5px;--ty:-8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-a" style="--tx:-3.1px;--ty:-11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-b" style="--tx:3.1px;--ty:-11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-c" style="--tx:8.5px;--ty:-8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+          <g class="pcl-d" style="--tx:11.6px;--ty:-3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
+        </g>
+      </g>
+    </svg></div>
+    <div class="sh-name">코스믹 오브</div>
+    <div class="sh-poem">언젠가 닿을, 가장 먼 별</div>
+    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
+  </div>
+
+  <div class="stage sh-m">
+    <div class="stars"><i style="left:20%;top:18%"></i><i style="left:64%;top:14%"></i><i style="left:44%;top:9%"></i><i style="left:82%;top:50%"></i><i style="left:14%;top:60%"></i></div>
+    <div class="sh-glow"></div>
+    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
+    <div class="sh-trophy aura-m"><svg viewBox="0 0 48 60">
+      <use href="#stand" style="color:#aab4bd"/>
+      <circle cx="24" cy="16" r="18" fill="url(#auraM)"/>
+      <!-- 정지한 성운 -->
+      <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#galNeb)" transform="rotate(-24 24 16)"/>
+      <!-- 나선팔: 전체가 왔다갔다 흔들리고, 팔 안으로 하얀 빛이 한 번씩 지나감 -->
+      <g class="galSway">
+        <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
+        <path class="armLight" d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" pathLength="100" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-dasharray="15 85" stroke-linecap="round" opacity=".9"/>
+        <path class="armLight" d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" pathLength="100" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-dasharray="15 85" stroke-linecap="round" opacity=".9"/>
+      </g>
+      <!-- 정지한 핵 -->
+      <circle cx="24" cy="16" r="4" fill="url(#galCore)"/>
+      <circle cx="24" cy="16" r="1.8" fill="#fff"/>
+      <g fill="#fff"><circle cx="12" cy="8" r=".8" opacity=".9"/><circle cx="37" cy="9" r=".7" opacity=".8"/><circle cx="34" cy="25" r=".6" opacity=".75"/><circle cx="13" cy="25" r=".5" opacity=".65"/><circle cx="24" cy="3.5" r=".6" opacity=".7"/><circle cx="40" cy="17" r=".5" opacity=".6"/></g>
+    </svg></div>
+    <div class="sh-name">네뷸라 은하</div>
+    <div class="sh-poem">한 해를 온전히 기록한 이에게</div>
+    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
+  </div>
+
+  <div class="stage sh-c">
+    <div class="stars"><i style="left:18%;top:22%"></i><i style="left:70%;top:15%"></i><i style="left:38%;top:10%"></i><i style="left:88%;top:48%"></i><i style="left:11%;top:56%"></i></div>
+    <div class="sh-glow"></div>
+    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
+    <div class="sh-trophy aura-c"><svg viewBox="0 0 48 60">
+      <use href="#stand" style="color:#aab4bd"/>
+      <circle cx="24" cy="16" r="18" fill="url(#auraC)"/>
+      <rect class="cubeCore" x="18" y="10" width="12" height="12" rx="1" fill="url(#tessCore)"/>
+      <g fill="none" stroke="url(#tessEdge)" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="10" y="2" width="28" height="28" rx="1.6"/>
+        <rect class="cubeInner" x="18" y="10" width="12" height="12" rx="1"/>
+        <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
+      </g>
+      <rect class="cubeEmerge" x="14" y="6" width="20" height="20" rx="1.4" fill="none" stroke="url(#tessEdge)" stroke-width="1.4"/>
+      <g fill="none" stroke="#e6ffff" stroke-opacity=".55" stroke-width="1" stroke-linejoin="round"><path d="M10 2h28M10 2v28M18 10h12M18 10v12"/></g>
+      <g fill="#eafdff"><circle cx="10" cy="2" r="1.5"/><circle cx="38" cy="2" r="1.5"/><circle cx="10" cy="30" r="1.5"/><circle cx="38" cy="30" r="1.5"/></g>
+    </svg></div>
+    <div class="sh-name">테서랙트 큐브</div>
+    <div class="sh-poem">쌓아 올린 라운드의 탑</div>
+    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
+  </div>
+
+  <div class="hall-note">받은 해의 영광은 영원히 남고, 새해엔 다시 새 주인을 찾습니다.<br>한 분이 여러 종을 품을 수도 있어요.</div>
+
+  <!-- 트로피 (필터 + 획득/미획득 분리, 각 10개씩 더보기) -->
+  <div class="shd"><div class="l"><span class="t">트로피</span></div><span class="c" id="totCount"></span></div>
+  <div class="filterbar">
+    <button class="fchip on" data-f="all">전체</button>
+    <button class="fchip" data-f="platinum">플래티넘</button>
+    <button class="fchip" data-f="gold">골드</button>
+    <button class="fchip" data-f="silver">실버</button>
+    <button class="fchip" data-f="bronze">브론즈</button>
+    <button class="fchip" data-f="hidden">히든</button>
+  </div>
+
+  <div class="grpHd" id="gotHd">획득한 트로피 <span id="gotCnt"></span></div>
+  <div class="list" id="gotList"></div>
+  <button class="morebtn" id="gotMore"></button>
+
+  <div class="grpHd" id="lockHd">미획득 트로피 <span id="lockCnt"></span></div>
+  <div class="list" id="lockList"></div>
+  <button class="morebtn" id="lockMore"></button>
+
+  <div class="foot">획득한 업적은 사라지지 않고 이 공간에 남아,<br>당신이 걸어온 계절을 오래 비춰줍니다.</div>
+</div>
+
+<!-- 업적 상세 바텀시트 -->
+<div class="dsheet-ov" id="dsOv">
+  <div class="dsheet" id="dsSheet">
+    <div class="ds-hero" id="dsHero">
+      <div class="ds-grip"></div>
+      <div class="ds-date" id="dsDate"></div>
+      <div class="ds-cupwrap">
+        <div class="ds-spot" id="dsSpot"></div>
+        <div class="ds-spk" id="dsSpk">
+          <svg style="left:14%;top:20%" width="15" height="15" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+          <svg style="right:16%;top:28%;animation-delay:.5s" width="11" height="11" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+          <svg style="left:22%;bottom:16%;animation-delay:1s" width="10" height="10" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+          <svg style="right:20%;bottom:22%;animation-delay:1.4s" width="13" height="13" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+        </div>
+        <div class="ds-cup" id="dsCup"></div>
+      </div>
+      <span class="ds-ribbon" id="dsRibbon"></span>
+      <div class="ds-name" id="dsName"></div>
+    </div>
+    <div class="ds-body">
+      <div class="ds-sec"><div class="k">달성 조건</div><div class="v" id="dsCond"></div></div>
+      <div class="ds-sec" id="dsXpSec"><div class="k">획득 경험치</div><div class="v" id="dsXp"></div></div>
+      <div class="ds-sec" id="dsMsgSec"><div class="k">달성 메시지</div><div class="ds-msg" id="dsMsg"></div></div>
+      <button class="ds-close" id="dsClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 플래티넘 · 명예의 전당 상세(우주 대형 시트) -->
+<div class="plat-ov" id="platOv">
+  <div class="plat-sheet" id="platSheet">
+    <div class="plat-stars" id="platStars"></div>
+    <div class="plat-vig"></div>
+    <div class="pl-x" id="platX"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+    <div class="plat-scroll">
+      <div class="pl-grip"></div>
+      <div class="pl-eyebrow">명예의 전당 <span class="sep"></span> 연간 단 한 분</div>
+      <div class="pl-status" id="platStatus"></div>
+      <div class="pl-stage">
+        <div class="pl-halo" id="platHalo"></div>
+        <div class="pl-ring r2"></div>
+        <div class="pl-ring"></div>
+        <div class="pl-plinth"></div>
+        <div class="pl-trophy locked" id="platTrophy"></div>
+      </div>
+      <span class="pl-ribbon">플래티넘 스페셜</span>
+      <div class="pl-name" id="platName"></div>
+      <div class="pl-tag" id="platTag"></div>
+      <div class="pl-hero-line" id="platHero"></div>
+      <div class="pl-roulette">
+        <div class="k">올해의 주인공</div>
+        <div class="who">수상 기준을 준비하고 있어요</div>
+        <div class="sub">한 해가 저무는 날, 리버힐 캐디 중 단 한 분의 이름이 이 자리에 새겨져요.</div>
+      </div>
+      <div class="pl-sec"><div class="k">수여 기준</div><div class="v pl-cond" id="platCond"></div></div>
+      <div class="pl-sec"><div class="k">이 트로피에 대하여</div><div class="v" id="platAbout"></div></div>
+      <button class="pl-close" id="platClose">닫기</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="gwToastHost" hidden>
+  <div class="toast-scene">
+    <div class="toast">
+      <div class="glow"></div>
+      <svg class="spk" style="left:24px;top:28px" width="14" height="14" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+      <svg class="spk" style="right:28px;top:54px;animation-delay:.6s" width="10" height="10" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+      <svg class="spk" style="left:42px;bottom:84px;animation-delay:1.1s" width="9" height="9" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
+      <div class="t-eyebrow">New Trophy</div>
+      <div class="t-cup"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></div>
+      <div><span class="t-ribbon">Bronze</span></div>
+      <div class="t-name">마음도 한 줄</div>
+      <div class="t-xp">경험치 +20 XP</div>
+      <div class="t-msg">오늘의 나를 처음으로 기록했어요</div>
+      <button class="t-btn">확인</button>
+      <div class="t-more">성장 공간에서 모든 발자취를 볼 수 있어요</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
