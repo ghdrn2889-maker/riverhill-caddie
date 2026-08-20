@@ -2706,32 +2706,32 @@
 #gwToastHost .ds-cup .cup{width:100%;height:100%;filter:drop-shadow(0 6px 8px rgba(0,0,0,.2))}
 #gwToastHost .ds-cup.dslock .cup{filter:grayscale(.45) brightness(1.03);opacity:.6}
 #gwToastHost .toast-scene{position:relative;padding:30px 16px 34px;background:radial-gradient(130% 80% at 50% 0%,rgba(11,93,52,.12),transparent 60%),#eef0f2}
-#gwToastHost .toast{max-width:336px;margin:0 auto;background:#fff;border-radius:22px;padding:24px 22px 20px;text-align:center;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(30,40,25,.24)}
-#gwToastHost .toast .glow{position:absolute;left:50%;top:0;width:210px;height:210px;transform:translateX(-50%);background:radial-gradient(circle,rgba(220,171,60,.3),transparent 62%);pointer-events:none}
+#gwToastHost .toast{max-width:none;width:min(100%,420px);margin:0 auto;background:#fff;border-radius:24px;padding:20px 24px 18px;text-align:center;position:relative;overflow:hidden;box-shadow:0 18px 50px rgba(30,40,25,.24)}
+#gwToastHost .toast .glow{position:absolute;left:50%;top:-8px;width:190px;height:190px;transform:translateX(-50%);background:radial-gradient(circle,rgba(220,171,60,.3),transparent 62%);pointer-events:none}
 #gwToastHost .spk{position:absolute;color:#e8c452;opacity:.9}
 #gwToastHost .t-eyebrow{position:relative;font-size:10.5px;font-weight:850;letter-spacing:.2em;color:#c39a2c;text-transform:uppercase}
-#gwToastHost .t-cup{position:relative;width:86px;height:108px;margin:10px auto 2px;color:#bd7a41}
+#gwToastHost .t-cup{position:relative;width:112px;height:140px;margin:4px auto 0;color:#bd7a41}
 #gwToastHost .t-cup .cup{width:100%;height:100%;filter:drop-shadow(0 5px 6px rgba(0,0,0,.22))}
 #gwToastHost .t-ribbon{position:relative;display:inline-block;margin-top:6px;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;padding:4px 12px;border-radius:20px;text-transform:uppercase;background:linear-gradient(90deg,#a2632f,#c9873f)}
-#gwToastHost .t-name{position:relative;font-size:22px;font-weight:850;margin-top:11px;letter-spacing:-.01em}
+#gwToastHost .t-name{position:relative;font-size:25px;font-weight:850;margin-top:10px;letter-spacing:-.01em}
 #gwToastHost .t-xp{position:relative;margin-top:7px;display:inline-block;font-size:11px;font-weight:850;color:#0b5d34;background:#e7f2ec;padding:3px 11px;border-radius:20px;font-variant-numeric:tabular-nums}
-#gwToastHost .t-msg{position:relative;font-size:13px;color:#70767e;margin-top:7px;line-height:1.55}
-#gwToastHost .t-btn{position:relative;margin-top:18px;width:100%;padding:13px;border:none;border-radius:13px;background:var(--green);color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
+#gwToastHost .t-msg{position:relative;font-size:13.5px;color:#70767e;margin-top:7px;line-height:1.55}
+#gwToastHost .t-btn{position:relative;margin-top:16px;width:100%;padding:15px;border:none;border-radius:13px;background:var(--green);color:#fff;font:inherit;font-size:14px;font-weight:800;cursor:pointer}
 #gwToastHost .t-more{position:relative;margin-top:9px;font-size:11px;color:#a2a8af;font-weight:700}
 #gwToastHost .toast .glow{animation:pulse 3.4s ease-in-out infinite}
 #gwToastHost .t-cup{animation:pop .6s cubic-bezier(.2,1.4,.4,1) both}
 #gwToastHost .spk{animation:tw 2.2s ease-in-out infinite}
 /* 시안에선 폰 틀 안이라 바탕이 필요했다 — 진짜 앵에선 카드만 뜨면 된다.
    ★복제된 규칙 '뒤'에 놓는다 — 특정도가 같으니 순서가 이긴다. */
-#gwToastHost .toast-scene{background:none;padding:0;min-height:0}
+#gwToastHost .toast-scene{background:none;padding:0;min-height:0;justify-self:stretch;width:100%}
 #growOv .gw-fail{padding:26px 18px;text-align:center;font-size:13px;line-height:1.7;color:#8b9199;font-weight:650}
 /* 함께 열린 트로피 — 대표 아래에 조용히, 그러나 빠짐없이. */
-#gwToastHost .t-also{position:relative;margin-top:16px;padding-top:14px;border-top:1px solid #eef0f2;text-align:left}
-#gwToastHost .t-also .k{font-size:10px;font-weight:850;letter-spacing:.12em;color:#a2a8af;margin-bottom:9px}
-#gwToastHost .t-also-r{display:flex;align-items:center;gap:9px;padding:5px 0}
+#gwToastHost .t-also{position:relative;margin-top:16px;padding:12px 14px 9px;background:#f5f7f6;border-radius:14px;text-align:left}
+#gwToastHost .t-also .k{font-size:10px;font-weight:850;letter-spacing:.12em;color:#a2a8af;margin-bottom:8px}
+#gwToastHost .t-also-r{display:flex;align-items:center;gap:10px;padding:5px 0}
 #gwToastHost .t-also-r .c{width:20px;height:24px;flex:none}
 #gwToastHost .t-also-r .c svg{width:100%;height:100%}
-#gwToastHost .t-also-r .n{font-size:12.5px;font-weight:750;color:#3a4048;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#gwToastHost .t-also-r .n{font-size:13px;font-weight:750;color:#3a4048;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #gwToastHost .t-also-r .x{font-size:11px;font-weight:800;color:#0b5d34;font-variant-numeric:tabular-nums;flex:none}
 #gwToastHost .t-sum{position:relative;margin-top:12px;font-size:11.5px;font-weight:800;color:#0b5d34;background:#e7f2ec;border-radius:9px;padding:7px 10px;display:inline-block}
 /* ★금속 색 — 성장 공간 밖이라 그쪽 규칙을 못 받는다.
