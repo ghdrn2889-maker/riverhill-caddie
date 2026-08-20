@@ -5253,6 +5253,29 @@ function startHeartbeat() {
     if (gwData) { gwData = { ...gwData, new: [] }; }
   }
 
+  // 그 화면을 '처음' 열 날만 서버에 남긴다. 브라우저에도 표시를 남겨 매번 요청하지 않는다.
+  //  ★몇 번 봤는지는 세지 않는다 — 업적은 자부심의 공간이지 이용 감시 장부가 아니다.
+  //  ★showView()가 부팅 중에 곧바로 부른다. 이게 없으면 main()이 거기서 끊기고 앱은 로딩 화면에서 멈춘다.
+  const GW_SEEN = ['board', 'journal', 'settle', 'profile'];
+  function gwSeen(what) {
+    if (!GW_SEEN.includes(what)) return;
+    const k = 'gwseen:' + what;
+    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch { /* 사생활 모드 */ }
+    postJSON('/api/first-view', { what }).catch(() => {});
+  }
+
+  // 못 불러왔을 때 — 왜 비었는지 말해준다.
+  function gwFail(e) {
+    const box = $('gotList');
+    if (box) box.innerHTML = '<div class="gw-fail">업적을 불러오지 못했어요.<br>잠시 뒤에 다시 열어보세요.</div>';
+    if ($('gotHd')) $('gotHd').style.display = 'none';
+    if ($('lockHd')) $('lockHd').style.display = 'none';
+    if ($('lockList')) $('lockList').innerHTML = '';
+    if ($('gotMore')) $('gotMore').style.display = 'none';
+    if ($('lockMore')) $('lockMore').style.display = 'none';
+    if ($('totCount')) $('totCount').textContent = '—';
+  }
+
   // 앱을 열자마자 — 성장 공간에 들어가지 않아도 축하는 뜬다.
   //  부팅을 막지 않게 뒤로 미룬다(첫 화면이 먼저 떠야 한다).
   async function gwBootCheck() {
