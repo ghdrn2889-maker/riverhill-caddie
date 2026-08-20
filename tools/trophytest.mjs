@@ -173,6 +173,22 @@ console.log('\n[부팅 순서 — 앱이 로딩 화면에서 멈추지 않게]')
   ok(app.slice(call + 8).trim() === '', 'main()이 파일의 마지막이다',
     '뒤에 무언가를 더 붙이는 순간 같은 사고가 반복된다');
 
+  // ★성장 공간이 부르는 '앱 도우미'가 진짜로 있는지 본다.
+  //  없는 이름(getJSON)을 부르다 진열장이 빈 채로 떴다 — try/catch가 삼켜서 화면은 멀쩡해 보였다.
+  //  미리보기 하네스가 그 이름을 스텁으로 만들어 둬서 샘플로도 못 잡았다.
+  const blkSrc = app.slice(blk, call);
+  const before = app.slice(0, blk);
+  for (const fn of ['$', 'postJSON']) {
+    const name = fn.replace('$', '\\$');                       // '$'는 정규식에서 '끝'을 뜻한다 — 글자로 쓰려면 escape
+    if (!new RegExp(name + '\\s*\\(').test(blkSrc)) continue;   // 이 블록이 쓰지도 않으면 볼 것 없다
+    //  끝 경계로 \b를 쓰면 안 된다 — '$'는 단어 문자가 아니라 '$ ='에서 경계가 성립하지 않는다.
+    ok(new RegExp('(const|let|var|function)\\s+' + name + '(?![\\w$])').test(before),
+      `성장 공간이 쓰는 ${fn}가 앱에 실제로 있다`, '없는 이름을 부르면 조용히 빈 화면이 된다');
+  }
+  ok(!/\bgetJSON\s*\(/.test(blkSrc), '없는 getJSON을 다시 부르지 않는다');
+  ok(/gwFail\(/.test(blkSrc), '못 불러오면 화면이 그 사실을 말한다',
+    '빈 진열장은 "아직 못 땄나 보다"로 읽혀 고장을 숨긴다');
+
   const idx = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
   ok(idx.indexOf('id="growOv"') < idx.indexOf('script src="/app.js"'), '성장 공간 마크업이 script보다 앞에 있다',
     'app.js는 문서 중간에서 바로 실행된다 — 뒤에 있으면 initGrowth가 화면을 못 찾는다');
