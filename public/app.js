@@ -37,6 +37,8 @@ let _viewPushed = false;        // 홈 위에 뷰 한 칸만 쌓는다 → 뒤�
 let _homeBack = false;          // 홈 탭이 쌓아둔 칸을 회수하는 중(back()은 비동기라 표시해 둔다)
 function showView(name, opts = {}) {
   if (!VIEWS.includes(name)) name = 'today';
+  // 정산을 떠나기 전에 팁을 보낸다 — 안 보내고 나가면 다시 들어올 때 서버값이 화면을 덮는다.
+  if (curView === 'settle' && name !== 'settle') { try { if (lgOpenDate) lgCommitTip(lgOpenDate); lgFlushTips(); } catch { /* 무해 */ } }
   // 바로가기가 깔아둔 바닥은 탭을 옮기는 순간 걷는다 — 안 그러면 다시 돌아왔을 때 빈 공간만 남는다.
   //  (바로가기는 showView 뒤에 다시 깔므로 여기서 지워도 안전하다.)
   if (typeof dropScrollPad === 'function') dropScrollPad();
@@ -2467,6 +2469,7 @@ let lgSig = '';   // 마지막으로 화면에 그린 응답의 지문 — 같�
 async function loadLedger(opts = {}) {
   const now = new Date();
   if (lgYear == null) { lgYear = now.getFullYear(); lgMonth = now.getMonth() + 1; }
+  await lgFlushTips();   // ★남은 팁을 먼저 보내고 읽는다 — 안 그러면 방금 넣은 값을 서버값이 덮는다
   let sig = '';
   try {
     const r = await (await fetch(`/api/ledger?year=${lgYear}&month=${lgMonth}`)).json();
@@ -2481,6 +2484,33 @@ async function loadLedger(opts = {}) {
   lgCountUpNext = lgEnterNext; lgPageInNext = lgEnterNext; lgEnterNext = false;
   renderLedger();
 }
+// 팁은 '누르는 순간' 서버로 간다 — 홀정산과 같은 규칙.
+//  ★실사고 2026-08-21: 칩을 눌러도 화면만 바뀌고 저장은 '다른 날짜를 열 때/입력칸에서 포커스가 빠질 때'만
+//   일어났다. 팁만 찍고 탭을 옮기면 아무것도 안 보내고, 정산에 다시 들어오면 loadLedger가 서버값으로
+//   화면을 덮어 그대로 사라졌다 — 쓰는 사람 눈에는 '저장이 안 되는' 것이다.
+function lgSaveTip(date) {
+  const d = lgWorkByDate(date); if (!d) return;
+  lgTipDirty.delete(date);
+  postJSON('/api/ledger/tip', { date, amount: d.tip || 0 }).catch(() => lgTipDirty.add(date));
+}
+let lgTipTimer = null;
+function lgTipLater(date) { clearTimeout(lgTipTimer); lgTipTimer = setTimeout(() => lgSaveTip(date), 800); }
+// 앱을 덮거나 화면을 내릴 때 — 남은 팁을 마지막으로 보낸다(fetch는 이때 끊길 수 있어 beacon 우선).
+function lgBeaconTips() {
+  try {
+    if (typeof lgOpenDate !== 'undefined' && lgOpenDate) lgCommitTip(lgOpenDate);
+    if (!lgTipDirty.size) return;
+    const dates = [...lgTipDirty]; lgTipDirty.clear();
+    for (const dt of dates) {
+      const d = lgWorkByDate(dt); if (!d) continue;
+      const body = { date: dt, amount: d.tip || 0 };
+      const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
+      if (!(navigator.sendBeacon && navigator.sendBeacon('/api/ledger/tip', blob))) postJSON('/api/ledger/tip', body);
+    }
+  } catch { /* 무해 */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) lgBeaconTips(); });
+window.addEventListener('pagehide', lgBeaconTips);
 async function lgFlushTips() {
   if (!lgTipDirty.size) return;
   const dates = [...lgTipDirty]; lgTipDirty.clear();
@@ -2897,11 +2927,11 @@ function bindLgList() {
   list.querySelectorAll('[data-tip]').forEach((b) => b.onclick = (e) => {
     e.stopPropagation();
     const [date, v] = b.dataset.tip.split('|');
-    const d = lgWorkByDate(date); if (d) { d.tip = Number(v) * 10000; lgTipDirty.add(date); }
+    const d = lgWorkByDate(date); if (d) { d.tip = Number(v) * 10000; lgSaveTip(date); }
     lgRerenderTip(date); refreshLgHero();
   });
   // 팁 · 직접 입력(원 단위, 기본 0)
-  list.querySelectorAll('[id^="lgTipI-"]').forEach((inp) => { inp.onclick = (e) => e.stopPropagation(); inp.oninput = () => { const date = inp.id.replace('lgTipI-', ''), d = lgWorkByDate(date); if (!d) return; d.tip = Math.max(0, Math.round(parseFloat(String(inp.value).replace(/[^\d]/g, '')) || 0)); lgTipDirty.add(date); refreshLgHero(); }; inp.onblur = () => { lgCommitTip(inp.id.replace('lgTipI-', '')); lgFlushTips(); }; });
+  list.querySelectorAll('[id^="lgTipI-"]').forEach((inp) => { inp.onclick = (e) => e.stopPropagation(); inp.oninput = () => { const date = inp.id.replace('lgTipI-', ''), d = lgWorkByDate(date); if (!d) return; d.tip = Math.max(0, Math.round(parseFloat(String(inp.value).replace(/[^\d]/g, '')) || 0)); lgTipDirty.add(date); refreshLgHero(); lgTipLater(date); }; inp.onblur = () => { lgCommitTip(inp.id.replace('lgTipI-', '')); lgFlushTips(); }; });
   // 스캔 / 직접입력
   list.querySelectorAll('[id^="lgScanIn-"]').forEach((inp) => inp.onchange = () => lgScan(inp));
   list.querySelectorAll('.xscan2').forEach((b) => b.onclick = (e) => { e.stopPropagation(); lgTriggerScan(b.dataset.day); });
