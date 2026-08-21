@@ -1005,9 +1005,10 @@ function incrBands(bounds) {
   const bands = [{ key: 'sum', x0: 0, x1: 1, y0: 0, y1: 0.07 },
     { key: 'crew', x0: 0.62, x1: 1, y0: 0, y1: 0.93 },
     { key: 'duty', x0: 0.26, x1: 0.76, y0: 0.75, y1: 1 },
-    // ★인원 요약 상자 전용 띠 — duty는 x1=0.76에서 끊겨 '가용' 숫자(x≈0.79)를 못 본다.
+    // ★인원 요약 상자 전용 띠 — duty는 x1=0.76에서 끊겨 '가용' 숫자를 못 본다.
     //  채점표를 묵은 띠로 재사용하면 가용이 바뀐 날 어제 점수를 그대로 물려받는다.
-    { key: 'hc', x0: 0.60, x1: 0.90, y0: 0.82, y1: 1 }];
+    //  ★x1=1까지 넓게: 여백 없는 캡처(1555폭)에선 상자가 오른쪽 끝(x 0.81~1.0)에 붙는다.
+    { key: 'hc', x0: 0.60, x1: 1, y0: 0.80, y1: 1 }];
   const sorted = (bounds || []).slice().sort((a, b) => a.x0 - b.x0);
   sorted.forEach((b, i) => {
     const next = sorted[i + 1];
@@ -1182,7 +1183,10 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   } else if (claudeBudgetLeft() > 0) {
     try {
       const hPath = path.join(TMP, `hc_${Date.now()}.png`);
-      await runPy({ image: img, crop_only: hPath, slice: { x0: 0.62, x1: 0.88, y0: 0.84, y1: 1.0, lmargin: 0 }, scale: 6 }, 30000);
+      // ★trim — 검은 여백을 떼고 '내용' 기준으로 자른다. 같은 배치표가 2520x945(좌우 검은 띠)와
+      //  1555x933(여백 없음) 두 가지로 들어오는데, 전체 폭 비율로 자르면 상자가 한쪽은 x 0.65, 다른 쪽은
+      //  x 0.81에 있어 한 값으로 둘 다 못 맞춘다. 여백을 떼면 내용 폭이 같아져 하나의 비율로 수렴한다.
+      await runPy({ image: img, crop_only: hPath, trim: true, slice: { x0: 0.68, x1: 1.0, y0: 0.85, y1: 1.0, lmargin: 0 }, scale: 5 }, 30000);
       headcount = await readHeadcountBox(hPath);
       try { fs.unlinkSync(hPath); } catch { /* noop */ }
       if (!headcount) console.log('[boardreader] 인원 요약: 이 이미지엔 상자 없음(부분 크롭) → 채점 생략');

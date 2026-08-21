@@ -106,6 +106,35 @@ def ask(img, prompt, key):
     return []
 
 
+def _content_box(im, thr=24, ink=0.02):
+    """검은 여백을 뺀 '내용' 경계 (x0, y0, x1, y1) 픽셀.
+
+    ★같은 배치표가 캡처 파이프라인에 따라 2520x945(좌우 검은 띠)로도, 1555x933(여백 없음)으로도 들어온다.
+     전체 폭 기준 비율은 두 그림에서 다른 곳을 가리키지만, 여백을 떼면 내용 폭이 1551 vs 1555로 같아진다.
+     밝은 픽셀이 ink 비율 이상인 첫/끝 행·열을 경계로 본다. 200점 표본이라 큰 그림에서도 수십 ms.
+     여백이 없으면 원본 그대로를 돌려준다 — 기존 호출부는 trim을 안 켜므로 아무 영향 없다.
+    """
+    g = im.convert("L")
+    W, H = g.size
+    px = g.load()
+    xs = range(0, W, max(1, W // 200))
+    ys = range(0, H, max(1, H // 200))
+    ny, nx = len(list(ys)), len(list(xs))
+    col = lambda x: sum(1 for y in ys if px[x, y] > thr) / ny          # noqa: E731
+    row = lambda y: sum(1 for x in xs if px[x, y] > thr) / nx          # noqa: E731
+    try:
+        x0 = next(x for x in range(W) if col(x) > ink)
+        x1 = next(x for x in range(W - 1, -1, -1) if col(x) > ink) + 1
+        y0 = next(y for y in range(H) if row(y) > ink)
+        y1 = next(y for y in range(H - 1, -1, -1) if row(y) > ink) + 1
+    except StopIteration:
+        return (0, 0, W, H)                                            # 전부 어둡다 = 잴 수 없다 → 원본
+    # 내용이 터무니없이 작으면(오검출) 원본을 쓴다 — 잘못 떼느니 안 떼는 게 낫다.
+    if (x1 - x0) < W * 0.3 or (y1 - y0) < H * 0.3:
+        return (0, 0, W, H)
+    return (x0, y0, x1, y1)
+
+
 def crop_up(im, x0f, x1f, y0f=0.0, y1f=1.0, scale=4, max_side=2400):
     from PIL import Image
     W, H = im.size
@@ -556,7 +585,15 @@ def main():
         y1 = float(sl.get("y1", 0.60))
         # ★y0 — 기본 0(기존 호출부 전부 무변화). 배치표 '하단' 박스(당번·벌당)처럼 아래쪽만 떼올 때 쓴다.
         y0 = max(0.0, min(float(sl.get("y0", 0.0)), y1))
-        c = im.crop((int(x0 * W), int(y0 * H), int(x1 * W), int(y1 * H)))
+        # ★trim — 검은 여백을 떼고 '내용'을 기준으로 자른다.
+        #  같은 배치표가 두 가지 캡처로 들어온다: 2520x945(좌우에 검은 띠)와 1555x933(여백 없음).
+        #  내용 폭은 1551 vs 1555로 사실상 같은데, 전체 폭 기준 비율로 자르면 두 그림이 전혀 다른 곳을 가리킨다
+        #  (인원 요약 상자가 한쪽은 x 0.65, 다른 쪽은 x 0.81). 여백을 떼면 두 기하가 하나로 수렴한다.
+        fx0, fy0, fx1, fy1 = (0, 0, W, H)
+        if cfg.get("trim"):
+            fx0, fy0, fx1, fy1 = _content_box(im)
+        bw, bh = fx1 - fx0, fy1 - fy0
+        c = im.crop((fx0 + int(x0 * bw), fy0 + int(y0 * bh), fx0 + int(x1 * bw), fy0 + int(y1 * bh)))
         cw, ch = c.size
         scale = int(cfg.get("scale", 6))
         c.resize((cw * scale, ch * scale), _PIL.LANCZOS).save(str(cfg["crop_only"]))

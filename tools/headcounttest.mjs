@@ -124,6 +124,19 @@ console.log('\n[판독기 계약 — 소스 검사]');
   ok(/key: 'hc'/.test(br), '★증분 비교에 인원 요약 전용 띠가 있다',
     "duty 띠는 x1=0.76에서 끊겨 '가용' 숫자를 못 본다 — 그 띠로 재사용하면 어제 점수를 물려받는다");
   ok(/export async function claudeHeadcount\(/.test(br), '캐시에서 꺼내 쓴다(추가 호출 0)');
+  ok(/crop_only: hPath, trim: true/.test(br), '★검은 여백을 떼고 내용 기준으로 자른다',
+    '같은 배치표가 2520x945(좌우 검은 띠)와 1555x933 두 가지로 들어온다 — 전체 폭 비율로는 상자가 한쪽은 x 0.65, 다른 쪽은 x 0.81이라 한 값으로 둘 다 못 맞춘다');
+  const hcBand = br.match(/\{ key: 'hc',[^}]*\}/);
+  ok(hcBand && /x1: 1\b/.test(hcBand[0]), '증분 띠가 오른쪽 끝까지 본다',
+    '여백 없는 캡처에선 상자가 오른쪽 끝에 붙는다');
+
+  const py = read('scripts/board_read_local.py');
+  ok(/def _content_box\(/.test(py), '내용 경계를 재는 함수가 있다');
+  ok(/if cfg\.get\("trim"\):\n\s+fx0, fy0, fx1, fy1 = _content_box\(im\)/.test(py), 'trim을 켤 때만 잰다');
+  ok(/fx0, fy0, fx1, fy1 = \(0, 0, W, H\)/.test(py), '★trim 없으면 원본 그대로 — 기존 크롭 전부 무변화',
+    '부 크롭·근태·당번이 다 이 경로를 쓴다. 여기서 기하가 흔들리면 판독 전체가 흔들린다');
+  ok(/if \(x1 - x0\) < W \* 0\.3 or \(y1 - y0\) < H \* 0\.3:\n\s+return \(0, 0, W, H\)/.test(py),
+    '내용이 터무니없이 작게 잡히면 원본을 쓴다', '잘못 떼느니 안 떼는 게 낫다');
 
   const rcSrc = noComment(read('src/rollcall.mjs'));
   ok(/recordRollCall\(board = currentBoard\(\), declared = null\)/.test(rcSrc), '전원 대조가 채점표를 받는다');
