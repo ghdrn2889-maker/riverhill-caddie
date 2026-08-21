@@ -63,8 +63,12 @@ function describe(it) {
       return { title: '두 부 근무 표시와 명단이 어긋납니다',
         body: `${(it.names || []).join(' / ')} — 태그가 가리키는 부에 그 이름이 없습니다. 이름을 흘려 읽었을 수 있습니다.` };
     case 'cross_untagged':
-      return { title: '표시 없이 두 부에서 근무로 잡힌 사람',
-        body: `${(it.names || []).join(' / ')} — 두 부를 뛰면 (54)·(1,3) 표시가 붙습니다. 한쪽은 잘못 들어간 이름일 수 있습니다.` };
+      return { title: '두 부에서 근무인데 설명이 안 되는 사람',
+        body: `${(it.names || []).join(' / ')} — 표시도 없고 당겨온 자리(명단 맨 끝)도 아닙니다. 한쪽은 잘못 들어간 이름일 수 있습니다.` };
+    // ★중복 근무자는 당길 수 없다 — 이미 두 부에 묶여 있어 빼낼 시간이 없다(관리자 확인).
+    case 'pull_forbidden':
+      return { title: '중복 근무자가 표시에 없는 부에서 근무로 잡혔습니다',
+        body: `${(it.names || []).join(' / ')} — 당겨올 수 있는 사람은 한 부만 뛰는 캐디입니다. 이름이나 부를 잘못 읽었을 수 있습니다.` };
     case 'board_not_reflected':
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':

@@ -89,12 +89,10 @@ console.log('\n[명단 앞뒤 검사 — 짝이 맞는다고 옳은 게 아니�
   ok(d && d.part === 3 && d.names.join().includes('김예원'), `3부 김예원 두 번 — ${d ? d.names.join(' ') : '못 잡음'}`,
     '스냅은 고치다 생기는 중복만 막는다. 처음부터 두 번 읽힌 건 그대로 통과했다');
 
-  ok(kinds.includes('cross_untagged'), '표시 없이 두 부에서 근무로 잡힌 사람을 잡는다');
-  const g = of('cross_untagged');
-  ok(g && g.names.join().includes('강경순'), `강경순 — ${g ? g.names.join(' / ') : '못 잡음'}`,
-    '1부 13번(커트 13)·2부 4번(커트 20) 둘 다 근무인데 (54)·(1,3) 표시가 없다');
-  ok(g && !g.names.join().includes('최수아'), '최수아는 안 잡는다 — 2부에선 스페어다',
-    '두 부에 이름이 있는 것 자체는 정상이다. 둘 다 근무인 게 이상한 것이다');
+  // ★당겨오기(관리자 확인 2026-08-21): 1부는 13팀인데 가용 12명이었고, 2부만 뛰던 강경순을
+  //  1부 맨 끝(13번)으로 당겨왔다. 팀이 모자라다고 예약을 안 받는 게 아니라 옆 부에서 당겨온다.
+  ok(!kinds.includes('cross_untagged'), '당겨온 사람은 알리지 않는다',
+    '강경순은 1부 명단 맨 끝(13번)에 얹혔다 — 원번 근무자를 당겨온 정상 배치다');
 
   ok(kinds.includes('tag_no_counterpart'), '태그가 가리키는 부에 없는 이름을 잡는다');
   const t = of('tag_no_counterpart');
@@ -107,6 +105,24 @@ console.log('\n[명단 앞뒤 검사 — 짝이 맞는다고 옳은 게 아니�
   const names = (rosterSanity(b).find((i) => i.kind === 'tag_no_counterpart') || {}).names || [];
   ok(!names.join().includes('강예영') && !names.join().includes('김수원'),
     '교차로 고친 이름은 더 이상 알리지 않는다');
+}
+{
+  // 당겨오기가 아닌 진짜 중복 — 맨 끝이 아니라 명단 한가운데에 같은 사람이 있다.
+  const b = { 1: { roster: ['가나다', '강경순', '라마바'], cut: 3 }, 2: { roster: ['강경순', '사아자'], cut: 2 } };
+  const k = rosterSanity(b).map((i) => i.kind);
+  ok(k.includes('cross_untagged'), '맨 끝이 아니면 잡는다 — 당겨오기로 설명되지 않는다');
+}
+{
+  // ★중복 근무자는 당길 수 없다 — 이미 두 부에 묶여 있다.
+  const b = {
+    1: { roster: ['가나다', '박진수(2,3)'], cut: 2 },
+    2: { roster: ['박진수(2,3)'], cut: 1 },
+    3: { roster: ['박진수(2,3)'], cut: 1 },
+  };
+  const it = rosterSanity(b).find((i) => i.kind === 'pull_forbidden');
+  ok(!!it, '중복 근무자가 표시 밖 부에서 근무면 잡는다');
+  ok(it && it.names.join().includes('1부'), `박진수(2,3)가 1부에 — ${it ? it.names.join(' / ') : '못 잡음'}`,
+    '당길 수 있는 건 한 부만 뛰는 캐디다');
 }
 {
   const issues = rosterSanity({ 3: { roster: ['가나다', '라마바'], cut: 5 } });
@@ -137,7 +153,7 @@ console.log('\n[사전 — 정본 코앞의 오독은 확정하지 않는다]');
 console.log('\n[알림 — 사람이 무엇을 해야 하는지 말한다]');
 {
   const src = read('src/boardalert.mjs');
-  for (const k of ['dup_name', 'cut_overflow', 'tag_no_counterpart', 'cross_untagged']) {
+  for (const k of ['dup_name', 'cut_overflow', 'tag_no_counterpart', 'cross_untagged', 'pull_forbidden']) {
     ok(new RegExp(`case '${k}':`).test(src), `${k} 문구가 있다`);
   }
   ok(/Array\.isArray\(it\.names\)/.test(src), '서명에 이름을 섞는다 — 다른 이름이면 다시 알린다');

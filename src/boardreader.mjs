@@ -812,6 +812,65 @@ export function disambiguateByCrossPart(parts, nearOf = officialNearCandidates) 
   return fixed;
 }
 
+// ★오늘 이 캐디가 몇 부를 뛰는가 — 단일인가 중복인가 당겨온 것인가.
+//  이 판정이 흩어져 있으면 정산(부 조합 = 캐디피)·일지(두 탕)·알림이 각자 다른 답을 낸다.
+//  그래서 여기서 한 번만 정한다.
+//
+//  리버힐 규칙(관리자 확인 2026-08-21)
+//   · 태그(54·1,3·2,3)가 붙은 사람 = 중복 근무자. 태그가 뛰는 부를 말한다.
+//   · 태그 없는 사람 = 원번 근무자(한 부만).
+//   · ★당겨오기 — 어느 부의 가용 캐디가 팀 수보다 모자라도 예약은 계속 받는다. 옆 부에서 당겨오면 되니까.
+//     당길 수 있는 사람은 시간이 자유로운 원번 근무자뿐이다. 중복 근무자는 이미 두 부에 묶여 못 당긴다.
+//     ★당겨오기는 '추가'가 아니라 '이동'이다 — 원래 부에서 빠져 받는 부로 간다.
+//      그래서 당겨진 사람은 오늘도 여전히 '단일 근무'다. 부만 바뀐 것이다.
+//      이걸 중복으로 세면 캐디피가 두 부로 잡히고 일지엔 두 탕이 찍힌다 — 하루가 통째로 틀어진다.
+//     당겨온 사람은 받는 부 명단의 '맨 끝'에 얹힌다(원래 순번이 없으니 뒤에 붙일 수밖에 없다).
+export function resolveWorkParts(parts) {
+  const PARTS_OF = (tag) => {
+    const t = String(tag || '').replace(/\s/g, '');
+    if (t === '54') return ['1', '2', '3'];
+    const m = t.match(/^([123])[,、]([123])$/);
+    return m ? [m[1], m[2]] : [];
+  };
+  const seat = {};
+  for (const p2 of Object.keys(parts || {})) {
+    const pd = parts[p2] || {};
+    const roster = pd.roster || [];
+    const cut = Number(pd.cut) || 0;
+    roster.forEach((cell, i) => {
+      const nm = _bare(cell); if (!nm) return;
+      (seat[nm] ||= []).push({ part: p2, pos: i + 1, tag: _tag(cell), working: cut > 0 && (i + 1) <= cut, last: i + 1 === roster.length });
+    });
+  }
+  const out = {};
+  for (const [nm, rows] of Object.entries(seat)) {
+    const work = rows.filter((r) => r.working).map((r) => r.part);
+    const spare = rows.filter((r) => !r.working).map((r) => r.part);
+    const tags = [...new Set(rows.map((r) => r.tag).filter(Boolean))];
+    if (tags.length) {
+      const allowed = [...new Set(rows.flatMap((r) => PARTS_OF(r.tag)))];
+      const extra = work.filter((x) => !allowed.includes(x));
+      out[nm] = { name: nm, kind: 'multi', tag: tags[0], parts: work.slice().sort(), spare, rows,
+        problem: extra.length ? `당길 수 없는 중복 근무자가 ${extra.join('·')}부에 있음` : '' };
+      continue;
+    }
+    if (work.length <= 1) { out[nm] = { name: nm, kind: 'single', tag: '', parts: work.slice(), spare, rows, problem: '' }; continue; }
+    // 태그 없이 두 부 이상 근무 — 당겨오기로 설명되는가.
+    const tail = rows.filter((r) => r.working && r.last);
+    if (tail.length === 1 && work.length === 2) {
+      const to = tail[0].part;
+      const from = work.find((x) => x !== to) || '';
+      out[nm] = { name: nm, kind: 'pulled', tag: '', parts: [to], from, spare, rows,
+        // 이동이므로 원래 부에 이름이 남아 있으면 그 뒤 순번이 한 칸 밀려 있을 수 있다.
+        problem: `${from}부 명단에 이름이 남아 있음(당겨오기는 이동이다)` };
+      continue;
+    }
+    out[nm] = { name: nm, kind: 'conflict', tag: '', parts: work.slice().sort(), spare, rows,
+      problem: '표시도 없고 당겨온 자리도 아님' };
+  }
+  return out;
+}
+
 // ★명단 자체의 앞뒤가 맞는가 — 고치지 않고 '이상하다'고만 말한다.
 //  실측 2026-08-21에 어떤 검사에도 안 걸린 것들:
 //   · 3부에 '김예원'이 17번과 37번, 두 번. 스냅은 '고치다가 중복 만들기'만 막지 판독이 처음부터
@@ -845,20 +904,37 @@ export function rosterSanity(parts) {
     const m = t.match(/^([123])[,、]([123])$/);
     return m ? [m[1], m[2]] : [];
   };
-  const missing = [], ghosts = [];
+  const missing = [], ghosts = [], forbidden = [], pulled = [];
+  const who = resolveWorkParts(parts);   // ★근무 부 판정은 한 자리(resolveWorkParts)에서만 한다
   for (const [nm, rows] of Object.entries(seat)) {
     for (const r of rows) {
       const want = PARTS_OF(r.tag).filter((x) => x !== r.part && parts[x] && (parts[x].roster || []).length);
       for (const x of want) if (!rows.some((y) => y.part === x)) missing.push(`${nm}(${r.tag}) — ${x}부 명단에 없음`);
     }
-    // 태그 하나 없이 두 부에서 '근무자'로 잡힌 사람. 두 부를 뛰면 리버힐은 태그를 단다.
     const work = rows.filter((r) => r.working);
-    if (work.length > 1 && rows.every((r) => !r.tag)) {
-      ghosts.push(`${nm} — ${work.map((r) => `${r.part}부 ${r.pos}번`).join(' · ')}`);
+    if (work.length < 2) continue;
+    // ★리버힐 당겨오기 규칙(관리자 확인 2026-08-21)
+    //  어느 부의 가용 캐디가 팀 수보다 모자라도 예약은 계속 받는다 — 옆 부에서 당겨오면 되기 때문이다.
+    //  단 ①중복 근무자(54·1,3·2,3)는 이미 두 부에 묶여 있어 절대 못 당긴다.
+    //     ②당길 수 있는 사람은 시간이 자유로운 '원번 근무자'(한 부만 뛰는 사람)다.
+    //  실측 8/21: 1부는 13팀인데 가용 12명 → 2부만 뛰던 강경순을 1부로 당겨 13번에 붙였다.
+    //  당겨온 사람은 '받는 부 명단의 맨 끝'에 붙는다 — 원래 순번이 없으니 뒤에 얹는 수밖에 없다.
+    //  그래서 맨 끝이면 당겨오기로 읽고, 아니면 이름이 잘못 들어간 것으로 본다.
+    const w = who[nm] || {};
+    if (w.kind === 'multi') {
+      if (w.problem) forbidden.push(`${nm}(${w.tag}) — ${work.map((r) => `${r.part}부 ${r.pos}번`).join(' · ')}`);
+      continue;
     }
+    if (w.kind === 'pulled') {
+      pulled.push(`${nm} — ${w.from}부에서 ${w.parts[0]}부로 당겨옴(오늘 ${w.parts[0]}부 단일 근무)`);
+      continue;
+    }
+    ghosts.push(`${nm} — ${work.map((r) => `${r.part}부 ${r.pos}번`).join(' · ')}`);
   }
+  if (pulled.length) console.log(`[boardreader] 당겨오기: ${pulled.join(' / ')}`);
   if (missing.length) out.push({ kind: 'tag_no_counterpart', names: [...new Set(missing)].slice(0, 10) });
   if (ghosts.length) out.push({ kind: 'cross_untagged', names: [...new Set(ghosts)].slice(0, 10) });
+  if (forbidden.length) out.push({ kind: 'pull_forbidden', names: [...new Set(forbidden)].slice(0, 10) });
   return out;
 }
 
