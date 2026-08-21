@@ -17,6 +17,7 @@ import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
+import { resolveWorkParts } from './boardreader.mjs';
 import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
 import * as outbox from './outbox.mjs';
@@ -547,8 +548,74 @@ const tokenFor = (pending, auto, notify, part = '3') => {
 const autoBrief = (a) => (a ? { on: a.ok, held: a.held, reason: a.reason,
   sent: a.sent.length, queued: a.queued.length, skipped: a.skipped.length } : null);
 
+// ── 당겨오기 뒷정리 ────────────────────────────────────────────
+//  리버힐 규칙: 어느 부의 가용 캐디가 팀 수보다 모자라면 옆 부에서 원번 근무자를 당겨온다.
+//  ★당겨오기는 '추가'가 아니라 '이동'이다 — 원래 부에서 빠져야 한다. 안 빼면 그 부의 순번이
+//   그 자리부터 통째로 한 칸씩 밀리고, 뒤 사람들이 남의 티오프를 받는다.
+//   실측 2026-08-21: 강경순을 1부로 당겨왔는데 2부에 남아 있어 2부 4번 뒤 16명의 티오프가 어긋났고,
+//   스페어 맨 앞(박신훈)이 근무로 올라오지 못했다.
+//  ★관리자가 검수에서 고친 직후에만 돈다(자동 판독 뒤에는 안 돈다) — 판독이 흔들리는 날
+//   시스템이 스스로 명단에서 사람을 빼면 그게 더 위험하다.
+function partRowsFromStore(part) {
+  let roster = [], cut = 0, grid = [];
+  if (String(part) === '3') {
+    const lb = loadJSON('lastboard.json', null);
+    const v = lb && lb.rawVerdict ? effectivePart3Verdict(lb) : null;
+    if (!v) return null;
+    roster = (v.part3Roster || []).slice(); cut = Number(v.cutoffPosition) || 0; grid = v.teeGrid || [];
+  } else {
+    const pd = loadBoardPartsStore()?.parts?.[String(part)];
+    if (!pd) return null;
+    roster = (pd.roster || []).slice(); cut = Number(pd.cutLine || pd.cutoffPosition) || 0; grid = pd.teeGrid || [];
+  }
+  const slot = {};
+  for (const g of grid) {
+    const t = (String(g.time).match(/\d{1,2}:\d{2}/) || [''])[0];
+    if (t) slot[Number(g.pos)] = { tee: t, course: /IN/i.test(g.course) ? 'IN' : 'OUT' };
+  }
+  return { roster, cut, slot };
+}
+
+async function reconcilePulls(justCorrected, token) {
+  const parts = {};
+  for (const p of ['1', '2', '3']) {
+    const r = partRowsFromStore(p);
+    if (r && r.roster.length) parts[p] = { roster: r.roster, cut: r.cut, _slot: r.slot };
+  }
+  if (Object.keys(parts).length < 2) return [];
+  const who = resolveWorkParts(parts);
+  const done = [];
+  for (const w of Object.values(who)) {
+    if (w.kind !== 'pulled' || !w.from || !parts[w.from]) continue;
+    if (String(w.from) === String(justCorrected)) continue;   // 방금 고친 부는 그대로 둔다(관리자 의도)
+    const src = parts[w.from];
+    const at = src.roster.findIndex((c) => String(c || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim() === w.name);
+    if (at < 0) continue;
+    const after = src.roster.slice(0, at).concat(src.roster.slice(at + 1));
+    // ★팀 수(커트)는 예약이 정한다 — 캐디가 빠져도 팀은 안 준다. 스페어 맨 앞이 근무로 올라온다.
+    const rows = after.map((cell, i) => {
+      const pos = i + 1, sl = pos <= src.cut ? src._slot[pos] : null;
+      return { pos, name: String(cell || ''), tee: sl ? sl.tee : '', course: sl ? sl.course : '' };
+    });
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/board-correct`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-monitor-token': token || '' },
+        body: JSON.stringify({ part: w.from, rows, interns: [], cutLine: src.cut,
+          notify: false, autoNotify: false, movedOut: [{ name: w.name, to: w.parts[0] }], _noReconcile: true }),
+      });
+      const j = await r.json();
+      if (!j.ok) { console.error(`🔁 [당겨오기] ${w.name} ${w.from}부 정리 실패: ${j.error || '?'}`); continue; }
+      console.log(`🔁 [당겨오기] ${w.name}: ${w.from}부 → ${w.parts[0]}부 — ${w.from}부 명단에서 빼고 순번 당김(회원 ${j.updated}명 재계산, 알림 없음)`);
+      done.push({ name: w.name, from: w.from, to: w.parts[0], updated: j.updated });
+    } catch (e) { console.error(`🔁 [당겨오기] ${w.name} 정리 오류: ${e.message}`); }
+  }
+  return done;
+}
+
 app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
+  const _tok = req.query.k || req.get('x-monitor-token') || '';
+  const _skipRec = !!req.body?._noReconcile;   // 뒷정리가 부른 요청 — 다시 뒷정리하지 않는다(무한 반복 방지)
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
   const interns = Array.isArray(req.body?.interns) ? req.body.interns : [];
   // 화면이 들고 있는 인턴 전부(배치표에 팀이 없는 칸 포함) — 수동 지정을 통째로 지우지 않기 위해.
@@ -690,7 +757,9 @@ app.post('/api/board-correct', gate, async (req, res) => {
       + ((movedOut || []).length || (movedIn || []).length
         ? ` · 부 간 대바 나감 ${(movedOut || []).map((x) => `${x.name}→${x.to}부`).join(',') || '-'} / 들어옴 ${(movedIn || []).map((x) => `${x.from}부→${x.name}`).join(',') || '-'}` : ''));
     const auto = autoNotify ? await autoNotifyPart(part, { rows, cutLine, by: '대조판 반영' }) : null;
-    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated,
+    // ★당겨온 사람이 원래 부에 남아 있으면 여기서 빠진다 — 관리자가 두 번 일하지 않게.
+    const pulls = _skipRec ? [] : await reconcilePulls(part, _tok);
+    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pulls,
       pending: pendingFor(pending, auto), notifyToken: tokenFor(pending, auto, notify, part), auto: autoBrief(auto) });
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
@@ -698,7 +767,8 @@ app.post('/api/board-correct', gate, async (req, res) => {
   try { out = correctPart3({ rows, interns, allInterns, cutLine, notify, dutySet, movedOut }); }
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const auto = autoNotify ? await autoNotifyPart('3', { rows, cutLine, by: '대조판 반영' }) : null;
-  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated,
+  const pulls3 = _skipRec ? [] : await reconcilePulls('3', _tok);
+  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pulls: pulls3,
     pending: pendingFor(out.pending, auto), notifyToken: tokenFor(out.pending, auto, notify, '3'), auto: autoBrief(auto) });
 });
 
