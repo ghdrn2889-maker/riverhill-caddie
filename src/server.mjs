@@ -46,7 +46,7 @@ import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs'
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
-import { useClaudeReader, claudeMonitorParts, claudeDutyList } from './boardreader.mjs';
+import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
 
@@ -157,12 +157,23 @@ app.post('/api/trophies/ack', (req, res) => {
 //  ★설명률(87명 중 몇 명이 설명되나)은 기록만 하고 알리지 않는다.
 //   지금은 근태 칸이 캡처에 안 들어와 매일 낮게 나온다 — 그걸 매일 알리면 알림이 배경음이 된다.
 //   알리는 건 '셀 수 있고 반드시 틀린' 둘뿐이다: 근무자 수 ≠ 팀 수, 정본에 없는 이름.
-async function runRollCall() {
-  const rc = recordRollCall();
+async function runRollCall(article = null) {
+  // ★배치표가 스스로 적어둔 인원 요약(총원·가용·제외인원)을 채점표로 쓴다.
+  //  추가 Claude 호출 0 — 판독 때 이미 읽어 캐시에 있다. 없으면(부분 크롭) 채점만 건너뛴다.
+  let hc = null;
+  try { hc = article ? await claudeHeadcount(article) : null; } catch { /* 채점은 있으면 좋은 것이지 필수가 아니다 */ }
+  const rc = recordRollCall(undefined, hc);
   for (const x of rc.partCheck) {
     if (!x.ok && x.cut > 0) await raiseBoardIssue({ kind: 'part_count_mismatch', part: Number(x.part), cut: x.cut, workers: x.workers });
   }
   if (rc.strangers.length) await raiseBoardIssue({ kind: 'unknown_names', names: rc.strangers.slice(0, 8) });
+  // ★가용 인원이 2명 이상 어긋나면 알린다. 1명 차이는 안 알린다 — 당번이 나가서 뛴 날은
+  //  그 한 명이 배치표 당번 칸과 우리 근무 셈 양쪽에 서서 ±1이 정상적으로 생긴다.
+  if (rc.score && rc.score.alert) {
+    await raiseBoardIssue({ kind: 'headcount_mismatch', gap: rc.score.gap,
+      declared: rc.declared.available, counted: rc.score.counted.available,
+      misses: rc.score.misses.filter((l) => l.key !== '가용' && l.key !== '총원').slice(0, 4) });
+  }
   return rc;
 }
 
@@ -1991,7 +2002,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   // ★배치표 한 판이 끝나면 업적을 본다 — 어제 마친 근무가 여기서 반영된다.
   //  판독 중에 끼어들지 않게 맨 끝에서 한 번만(전 회원 한 바퀴는 파일 몇 개 읽는 정도).
   // ★전원 대조 — 고치지 않고 잰다. 이 숫자가 있어야 다음에 무엇을 고쳤을 때 효과를 알 수 있다.
-  try { await runRollCall(); } catch (e) { console.error('[전원대조] 오류:', e.message); }
+  try { await runRollCall(full); } catch (e) { console.error('[전원대조] 오류:', e.message); }
   try { await sweepTrophies(); } catch (e) { console.error('[업적] 배치표 후 판정 오류:', e.message); }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)

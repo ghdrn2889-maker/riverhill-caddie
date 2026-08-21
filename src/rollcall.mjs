@@ -13,6 +13,7 @@ import { effectivePart3Verdict } from './analytics.mjs';
 import { resolveWorkParts } from './boardreader.mjs';
 import { OFFICIAL_ROSTER } from './roster-official.mjs';
 import { keyFromLabel } from './boardpending.mjs';
+import { scoreHeadcount, scoreLine, saveHeadcount, loadHeadcount } from './headcount.mjs';
 
 const FILE = 'rollcall.json';
 const KEEP_DAYS = 60;
@@ -87,15 +88,24 @@ export function buildRollCall(board = currentBoard(), roster = OFFICIAL_ROSTER) 
 }
 
 // 날짜별 기록 — 고친 것이 실제로 효과가 있었는지 이 추이로만 알 수 있다.
-export function recordRollCall(board = currentBoard()) {
+//  ★declared — 배치표가 스스로 적어둔 인원 요약(총원·가용·제외인원). 있으면 채점해 같이 남긴다.
+//   안 넘기면 그날 이미 읽어둔 것을 꺼낸다 — '변동' 글처럼 상자가 없는 그림으로 다시 돌아도 점수를 잃지 않게.
+export function recordRollCall(board = currentBoard(), declared = null) {
   const rc = buildRollCall(board);
   const key = keyFromLabel(rc.dateLabel) || '';
   if (!key) return rc;
+  if (declared) saveHeadcount(key, declared);
+  const hc = declared || loadHeadcount(key);
+  rc.declared = hc || null;
+  rc.score = hc ? scoreHeadcount(hc, rc) : null;
   const all = loadJSON(FILE, {}) || {};
   all[key] = {
     at: Date.now(), rate: rc.rate, states: rc.states,
     unexplained: rc.unexplained, strangers: rc.strangers,
     partCheck: rc.partCheck.map((x) => ({ part: x.part, cut: x.cut, workers: x.workers })),
+    declared: hc ? { total: hc.total, available: hc.available, excluded: hc.excluded } : null,
+    score: rc.score ? { rate: rc.score.rate, gap: rc.score.gap, usable: rc.score.usable,
+      misses: rc.score.misses.map((l) => ({ key: l.key, declared: l.declared, counted: l.counted })) } : null,
   };
   const keys = Object.keys(all).sort();
   while (keys.length > KEEP_DAYS) delete all[keys.shift()];
@@ -105,6 +115,8 @@ export function recordRollCall(board = currentBoard()) {
     + Object.entries(rc.states).map(([k, n]) => `${k} ${n}`).join(' · ')
     + (rc.strangers.length ? ` · 정본 밖 이름 ${rc.strangers.join(',')}` : '')
     + (bad.length ? ` · ★${bad.join(' ')}` : ''));
+  // ★채점 — 배치표가 말한 수와 우리가 센 수. 이 한 줄이 그날 판독의 성적표다.
+  if (rc.score) console.log(`🧾 [인원채점] ${key} ${scoreLine(rc.score)}`);
   return rc;
 }
 

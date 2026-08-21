@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows, readHeadcountBox } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
@@ -1004,7 +1004,10 @@ function incrLoad() {
 function incrBands(bounds) {
   const bands = [{ key: 'sum', x0: 0, x1: 1, y0: 0, y1: 0.07 },
     { key: 'crew', x0: 0.62, x1: 1, y0: 0, y1: 0.93 },
-    { key: 'duty', x0: 0.26, x1: 0.76, y0: 0.75, y1: 1 }];
+    { key: 'duty', x0: 0.26, x1: 0.76, y0: 0.75, y1: 1 },
+    // ★인원 요약 상자 전용 띠 — duty는 x1=0.76에서 끊겨 '가용' 숫자(x≈0.79)를 못 본다.
+    //  채점표를 묵은 띠로 재사용하면 가용이 바뀐 날 어제 점수를 그대로 물려받는다.
+    { key: 'hc', x0: 0.60, x1: 0.90, y0: 0.82, y1: 1 }];
   const sorted = (bounds || []).slice().sort((a, b) => a.x0 - b.x0);
   sorted.forEach((b, i) => {
     const next = sorted[i + 1];
@@ -1036,7 +1039,7 @@ export async function incrPlan(img) {
 }
 
 // 이번 판독 결과를 다음 비교의 기준으로 남긴다. ★결함 있는 판독(_fault)은 재사용 금지 — 오독을 대물림한다.
-function incrRemember(img, { bounds, cuts, parts, offList, dutyList, clean }) {
+function incrRemember(img, { bounds, cuts, parts, offList, dutyList, headcount, clean }) {
   if (!incrOn() || !clean || !bounds || !bounds.length) return;
   try {
     fs.mkdirSync(INCR_DIR, { recursive: true });
@@ -1044,7 +1047,8 @@ function incrRemember(img, { bounds, cuts, parts, offList, dutyList, clean }) {
     fs.copyFileSync(img, dst);
     const prev = incrLoad();   // ★한 번만 읽는다 — 두 번 읽으면 객체가 달라져 '남길 것'까지 지운다
     const list = [{ img: dst, at: Date.now(), bounds, cuts: cuts || {}, parts: parts || {},
-      offList: offList || null, dutyList: dutyList === undefined ? null : dutyList }, ...prev].slice(0, INCR_KEEP);
+      offList: offList || null, dutyList: dutyList === undefined ? null : dutyList,
+      headcount: headcount || null }, ...prev].slice(0, INCR_KEEP);
     const keepImgs = new Set(list.map((e) => e.img));
     for (const e of prev) if (!keepImgs.has(e.img)) { try { fs.unlinkSync(e.img); } catch { /* noop */ } }
     saveJSON(INCR_FILE, list);
@@ -1168,9 +1172,27 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       else console.log('[boardreader] 당번·벌당 판독: 배정표 있음 · 오늘 배정 0명');
     } catch (e) { console.error('[boardreader] 당번·벌당 판독 실패:', e.message); }
   }
+  // ★인원 요약 상자(오른쪽 아래) — 총원·가용·제외인원이 인쇄돼 있다. 그날의 정답지다.
+  //  판독을 고치는 게 아니라 채점하려고 읽는다 — 명단은 손대지 않는다.
+  //  작은 띠 하나라 1콜이면 충분하고, 부분 크롭이면 상자가 없어 null이 돌아온다(당번표와 같은 규칙).
+  let headcount = null;
+  if (keep('hc') && plan.entry.headcount) {
+    headcount = plan.entry.headcount;
+    console.log(`[증분] 인원 요약 그대로 → 판독 건너뜀(총원 ${headcount.total} · 가용 ${headcount.available})`);
+  } else if (claudeBudgetLeft() > 0) {
+    try {
+      const hPath = path.join(TMP, `hc_${Date.now()}.png`);
+      await runPy({ image: img, crop_only: hPath, slice: { x0: 0.62, x1: 0.88, y0: 0.84, y1: 1.0, lmargin: 0 }, scale: 6 }, 30000);
+      headcount = await readHeadcountBox(hPath);
+      try { fs.unlinkSync(hPath); } catch { /* noop */ }
+      if (!headcount) console.log('[boardreader] 인원 요약: 이 이미지엔 상자 없음(부분 크롭) → 채점 생략');
+      else console.log(`[boardreader] 인원 요약 판독: 총원 ${headcount.total} · 가용 ${headcount.available} · 제외 ${headcount.excluded}`
+        + (Object.keys(headcount.breakdown).length ? ` (${Object.entries(headcount.breakdown).filter(([, n]) => n > 0).map(([k, n]) => `${k} ${n}`).join(' · ') || '상세 전부 0'})` : ''));
+    } catch (e) { console.error('[boardreader] 인원 요약 판독 실패:', e.message); }
+  }
   const used = startBudget - claudeBudgetLeft();
   // 다음 배치표가 왔을 때 견줄 기준으로 남긴다(결함 있는 판독은 안 남긴다 — 오독 대물림 방지).
-  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, dutyList, clean: !lastFault });
+  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, dutyList, headcount, clean: !lastFault });
   if (plan) {
     console.log(`[증분] 이번 판독 ${used}콜 — 그대로 쓴 구역: ${[...plan.unchanged].join(',') || '없음'}`);
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [...plan.unchanged],
@@ -1178,7 +1200,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   } else {
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [], full: true, fault: lastFault || '' });
   }
-  return { boundaries: bestBounds, parts: best, offList, dutyList, _claudeCalls: used, _fault: lastFault };
+  return { boundaries: bestBounds, parts: best, offList, dutyList, headcount, _claudeCalls: used, _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -1353,6 +1375,15 @@ export async function claudeDutyList(article) {
   const img = article?.images?.[0] || article?.image || '';
   if (!img || !_boardCache.has(img)) return null;
   try { const b = await _boardCache.get(img); return Array.isArray(b?.dutyList) ? b.dutyList : null; }
+  catch { return null; }
+}
+
+// ★인원 요약(총원·가용·제외인원) — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
+//  캐시에 없거나 상자가 없는 그림이면 null → 호출부는 채점을 건너뛴다(틀린 점수를 남기느니 안 남긴다).
+export async function claudeHeadcount(article) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img || !_boardCache.has(img)) return null;
+  try { const b = await _boardCache.get(img); return b?.headcount || null; }
   catch { return null; }
 }
 

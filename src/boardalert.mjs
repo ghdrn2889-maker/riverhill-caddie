@@ -77,6 +77,16 @@ function describe(it) {
     case 'unknown_names':
       return { title: '정본 명단에 없는 이름이 배치표에 있습니다',
         body: `${(it.names || []).join(', ')} — 이름을 흘려 읽었거나, 아직 정본에 없는 캐디입니다. 오독이면 그 자리 사람이 통째로 사라진 것입니다.` };
+    // ★배치표가 스스로 적어둔 인원 요약과 우리가 센 수가 어긋남 — 그날 몇 명을 통째로 놓쳤다는 뜻이다.
+    //  이건 추정이 아니라 채점이다. 배치표에 인쇄된 숫자가 정답이고 우리 수가 오답이다.
+    case 'headcount_mismatch': {
+      const miss = (it.misses || []).map((m) => `${m.key} ${m.counted}/${m.declared}`).join(' · ');
+      const n = Math.abs(Number(it.gap) || 0);
+      return { title: `배치표 인원과 ${n}명 어긋납니다`,
+        body: `배치표는 가용 ${it.declared}명인데 ${it.counted}명만 찾았습니다.`
+          + (miss ? ` 어긋난 곳: ${miss}.` : '')
+          + ' 명단을 못 읽은 자리가 있습니다 — 검수에서 확인해 주세요.' };
+    }
     case 'board_not_reflected':
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':
@@ -109,8 +119,10 @@ export async function raiseBoardIssue(it) {
     //  알림까지 삼킨다(중복차단은 '같은 손상'을 막으려는 것이지 '다음 사고'를 막으려는 게 아니다).
     const detail = it.kind === 'roster_holes' ? (it.holes || []).join(',')
       : it.kind === 'tee_conflict' ? (it.times || []).join(',')
-        : Array.isArray(it.names) ? it.names.join(',')
-          : String(it.articleId || it.purged || it.cut || '');
+        // 채점은 '몇 대 몇'이 서명이다 — 같은 어긋남이면 한 번만, 어긋남이 커지면 다시 알린다.
+        : it.kind === 'headcount_mismatch' ? `${it.declared}-${it.counted}`
+          : Array.isArray(it.names) ? it.names.join(',')
+            : String(it.articleId || it.purged || it.cut || '');
     const sig = `${it.kind}|${it.part || ''}|${detail}`;
     if (seenRecently(sig, now)) return false;
     const { title, body } = describe(it);

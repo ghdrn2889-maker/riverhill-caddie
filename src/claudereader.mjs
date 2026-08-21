@@ -413,6 +413,49 @@ export async function readSummaryCounts(imagePath) {
   } catch { return null; }
 }
 
+// ── ★인원 요약 상자 판독 (총원·가용·제외인원) ────────────────
+//  ★배치표가 자기 답을 적어둔 칸이다. 오른쪽 아래 남색 띠에 "총원: 83  가용: 64",
+//   그 아래 표에 휴가·병가·동반·휴무·당번·배치·접종·프리·벌당·제외인원이 숫자로 찍혀 있다.
+//  이걸 읽으면 판독이 그날 몇 명을 놓쳤는지를 '추측'이 아니라 '채점'으로 알 수 있다.
+//   지금까지는 틀려도 틀린 줄을 몰랐다 — 모르는 것과 틀린 것 중 더 나쁜 건 모르는 쪽이다.
+//  반환 {total, available, excluded, breakdown} · 상자 없음(부분 크롭)=null.
+const HEADCOUNT_PROMPT = (
+  'Read the local image with the Read tool. It is the bottom-right corner strip of a Korean golf caddie board (배치표). '
+  + 'Look for the headcount summary: a dark navy bar printed as "총원 : N" on the left and "가용 : N" on the right, '
+  + 'with a small table underneath whose cells are [label][number] pairs: 휴가, 병가, 동반, 휴무, 당번, 배치, 접종, 프리, 벌당, 제외인원. '
+  + '★Report every number EXACTLY as printed. Zero is a real value — report 0, never omit it and never guess a nonzero. '
+  + 'Do NOT compute or correct anything: if the printed numbers do not add up, report them as printed anyway. '
+  + 'Ignore the caddie name grid above the bar, the 당번/벌당 time table on the left, 공지사항 and 흡연실 boxes. '
+  + '★Also report whether this headcount box exists in this image at all: "found". '
+  + 'Many images are only a CROPPED PART of the board and simply do not contain it — for those set found=false and omit the numbers. '
+  + 'Output STRICT JSON only, no prose: '
+  + '{"found":true,"total":83,"available":64,"excluded":19,'
+  + '"breakdown":{"휴가":1,"병가":1,"동반":0,"휴무":16,"당번":1,"배치":1,"접종":0,"프리":0,"벌당":0}}'
+);
+const HC_KEYS = ['휴가', '병가', '동반', '휴무', '당번', '배치', '접종', '프리', '벌당'];
+export async function readHeadcountBox(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 인원요약 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${HEADCOUNT_PROMPT}\nImage path: ${imagePath}`, '인원요약'); }
+  catch (e) { console.error('[claude] 인원요약 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    if (j.found === false) return null;   // ★상자 자체가 없다 — '총원 0명'과 반드시 구분해야 한다
+    const num = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 0 && n <= 300 ? n : null; };
+    const total = num(j.total), available = num(j.available), excluded = num(j.excluded);
+    // 총원과 가용이 없으면 채점표로 쓸 가치가 없다 — 반쪽짜리를 남기느니 안 읽은 것으로 본다.
+    if (total == null || available == null) return null;
+    const src = j.breakdown || {};
+    const breakdown = {};
+    for (const k of HC_KEYS) { const n = num(src[k]); if (n != null) breakdown[k] = n; }
+    return { total, available, excluded, breakdown };
+  } catch { return null; }
+}
+
 // 배치표의 '근태(휴무·병가·휴가…) 명단' 판독 — 부별 순번명단·티오프에는 없고 별도 근태 칸/목록에 인쇄된다.
 //  ★Claude 부 판독기는 부 크롭만 봐서 근태를 통째로 놓친다(병가→휴무 강등, 오프 캐디가 스페어로 잔류).
 //   전용 1회 판독으로 근태를 잡아 crewDuty에 주입 → 기존 오프 게이트(judge fixMemberPosByRoster)가 발화한다.
