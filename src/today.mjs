@@ -337,12 +337,20 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   const tc = Number(verdict.teamCount);
   const myp = Number(next.myPosition);
   if (!removed && !offVerdict && Number.isFinite(tc) && tc > 0 && myp > 0) {
-    // ★'○○까지 근무' 명시 확정선(cutoffAnnounced)이 팀수보다 크면 그 사람 콕 집은 커트라인이 우선.
-    //  팀수(N팀)는 순번단위와 어긋날 수 있어(예: 팀수 23인데 확정선 34번·티오프표도 34번까지 18:31),
-    //  그대로 쓰면 확정 근무자(연승준 pos34)를 스페어로 잘못 내리고 티오프를 지운다. 큰 쪽을 실효 확정선으로.
+    // ★'○○님까지 근무'라고 사람을 콕 집었으면 그게 확정선이다 — 위로도 아래로도 팀수가 못 뒤집는다.
+    //  팀수(N팀)는 순번 단위와 어긋난다. 인턴·캐디 없는 팀이 섞여 순번보다 크기도 작기도 하다.
+    //   · 작은 쪽으로 어긋난 예(2026-08-17): "팀수 23인데 확정선 34번" — 팀수를 쓰면 확정 근무자를
+    //     스페어로 내리고 티오프를 지운다.
+    //   · 큰 쪽으로 어긋난 예(2026-08-21 #27495): "금일 3부 27팀, 장성원님까지 근무됩니다."
+    //     장성원은 26번이다. 큰 쪽(27)을 쓰면 27번 조하빈이 근무로 올라간다 — 검수·대조표는 스페어인데
+    //     앱에서만 근무로 보였다. 사람 이름이 적힌 문장이 팀수보다 언제나 정확하다.
+    //  그래서 max가 아니라 '이름이 있으면 이름'이다. 팀수는 이름이 없을 때만 쓴다.
     const annCut = (verdict.cutoffAnnounced && Number(verdict.cutoffPosition) > 0) ? Number(verdict.cutoffPosition) : 0;
-    const effCut = Math.max(tc, annCut);
-    const cutTxt = effCut > tc ? `확정선 ${effCut}번` : `${tc}팀`;
+    const effCut = annCut > 0 ? annCut : tc;
+    // 회원에게 '무엇을 근거로 바뀌었는지'를 그대로 말한다 — 쓰지도 않은 팀수를 근거로 대면 납득이 안 된다.
+    const cutTxt = annCut > 0
+      ? `${cur.part || '3부'} ${verdict.cutoffName ? `${verdict.cutoffName}님` : `${annCut}번`}까지 근무`
+      : `현재 ${cur.part || '3부'} ${tc}팀`;
     next.cutLine = effCut; // 실효 확정선 → 티오프표 스냅샷보다 우선
     const nowWork = myp <= effCut;
     const newStatus = nowWork ? (next.teeTime ? 'assigned' : 'work') : 'spare';
@@ -350,8 +358,8 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
       const reversal = (isWait(next.status) && isWork(newStatus)) || (isWork(next.status) && isWait(newStatus));
       changes.push({ field: 'teamcount', from: next.status, to: newStatus, reversal,
         msg: nowWork
-          ? `현재 ${cur.part || '3부'} ${cutTxt} — 순번 ${myp}번 근무 거의 확정(준비 시작)`
-          : `현재 ${cur.part || '3부'} ${cutTxt} — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - effCut - 1)}명)` });
+          ? `${cutTxt} — 순번 ${myp}번 근무 거의 확정(준비 시작)`
+          : `${cutTxt} — 순번 ${myp}번 스페어로 전환(내 앞 ${Math.max(0, myp - effCut - 1)}명)` });
       next.status = newStatus;
       if (!nowWork) { next.teeTime = ''; next.course = ''; } // 스페어로 내려가면 임시 티오프 해제
     }
