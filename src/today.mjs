@@ -257,8 +257,13 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   const _newRoster = Array.isArray(verdict.part3Roster) ? verdict.part3Roster : [];
   const _curRoster = Array.isArray(cur.roster3) ? cur.roster3 : [];
   const _dayChanged = cur.date && verdict.dateLabel && dayKey(cur.date) !== dayKey(verdict.dateLabel);
-  const _authoritative = verdict.rosterReliable === true && !!String(verdict.dateLabel || '').trim()
-    && (Number(verdict.teamCount) > 0 || Number(verdict.cutoffPosition) > 0) && _newRoster.length >= 9;
+  //  ★관리자 교정본은 판독 신뢰도와 무관하게 정본이다. 사람이 손으로 확정한 명단이라 짧아졌다고 막으면,
+  //   대바(사람 교체)가 회원 명단에 영원히 반영되지 않는다 — 실측 2026-08-21: 교정 명단 37이
+  //   스테일 명단 38보다 짧다는 이유로 막혀, 순번은 27로 바뀌었는데 명단엔 여전히 조하빈이 27번이었다
+  //   (같은 카드 안에서 myPosition과 roster3이 서로 다른 말을 했다).
+  const _readAuth = verdict.rosterReliable === true && !!String(verdict.dateLabel || '').trim()
+    && (Number(verdict.teamCount) > 0 || Number(verdict.cutoffPosition) > 0);
+  const _authoritative = (_readAuth || !!verdict._adminCorrected) && _newRoster.length >= 9;
   //  ★차단 대상 = '더 짧게' 덮는 약한 크롭만(같은 길이=대바 교환 등은 통과, 회귀 최소화).
   const _wouldShrink = _curRoster.length > 0 && !_authoritative && !_dayChanged && _newRoster.length > 0 && _newRoster.length < _curRoster.length;
   if (_wouldShrink) console.log(`·  [프레임보호] 약한 변동(명단 ${_newRoster.length} < 정본 ${_curRoster.length})이 명단·티오프표 프레임을 덮지 않음 — 컷은 공지 앵커로 반영`);

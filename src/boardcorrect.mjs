@@ -148,6 +148,13 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     const base = { ...today }; delete base._adminLock;
     try {
       const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, base);
+      // ★교정본 표식을 다시 붙인다 — interpretForMember가 _adminCorrected·rosterReliable을 떨어뜨린다.
+      //  이게 없으면 프레임보호가 '짧아진 명단'으로 보고 막아, 순번만 바뀌고 명단은 옛것으로 남는다
+      //  (실측 2026-08-21: myPosition 27인데 roster3의 27번은 여전히 조하빈이었다).
+      if (mout.rawVerdict) {
+        mout.rawVerdict._adminCorrected = v._adminCorrected;
+        mout.rawVerdict.rosterReliable = true;
+      }
       next = applyVerdict(base, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
     } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
     const isOff = next.status === 'off';   // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정

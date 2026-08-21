@@ -49,6 +49,20 @@ console.log('\n[정본 판정 자체는 그대로인가]');
     '텍스트 커트라인 글이 정본이 되면 이 가드가 통째로 무력해진다');
 }
 
+console.log('\n[★명단까지 바뀌는가 — 순번만 바뀌면 카드 안에서 말이 엇갈린다]');
+{
+  const td = read('src/today.mjs').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok(/_readAuth \|\| !!verdict\._adminCorrected/.test(td),
+    '★관리자 교정본은 판독 신뢰도와 무관하게 정본이다',
+    '교정 명단이 스테일 명단보다 짧다는 이유로 막히면 대바가 명단에 영원히 안 들어간다');
+  ok(/_wouldShrink/.test(td), '프레임보호 자체는 살아 있다 — 약한 부분 크롭은 여전히 막는다');
+  const bc = read('src/boardcorrect.mjs').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok(/mout\.rawVerdict\._adminCorrected = v\._adminCorrected/.test(bc),
+    '교정 재계산이 교정본 표식을 다시 붙인다',
+    'interpretForMember가 _adminCorrected·rosterReliable을 떨어뜨린다 — 실측으로 확인했다');
+  ok(/mout\.rawVerdict\.rosterReliable = true/.test(bc), '판독 신뢰 표식도 같이 붙인다');
+}
+
 console.log('\n[교정은 lastboard에도 여전히 남는가]');
 {
   ok(/_adminCorrected/.test(src), '교정 표식이 살아 있다');
