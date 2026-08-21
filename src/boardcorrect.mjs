@@ -141,9 +141,14 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     if (today.status === 'off' && !rosterNk.has(nkey(m.board_name))) continue;
     const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };
     let next;
+    // ★잠금은 '자동 재판독이 관리자 교정을 덮지 못하게' 하는 장치다. 관리자 본인의 다음 교정까지
+    //  막으면 안 된다. 실측 2026-08-21: 22:54 교정으로 걸린 잠금 때문에 그 다음 교정(강경순을
+    //  2부에서 빼고 순번을 당김)이 회원 카드에 반영되지 않았다 — 명단은 바뀌었는데 사람은 옛 티오프를
+    //  들고 있었다. 그래서 여기서는 잠금을 벗기고 다시 계산하고, 바뀐 사람에게 새로 건다(아래).
+    const base = { ...today }; delete base._adminLock;
     try {
-      const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, today);
-      next = applyVerdict(today, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
+      const mout = interpretForMember(lb.article, JSON.parse(JSON.stringify(v)), member, base);
+      next = applyVerdict(base, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
     } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
     const isOff = next.status === 'off';   // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정
     const pos = Number(next.myPosition) || 0;
