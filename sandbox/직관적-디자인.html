@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>직관적 디자인</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  직관적 디자인 — 리버힐 캐디 앱 첫 화면 시안 (2026-08-21)
+
+  ★출발점: "앱이 복잡하다". 실제로 같은 기능으로 가는 길이 세 갈래였다 —
+   하단 탭바 5개 · 햄버거 메뉴 7개 · 홈 위젯. 어디에 뭐가 있는지 외워야 했다.
+
+  ★고친 것 셋:
+   1. 하단 탭바를 없앴다. 길이 홈 하나뿐 → 같은 곳으로 가는 길이 갈라지지 않는다.
+   2. 앱을 여는 이유(오늘 몇 부·몇 번·몇 시)를 맨 위에 놓았다. 0번 눌러도 보인다.
+   3. 열한 개 기능을 목적별 네 묶음으로 묶었다(오늘·내 기록·돈·알아두기).
+      세는 개수가 12에서 4로 줄어든다.
+
+  ★이 파일은 눌러서 돌아다닐 수 있는 시안이다(자바스크립트 단독 실행, 서버 불필요).
+   열한 개 화면이 모두 열리고 체크·사진·지출 등록·목표 변경·되돌아가기가 작동한다.
+   데이터는 리버힐 실제 형식에 맞춘 예시값이다 — 실제 회원 기록이 아니다.
+-->
+
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#20272b;color:#e7ece9;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 56px}
+  .hd{text-align:center;padding:2px 0 18px}
+  .hd h1{margin:0 0 7px;font-size:19px;font-weight:850;letter-spacing:-.01em}
+  .hd p{margin:0 auto;font-size:13px;color:#9aa8a2;line-height:1.7;max-width:700px}
+  .hd b{color:#cdd8d2}
+  .stage{display:flex;gap:34px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+
+  /* 조작판 */
+  .ctl{width:270px;background:#273035;border:1px solid #34403f;border-radius:16px;padding:16px 15px}
+  .ctl h3{margin:0 0 4px;font-size:13px;font-weight:800;color:#fff}
+  .ctl .sub{font-size:11.5px;color:#8b968f;line-height:1.55;margin-bottom:13px}
+  .ctl .lb{font-size:11px;font-weight:800;letter-spacing:.06em;color:#7f8c86;margin:14px 0 7px}
+  .seg{display:flex;background:#1b2225;border-radius:10px;padding:3px;gap:3px}
+  .seg button{flex:1;border:0;background:transparent;color:#9aa8a2;font-family:inherit;font-size:12.5px;
+              font-weight:750;padding:8px 4px;border-radius:8px;cursor:pointer}
+  .seg button.on{background:#0c8f6a;color:#fff}
+  .log{font-size:11.5px;color:#9aa8a2;line-height:1.7;background:#1b2225;border-radius:10px;
+       padding:10px 11px;max-height:190px;overflow-y:auto}
+  .log div{padding:2px 0;border-bottom:1px solid #2a3336}
+  .log div:last-child{border:0}
+  .log b{color:#4fd3a6;font-weight:700}
+  .note{font-size:11px;color:#6f7c76;line-height:1.6;margin-top:12px}
+
+  /* 폰 */
+  .phone{width:390px;height:820px;background:#f3f4f8;border-radius:34px;overflow:hidden;
+         position:relative;box-shadow:0 18px 46px rgba(0,0,0,.45);display:flex;flex-direction:column}
+  .st{height:30px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;
+      padding:0 20px;font-size:11px;font-weight:700;color:#5c6a63;background:#f3f4f8;z-index:5}
+  .stack{flex:1 1 auto;position:relative;overflow:hidden}
+  .scr{position:absolute;inset:0;background:#f3f4f8;display:flex;flex-direction:column;
+       transform:translateX(0);transition:transform .26s cubic-bezier(.32,.72,0,1)}
+  .scr.in{transform:translateX(100%)}
+  .scr.out{transform:translateX(-24%)}
+  @media (prefers-reduced-motion:reduce){ .scr{transition:none} }
+  .sc{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
+  .sc::-webkit-scrollbar{width:0}
+  svg{fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+  /* 하위 화면 머리 */
+  .nav{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:6px 8px 10px;background:#f3f4f8}
+  .nav button{display:flex;align-items:center;gap:4px;border:0;background:transparent;cursor:pointer;
+              font-family:inherit;font-size:14.5px;font-weight:750;color:#0c8f6a;padding:8px 8px 8px 4px}
+  .nav button svg{width:20px;height:20px;stroke:#0c8f6a}
+  .nav .ti{font-size:15px;font-weight:800;color:#17231d;margin-left:2px}
+
+  /* 홈 */
+  .hi{padding:12px 18px 10px}
+  .hi .k{font-size:11px;font-weight:850;letter-spacing:.1em;color:#0c8f6a}
+  .hi h2{margin:6px 0 3px;font-size:22px;font-weight:850;color:#17231d;letter-spacing:-.02em;line-height:1.28}
+  .hi p{margin:0;font-size:13px;color:#647168;line-height:1.6}
+  .td{margin:2px 14px 18px;border-radius:19px;padding:19px 18px 17px;color:#fff;
+      background:linear-gradient(152deg,#0f9b73 0%,#0a7657 100%)}
+  .td .dt{font-size:12px;font-weight:700;opacity:.86}
+  .td .big{display:flex;align-items:flex-end;gap:9px;margin-top:9px}
+  .td .p{font-size:34px;font-weight:850;letter-spacing:-.03em;line-height:1}
+  .td .n{font-size:20px;font-weight:800;opacity:.95;padding-bottom:2px}
+  .td .tee{margin-top:15px;padding-top:13px;border-top:1px solid rgba(255,255,255,.24);
+           display:flex;align-items:baseline;gap:9px}
+  .td .tee .t{font-size:27px;font-weight:850;letter-spacing:-.02em}
+  .td .tee .c{font-size:13px;font-weight:800;background:rgba(255,255,255,.2);padding:3px 9px;border-radius:7px}
+  .td .tee .w{margin-left:auto;font-size:12px;opacity:.85}
+  .td .go{margin-top:15px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+          background:rgba(255,255,255,.15);border-radius:12px;padding:11px 14px;font-size:13.5px;font-weight:750}
+  .td .go svg{width:17px;height:17px;stroke:#fff}
+  .td.off{background:linear-gradient(152deg,#5d6b78 0%,#414d58 100%)}
+  .td.off .p{font-size:30px}
+
+  .cWrap{padding:0 14px 18px}
+  .cGrp{margin-bottom:16px}
+  .cHd{display:flex;align-items:baseline;gap:8px;padding:0 3px 8px}
+  .cHd .n{font-size:14px;font-weight:850;color:#17231d}
+  .cHd .w{font-size:11.5px;color:#8b968f}
+  .cBox{background:#fff;border:1px solid #e3e8e4;border-radius:15px;overflow:hidden}
+  .cIt{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;border-top:1px solid #eef1ec}
+  .cIt:first-child{border-top:0}
+  .cIt:active{background:#f6f9f6}
+  .cIt .ic{flex:0 0 auto;width:30px;height:30px;display:flex;align-items:center;justify-content:center}
+  .cIt .ic svg{stroke:#0c8f6a;width:20px;height:20px}
+  .cIt .tx{flex:1 1 auto;min-width:0}
+  .cIt .tt{font-size:15.5px;font-weight:750;color:#17231d}
+  .cIt .ds{font-size:12px;color:#6d7970;margin-top:2px;line-height:1.4}
+  .cIt .ar{flex:0 0 auto;stroke:#c3ccc6;width:17px;height:17px}
+
+  /* 하위 화면 공통 부품 */
+  .pad{padding:0 14px 26px}
+  .card{background:#fff;border:1px solid #e3e8e4;border-radius:15px;padding:15px;margin-bottom:11px}
+  .card h4{margin:0 0 4px;font-size:14px;font-weight:800;color:#17231d}
+  .card p{margin:0;font-size:12.5px;color:#6d7970;line-height:1.6}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-top:1px solid #eef1ec}
+  .kv:first-of-type{border-top:0}
+  .kv .k{font-size:13px;color:#647168}
+  .kv .v{font-size:15px;font-weight:800;color:#17231d;font-variant-numeric:tabular-nums}
+  .kv .v.g{color:#0c8f6a}
+  .kv .v.r{color:#b23b2e}
+  .big2{font-size:29px;font-weight:850;letter-spacing:-.02em;color:#17231d;font-variant-numeric:tabular-nums}
+  .muted{font-size:12px;color:#8b968f;line-height:1.6}
+  .btn{width:100%;border:0;border-radius:12px;padding:13px;font-size:14.5px;font-weight:800;
+       font-family:inherit;background:#0c8f6a;color:#fff;cursor:pointer;margin-top:4px}
+  .btn.gh{background:#eef7f0;color:#0a7657}
+  .btn:active{opacity:.8}
+
+  /* 배치표 */
+  .rrow{display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid #eef1ec;font-size:13.5px}
+  .rrow:first-child{border-top:0}
+  .rrow .no{width:24px;font-weight:800;color:#8b968f;font-variant-numeric:tabular-nums}
+  .rrow .nm{flex:1;font-weight:700;color:#17231d}
+  .rrow .tg{font-size:11px;font-weight:750;color:#0a7657;background:#eef7f0;padding:2px 6px;border-radius:5px}
+  .rrow .tm{font-size:12.5px;font-weight:750;color:#647168;font-variant-numeric:tabular-nums}
+  .rrow .cs{font-size:10.5px;font-weight:800;color:#fff;background:#9aa8a2;padding:2px 5px;border-radius:4px}
+  .rrow.me{background:#eef7f0}
+  .rrow.me .nm{color:#0a7657;font-weight:850}
+  .cutbar{display:flex;align-items:center;gap:8px;padding:7px 13px;background:#fbf6e8;
+          font-size:11.5px;font-weight:750;color:#8a6d1f;border-top:1px solid #eef1ec}
+  .rrow.sp .nm{color:#8b968f;font-weight:700}
+
+  /* 달력 */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal .dow{text-align:center;font-size:10.5px;font-weight:800;color:#98a49c;padding:2px 0 5px}
+  .cal .d{aspect-ratio:1;border-radius:9px;display:flex;flex-direction:column;align-items:center;
+          justify-content:center;gap:2px;font-size:12px;font-weight:700;color:#17231d;background:#f6f7f6}
+  .cal .d.e{background:transparent}
+  .cal .d .dot{width:5px;height:5px;border-radius:50%}
+  .cal .d.w{background:#e5f5ec;color:#0a7657}
+  .cal .d.s{background:#eef1f7;color:#5b6b86}
+  .cal .d.o{background:#fdf6e3;color:#8a6d1f}
+  .cal .d.v{background:#eaf7ea;color:#3f7a3f}
+  .lg{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+  .lg span{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#647168}
+  .lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  /* 트로피 */
+  .tg3{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+  .tr{background:#fff;border:1px solid #e3e8e4;border-radius:13px;padding:13px 6px 11px;text-align:center}
+  .tr svg{width:26px;height:26px;stroke:#c9a227;margin-bottom:6px}
+  .tr.lock svg{stroke:#cfd6d1}
+  .tr .n{font-size:11.5px;font-weight:750;color:#17231d;line-height:1.3}
+  .tr.lock .n{color:#a8b2ac}
+
+  /* 막대 */
+  .bars{display:flex;align-items:flex-end;gap:9px;height:130px;padding:6px 2px 0}
+  .bars .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .bars .b i{width:100%;background:#cfe9dd;border-radius:6px 6px 0 0;display:block}
+  .bars .b.on i{background:#0c8f6a}
+  .bars .b span{font-size:10.5px;color:#8b968f;font-weight:700}
+
+  /* 체크 */
+  .ck{display:flex;align-items:center;gap:11px;padding:13px 14px;border-top:1px solid #eef1ec;cursor:pointer}
+  .ck:first-child{border-top:0}
+  .ck .bx{width:23px;height:23px;border-radius:7px;border:2px solid #cfd6d1;flex:0 0 auto;
+          display:flex;align-items:center;justify-content:center}
+  .ck .bx svg{width:14px;height:14px;stroke:#fff;stroke-width:2.6}
+  .ck.on .bx{background:#0c8f6a;border-color:#0c8f6a}
+  .ck .t{flex:1;font-size:14.5px;font-weight:700;color:#17231d}
+  .ck.on .t{color:#0a7657}
+  .shot{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .shot div{aspect-ratio:4/3;border:2px dashed #cfd6d1;border-radius:12px;display:flex;flex-direction:column;
+            align-items:center;justify-content:center;gap:6px;color:#98a49c;font-size:12px;font-weight:700;cursor:pointer}
+  .shot div svg{width:22px;height:22px;stroke:#98a49c}
+  .shot div.done{border:0;background:#e5f5ec;color:#0a7657}
+  .shot div.done svg{stroke:#0a7657}
+
+  /* 폼 */
+  .fld{margin-bottom:11px}
+  .fld label{display:block;font-size:11.5px;font-weight:800;color:#647168;margin-bottom:5px}
+  .fld input, .fld select{width:100%;border:1px solid #dbe2d9;border-radius:11px;padding:12px;
+        font-family:inherit;font-size:14.5px;color:#17231d;background:#fff}
+  .fld input:focus,.fld select:focus{outline:2px solid #0c8f6a;outline-offset:-1px;border-color:#0c8f6a}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chips button{border:1px solid #dbe2d9;background:#fff;border-radius:9px;padding:9px 12px;
+                font-family:inherit;font-size:13px;font-weight:700;color:#647168;cursor:pointer}
+  .chips button.on{background:#0c8f6a;border-color:#0c8f6a;color:#fff}
+
+  /* 게이지 */
+  .gau{height:13px;border-radius:99px;background:#e8ece9;overflow:hidden;margin:12px 0 8px}
+  .gau i{display:block;height:100%;background:linear-gradient(90deg,#12bf94,#0a7657);border-radius:99px;
+         transition:width .4s cubic-bezier(.32,.72,0,1)}
+
+  /* 토스트 */
+  .toast{position:absolute;left:16px;right:16px;bottom:18px;background:#17231d;color:#fff;border-radius:13px;
+         padding:13px 15px;font-size:13.5px;font-weight:700;opacity:0;transform:translateY(10px);
+         transition:opacity .2s, transform .2s;pointer-events:none;z-index:20}
+  .toast.on{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hd">
+    <h1>직관적 디자인</h1>
+    <p><b>&ldquo;앱이 복잡하다&rdquo;</b>에서 출발한 첫 화면 시안입니다.
+       지금은 같은 기능으로 가는 길이 세 갈래입니다 — 하단 탭바 5개, 메뉴 7개, 홈 위젯.<br>
+       여기서는 <b>탭바를 없애 길을 홈 하나로</b> 모으고, <b>앱을 여는 이유(오늘 몇 부·몇 번·몇 시)를 맨 위에</b> 두고,
+       나머지 열한 개를 <b>목적별 네 묶음</b>으로 묶었습니다.<br>
+       <b style="color:#4fd3a6">실제로 눌러서 돌아다닐 수 있습니다</b> — 열한 개 화면이 전부 열리고, 체크·입력·되돌아가기가 작동합니다.</p>
+  </div>
+  <div class="stage">
+    <div class="phone">
+      <div class="st"><span id="clock">9:41</span><span>리버힐 캐디</span></div>
+      <div class="stack" id="stack"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+    <div class="ctl">
+      <h3>시뮬레이션 조작판</h3>
+      <div class="sub">실제 앱이 아니라 느낌을 보는 시안입니다. 데이터는 리버힐 실제 형식에 맞춘 예시입니다.</div>
+      <div class="lb">오늘 상태</div>
+      <div class="seg" id="segDay">
+        <button data-day="work" class="on">근무일</button>
+        <button data-day="off">휴무일</button>
+      </div>
+      <div class="lb">눌러본 자취</div>
+      <div class="log" id="log"><div>홈에서 시작</div></div>
+      <div class="note">되돌아가려면 화면 왼쪽 위 <b style="color:#4fd3a6">← 홈</b>을 누르세요.
+        탭바가 없으니 돌아오는 길도 하나입니다.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══ 아이콘 ══ */
+const IC = {
+  board:'<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9h17M9 9v11.5"/>',
+  cart:'<path d="M4 7h11l1.6 7H6.2z"/><circle cx="8" cy="18.5" r="1.6"/><circle cx="16" cy="18.5" r="1.6"/><path d="M15 7l1.5-3H20"/>',
+  log:'<rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 2.5v4M16 2.5v4M3.5 10h17"/><path d="m9 14.6 2 2 4-4"/>',
+  money:'<path d="M4 6.5h16v11H4z"/><circle cx="12" cy="12" r="2.6"/><path d="M7.5 12h.01M16.5 12h.01"/>',
+  goal:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/>',
+  chart:'<path d="M4 20V4"/><path d="M4 20h16"/><path d="m7.5 15.5 3.5-4 3 2.5 4.5-6"/>',
+  doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/>',
+  receipt:'<path d="M6 3.5h12v17l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M9.5 8.5h5M9.5 12.5h5"/>',
+  trophy:'<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5.5H5.5V7a3 3 0 0 0 3 3M16 5.5h2.5V7a3 3 0 0 1-3 3"/><path d="M12 13v3.5M9 20h6l-.6-3.5H9.6z"/>',
+  shield:'<path d="M12 3.2 19 6v5.4c0 4.2-2.8 7.5-7 9.4-4.2-1.9-7-5.2-7-9.4V6z"/><path d="m9.2 12.2 2 2 3.6-3.8"/>',
+  rule:'<path d="M5 4.5h14v15H5z"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/>',
+  cam:'<path d="M4 8h3l1.6-2.5h6.8L17 8h3v11H4z"/><circle cx="12" cy="13.2" r="3.4"/>',
+  chk:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  back:'<path d="m14 5-7 7 7 7"/>',
+};
+const AR = '<svg class="ar" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>';
+const ic = (k) => `<span class="ic"><svg viewBox="0 0 24 24">${IC[k]}</svg></span>`;
+const won = (n) => n.toLocaleString('ko-KR') + '원';
+
+/* ══ 예시 데이터 — 리버힐 실제 형식 ══ */
+const ME = { name: '김홍구', part: '3부', pos: 12, tee: '16:32', course: 'IN', cut: 20 };
+const ROSTER = [
+  ['이하늘','54'],['연승준','54'],['신지현','54'],['표승완','1,3'],['강혜영','1,3'],['문태익','1,3'],
+  ['김수룡','1,3'],['이지은','1,3'],['서동명','1,3'],['조예린','1,3'],['정유경',''],['김홍구',''],
+  ['김동윤',''],['박진수','2,3'],['김서현','2,3'],['김기선','2,3'],['김예린','2,3'],['박수현','2,3'],
+  ['오동현','2,3'],['서동환','2,3'],['남재권','2,3'],['양태록','2,3'],['한지홍',''],
+];
+const SLOT0 = 15 * 60 + 57;   // 첫 티오프 15:57 · 7분 격자 · 한 칸에 OUT/IN 둘
+const teeOf = (pos) => {
+  const m = SLOT0 + (Math.ceil(pos / 2) - 1) * 7;
+  return { t: `${String(Math.floor(m / 60)).padStart(2,'0')}:${String(m % 60).padStart(2,'0')}`,
+           c: pos % 2 ? 'OUT' : 'IN' };
+};
+let EXPENSES = [
+  { d: '8월 19일', c: '식대', a: 12000, v: '클럽하우스 식당' },
+  { d: '8월 14일', c: '장비', a: 38000, v: '골프마트' },
+  { d: '8월 6일',  c: '유류비', a: 55000, v: 'GS칼텍스 안동' },
+];
+let GOAL = 320;   // 만원
+const SETTLE = { rounds: 12, fee: 1740000, tip: 210000 };
+const expSum = () => EXPENSES.reduce((s, e) => s + e.a, 0);
+
+/* ══ 화면 틀 ══ */
+const stack = document.getElementById('stack');
+const logEl = document.getElementById('log');
+const toastEl = document.getElementById('toast');
+let DAY = 'work';
+let depth = 0;
+
+function say(msg) { logEl.insertAdjacentHTML('afterbegin', `<div><b>${msg}</b></div>`); }
+let tmr;
+function toast(msg) {
+  toastEl.textContent = msg; toastEl.classList.add('on');
+  clearTimeout(tmr); tmr = setTimeout(() => toastEl.classList.remove('on'), 1900);
+}
+
+function screenEl(html) {
+  const d = document.createElement('div');
+  d.className = 'scr in';
+  d.innerHTML = html;
+  return d;
+}
+function push(key) {
+  const S = SCREENS[key];
+  if (!S) return;
+  const cur = stack.lastElementChild;
+  const el = screenEl(
+    `<div class="nav"><button type="button" data-back="1"><svg viewBox="0 0 24 24">${IC.back}</svg>홈</button>`
+    + `<span class="ti">${S.title}</span></div><div class="sc"><div class="pad">${S.body()}</div></div>`);
+  stack.appendChild(el);
+  requestAnimationFrame(() => { el.classList.remove('in'); if (cur) cur.classList.add('out'); });
+  depth++; say(S.title + ' 열기');
+  if (S.after) S.after(el);
+}
+function pop() {
+  if (depth === 0) return;
+  const el = stack.lastElementChild;
+  const prev = el.previousElementSibling;
+  el.classList.add('in'); if (prev) prev.classList.remove('out');
+  setTimeout(() => el.remove(), 280);
+  depth--; say('홈으로 돌아감');
+}
+
+/* ══ 홈 ══ */
+const F = {
+  board:   ['board','배치표','오늘 순번표 전체 — 내 앞뒤로 누가 있는지'],
+  cart:    ['cart','라운드 점검','끝나고 카트·클럽 확인하고 사진 남기기'],
+  log:     ['log','근무 기록','어느 날 일했고 어느 날 쉬었는지 달력으로'],
+  trophy:  ['trophy','업적','지금까지 걸어온 발자취'],
+  money:   ['money','정산','이 달 캐디피·팁·지출 한자리에'],
+  goal:    ['goal','이 달 목표','얼마를 목표로 두고 지금 어디쯤인지'],
+  chart:   ['chart','수익 분석','달마다 얼마나 벌었는지 흐름으로'],
+  doc:     ['doc','정산서','수익계산서를 서류로 뽑기'],
+  receipt: ['receipt','지출 등록','영수증 찍으면 알아서 적힙니다'],
+  shield:  ['shield','캐디 보험','산재·고용·배상책임 — 내게 걸린 세 가지'],
+  rule:    ['rule','근무 수칙','알아둬야 할 규칙 모음'],
+};
+const GROUPS = [
+  ['오늘',     '지금 일하는 데 필요한 것', ['board','cart']],
+  ['내 기록',  '지나온 날들',             ['log','trophy']],
+  ['돈',      '벌고 쓴 것',              ['money','goal','chart','doc','receipt']],
+  ['알아두기', '급할 때 찾게 되는 것',     ['shield','rule']],
+];
+function homeHTML() {
+  const card = DAY === 'work'
+    ? `<div class="td">
+        <div class="dt">8월 21일 금요일</div>
+        <div class="big"><span class="p">${ME.part}</span><span class="n">${ME.pos}번</span></div>
+        <div class="tee"><span class="t">${ME.tee}</span><span class="c">${ME.course}</span><span class="w">2시간 40분 뒤</span></div>
+        <div class="go" data-go="board"><span>배치표에서 앞뒤 순번 보기</span><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></div>
+      </div>`
+    : `<div class="td off">
+        <div class="dt">8월 22일 토요일</div>
+        <div class="big"><span class="p">오늘은 휴무</span></div>
+        <div class="tee"><span class="t" style="font-size:15px;font-weight:700;opacity:.9">다음 근무는 8월 23일 일요일 · 3부</span></div>
+        <div class="go" data-go="board"><span>다음 배치표 미리 보기</span><svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></div>
+      </div>`;
+  const groups = '<div class="cWrap">' + GROUPS.map(([n,w,ks]) =>
+    `<div class="cGrp"><div class="cHd"><span class="n">${n}</span><span class="w">${w}</span></div><div class="cBox">`
+    + ks.map((k) => { const [i,t,d] = F[k];
+        return `<div class="cIt" data-go="${k}">${ic(i)}<div class="tx"><div class="tt">${t}</div><div class="ds">${d}</div></div>${AR}</div>`;
+      }).join('') + '</div></div>').join('') + '</div>';
+  return `<div class="sc">
+    <div class="hi"><div class="k">리버힐 캐디</div><h2>안녕하세요, 홍구님</h2>
+      <p>오늘 일정이 맨 위에, 나머지는 아래 묶음에 있습니다.</p></div>
+    ${card}${groups}</div>`;
+}
+function renderHome() {
+  stack.innerHTML = '';
+  const el = screenEl(homeHTML());
+  el.classList.remove('in');
+  stack.appendChild(el);
+  depth = 0;
+}
+
+/* ══ 열한 개 화면 ══ */
+const SCREENS = {
+  board: { title: '배치표', body() {
+    const rows = ROSTER.map(([nm, tag], i) => {
+      const pos = i + 1, sp = pos > ME.cut, me = nm === ME.name;
+      const { t, c } = teeOf(pos);
+      const cut = pos === ME.cut + 1
+        ? `<div class="cutbar"><svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#8a6d1f"><path d="M4 12h16"/></svg>여기부터 스페어 — 팀 ${ME.cut}개</div>` : '';
+      return cut + `<div class="rrow${me ? ' me' : ''}${sp ? ' sp' : ''}">
+        <span class="no">${pos}</span><span class="nm">${nm}${me ? ' (나)' : ''}</span>
+        ${tag ? `<span class="tg">${tag}</span>` : ''}
+        ${sp ? '<span class="cs">대기</span>' : `<span class="tm">${t}</span><span class="cs" style="background:${c==='OUT'?'#0c8f6a':'#5b6b86'}">${c}</span>`}
+      </div>`;
+    }).join('');
+    return `<div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:13px 14px;border-bottom:1px solid #eef1ec">
+          <h4>8월 21일 금요일 · 3부</h4><p>팀 ${ME.cut}개 · 명단 ${ROSTER.length}명 · 내 순번 ${ME.pos}번</p></div>
+        ${rows}</div>
+      <div class="muted">회색은 대기(스페어)입니다. 앞사람이 빠지면 순번이 당겨집니다.</div>`;
+  }},
+
+  cart: { title: '라운드 점검', body() {
+    return `<div class="card"><h4>사진으로 남기기</h4><p>카트와 클럽만 찍습니다. 나머지는 눌러서 확인.</p>
+        <div class="shot" style="margin-top:12px">
+          <div data-shot="카트"><svg viewBox="0 0 24 24">${IC.cam}</svg>카트</div>
+          <div data-shot="클럽"><svg viewBox="0 0 24 24">${IC.cam}</svg>클럽</div>
+        </div></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        ${['퍼터','우산','아이스박스','수건'].map((t) =>
+          `<div class="ck" data-ck="1"><span class="bx"><svg viewBox="0 0 24 24">${IC.chk}</svg></span><span class="t">${t}</span></div>`).join('')}
+      </div>
+      <button class="btn" data-act="반납 점검 제출">점검 마치기</button>`;
+  }},
+
+  log: { title: '근무 기록', body() {
+    // 2026년 8월: 1일 토요일
+    const KIND = { 1:'o',2:'w',3:'w',4:'s',5:'o',6:'w',7:'w',8:'w',9:'o',10:'w',11:'s',12:'w',
+      13:'o',14:'w',15:'v',16:'w',17:'w',18:'o',19:'w',20:'w',21:'w',22:'o' };
+    let cells = '<div class="dow">일</div><div class="dow">월</div><div class="dow">화</div><div class="dow">수</div><div class="dow">목</div><div class="dow">금</div><div class="dow">토</div>';
+    for (let i = 0; i < 6; i++) cells += '<div class="d e"></div>';       // 8/1이 토요일
+    for (let d = 1; d <= 31; d++) cells += `<div class="d ${KIND[d] || ''}">${d}</div>`;
+    return `<div class="card"><h4>2026년 8월</h4><p>근무 12일 · 스페어 2일 · 휴무 6일 · 휴가 1일</p>
+        <div class="cal" style="margin-top:12px">${cells}</div>
+        <div class="lg">
+          <span><i style="background:#e5f5ec"></i>근무</span><span><i style="background:#eef1f7"></i>스페어</span>
+          <span><i style="background:#fdf6e3"></i>휴무</span><span><i style="background:#eaf7ea"></i>휴가</span></div>
+      </div>
+      <div class="muted">배치표가 올라오면 자동으로 채워집니다. 틀린 날은 눌러서 고칠 수 있습니다.</div>`;
+  }},
+
+  trophy: { title: '업적', body() {
+    const got = ['첫 라운드','백 라운드','한 달 개근 없이','비 오는 날','새벽 조출','한 해의 시작'];
+    const lock = ['오백 라운드','세 해의 발자취','천 라운드'];
+    return `<div class="card"><h4>지금까지 걸어온 발자취</h4>
+        <p>획득 ${got.length}개 · 남은 ${lock.length}개</p></div>
+      <div class="cHd"><span class="n">획득한 트로피</span></div>
+      <div class="tg3" style="margin-bottom:14px">${got.map((n) =>
+        `<div class="tr"><svg viewBox="0 0 24 24">${IC.trophy}</svg><div class="n">${n}</div></div>`).join('')}</div>
+      <div class="cHd"><span class="n">아직인 트로피</span></div>
+      <div class="tg3">${lock.map((n) =>
+        `<div class="tr lock"><svg viewBox="0 0 24 24">${IC.trophy}</svg><div class="n">${n}</div></div>`).join('')}</div>`;
+  }},
+
+  money: { title: '정산', body() {
+    const net = SETTLE.fee + SETTLE.tip - expSum();
+    return `<div class="card">
+        <div class="muted">이 달 순수익</div>
+        <div class="big2" style="margin:4px 0 12px">${won(net)}</div>
+        <div class="kv"><span class="k">캐디피 · ${SETTLE.rounds}라운드</span><span class="v g">${won(SETTLE.fee)}</span></div>
+        <div class="kv"><span class="k">팁</span><span class="v g">${won(SETTLE.tip)}</span></div>
+        <div class="kv"><span class="k">지출 · ${EXPENSES.length}건</span><span class="v r">−${won(expSum())}</span></div>
+      </div>
+      <div class="cHd"><span class="n">지출 내역</span><span class="w">누르면 지출 등록으로</span></div>
+      <div class="cBox" style="margin-bottom:11px">${EXPENSES.map((e) =>
+        `<div class="cIt" data-go="receipt"><div class="tx"><div class="tt">${e.c} · ${won(e.a)}</div>
+          <div class="ds">${e.d} · ${e.v}</div></div>${AR}</div>`).join('')}</div>
+      <button class="btn gh" data-go="doc">정산서로 뽑기</button>`;
+  }},
+
+  goal: { title: '이 달 목표', body() {
+    const now = Math.round((SETTLE.fee + SETTLE.tip) / 10000);
+    const pct = Math.min(100, Math.round(now / GOAL * 100));
+    return `<div class="card">
+        <div class="muted">이 달 목표</div>
+        <div class="big2" style="margin:4px 0 0">${GOAL}만원</div>
+        <div class="gau"><i id="gauBar" style="width:${pct}%"></i></div>
+        <div class="muted">지금 <b style="color:#0c8f6a">${now}만원</b> · ${pct}% 왔습니다.
+          남은 ${Math.max(0, GOAL - now)}만원이면 채웁니다.</div>
+        <div class="lb" style="font-size:11px;font-weight:800;color:#647168;margin:16px 0 7px">목표 바꾸기</div>
+        <div class="chips" id="goalChips">${[250,280,320,360,400].map((g) =>
+          `<button type="button" data-goal="${g}" class="${g===GOAL?'on':''}">${g}만원</button>`).join('')}</div>
+      </div>
+      <div class="muted">목표는 언제든 바꿀 수 있습니다. 아무에게도 안 보입니다.</div>`;
+  }, after(el) {
+    el.querySelectorAll('[data-goal]').forEach((b) => b.addEventListener('click', () => {
+      GOAL = Number(b.dataset.goal);
+      const now = Math.round((SETTLE.fee + SETTLE.tip) / 10000);
+      el.querySelectorAll('[data-goal]').forEach((x) => x.classList.toggle('on', x === b));
+      el.querySelector('#gauBar').style.width = Math.min(100, Math.round(now / GOAL * 100)) + '%';
+      toast(`목표를 ${GOAL}만원으로 바꿨습니다`); say(`목표 → ${GOAL}만원`);
+    }));
+  }},
+
+  chart: { title: '수익 분석', body() {
+    const M = [['3월',248],['4월',291],['5월',276],['6월',312],['7월',265],['8월',195]];
+    const mx = Math.max(...M.map((m) => m[1]));
+    return `<div class="card"><h4>달마다 얼마나 벌었는지</h4><p>캐디피와 팁을 더한 값입니다. 8월은 아직 진행 중.</p>
+        <div class="bars">${M.map(([n,v],i) =>
+          `<div class="b${i===M.length-1?' on':''}"><i style="height:${Math.round(v/mx*100)}%"></i><span>${n}</span></div>`).join('')}</div>
+        <div class="kv" style="margin-top:10px"><span class="k">여섯 달 평균</span><span class="v">${won(Math.round(M.reduce((s,m)=>s+m[1],0)/M.length)*10000)}</span></div>
+        <div class="kv"><span class="k">가장 많았던 달</span><span class="v g">6월 · ${won(312*10000)}</span></div>
+      </div>`;
+  }},
+
+  doc: { title: '정산서', body() {
+    const net = SETTLE.fee + SETTLE.tip - expSum();
+    return `<div class="card" style="background:#fff">
+        <div style="text-align:center;padding:6px 0 14px;border-bottom:2px solid #17231d">
+          <div style="font-size:17px;font-weight:850;letter-spacing:.06em">수 익 계 산 서</div>
+          <div class="muted" style="margin-top:4px">2026년 8월 · 김홍구 · 리버힐 컨트리클럽</div></div>
+        <div class="kv" style="margin-top:8px"><span class="k">캐디피 수입</span><span class="v">${won(SETTLE.fee)}</span></div>
+        <div class="kv"><span class="k">팁 수입</span><span class="v">${won(SETTLE.tip)}</span></div>
+        <div class="kv"><span class="k">필요경비</span><span class="v">${won(expSum())}</span></div>
+        <div class="kv" style="border-top:2px solid #17231d;margin-top:4px;padding-top:11px">
+          <span class="k" style="font-weight:800;color:#17231d">과세 대상 소득</span><span class="v">${won(net)}</span></div>
+      </div>
+      <button class="btn" data-act="PDF로 저장">PDF로 저장</button>
+      <button class="btn gh" data-act="워드로 저장" style="margin-top:9px">워드로 저장</button>
+      <div class="muted" style="margin-top:11px">종합소득세 신고에 그대로 쓸 수 있는 서식입니다.</div>`;
+  }},
+
+  receipt: { title: '지출 등록', body() {
+    return `<div class="card"><h4>영수증 찍기</h4><p>사진을 올리면 항목·금액·상호를 알아서 읽습니다.</p>
+        <div class="shot" style="grid-template-columns:1fr;margin-top:12px">
+          <div data-shot="영수증" style="aspect-ratio:16/7"><svg viewBox="0 0 24 24">${IC.cam}</svg>영수증 촬영</div>
+        </div></div>
+      <div class="card">
+        <div class="fld"><label>항목</label>
+          <div class="chips" id="catChips">${['식대','유류비','장비','세탁','기타'].map((c,i) =>
+            `<button type="button" data-cat="${c}" class="${i===0?'on':''}">${c}</button>`).join('')}</div></div>
+        <div class="fld"><label>금액</label><input id="expAmt" type="text" inputmode="numeric" placeholder="12,000" /></div>
+        <div class="fld"><label>상호</label><input id="expVen" type="text" placeholder="클럽하우스 식당" /></div>
+        <button class="btn" id="expSave">등록하기</button>
+      </div>
+      <div class="cHd"><span class="n">최근 내역</span></div>
+      <div class="cBox" id="expList">${EXPENSES.map((e) =>
+        `<div class="cIt"><div class="tx"><div class="tt">${e.c} · ${won(e.a)}</div><div class="ds">${e.d} · ${e.v}</div></div></div>`).join('')}</div>`;
+  }, after(el) {
+    let cat = '식대';
+    el.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+      cat = b.dataset.cat;
+      el.querySelectorAll('[data-cat]').forEach((x) => x.classList.toggle('on', x === b));
+    }));
+    el.querySelector('#expSave').addEventListener('click', () => {
+      const amt = Number(String(el.querySelector('#expAmt').value).replace(/[^0-9]/g, ''));
+      const ven = el.querySelector('#expVen').value.trim() || '상호 미입력';
+      if (!amt) { toast('금액을 넣어주세요'); return; }
+      EXPENSES.unshift({ d: '8월 21일', c: cat, a: amt, v: ven });
+      el.querySelector('#expList').insertAdjacentHTML('afterbegin',
+        `<div class="cIt"><div class="tx"><div class="tt">${cat} · ${won(amt)}</div><div class="ds">8월 21일 · ${ven}</div></div></div>`);
+      el.querySelector('#expAmt').value = ''; el.querySelector('#expVen').value = '';
+      toast(`${cat} ${won(amt)} 등록했습니다`); say(`지출 등록 · ${cat} ${won(amt)}`);
+    });
+  }},
+
+  shield: { title: '캐디 보험', body() {
+    const L = [
+      ['산업재해보상보험','일하다 다치면 치료비와 쉬는 동안의 임금을 받습니다.',
+       '가입이 안 돼 있어도 청구할 수 있습니다 — 캐디는 법으로 적용 대상입니다.'],
+      ['고용보험','일이 끊겼을 때 실업급여를 받을 수 있습니다.','2021년부터 캐디도 대상에 들어갔습니다.'],
+      ['배상책임보험','손님이나 남의 물건에 손해를 입혔을 때를 대비합니다.','골프장 단체보험으로 드는 경우가 많습니다.'],
+    ];
+    return L.map(([t,d,n]) => `<div class="card"><h4>${t}</h4><p>${d}</p>
+        <p style="margin-top:9px;padding-top:9px;border-top:1px solid #eef1ec;color:#0a7657;font-weight:700">${n}</p></div>`).join('')
+      + '<div class="muted">자세한 청구 절차는 각 항목을 눌러 볼 수 있습니다.</div>';
+  }},
+
+  rule: { title: '근무 수칙', body() {
+    const R = [['안전','카트 사고·타구 사고가 나지 않도록 안전 멘트를 꼭 합니다.'],
+      ['폭염','9홀 종료 후 최소 10분은 쉬었다 갈 수 있게 합니다.'],
+      ['코스 관리','코스 안 카트길 쓰레기를 수거합니다.'],
+      ['벙커','배토 모래주머니에 모래를 채웁니다.'],
+      ['광장','외부 음식은 반입 금지입니다.']];
+    return `<div class="card" style="padding:0;overflow:hidden">${R.map(([t,d]) =>
+      `<div style="padding:14px;border-top:1px solid #eef1ec"><div style="font-size:14.5px;font-weight:800;color:#17231d">${t}</div>
+        <div style="font-size:13px;color:#6d7970;margin-top:4px;line-height:1.6">${d}</div></div>`).join('')}</div>
+      <div class="muted">공지사항이 바뀌면 여기도 함께 바뀝니다.</div>`;
+  }},
+};
+
+/* ══ 조작 ══ */
+stack.addEventListener('click', (e) => {
+  const back = e.target.closest('[data-back]');
+  if (back) { pop(); return; }
+  const go = e.target.closest('[data-go]');
+  if (go) { push(go.dataset.go); return; }
+  const ck = e.target.closest('[data-ck]');
+  if (ck) { ck.classList.toggle('on'); say((ck.classList.contains('on') ? '체크 ' : '해제 ') + ck.querySelector('.t').textContent); return; }
+  const sh = e.target.closest('[data-shot]');
+  if (sh && !sh.classList.contains('done')) {
+    sh.classList.add('done');
+    sh.innerHTML = `<svg viewBox="0 0 24 24">${IC.chk}</svg>${sh.dataset.shot} 찍음`;
+    toast(`${sh.dataset.shot} 사진을 남겼습니다`); say(`사진 · ${sh.dataset.shot}`); return;
+  }
+  const act = e.target.closest('[data-act]');
+  if (act) { toast(act.dataset.act + ' — 시안이라 여기까지입니다'); say(act.dataset.act); }
+});
+
+document.getElementById('segDay').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  DAY = b.dataset.day;
+  document.querySelectorAll('#segDay button').forEach((x) => x.classList.toggle('on', x === b));
+  renderHome(); say(DAY === 'work' ? '근무일로 바꿈' : '휴무일로 바꿈');
+});
+
+setInterval(() => {
+  const d = new Date();
+  document.getElementById('clock').textContent =
+    `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}, 1000);
+
+renderHome();
+</script>
+</body>
+</html>
