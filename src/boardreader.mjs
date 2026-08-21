@@ -459,6 +459,26 @@ async function readOffByColumns(img) {
   return { off: perJo.flatMap((x) => x.off), crew: perJo.flatMap((x) => x.crew) };
 }
 
+// ★역할 태그(당번·벌당·배치·프리) — 그날의 보직. 순번 근무와 별개로 배치표가 따로 세는 것들이다.
+//  조편성표는 이미 전원의 근무칸을 읽고 있는데(실측 8/21: 83명 전원, 역할 2건 정확), 그걸 티브레이크에만
+//  쓰고 버려서 당번·배치가 어디에도 안 잡혔다(채점표 '당번 0/1 · 배치 0/1'). Claude 호출 0회로 메운다.
+//
+//  ★근무부 태그(3부·1,3·54)는 일부러 안 가져온다. 그건 '순번표에 있어야 할 사람'이라는 뜻이라,
+//   역할로 인정해 버리면 명단을 못 읽어 사라진 사람을 '설명됨'으로 덮어 채점이 거짓말을 한다.
+//   여기 넣는 넷은 배치표 요약 상자가 직접 세는 항목이라, 상자와 대조해 맞는지 확인할 수 있다.
+const ROLE_TAG_RE = /^(당번|벌당|배치|프리)$/;
+export function rolesFromCrew(crew) {
+  const out = []; const seen = new Set();
+  for (const c of (crew || [])) {
+    const duty = String(c?.duty || '').replace(/\s/g, '').trim();
+    if (!ROLE_TAG_RE.test(duty)) continue;
+    const name = snapOfficial(c.name) || String(c.name || '').replace(/\s/g, '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name); out.push({ name, role: duty });
+  }
+  return out;
+}
+
 // 한 세트의 경계로 부별 크롭+판독 1회. { '1':{roster,tee,cut,x0,x1}, ... }.
 // issues: 이번 '시도'에서만 알 수 있는 손상(3부 홀리스틱의 grid_short)을 담아 호출자에게 돌려준다.
 //  ★알림은 여기서 쏘지 않는다 — 판독은 최대 3회 재시도하고 그중 하나만 채택된다. 버려질 시도의 손상까지
@@ -1040,7 +1060,7 @@ export async function incrPlan(img) {
 }
 
 // 이번 판독 결과를 다음 비교의 기준으로 남긴다. ★결함 있는 판독(_fault)은 재사용 금지 — 오독을 대물림한다.
-function incrRemember(img, { bounds, cuts, parts, offList, dutyList, headcount, clean }) {
+function incrRemember(img, { bounds, cuts, parts, offList, roleList, dutyList, headcount, clean }) {
   if (!incrOn() || !clean || !bounds || !bounds.length) return;
   try {
     fs.mkdirSync(INCR_DIR, { recursive: true });
@@ -1048,7 +1068,7 @@ function incrRemember(img, { bounds, cuts, parts, offList, dutyList, headcount, 
     fs.copyFileSync(img, dst);
     const prev = incrLoad();   // ★한 번만 읽는다 — 두 번 읽으면 객체가 달라져 '남길 것'까지 지운다
     const list = [{ img: dst, at: Date.now(), bounds, cuts: cuts || {}, parts: parts || {},
-      offList: offList || null, dutyList: dutyList === undefined ? null : dutyList,
+      offList: offList || null, roleList: roleList || [], dutyList: dutyList === undefined ? null : dutyList,
       headcount: headcount || null }, ...prev].slice(0, INCR_KEEP);
     const keepImgs = new Set(list.map((e) => e.img));
     for (const e of prev) if (!keepImgs.has(e.img)) { try { fs.unlinkSync(e.img); } catch { /* noop */ } }
@@ -1122,11 +1142,14 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   // ★offOk — '근태를 실제로 읽었나'. 판독 실패·예산부족도 offList는 []라, 이 구분이 없으면 '아무도 근태 아님'을
   //  다음 배치표의 기준으로 물려주게 된다(빈 근태가 조용히 전파). []는 진짜 0명일 때만 기준이 될 수 있다.
   let offOk = false;
+  // 그날의 역할(당번·벌당·배치·프리) — 같은 조편성표 판독에서 함께 건진다. 추가 호출 0.
+  let roleList = [];
   // ★조편성표 구역이 직전과 픽셀까지 같으면 근태도 그대로다 — 이 판독만 조 열분할까지 ~6콜이라 절약이 크다.
   const crewCached = keep('crew') && Array.isArray(plan.entry.offList) ? plan.entry.offList : null;
   if (crewCached) {
     offList = crewCached; offOk = true;
-    console.log(`[증분] 조편성표 그대로 → 근태 판독 건너뜀(${offList.length}명)`);
+    roleList = Array.isArray(plan.entry.roleList) ? plan.entry.roleList : [];
+    console.log(`[증분] 조편성표 그대로 → 근태 판독 건너뜀(근태 ${offList.length}명 · 역할 ${roleList.length}명)`);
   } else if (claudeBudgetLeft() > 0) {
     try {
       let raw = await readOffByColumns(img);              // {off, crew} — 조 열분할(이름 안정)
@@ -1139,6 +1162,9 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
       const offRaw = Array.isArray(raw) ? raw : (raw.off || []);   // 배열형(옛) 호환
       offList = offRaw.map((o) => ({ name: snapOfficial(o.name) || o.name, reason: o.reason }));
       offOk = true;
+      // ★같은 판독에서 역할(당번·벌당·배치·프리)도 건진다 — 추가 호출 0.
+      roleList = rolesFromCrew((raw && raw.crew) || []);
+      if (roleList.length) console.log(`[boardreader] 역할 판독: ${roleList.map((r) => `${r.name}(${r.role})`).join(', ')}`);
       console.log(`[boardreader] 근태 판독: ${offList.length}명${offList.length ? ` (${offList.map((o) => `${o.name}:${o.reason}`).slice(0, 20).join(', ')})` : ''}`);
       // ★오늘 근무자 집합 → 애매 오독 티브레이크(이수련↔이수현 등). 근무태그만(근태·빈칸 제외), 정본 스냅 후 수집.
       const workingSet = new Set();
@@ -1196,7 +1222,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   const used = startBudget - claudeBudgetLeft();
   // 다음 배치표가 왔을 때 견줄 기준으로 남긴다(결함 있는 판독은 안 남긴다 — 오독 대물림 방지).
-  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, dutyList, headcount, clean: !lastFault });
+  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, roleList, dutyList, headcount, clean: !lastFault });
   if (plan) {
     console.log(`[증분] 이번 판독 ${used}콜 — 그대로 쓴 구역: ${[...plan.unchanged].join(',') || '없음'}`);
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [...plan.unchanged],
@@ -1204,7 +1230,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   } else {
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [], full: true, fault: lastFault || '' });
   }
-  return { boundaries: bestBounds, parts: best, offList, dutyList, headcount, _claudeCalls: used, _fault: lastFault };
+  return { boundaries: bestBounds, parts: best, offList, roleList, dutyList, headcount, _claudeCalls: used, _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -1238,7 +1264,7 @@ function parseCell(cell) {
 
 // 부별 Claude 판독({roster,tee,cut}) → judge()가 쓰는 verdict 형식. localvlm.readBoardLocalVerdict와 동일 계약 +
 //  괄호 태그에서 crewDuty·guaranteedWork(54/찾근)·crossPartNames를 파생(3부 54·1,3 근무판정 게이트 근거).
-function verdictFromPart(article, member, pd, allParts, offList = []) {
+function verdictFromPart(article, member, pd, allParts, offList = [], roleList = []) {
   const roster = Array.isArray(pd?.roster) ? pd.roster.slice() : [];
   if (!roster.length) return null;
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
@@ -1265,6 +1291,10 @@ function verdictFromPart(article, member, pd, allParts, offList = []) {
     if (c.cross && c.name) cross.push(c.name);
     if (nk && c.holder === nk && myPos === 0) myPos = i + 1;
   });
+  // ★역할(당번·벌당·배치·프리) 주입 — 조편성표 근무칸에서 건진 그날의 보직.
+  //  순번 셀 괄호 태그가 이미 있으면 그쪽이 이긴다(그 부에 대해 더 구체적이다). 없는 사람만 채운다.
+  //  ★배치·당번은 순번표에 아예 안 올라가는 경우가 많아, 이 주입이 없으면 어디에도 안 잡힌다.
+  for (const r of (roleList || [])) { if (r && r.name && !crewDuty[r.name]) crewDuty[r.name] = r.role; }
   // ★근태(휴무/병가/휴가…) 주입 — 부 크롭엔 없어 전용 판독(readOffList)으로 잡은 근태를 crewDuty에 넣는다.
   //  이래야 judge.fixMemberPosByRoster의 근태 오프 게이트가 발화(무조건 오프 + offType sick/vacation 확정).
   //  근태가 근무태그보다 우선(오늘 안 나옴) → 뒤에 덮어씀. 명단에 이름이 남아 스페어로 잡혀도 게이트가 오프로 못박음.
@@ -1370,7 +1400,7 @@ export async function readBoardClaudeVerdict(article, member) {
     return null;
   }
   _clearReadFault(img);
-  return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList);
+  return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList, board.roleList);
 }
 
 // ★당번·벌당 배정 — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
@@ -1403,7 +1433,7 @@ export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
   for (const p of wantParts) {
     const pd = board.parts[String(p)];
     if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue;
-    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList);
+    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList, board.roleList);
     out[String(p)] = {
       roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teeTimes: v.teeTimes || [], teamCount: Number(v.teamCount) || 0,
       internTees: v.internTees, internCount: v.internCount,

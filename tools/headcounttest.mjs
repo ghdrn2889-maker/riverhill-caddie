@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boxConsistent, countedFrom, scoreHeadcount, scoreLine, ALERT_GAP } from '../src/headcount.mjs';
+import { rolesFromCrew } from '../src/boardreader.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let pass = 0, fail = 0;
@@ -117,6 +118,36 @@ console.log('\n[아무것도 고치지 않는다]');
   ok(scoreHeadcount(null, rc({ 근무: 1 })) === null && scoreHeadcount(REAL, null) === null, '재료가 없으면 null');
 }
 
+console.log('\n[역할 수확 — 이미 읽어둔 걸 버리지 않는다]');
+{
+  // 2026-08-21 실측: 조편성표 4열에서 83명 전원을 읽었고 역할 태그는 정확히 2건이었다.
+  const crew = [{ name: '석정일', duty: '당번' }, { name: '우겸조', duty: '배치' },
+    { name: '정진영', duty: '3부' }, { name: '박수현', duty: '2,3' }, { name: '차은경', duty: '54' },
+    { name: '이수련', duty: '휴무' }, { name: '우겸조', duty: '배치' }, { name: '홍길동', duty: '' }];
+  const roles = rolesFromCrew(crew);
+  ok(roles.length === 2, `역할만 골라낸다 — ${roles.length}건`);
+  ok(roles.some((r) => r.name === '석정일' && r.role === '당번'), '당번을 잡는다');
+  ok(roles.some((r) => r.name === '우겸조' && r.role === '배치'), '배치를 잡는다');
+  ok(!roles.some((r) => /^(3부|2,3|54)$/.test(r.role)), '★근무부 태그는 안 가져온다',
+    "'3부'는 순번표에 있어야 할 사람이라는 뜻이다 — 역할로 인정하면 명단을 못 읽어 사라진 사람을 '설명됨'으로 덮어 채점이 거짓말을 한다");
+  ok(!roles.some((r) => r.role === '휴무'), '근태는 여기로 안 온다 — 근태는 따로 다룬다');
+  ok(roles.filter((r) => r.name === '우겸조').length === 1, '같은 사람이 두 번 안 들어간다');
+  ok(rolesFromCrew([]).length === 0 && rolesFromCrew(null).length === 0, '빈 입력도 안전하다');
+}
+
+console.log('\n[역할이 붙으면 채점이 어떻게 움직이나]');
+{
+  // 배선 전: 석정일·우겸조가 어디에도 안 잡혀 설명 −3.
+  const 전 = scoreHeadcount(REAL, rc({ 근무: 33, 스페어: 29, '불가용/휴무': 16, '불가용/휴가': 1, '불가용/병가': 1 }));
+  // 배선 후: 둘이 '역할'로 잡힌다.
+  const 후 = scoreHeadcount(REAL, rc({ 근무: 33, 스페어: 29, '불가용/휴무': 16, '불가용/휴가': 1, '불가용/병가': 1,
+    '역할/당번': 1, '역할/배치': 1 }));
+  ok(전.gap === -3 && 후.gap === -1, `설명 −3 → −1`, '두 사람이 자리를 찾는다');
+  ok(후.rate > 전.rate, `${전.rate}% → ${후.rate}%`);
+  ok(!후.misses.some((l) => l.key === '당번' || l.key === '배치'), '당번·배치 줄이 맞는다',
+    '채점표가 짚은 구멍이 그대로 메워지는지 — 이게 이 작업의 성적표다');
+}
+
 console.log('\n[판독기 계약 — 소스 검사]');
 {
   const cr = noComment(read('src/claudereader.mjs'));
@@ -131,6 +162,19 @@ console.log('\n[판독기 계약 — 소스 검사]');
   ok(/key: 'hc'/.test(br), '★증분 비교에 인원 요약 전용 띠가 있다',
     "duty 띠는 x1=0.76에서 끊겨 '가용' 숫자를 못 본다 — 그 띠로 재사용하면 어제 점수를 물려받는다");
   ok(/export async function claudeHeadcount\(/.test(br), '캐시에서 꺼내 쓴다(추가 호출 0)');
+  ok(/roleList = rolesFromCrew\(\(raw && raw\.crew\) \|\| \[\]\)/.test(br), '역할을 같은 판독에서 건진다(추가 호출 0)',
+    '조편성표는 이미 전원의 근무칸을 읽고 있었다 — 티브레이크에만 쓰고 버렸을 뿐이다');
+  {
+    // ★주입 순서: 순번 괄호 태그 → 역할 → 근태. 근태가 마지막이라 '오늘 안 나옴'이 무엇이든 이긴다.
+    const iRole = br.indexOf('for (const r of (roleList || []))');
+    const iOff = br.indexOf('for (const o of (offList || []))');
+    const iRoster = br.indexOf('if (c.holder && c.duty && !crewDuty[c.holder])');
+    ok(iRoster > -1 && iRole > iRoster, '순번 셀 괄호 태그가 역할보다 먼저다(그쪽이 더 구체적)');
+    ok(iRole > -1 && iOff > iRole, '★근태가 역할을 덮는다 — 휴무인 사람은 당번이어도 안 나온다');
+    ok(/!crewDuty\[r\.name\]\) crewDuty\[r\.name\] = r\.role/.test(br), '이미 있는 값은 안 건드린다');
+  }
+  ok(/const ROLE_TAG_RE = \/\^\(당번\|벌당\|배치\|프리\)\$\//.test(br), '역할 태그가 배치표 요약 상자 항목과 같다',
+    '상자가 직접 세는 넷이라 대조해 맞는지 확인할 수 있다');
   ok(/crop_only: hPath, trim: true/.test(br), '★검은 여백을 떼고 내용 기준으로 자른다',
     '같은 배치표가 2520x945(좌우 검은 띠)와 1555x933 두 가지로 들어온다 — 전체 폭 비율로는 상자가 한쪽은 x 0.65, 다른 쪽은 x 0.81이라 한 값으로 둘 다 못 맞춘다');
   const hcBand = br.match(/\{ key: 'hc',[^}]*\}/);
