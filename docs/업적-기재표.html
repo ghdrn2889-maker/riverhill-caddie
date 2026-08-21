@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>업적 기재표</title>
+<!--
+  업적 기재표 — 추가할 트로피 31개의 이름·조건을 채우는 표 (2026-08-21)
+
+  ★입력하는 대로 XP 천장과 등급 도달 난이도가 다시 계산된다.
+   행을 더하거나 지우면 그 자리에서 균형이 보인다 — 다 채우고 나서 어긋난 걸 발견하지 않게.
+  ★적은 내용은 브라우저에 자동 저장된다(localStorage). 창을 닫아도 남는다.
+  ★다 채우면 [내보내기]로 표를 복사해 그대로 넘기면 된다.
+-->
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#f4f6f4; --paper:#fff; --ink:#17231d; --muted:#647168; --line:#dde4de;
+    --green:#0c8f6a; --green-d:#0a7657; --soft:#eef7f0; --warn:#8a6d1f; --warn-bg:#fbf6e8;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#161b19; --paper:#1d2422; --ink:#e9efeb; --muted:#9aa8a2; --line:#2f3a35;
+    --green:#3fbf94; --green-d:#63d3ae; --soft:#1c2b25; --warn:#d8b96a; --warn-bg:#2a2418;
+  }}
+  :root[data-theme="dark"]{
+    --bg:#161b19; --paper:#1d2422; --ink:#e9efeb; --muted:#9aa8a2; --line:#2f3a35;
+    --green:#3fbf94; --green-d:#63d3ae; --soft:#1c2b25; --warn:#d8b96a; --warn-bg:#2a2418;
+  }
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+       line-height:1.6;font-size:15px}
+  .wrap{max-width:1060px;margin:0 auto;padding:26px 18px 80px}
+  h1{margin:0 0 5px;font-size:24px;font-weight:850;letter-spacing:-.02em}
+  .lead{margin:0 0 20px;font-size:13.5px;color:var(--muted);line-height:1.7}
+  .lead b{color:var(--ink)}
+
+  /* 요약 바 — 붙어서 따라온다 */
+  .sum{position:sticky;top:0;z-index:10;background:var(--paper);border:1px solid var(--line);
+       border-radius:15px;padding:14px 16px;margin-bottom:22px;box-shadow:0 4px 18px rgba(0,0,0,.06)}
+  .sum .top{display:flex;flex-wrap:wrap;gap:20px;align-items:baseline}
+  .sum .m{display:flex;flex-direction:column;gap:1px}
+  .sum .m .k{font-size:10.5px;font-weight:800;letter-spacing:.07em;color:var(--muted)}
+  .sum .m .v{font-size:21px;font-weight:850;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .sum .m .v small{font-size:12px;font-weight:700;color:var(--muted);margin-left:2px}
+  .ranks{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .rk{display:flex;align-items:baseline;gap:5px;font-size:11.5px;font-weight:700;
+      background:var(--soft);color:var(--green-d);padding:4px 9px;border-radius:8px}
+  .rk.no{background:var(--warn-bg);color:var(--warn)}
+  .rk i{font-style:normal;font-variant-numeric:tabular-nums;opacity:.75;font-weight:600}
+
+  /* 묶음 */
+  .grp{background:var(--paper);border:1px solid var(--line);border-radius:15px;margin-bottom:18px;overflow:hidden}
+  .gh{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .gh .nm{font-size:16px;font-weight:850;letter-spacing:-.01em}
+  .gh .xp{font-size:11.5px;font-weight:800;background:var(--soft);color:var(--green-d);padding:3px 8px;border-radius:7px}
+  .gh .ds{flex:1 1 220px;font-size:12px;color:var(--muted);min-width:0}
+  .gh .ct{font-size:12.5px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  table{width:100%;border-collapse:collapse}
+  th{font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-align:left;
+     padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  .idc{width:52px;font-size:12px;font-weight:800;color:var(--muted);padding-left:14px;font-variant-numeric:tabular-nums}
+  .delc{width:40px}
+  input[type=text]{width:100%;border:1px solid transparent;border-radius:9px;padding:9px 10px;
+        font-family:inherit;font-size:14.5px;color:var(--ink);background:transparent}
+  input[type=text]:hover{border-color:var(--line)}
+  input[type=text]:focus{outline:0;border-color:var(--green);background:var(--bg)}
+  input.cond{font-size:13.5px;color:var(--muted)}
+  input.cond:focus{color:var(--ink)}
+  .del{border:0;background:transparent;color:#c3ccc6;cursor:pointer;font-size:17px;line-height:1;
+       padding:6px 8px;border-radius:8px;font-family:inherit}
+  .del:hover{color:#b23b2e;background:var(--bg)}
+  .addrow{padding:9px 14px}
+  .add{border:1px dashed var(--line);background:transparent;color:var(--muted);border-radius:10px;
+       padding:9px 14px;font-family:inherit;font-size:13px;font-weight:750;cursor:pointer;width:100%}
+  .add:hover{border-color:var(--green);color:var(--green-d)}
+
+  /* 원칙 */
+  .rules{background:var(--warn-bg);border:1px solid var(--line);border-radius:15px;padding:15px 18px;margin-bottom:20px}
+  .rules h3{margin:0 0 7px;font-size:13.5px;font-weight:850;color:var(--warn)}
+  .rules ul{margin:0;padding-left:19px}
+  .rules li{font-size:12.5px;color:var(--muted);line-height:1.75}
+  .rules li b{color:var(--ink)}
+
+  /* 내보내기 */
+  .foot{display:flex;gap:9px;flex-wrap:wrap;margin-top:6px}
+  .btn{border:0;border-radius:11px;padding:12px 18px;font-family:inherit;font-size:14px;font-weight:800;
+       background:var(--green);color:#fff;cursor:pointer}
+  .btn.gh2{background:var(--soft);color:var(--green-d)}
+  .btn:active{opacity:.82}
+  #out{width:100%;margin-top:13px;min-height:220px;border:1px solid var(--line);border-radius:12px;
+       padding:13px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;
+       background:var(--paper);color:var(--ink);line-height:1.65;display:none}
+  .said{font-size:12.5px;color:var(--green-d);font-weight:750;margin-top:9px;min-height:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>업적 기재표</h1>
+  <p class="lead">추가할 트로피 <b>31개</b>의 이름과 조건을 채우는 표입니다.
+    적는 대로 <b>XP 천장과 등급 난이도가 다시 계산</b>됩니다 — 행을 더하거나 지우면 그 자리에서 균형이 보입니다.<br>
+    적은 내용은 <b>브라우저에 자동 저장</b>되니 창을 닫아도 남습니다. 다 채우면 아래 <b>내보내기</b>로 넘겨주세요.</p>
+
+  <div class="sum">
+    <div class="top">
+      <div class="m"><span class="k">채운 개수</span><span class="v" id="mFilled">0<small>/ 31</small></span></div>
+      <div class="m"><span class="k">추가 XP</span><span class="v" id="mXp">0</span></div>
+      <div class="m"><span class="k">바뀐 천장</span><span class="v" id="mCap">1,677</span></div>
+      <div class="m"><span class="k">계획 대비</span><span class="v" id="mPlan">0<small>%</small></span></div>
+    </div>
+    <div class="ranks" id="ranks"></div>
+  </div>
+
+  <div class="rules">
+    <h3>채우실 때 지켜야 하는 것 — 코드로 잠긴 원칙</h3>
+    <ul>
+      <li><b>결근 개념 없음.</b> 안 뛴 날은 마이너스가 아니라 세지 않는 날입니다.</li>
+      <li><b>오직 +만.</b> 무엇도 깎이지 않습니다.</li>
+      <li><b>출근율·개근·연속 스트릭 금지.</b> 휴무·휴가·병가는 권리입니다.</li>
+      <li><b>순수 물량으로 압박하지 않습니다.</b></li>
+      <li><b>하루 1일 규칙.</b> 그날 한 번이라도 근무했으면 근무 1일 — 54라고 세 번 치지 않습니다.</li>
+    </ul>
+  </div>
+
+  <div id="groups"></div>
+
+  <div class="foot">
+    <button class="btn" id="btnOut" type="button">내보내기</button>
+    <button class="btn gh2" id="btnCopy" type="button">복사하기</button>
+    <button class="btn gh2" id="btnReset" type="button">비우기</button>
+  </div>
+  <div class="said" id="said"></div>
+  <textarea id="out" readonly spellcheck="false"></textarea>
+</div>
+
+<script>
+/* ── 지형: 지금 카탈로그가 만들어 내는 천장 ── */
+const NOW_CAP = 1677;                       // 카탈로그 1,400 + '열흘의 마음' 달 반복 누적 277
+const XP = { bronze: 20, silver: 60, gold: 160, hidden: 100 };
+const RANKS = [
+  ['행성', 300], ['항성', 600], ['거성', 1050],
+  ['초신성', 1600], ['성단', 2400], ['성운', 3600],
+];
+const PLAN = { bronze: 8, silver: 14, gold: 8, hidden: 1 };
+const GROUPS = [
+  { key: 'bronze', nm: '브론즈', pre: 'B', ds: '초반 첫경험 빈칸 — 위성~행성 구간. 많고 가볍게.' },
+  { key: 'silver', nm: '실버',   pre: 'S', ds: '꾸준함 — 항성~거성 구간. 계절·반복·기록 습관.' },
+  { key: 'gold',   nm: '골드',   pre: 'G', ds: '★성실함의 결과 — 거성 위 계단. 적고 무겁게.' },
+  { key: 'hidden', nm: '히든',   pre: 'H', ds: '숨은 재미. 조건을 안 알려주는 것.' },
+];
+const KEY = 'riverhill-trophy-draft-v1';
+
+/* ── 상태 ── */
+let rows = load() || seed();
+function seed() {
+  const o = {};
+  for (const g of GROUPS) o[g.key] = Array.from({ length: PLAN[g.key] }, () => ({ n: '', c: '' }));
+  return o;
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.bronze ? s : null; } catch { return null; }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(rows)); } catch { /* 사생활 모드 등 */ } }
+
+/* ── 그리기 ── */
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+function render() {
+  document.getElementById('groups').innerHTML = GROUPS.map((g) => {
+    const L = rows[g.key];
+    return `<div class="grp" data-g="${g.key}">
+      <div class="gh"><span class="nm">${g.nm}</span><span class="xp">${XP[g.key]}점</span>
+        <span class="ds">${g.ds}</span>
+        <span class="ct"><b data-ct="${g.key}">${L.filter((r) => r.n.trim()).length}</b> / ${L.length}개</span></div>
+      <table><thead><tr><th class="idc">번호</th><th style="width:31%">이름</th><th>조건 — 무엇을 하면 열리나</th><th class="delc"></th></tr></thead>
+      <tbody>${L.map((r, i) => `<tr>
+        <td class="idc">${g.pre}${i + 1}</td>
+        <td><input type="text" data-g="${g.key}" data-i="${i}" data-f="n" value="${esc(r.n)}" placeholder="이름"></td>
+        <td><input type="text" class="cond" data-g="${g.key}" data-i="${i}" data-f="c" value="${esc(r.c)}" placeholder="…하면 열려요."></td>
+        <td class="delc"><button class="del" type="button" data-del="${g.key}" data-i="${i}" aria-label="${g.pre}${i + 1} 행 지우기">&times;</button></td>
+      </tr>`).join('')}</tbody></table>
+      <div class="addrow"><button class="add" type="button" data-add="${g.key}">${g.nm} 한 줄 더 (+${XP[g.key]}점)</button></div>
+    </div>`;
+  }).join('');
+  tally();
+}
+function tally() {
+  let n = 0, xp = 0, plan = 0;
+  for (const g of GROUPS) {
+    const L = rows[g.key];
+    n += L.length; xp += L.length * XP[g.key]; plan += PLAN[g.key];
+    const el = document.querySelector(`[data-ct="${g.key}"]`);
+    if (el) el.textContent = L.filter((r) => r.n.trim()).length;
+  }
+  const filled = GROUPS.reduce((s, g) => s + rows[g.key].filter((r) => r.n.trim()).length, 0);
+  const cap = NOW_CAP + xp - (rows.hidden.length * XP.hidden);   // 히든은 천장 계산에서 뺀다(숨은 것)
+  document.getElementById('mFilled').innerHTML = `${filled}<small>/ ${n}</small>`;
+  document.getElementById('mXp').textContent = xp.toLocaleString('ko-KR');
+  document.getElementById('mCap').textContent = cap.toLocaleString('ko-KR');
+  document.getElementById('mPlan').innerHTML = `${Math.round(filled / plan * 100)}<small>%</small>`;
+  document.getElementById('ranks').innerHTML = RANKS.map(([nm, need]) => {
+    const ok = cap >= need;
+    return `<span class="rk${ok ? '' : ' no'}">${nm}<i>${ok ? Math.round(need / cap * 100) + '%' : '불가'}</i></span>`;
+  }).join('') + `<span class="rk" style="background:transparent;color:var(--muted)">천장 대비 필요 비율</span>`;
+}
+
+/* ── 조작 ── */
+document.getElementById('groups').addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t.dataset.f) return;
+  rows[t.dataset.g][Number(t.dataset.i)][t.dataset.f] = t.value;
+  save(); tally();
+});
+document.getElementById('groups').addEventListener('click', (e) => {
+  const del = e.target.closest('[data-del]');
+  if (del) { rows[del.dataset.del].splice(Number(del.dataset.i), 1); save(); render(); return; }
+  const add = e.target.closest('[data-add]');
+  if (add) { rows[add.dataset.add].push({ n: '', c: '' }); save(); render(); }
+});
+
+/* ── 내보내기 ── */
+function markdown() {
+  const L = ['# 업적 추가 — 채운 내용', ''];
+  let xp = 0;
+  for (const g of GROUPS) {
+    const R = rows[g.key].filter((r) => r.n.trim() || r.c.trim());
+    xp += rows[g.key].length * XP[g.key];
+    L.push(`## ${g.nm} ${rows[g.key].length}개 · ${XP[g.key]}점 — ${g.ds}`, '');
+    L.push('| # | 이름 | 조건 |', '|---|---|---|');
+    rows[g.key].forEach((r, i) => L.push(`| ${g.pre}${i + 1} | ${r.n.trim()} | ${r.c.trim()} |`));
+    L.push('');
+    if (!R.length) L.push('_아직 비어 있음_', '');
+  }
+  const cap = NOW_CAP + xp - rows.hidden.length * XP.hidden;
+  L.push('---', '', `추가 ${GROUPS.reduce((s,g)=>s+rows[g.key].length,0)}개 · ${xp.toLocaleString('ko-KR')}점 · 바뀐 천장 ${cap.toLocaleString('ko-KR')}점`, '');
+  L.push('| 등급 | 필요 XP | 천장 대비 |', '|---|---:|---:|');
+  for (const [nm, need] of RANKS) L.push(`| ${nm} | ${need.toLocaleString('ko-KR')} | ${cap >= need ? Math.round(need / cap * 100) + '%' : '도달 불가'} |`);
+  return L.join('\n');
+}
+const said = (m) => { document.getElementById('said').textContent = m; };
+document.getElementById('btnOut').addEventListener('click', () => {
+  const o = document.getElementById('out');
+  o.value = markdown(); o.style.display = 'block'; o.focus(); o.select();
+  said('아래 칸을 그대로 복사해서 넘겨주시면 됩니다.');
+});
+document.getElementById('btnCopy').addEventListener('click', async () => {
+  const md = markdown();
+  try { await navigator.clipboard.writeText(md); said('복사했습니다.'); }
+  catch {
+    const o = document.getElementById('out');
+    o.value = md; o.style.display = 'block'; o.focus(); o.select();
+    said('복사가 막혀 있어 아래 칸에 펼쳤습니다 — Ctrl+C 로 복사하세요.');
+  }
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  if (!confirm('적은 내용을 모두 지우고 빈 표로 되돌립니다. 계속할까요?')) return;
+  rows = seed(); save(); render(); said('비웠습니다.');
+});
+
+render();
+</script>
+</body>
+</html>
