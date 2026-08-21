@@ -63,6 +63,24 @@ console.log('\n[★명단까지 바뀌는가 — 순번만 바뀌면 카드 안�
   ok(/mout\.rawVerdict\.rosterReliable = true/.test(bc), '판독 신뢰 표식도 같이 붙인다');
 }
 
+console.log('\n[★내 자리도 교정 명단에서 다시 뽑는가 — 1번 회원은 명단만 바꾸면 안 따라온다]');
+{
+  const i = noC.indexOf('_sameArticle || _weakerThanCorrected');
+  const blk = noC.slice(i, i + 1800);
+  ok(/relocateOnRoster\(out\.rawVerdict, primary, loadToday\(1\)\)/.test(blk),
+    '★교정 명단을 얻은 뒤 본인 순번을 그 명단으로 재설정한다',
+    '1번 회원은 out.rawVerdict가 곳 자기 판정 — 명단만 갈면 명단은 27번이 김홍구인데 myPosition은 옛 30으로 남는다');
+  ok(/Object\.assign\(out, decide\(full, out\.rawVerdict, primary\)\)/.test(blk),
+    '자리가 바뀌면 알림 문구도 다시 쓴다',
+    '카드는 근무인데 푸시만 스페어면 같은 엇갈림이 알림으로 옮겨간다');
+  ok(!/resolveCutoff\(out\.rawVerdict/.test(blk),
+    '커트는 재계산하지 않는다 — 관리자가 손으로 정한 근무선을 명단 순서로 덮지 않는다');
+  const jd = read('src/judge.mjs').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok(/export function relocateOnRoster\(v, member = memberFromEnv\(\), today = null\)/.test(jd),
+    '재설정은 명단·순번 가드와 같은 함수를 쓴다(fixMemberPosByRoster)',
+    '같은 질문에 두 개의 답을 두면 언젠가 한쪽만 고친다');
+}
+
 console.log('\n[교정은 lastboard에도 여전히 남는가]');
 {
   ok(/_adminCorrected/.test(src), '교정 표식이 살아 있다');

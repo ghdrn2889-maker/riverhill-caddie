@@ -534,6 +534,17 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
   }
 }
 
+// ★명단을 '나중에' 갈아끼운 뒤 본인 자리를 다시 세우는 통로(교정소급 전용).
+//  1번 회원은 judge()가 판독 당시 명단으로 이미 순번을 확정해둔다. 그 뒤에 교정 명단만 었으면
+//  카드가 스스로 모순된다 — 실측 2026-08-21: 명단은 27번이 김홍구인데 myPosition은 옛 30이 그대로라,
+//  순번표는 27번 근무를 가리키는데 히어로만 '스페어 · 30번째'라고 떴다.
+//  다른 회원은 interpretForMember가 매번 명단에서 자리를 다시 뽑아 이 구멍이 없었다.
+export function relocateOnRoster(v, member = memberFromEnv(), today = null) {
+  if (!v) return v;
+  fixMemberPosByRoster(v, member, today);
+  return v;
+}
+
 function buildPrompt(article, member = memberFromEnv()) {
   const { name, part } = member;
   const wdesc = partWindowDesc(member);   // 이 회원(부) 티오프 시간대 서술 — 3부면 "16시 이후(저녁까지)"

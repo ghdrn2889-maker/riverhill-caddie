@@ -12,7 +12,7 @@ import { startCrawler } from './crawler.mjs';
 import { isScheduleWriter, PERSONAL_REQUEST_RE, looksLikeBoardPost } from './analyzer.mjs';
 import { fetchArticle } from './naverArticle.mjs';
 import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
-import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
+import { judge, interpretForMember, relocateOnRoster, decide, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as wd from './workday.mjs';
@@ -1755,6 +1755,21 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         if (Array.isArray(_cv.teeGrid) && _cv.teeGrid.length) out.rawVerdict.teeGrid = _cv.teeGrid.slice();
         out.rawVerdict._adminCorrected = _cv._adminCorrected;
         console.log(`·  [교정소급] #${full.id} 검수 교정 명단/티오프를 회원 처리에 적용(검수·대시보드·알림 일치)`);
+        // ★명단을 갈았으면 '내 자리'도 그 명단에서 다시 뽑는다.
+        //  1번 회원은 이 out.rawVerdict가 곳 자기 판정이라, 명단만 바꾸면 순번은 판독 당시(교정 전) 값에 멈췄다.
+        //  실측 2026-08-21 #27498: 명단 27번은 김홍구인데 myPosition은 옛 30 → 순번표는 근무,
+        //  히어로만 '스페어 · 30번째'. 다른 회원(interpretForMember)은 명단에서 매번 다시 뽑아 멀지 않았다.
+        //  ★커트는 그대로 둔다 — 관리자가 검수에서 손으로 정한 근무선을 명단 순서로 재해석하면 안 된다.
+        try {
+          const _p0 = Number(out.rawVerdict.myPosition) || 0, _s0 = String(out.rawVerdict.myStatus || '');
+          relocateOnRoster(out.rawVerdict, primary, loadToday(1));
+          const _p1 = Number(out.rawVerdict.myPosition) || 0, _s1 = String(out.rawVerdict.myStatus || '');
+          if (_p1 !== _p0 || _s1 !== _s0) {
+            // 알림 문구도 교정 명단 기준으로 다시 쓴다(카드는 근무인데 푸시는 스페어인 엇갈림 방지).
+            Object.assign(out, decide(full, out.rawVerdict, primary));
+            console.log(`·  [교정소급] 내 자리 재설정: 순번 ${_p0 || '?'}→${_p1 || '?'} · ${_s0 || '?'}→${_s1 || '?'}`);
+          }
+        } catch (e) { console.error('[교정소급 자리재설정 오류]', e.message); }
       }
     }
   } catch (e) { console.error('[교정소급 오류]', e.message); }
