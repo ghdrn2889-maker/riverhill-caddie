@@ -150,6 +150,21 @@ console.log('\n[사전 — 정본 코앞의 오독은 확정하지 않는다]');
     '조용히 막으면 새 캐디가 영영 확정되지 않는다');
 }
 
+console.log('\n[당겨오기 뒷정리 — 원래 부에서 빠진다]');
+{
+  const src = read('src/monitor.mjs').replace(/^[ \t]*\/\/.*$/gm, '');
+  ok(/async function reconcilePulls\(/.test(src), '검수 뒤 뒷정리가 있다');
+  ok(/_skipRec \? \[\] : await reconcilePulls\(part, _tok\)/.test(src), '1·2부 교정 뒤에 돈다');
+  ok(/_skipRec \? \[\] : await reconcilePulls\('3', _tok\)/.test(src), '3부 교정 뒤에도 돈다');
+  ok(/_noReconcile: true/.test(src), '뒷정리가 부른 요청은 다시 뒷정리하지 않는다', '안 그러면 서로를 계속 부른다');
+  ok(/String\(w\.from\) === String\(justCorrected\)/.test(src), '방금 고친 부는 건드리지 않는다');
+  ok(/notify: false, autoNotify: false, movedOut/.test(src), '뒷정리는 알림을 보내지 않는다');
+  ok(/cutLine: src\.cut/.test(src), '팀 수(커트)는 그대로 둔다',
+    '예약이 정한 팀은 캐디가 빠진다고 줄지 않는다 — 스페어 맨 앞이 근무로 올라온다');
+  // ★자동 판독 뒤에는 안 돈다 — 판독이 흔들리는 날 시스템이 스스로 명단에서 사람을 빼면 더 위험하다.
+  ok(!/reconcilePulls/.test(read('src/boardreader.mjs')), '자동 판독 경로에서는 안 돈다');
+}
+
 console.log('\n[알림 — 사람이 무엇을 해야 하는지 말한다]');
 {
   const src = read('src/boardalert.mjs');
