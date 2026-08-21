@@ -1739,7 +1739,15 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   try {
     const _lbCorr = loadJSON('lastboard.json', null);
     const _cv = _lbCorr && _lbCorr.rawVerdict;
-    if (_cv && _cv._adminCorrected && String(_lbCorr.id) === String(full.id) && out.rawVerdict) {
+    // ★같은 글이 아니어도 소급한다 — 이번 판독이 '정본만 못하면'(약한 변동·부분 크롭).
+    //  대바는 사진에 찍히지 않는다. 관리자가 검수에서 사람을 바꿔 넣어도 원본 사진엔 옛 이름이 그대로라,
+    //  그 사진을 다시 읽는 순간 언제나 교정 전으로 돌아간다.
+    //  실측 2026-08-21: 14:31 조하빈(27) → 김홍구으로 대바 교정. 1분 뒤 글 #27496이 같은 사진을 다시 읽어
+    //   회원 카드를 옛 명단으로 되돌렸다 — 검수·대조표는 김홍구, 앱만 조하빈이었다.
+    //  정본 가드(rememberBoard)는 lastboard만 지켰고 회원 카드는 안 지켰다. 같은 판정을 여기서도 쓴다.
+    const _sameArticle = String(_lbCorr && _lbCorr.id) === String(full.id);
+    const _weakerThanCorrected = !isAuthoritativeBoard(out.rawVerdict);
+    if (_cv && _cv._adminCorrected && (_sameArticle || _weakerThanCorrected) && out.rawVerdict) {
       const pd = String(_cv.dateLabel || '').trim(), nd = String(out.rawVerdict.dateLabel || '').trim();
       if (!(pd && nd && pd !== nd)) {   // 같은 날만
         if (Array.isArray(_cv.part3Roster) && _cv.part3Roster.length) out.rawVerdict.part3Roster = _cv.part3Roster.slice();
