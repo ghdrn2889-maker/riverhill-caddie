@@ -77,6 +77,23 @@
        padding:9px 14px;font-family:inherit;font-size:13px;font-weight:750;cursor:pointer;width:100%}
   .add:hover{border-color:var(--green);color:var(--green-d)}
 
+  /* 이미 있는 것 — 중복 방지 */
+  details.have{border-top:1px solid var(--line);background:var(--bg)}
+  details.have summary{padding:10px 16px;font-size:12.5px;font-weight:800;color:var(--muted);
+       cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px}
+  details.have summary::-webkit-details-marker{display:none}
+  details.have summary::before{content:'▸';font-size:11px;transition:transform .15s}
+  details.have[open] summary::before{transform:rotate(90deg)}
+  details.have summary:hover{color:var(--green-d)}
+  .havelist{padding:2px 16px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:5px 14px}
+  .havelist div{font-size:12px;color:var(--muted);line-height:1.5;padding:3px 0}
+  .havelist b{color:var(--ink);font-weight:750}
+  .havelist em{font-style:normal;font-size:10.5px;font-weight:800;color:var(--green-d);
+       background:var(--soft);padding:1px 5px;border-radius:4px;margin-left:4px}
+  /* 이름이 겹칠 때 */
+  input.dup{border-color:#c9622f !important;background:var(--warn-bg)}
+  .dupmsg{font-size:11px;font-weight:750;color:#c9622f;padding:0 10px 6px}
+
   /* 원칙 */
   .rules{background:var(--warn-bg);border:1px solid var(--line);border-radius:15px;padding:15px 18px;margin-bottom:20px}
   .rules h3{margin:0 0 7px;font-size:13.5px;font-weight:850;color:var(--warn)}
@@ -101,7 +118,8 @@
   <h1>업적 기재표</h1>
   <p class="lead">추가할 트로피 <b>31개</b>의 이름과 조건을 채우는 표입니다.
     적는 대로 <b>XP 천장과 등급 난이도가 다시 계산</b>됩니다 — 행을 더하거나 지우면 그 자리에서 균형이 보입니다.<br>
-    적은 내용은 <b>브라우저에 자동 저장</b>되니 창을 닫아도 남습니다. 다 채우면 아래 <b>내보내기</b>로 넘겨주세요.</p>
+    각 묶음 아래에 <b>이미 배포된 42개</b>를 접어 뒀습니다. 이름이 겹치면 <b>적는 즉시 표시</b>됩니다.<br>
+    적은 내용은 브라우저에 자동 저장되고, <b>저장하기</b>를 누르면 파일로 떨어집니다.</p>
 
   <div class="sum">
     <div class="top">
@@ -125,17 +143,26 @@
   </div>
 
   <div id="groups"></div>
+  <div class="grp" id="plat"></div>
 
   <div class="foot">
-    <button class="btn" id="btnOut" type="button">내보내기</button>
+    <button class="btn" id="btnSave" type="button">저장하기</button>
+    <button class="btn gh2" id="btnOut" type="button">내보내기</button>
     <button class="btn gh2" id="btnCopy" type="button">복사하기</button>
     <button class="btn gh2" id="btnReset" type="button">비우기</button>
   </div>
+  <p class="lead" style="margin:11px 0 0;font-size:12.5px">
+    <b>저장하기</b>를 누르면 <b>업적-기재표-내용.md</b> 파일로 떨어집니다.
+    처음 한 번만 위치를 묻는데 <b>이 docs 폴더</b>에 저장해 주세요 — 그 다음부터는 묻지 않고 같은 파일에 덮어씁니다.
+    (위치 묻기가 막혀 있으면 <b>다운로드 폴더</b>로 갑니다. 둘 다 제가 찾아 읽습니다.)</p>
   <div class="said" id="said"></div>
   <textarea id="out" readonly spellcheck="false"></textarea>
 </div>
 
 <script>
+/* ── 이미 배포된 42개 — 중복 방지용 ── */
+const HAVE = {"bronze":[["첫 출근","첫 근무를 완수하면","year"],["첫 3부","3부 근무를 처음 완수하면","year"],["첫 2부","2부 근무를 처음 완수하면","year"],["첫 1부","1부 근무를 처음 완수하면","year"],["다섯 걸음","누적 근무 다섯 번을 채우면",""],["열 걸음","누적 근무 열 번을 채우면",""],["서른 고개","누적 근무 서른 번을 채우면",""],["3부의 발자국","3부 근무를 다섯 번 달성하면",""],["투의 첫날","하루에 두 번(투) 근무를 처음 완수하면",""],["남들보다 한 걸음 더","하루 두 번 근무를 세 번 달성하면",""],["첫 54","하루에 1·2·3부(54)를 처음 완수하면",""],["주말의 그린","주말에 처음 근무하면",""],["알찬 한 주","한 주에 다섯 번 근무하면",""],["In and Out 캐디","인코스와 아웃코스를 모두 한 번씩 돌면",""],["마음도 한 줄","근무 일지에 그날의 기분·메모를 처음 남기면",""],["좋았던 하루","'좋음' 이상의 기분을 처음 기록하면",""],["목표를 응원해","정산에서 월 목표를 처음 세우면",""],["누군가의 감사","팁을 처음 기록하면",""],["나를 위한 소비","정산에 지출을 처음 기록하면",""],["영수증 스캐너","지출 등록 시 AI 영수증 인식을 처음 사용하면",""],["찰칵! 찰칵!","카트 점검을 처음 완료하면",""],["틀린 그림 찾기","클럽 점검을 처음 완료하면",""],["입문","앱에 처음 방문하면",""],["첫 확인","앱에서 배치표를 처음 확인하면",""],["기록의 시작","근무 일지를 처음 열면",""],["셈의 시작","정산을 처음 확인하면",""],["나의 자리","프로필을 처음 열면",""]],"silver":[["봄의 함께","3~5월 사이 올해 첫 근무를 하면","year"],["여름을 대비해!","6~8월 사이 올해 첫 근무를 하면","year"],["나 가을 타나봐","9~11월 사이 올해 첫 근무를 하면","year"],["이 날씨에 골프를 쳐?","12~2월 사이 올해 첫 근무를 하면","year"],["열흘의 마음","한 달에 기분·메모를 10일 이상 남기면","month"],["감사가 쌓여","팁을 열 번 기록하면",""],["절세의 습관","정산에 지출을 열 건 기록하면",""],["목표 달성","정산에서 세운 월 목표 금액을 실제 수입으로 처음 넘어서면",""],["돌아보기","한 달 근무 10일 이상이 기록된 수익계산서를 처음 발급하면",""]],"gold":[["사계의 일기","봄·여름·가을·겨울 네 계절 모두 그날의 기분·메모를 한 번 이상 남기면",""],["반년의 장부","수익계산서를 여섯 달 발급하면",""]],"hidden":[["숨겨진 이야기","",""]],"platinum":[["코스믹 오브","한 해, 리버힐 캐디 중 단 한 분께 주어지는 최고의 영광이에요. 올해의 수상 기준은 준비 중이에요.",""],["네뷸라 은하","한 해, 리버힐 캐디 중 단 한 분께 주어지는 최고의 영광이에요. 올해의 수상 기준은 준비 중이에요.",""],["테서랙트 큐브","한 해, 리버힐 캐디 중 단 한 분께 주어지는 최고의 영광이에요. 올해의 수상 기준은 준비 중이에요.",""]]};
+
 /* ── 지형: 지금 카탈로그가 만들어 내는 천장 ── */
 const NOW_CAP = 1677;                       // 카탈로그 1,400 + '열흘의 마음' 달 반복 누적 277
 const XP = { bronze: 20, silver: 60, gold: 160, hidden: 100 };
@@ -181,9 +208,28 @@ function render() {
         <td class="delc"><button class="del" type="button" data-del="${g.key}" data-i="${i}" aria-label="${g.pre}${i + 1} 행 지우기">&times;</button></td>
       </tr>`).join('')}</tbody></table>
       <div class="addrow"><button class="add" type="button" data-add="${g.key}">${g.nm} 한 줄 더 (+${XP[g.key]}점)</button></div>
+      ${haveBlock(g)}
     </div>`;
   }).join('');
+  // 플래티넘은 새로 더하지 않는다(한 해 한 명). 그래도 이름은 보여야 중복을 피한다.
+  const P = HAVE.platinum || [];
+  document.getElementById('plat').innerHTML = P.length
+    ? `<div class="gh"><span class="nm">플래티넘</span><span class="xp">500점</span>
+        <span class="ds">한 해, 리버힐 캐디 중 단 한 분께. 여기엔 더하지 않습니다 — 이름만 겹치지 않게.</span>
+        <span class="ct">${P.length}개</span></div>
+       <div class="havelist" style="padding-top:12px">${P.map(([n, c]) =>
+         `<div><b>${esc(n)}</b><br>${esc(c || '조건 준비 중')}</div>`).join('')}</div>` : '';
   tally();
+}
+
+/* ★이미 배포된 것을 같은 자리에 펼쳐 둔다 — 중복은 다른 화면에서 확인하려면 안 하게 된다. */
+function haveBlock(g) {
+  const L = HAVE[g.key] || [];
+  if (!L.length) return '';
+  return `<details class="have"><summary>이미 있는 ${g.nm} ${L.length}개 보기 — 중복 확인</summary>
+    <div class="havelist">${L.map(([n, c, rep]) =>
+      `<div><b>${esc(n)}</b>${rep ? `<em>${rep === 'year' ? '해마다' : '달마다'}</em>` : ''}<br>${esc(c || '조건 비공개')}</div>`).join('')}
+    </div></details>`;
 }
 function tally() {
   let n = 0, xp = 0, plan = 0;
@@ -203,6 +249,35 @@ function tally() {
     const ok = cap >= need;
     return `<span class="rk${ok ? '' : ' no'}">${nm}<i>${ok ? Math.round(need / cap * 100) + '%' : '불가'}</i></span>`;
   }).join('') + `<span class="rk" style="background:transparent;color:var(--muted)">천장 대비 필요 비율</span>`;
+  markDups();
+}
+
+/* ★이름이 겹치면 그 자리에서 알려준다 — 다 적고 나서 찾으면 늦다.
+   티어가 달라도 이름이 같으면 중복이다(회원 눈에는 티어가 안 보인다). */
+const norm = (s) => String(s).replace(/\s|!|\?|·/g, '').toLowerCase();
+let HAVE_SET = null;
+function markDups() {
+  if (!HAVE_SET) {
+    HAVE_SET = new Map();
+    for (const k of Object.keys(HAVE)) for (const [n] of HAVE[k]) HAVE_SET.set(norm(n), n);
+  }
+  const mine = {};
+  for (const g of GROUPS) for (const r of rows[g.key]) {
+    const k = norm(r.n); if (k) mine[k] = (mine[k] || 0) + 1;
+  }
+  for (const inp of document.querySelectorAll('input[data-f="n"]')) {
+    const v = norm(inp.value);
+    const td = inp.closest('td');
+    const old = td.querySelector('.dupmsg'); if (old) old.remove();
+    inp.classList.remove('dup');
+    if (!v) continue;
+    let why = '';
+    if (HAVE_SET.has(v)) why = `이미 있습니다 — “${HAVE_SET.get(v)}”`;
+    else if (mine[v] > 1) why = '이 표 안에서 겹칩니다';
+    if (!why) continue;
+    inp.classList.add('dup');
+    td.insertAdjacentHTML('beforeend', `<div class="dupmsg">${esc(why)}</div>`);
+  }
 }
 
 /* ── 조작 ── */
@@ -236,9 +311,64 @@ function markdown() {
   L.push('---', '', `추가 ${GROUPS.reduce((s,g)=>s+rows[g.key].length,0)}개 · ${xp.toLocaleString('ko-KR')}점 · 바뀐 천장 ${cap.toLocaleString('ko-KR')}점`, '');
   L.push('| 등급 | 필요 XP | 천장 대비 |', '|---|---:|---:|');
   for (const [nm, need] of RANKS) L.push(`| ${nm} | ${need.toLocaleString('ko-KR')} | ${cap >= need ? Math.round(need / cap * 100) + '%' : '도달 불가'} |`);
+  // ★기계가 읽을 몫 — 표를 다시 파싱하다 틀리느니 원본을 그대로 싣는다.
+  L.push('', '```json', JSON.stringify({ savedAt: new Date().toISOString().slice(0, 16).replace('T', ' '), rows }, null, 1), '```', '');
   return L.join('\n');
 }
 const said = (m) => { document.getElementById('said').textContent = m; };
+
+/* ── 파일로 저장 ────────────────────────────────────────────
+   ★localStorage는 이 브라우저 안에만 있어 남이 못 읽는다. 넘기려면 파일이어야 한다.
+   1순위: 파일 손잡이(File System Access)를 한 번 받아 두고 그 파일에 계속 덮어쓴다 — 사본이 안 쌓인다.
+   2순위: 막혀 있으면 그냥 내려받는다(다운로드 폴더). 어느 쪽이든 파일 하나로 떨어진다. */
+const FNAME = '업적-기재표-내용.md';
+const IDB = 'riverhill-trophy-fh';
+const idb = () => new Promise((res, rej) => {
+  const r = indexedDB.open(IDB, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('h');
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+const hGet = async () => { try { const d = await idb();
+  return await new Promise((res) => { const q = d.transaction('h').objectStore('h').get('f'); q.onsuccess = () => res(q.result); q.onerror = () => res(null); });
+} catch { return null; } };
+const hPut = async (h) => { try { const d = await idb();
+  d.transaction('h', 'readwrite').objectStore('h').put(h, 'f');
+} catch { /* 손잡이 보관 실패는 치명적이지 않다 — 다음에 다시 물으면 된다 */ } };
+
+function download(text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = FNAME; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+async function saveFile() {
+  const text = markdown();
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      let h = await hGet();
+      // 보관해 둔 손잡이가 아직 쓸 수 있는지 확인 — 권한은 세션마다 다시 물을 수 있다.
+      if (h) {
+        const q = await h.queryPermission({ mode: 'readwrite' });
+        if (q !== 'granted' && await h.requestPermission({ mode: 'readwrite' }) !== 'granted') h = null;
+      }
+      if (!h) {
+        h = await window.showSaveFilePicker({ suggestedName: FNAME,
+          types: [{ description: '마크다운', accept: { 'text/markdown': ['.md'] } }] });
+        await hPut(h);
+      }
+      const w = await h.createWritable();
+      await w.write(text); await w.close();
+      said(`저장했습니다 — ${h.name} (다음부터는 안 묻고 이 파일에 덮어씁니다)`);
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') { said('저장을 취소했습니다.'); return; }
+      // 그 밖의 실패(파일 접근이 막힌 환경 등)는 조용히 내려받기로 넘어간다.
+    }
+  }
+  download(text);
+  said('다운로드 폴더에 저장했습니다 — 업적-기재표-내용.md');
+}
+document.getElementById('btnSave').addEventListener('click', saveFile);
 document.getElementById('btnOut').addEventListener('click', () => {
   const o = document.getElementById('out');
   o.value = markdown(); o.style.display = 'block'; o.focus(); o.select();
