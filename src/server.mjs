@@ -16,6 +16,7 @@ import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, p
 import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
 import * as wd from './workday.mjs';
+import { recordRollCall } from './rollcall.mjs';
 import { compose as composeNotify, contextOf as notifyContextOf, partLabel as notifyPartLabel, trophyNotice } from './notifytext.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -151,6 +152,20 @@ app.post('/api/trophies/ack', (req, res) => {
 //  ★한 회원이 한 번에 여러 개를 달성해도 알림은 한 통이다. 트로피마다 울리면
 //   축하가 성가심이 된다(방금 걷어낸 '중구난방'으로 되돌아가는 길).
 //  ★조용시간이면 push.mjs가 아침 대기열로 돌린다(bypassQuiet 안 켠다) — 급한 알림이 아니다.
+// ── 전원 대조 ──────────────────────────────────────────────
+//  정본 87명을 세우고 각자 오늘 상태를 하나씩 요구한다. 아무것도 고치지 않는다 — 재기만 한다.
+//  ★설명률(87명 중 몇 명이 설명되나)은 기록만 하고 알리지 않는다.
+//   지금은 근태 칸이 캡처에 안 들어와 매일 낮게 나온다 — 그걸 매일 알리면 알림이 배경음이 된다.
+//   알리는 건 '셀 수 있고 반드시 틀린' 둘뿐이다: 근무자 수 ≠ 팀 수, 정본에 없는 이름.
+async function runRollCall() {
+  const rc = recordRollCall();
+  for (const x of rc.partCheck) {
+    if (!x.ok && x.cut > 0) await raiseBoardIssue({ kind: 'part_count_mismatch', part: Number(x.part), cut: x.cut, workers: x.workers });
+  }
+  if (rc.strangers.length) await raiseBoardIssue({ kind: 'unknown_names', names: rc.strangers.slice(0, 8) });
+  return rc;
+}
+
 let _trophyBusy = false;
 async function sweepTrophies({ notify = true } = {}) {
   if (_trophyBusy) return { checked: 0, notified: 0 };
@@ -1975,6 +1990,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // ★배치표 한 판이 끝나면 업적을 본다 — 어제 마친 근무가 여기서 반영된다.
   //  판독 중에 끼어들지 않게 맨 끝에서 한 번만(전 회원 한 바퀴는 파일 몇 개 읽는 정도).
+  // ★전원 대조 — 고치지 않고 잰다. 이 숫자가 있어야 다음에 무엇을 고쳤을 때 효과를 알 수 있다.
+  try { await runRollCall(); } catch (e) { console.error('[전원대조] 오류:', e.message); }
   try { await sweepTrophies(); } catch (e) { console.error('[업적] 배치표 후 판정 오류:', e.message); }
 
   return primaryRet; // 호출부 호환(1번 회원 결과 반환)

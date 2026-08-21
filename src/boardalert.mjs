@@ -69,6 +69,14 @@ function describe(it) {
     case 'pull_forbidden':
       return { title: '중복 근무자가 표시에 없는 부에서 근무로 잡혔습니다',
         body: `${(it.names || []).join(' / ')} — 당겨올 수 있는 사람은 한 부만 뛰는 캐디입니다. 이름이나 부를 잘못 읽었을 수 있습니다.` };
+    // ★근무자 수 = 팀 수. 팀 하나에 캐디 한 명이 붙는다 — 어긋나면 명단이나 커트 중 하나가 틀렸다.
+    case 'part_count_mismatch':
+      return { title: `${p} 근무자 수가 팀 수와 다릅니다`,
+        body: `팀 ${it.cut}인데 근무자는 ${it.workers}명입니다. 명단이 잘렸거나 커트를 잘못 읽었습니다.` };
+    // ★배치표엔 있는데 정본 명단에 없는 이름 — 오독이거나 미등록 신입, 둘 중 하나뿐이다.
+    case 'unknown_names':
+      return { title: '정본 명단에 없는 이름이 배치표에 있습니다',
+        body: `${(it.names || []).join(', ')} — 이름을 흘려 읽었거나, 아직 정본에 없는 캐디입니다. 오독이면 그 자리 사람이 통째로 사라진 것입니다.` };
     case 'board_not_reflected':
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':
