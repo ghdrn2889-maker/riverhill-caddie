@@ -14,6 +14,7 @@
 // ★하루 1일 규칙(확정): 그날 한 번이라도 근무했으면 근무 1일. 54라고 세 번 치지 않는다.
 //  물량(투·54)은 '근무 일수'가 아니라 별도 업적으로 인정한다.
 import * as journal from './journal.mjs';
+import * as wd from './workday.mjs';
 import * as ledger from './ledger.mjs';
 import { loadUserJSON, saveUserJSON } from './store.mjs';
 
@@ -49,23 +50,10 @@ function weekKey(iso) {
   d.setDate(d.getDate() - day);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-// ── '마친 근무인가' ────────────────────────────────────────
-//  ★배치표는 전날 밤에 올라오고 그때 일지에 '근무'로 적힌다. 그대로 세면
-//   아직 나가지도 않은 근무로 '첫 출근'이 하루 먼저 열린다.
-//  기준은 정산과 같다 — 마지막 티오프 + 라운드 소요(4시간 30분)가 지나야 마친 것으로 본다.
-//  티오프를 모르는 오늘 근무는 아직 안 한 것으로 본다(먼저 축하하느니 늦게 축하한다).
-export const ROUND_MIN = 270;
-export function isSettled(dateISO, tees = [], now = Date.now()) {
-  const k = new Date(now + 9 * 3600 * 1000);          // KST
-  const today = k.toISOString().slice(0, 10);
-  if (dateISO < today) return true;
-  if (dateISO > today) return false;                  // 내일 근무는 아직 근무가 아니다
-  const mins = (tees || [])
-    .map((t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; })
-    .filter((v) => v != null);
-  if (!mins.length) return false;
-  return (k.getUTCHours() * 60 + k.getUTCMinutes()) >= Math.max(...mins) + ROUND_MIN;
-}
+// ── '마친 근무인가' ──────────────────────────
+//  판정은 workday.mjs에 하나만 있다 — 정산과 같은 자를 쓴다.
+//  여기서 다시 내보내는 건 기존 가져다 쓰던 곳(검사)을 안 깨뜨려는 것뿐이다.
+export { ROUND_MIN, isSettled } from './workday.mjs';
 
 // 조건을 만족한 '그 순간의 날짜'를 준다. 없으면 빈 문자열.
 const firstWhere = (arr, fn) => { const hit = (arr || []).find(fn); return hit ? hit.date : ''; };
@@ -79,16 +67,12 @@ export function buildContext(userId = 1) {
   const jMap = {};
   for (const r of j) if (r && r.date) jMap[r.date] = r;
 
-  // 근무한 날 — 대표 kind가 work이거나, 어느 라운드든 work면 그날은 근무일.
+  // 근무한 날 — 판정은 workday.mjs가 한다(일지·정산과 같은 자).
   const days = [];
   for (const date of Object.keys(jMap).sort()) {
     const r = jMap[date];
-    if (!r || r.excluded) continue;
-    const rounds = Object.values(r.rounds || {});
-    const worked = rounds.filter((x) => x && x.kind === 'work');
-    const isWork = r.kind === 'work' || worked.length > 0;
-    if (!isWork) continue;
-    if (!isSettled(date, [r.teeTime, ...worked.map((x) => x.teeTime)])) continue;
+    if (!wd.isWorkDone(r)) continue;                   // 근무인가 · 마쳤는가 — 정산과 똑같은 판정
+    const worked = Object.values(r.rounds || {}).filter((x) => x && x.kind === 'work');
     // rounds가 비었는데 kind만 work인 옛 기록은 대표 부(3부)로 본다 — 기록을 버리지 않는다.
     const parts = worked.length ? [...new Set(worked.map((x) => String(x.part)))].sort() : ['3'];
     // ★인·아웃은 별도 필드가 아니라 course에 그대로 들어 있다('IN'/'OUT').

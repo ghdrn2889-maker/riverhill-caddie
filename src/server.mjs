@@ -15,6 +15,7 @@ import { analyzeTurn, analyzeSchedule, analyzeReceipt } from './gemini.mjs';
 import { judge, interpretForMember, commuteInfo, scheduleHint, cheapRelevance, partWindow, dayWordFor, dutyToParts, crossPartWorkMap, gridLooksRownumbered } from './judge.mjs';
 import { loadToday, saveToday, applyVerdict, statusKo, applyAdminLock, clearTodayPart, dayKey } from './today.mjs';
 import * as worklog from './worklog.mjs';
+import * as wd from './workday.mjs';
 import { compose as composeNotify, contextOf as notifyContextOf, partLabel as notifyPartLabel, trophyNotice } from './notifytext.mjs';
 import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
@@ -326,14 +327,17 @@ app.get('/api/journal', (req, res) => {
   const month = req.query.month ? Number(req.query.month) : undefined;
   const uid = req.user?.id || 1;
   const days = journal.listJournal({ year, month }, uid).map((d) => {
+    // ★근무 판정은 서버가 한 번만 한다 — 화면이 제각기 세면 또 갈라진다(일지 30일 · 정산 29일).
+    const f = { work: wd.isWorkDay(d), settled: wd.isWorkDone(d), upcoming: wd.isUpcomingWork(d), payable: wd.isPayable(d) };
     // ★유효 부 조합(정산과 동일 소스) + 수동보정 여부를 얹어 일지가 조합·탕수를 표시/수정하게 함.
-    if (d.kind === 'work' && !d.excluded) {
-      const eff = ledger.effPartsFor(d.date, uid) || ['3'];
-      return { ...d, effParts: eff, partsOverride: ledger.hasDayPartsOverride(d.date, uid) };
-    }
-    return d;
+    if (!f.work) return { ...d, ...f };
+    const eff = ledger.effPartsFor(d.date, uid) || ['3'];
+    return { ...d, ...f, effParts: eff, partsOverride: ledger.hasDayPartsOverride(d.date, uid) };
   });
-  res.json({ ok: true, days, summary: journal.summary({ year, month }, uid) });
+  const sum = journal.summary({ year, month }, uid);
+  sum.work = days.filter((x) => x.settled).length;        // 근무 확정(마친 근무)
+  sum.upcomingWork = days.filter((x) => x.upcoming).length; // 아직 안 한 근무 — 같이 세지 않고 따로 알린다
+  res.json({ ok: true, days, summary: sum });
 });
 
 // 일일 근무 일지 수동 보정 — 그날 분류 직접 지정(근무/스페어/휴무/휴가/순번 제외, 또는 auto 복귀).

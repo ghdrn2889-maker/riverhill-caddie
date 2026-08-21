@@ -1883,10 +1883,14 @@ async function renderJournalCal() {
   const pre = `${jViewY}-${String(jViewM).padStart(2, '0')}`;
   const md = jCache.days.filter((d) => d.date.startsWith(pre));
   const cnt = (f) => md.filter(f).length;
-  const sub = [`근무 ${cnt((d) => d.kind === 'work' && !d.excluded)}`, `스페어 ${cnt((d) => d.kind === 'spare')}`, `휴무 ${cnt((d) => d.kind === 'off' && !d.excluded && d.offType !== 'vacation' && d.offType !== 'sick')}`];
+  // ★근무는 서버가 붙여준 표식(settled)을 읽는다 — 여기서 직접 세면 정산·트로피와 숫자가 갈라졌다.
+  //  아직 라운드를 안 마친 날(오늘·내일 배치표)은 '예정'으로 따로 센다.
+  const sub = [`근무 ${cnt((d) => d.settled)}`, `스페어 ${cnt((d) => d.kind === 'spare')}`, `휴무 ${cnt((d) => d.kind === 'off' && !d.excluded && d.offType !== 'vacation' && d.offType !== 'sick')}`];
+  const upc = cnt((d) => d.upcoming);
   const vac = cnt((d) => d.kind === 'off' && !d.excluded && d.offType === 'vacation');
   const sick = cnt((d) => d.kind === 'off' && !d.excluded && d.offType === 'sick');
   const rem = cnt((d) => d.excluded);
+  if (upc) sub.push(`예정 ${upc}`);
   if (vac) sub.push(`휴가 ${vac}`);
   if (sick) sub.push(`병가 ${sick}`);
   if (rem) sub.push(`순번제외 ${rem}`);
@@ -2715,7 +2719,8 @@ function renderLgList() {
   if (lgPage > pages - 1) lgPage = pages - 1; if (lgPage < 0) lgPage = 0;
   const shown = entries.slice(lgPage * LG_PAGE, lgPage * LG_PAGE + LG_PAGE);
   $('lgList').innerHTML = shown.length ? shown.map(lgRowHTML).join('') : '<div class="lg-empty" style="padding:26px 0;text-align:center;color:#9aa49c;font-size:12.5px;">이 달 기록이 없어요.</div>';
-  const wN = (lgData.rows || []).length, xN = (lgData.expenses || []).length;
+  // ★근무일수는 서버가 준 단일 판정(workedDays)을 그대로 — 내역 줄 개수로 세면 당번 날이 빠져 일지·홈과 갈라진다.
+  const wN = Number(lgData.workedDays) || 0, xN = (lgData.expenses || []).length;
   // ★예정(아직 안 한 근무)·당번(무보수)은 금액에 안 들어가니, 왜 안 잡히는지 여기서 알려준다.
   const upN = Number(lgData.upcomingDays) || 0, dtN = Number(lgData.dutyDays) || 0;
   const extra = (upN ? ` · 예정 ${upN}일(미반영)` : '') + (dtN ? ` · 당번·벌당 ${dtN}일(무보수)` : '');
