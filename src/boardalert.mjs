@@ -82,8 +82,8 @@ function describe(it) {
     case 'headcount_mismatch': {
       const miss = (it.misses || []).map((m) => `${m.key} ${m.counted}/${m.declared}`).join(' · ');
       const n = Math.abs(Number(it.gap) || 0);
-      return { title: `배치표 인원과 ${n}명 어긋납니다`,
-        body: `배치표는 가용 ${it.declared}명인데 ${it.counted}명만 찾았습니다.`
+      return { title: `배치표 인원 ${n}명을 못 찾았습니다`,
+        body: `배치표 총원 ${it.declared}명 중 ${it.counted}명만 자리를 찾았습니다.`
           + (miss ? ` 어긋난 곳: ${miss}.` : '')
           + ' 명단을 못 읽은 자리가 있습니다 — 검수에서 확인해 주세요.' };
     }

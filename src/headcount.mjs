@@ -35,11 +35,16 @@ export function countedFrom(rc) {
   const breakdown = {};
   for (const k of OFF_KEYS) breakdown[k] = rows.filter((r) => r.state === '불가용' && has(r, k)).length;
   for (const k of ROLE_KEYS) breakdown[k] = rows.filter((r) => r.state === '역할' && has(r, k)).length;
+  const available = rows.filter((r) => r.state === '근무' || r.state === '스페어').length;
+  const excluded = rows.filter((r) => r.state === '불가용').length;
+  const role = rows.filter((r) => r.state === '역할').length;
   return {
     total: rows.length,
-    available: rows.filter((r) => r.state === '근무' || r.state === '스페어').length,
-    excluded: rows.filter((r) => r.state === '불가용').length,
-    role: rows.filter((r) => r.state === '역할').length,
+    available,
+    excluded,
+    role,
+    // ★placed — 어떤 자리든 찾아준 사람. 이게 총원과 맞으면 그날을 다 읽은 것이다.
+    placed: available + excluded + role,
     breakdown,
   };
 }
@@ -47,14 +52,23 @@ export function countedFrom(rc) {
 // ── 채점표 ──────────────────────────────────────────────────
 //  gap = 우리가 센 수 − 배치표가 말한 수. 음수면 그만큼 놓쳤다는 뜻이다.
 //
-//  ★hard(반드시 맞아야 하는 줄)는 '가용' 하나뿐이다. 나머지는 참고다. 이유:
+//  ★hard(알림을 좌우하는 줄)는 '설명' 하나뿐이다 — 총원 83명 중 우리가 자리를 찾아준 사람 수.
+//   왜 '가용'이 아니라 '설명'인가: 가용/제외의 경계는 흔들린다. 실측 8/21 배치표를 보면
+//   제외인원 19인데 상세 합은 20이다(휴가1 병가1 휴무16 당번1 배치1). 당번·배치 같은 역할은
+//   가용 쪽에 설 수도, 제외 쪽에 설 수도 있어 그 경계에서 ±1씩 논다.
+//   반면 '총원 83명 각자에게 자리가 있었나'는 경계와 무관하다. 근무든 스페어든 근태든 역할이든
+//   자리를 찾았으면 설명된 것이고, 못 찾았으면 그 사람은 판독에서 사라진 것이다.
+//
+//  다른 줄이 hard가 아닌 이유:
 //   · 총원 — 정본 명단은 퇴사·신입 때문에 배치표 총원과 상시로 어긋난다(오늘 정본 89 vs 총원 83).
 //     매일 알리면 알림이 배경음이 된다. 대신 차이를 기록해 정본을 손볼 때 쓴다.
 //   · 당번·프리 — 당번이어도 가용이 모자라면 나가서 뛴다. 뛴 사람은 우리 셈에서 '근무'로 올라가고
 //     배치표 당번 칸엔 그대로 남는다. 즉 ±1은 정상적으로 생긴다.
-//  그래서 '가용'조차 1 차이는 알리지 않는다(당번 한 명이 어느 쪽에 서느냐로 갈릴 수 있다).
-//  2 이상 벌어지면 그건 사람이 통째로 사라진 것이다 — 그때만 알린다.
-export const ALERT_GAP = 2;
+//
+//  ★알림은 '모자랄 때만'이다. 남는 건(정본이 배치표보다 많은 것) 판독 실패가 아니라 명부 문제다.
+//  ★기준값은 아직 보정 중이다 — 실측 8/21이 −3(당번·배치 2명 + 진짜 누락 1명)이라, 그보다 위에서
+//   시작해 며칠 실데이터를 보고 좁힌다. 이제 잴 수 있으니 보정할 근거가 생겼다.
+export const ALERT_GAP = 5;
 
 export function scoreHeadcount(declared, rc) {
   if (!declared || !rc) return null;
@@ -64,8 +78,9 @@ export function scoreHeadcount(declared, rc) {
     if (dec == null) return;
     lines.push({ key, declared: dec, counted: cnt, gap: cnt - dec, hard: !!hard });
   };
-  add('가용', declared.available, counted.available, true);
-  add('총원', declared.total, counted.total, false);
+  add('설명', declared.total, counted.placed, true);          // ★총원 중 자리를 찾아준 사람
+  add('가용', declared.available, counted.available, false);
+  add('총원', declared.total, counted.total, false);          // 정본 명부 크기 — 판독이 아니라 명부 이야기
   add('제외인원', declared.excluded, counted.excluded, false);
   const bd = declared.breakdown || {};
   for (const k of [...OFF_KEYS, ...ROLE_KEYS]) add(k, bd[k], counted.breakdown[k] || 0, false);
@@ -73,16 +88,17 @@ export function scoreHeadcount(declared, rc) {
   const consistent = boxConsistent(declared);
   // ★상자가 자기 검산을 못 지키면 채점을 하지 않는다 — 틀린 자로 재면 틀린 값이 나온다.
   const usable = consistent !== false;
-  const avail = lines.find((l) => l.key === '가용');
-  const gap = avail ? avail.gap : 0;
-  const rate = declared.available > 0
-    ? Math.round((counted.available / declared.available) * 1000) / 10
+  const hard = lines.find((l) => l.hard);
+  const gap = hard ? hard.gap : 0;
+  const rate = declared.total > 0
+    ? Math.round((Math.min(counted.placed, declared.total) / declared.total) * 1000) / 10
     : 0;
   return {
     usable, consistent, rate, gap, lines, counted,
     // 어긋난 줄만 — 어디서 몇 명이 새는지 바로 짚는다.
     misses: lines.filter((l) => l.gap !== 0),
-    alert: usable && Math.abs(gap) >= ALERT_GAP,
+    // 모자랄 때만 알린다. 남는 건 판독 실패가 아니라 정본에 옛 사람이 남은 것이다.
+    alert: usable && gap <= -ALERT_GAP,
   };
 }
 
@@ -90,8 +106,8 @@ export function scoreHeadcount(declared, rc) {
 export function scoreLine(sc) {
   if (!sc) return '';
   if (sc.consistent === false) return '인원요약 상자 검산 실패(총원−제외≠가용) — 채점 보류';
-  const head = `가용 ${sc.lines.find((l) => l.key === '가용')?.declared ?? '?'} 중 ${sc.counted.available}명 확인(${sc.rate}%)`;
-  const miss = sc.misses.filter((l) => l.key !== '가용')
+  const head = `총원 ${sc.lines.find((l) => l.key === '설명')?.declared ?? '?'}명 중 ${sc.counted.placed}명 설명(${sc.rate}%)`;
+  const miss = sc.misses.filter((l) => l.key !== '설명')
     .map((l) => `${l.key} ${l.counted}/${l.declared}`).join(' · ');
   return head + (miss ? ` · 어긋남: ${miss}` : ' · 전부 일치');
 }

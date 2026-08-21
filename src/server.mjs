@@ -167,12 +167,12 @@ async function runRollCall(article = null) {
     if (!x.ok && x.cut > 0) await raiseBoardIssue({ kind: 'part_count_mismatch', part: Number(x.part), cut: x.cut, workers: x.workers });
   }
   if (rc.strangers.length) await raiseBoardIssue({ kind: 'unknown_names', names: rc.strangers.slice(0, 8) });
-  // ★가용 인원이 2명 이상 어긋나면 알린다. 1명 차이는 안 알린다 — 당번이 나가서 뛴 날은
-  //  그 한 명이 배치표 당번 칸과 우리 근무 셈 양쪽에 서서 ±1이 정상적으로 생긴다.
+  // ★배치표 총원 중 자리를 못 찾아준 사람이 여럿이면 알린다 — 명단 한 덩이가 통째로 안 읽힌 것이다.
+  //  몇 명 차이로는 안 알린다: 당번·배치 같은 역할은 가용/제외 경계에서 정상적으로 논다.
   if (rc.score && rc.score.alert) {
     await raiseBoardIssue({ kind: 'headcount_mismatch', gap: rc.score.gap,
-      declared: rc.declared.available, counted: rc.score.counted.available,
-      misses: rc.score.misses.filter((l) => l.key !== '가용' && l.key !== '총원').slice(0, 4) });
+      declared: rc.declared.total, counted: rc.score.counted.placed,
+      misses: rc.score.misses.filter((l) => l.key !== '설명' && l.key !== '총원').slice(0, 4) });
   }
   return rc;
 }
