@@ -240,6 +240,13 @@ td.c .tag{display:inline-block;font-size:9px;opacity:.6;margin-right:3px;letter-
   font-variant-numeric:tabular-nums}
 td.c .dt{display:inline-block;font-size:9px;margin-left:3px;padding:0 3px;border-radius:3px;
   background:rgba(127,127,127,.16);opacity:.85;letter-spacing:-.02em}
+/* ★겹친 칸 — 한 티오프에 순번이 둘 이상. 사람을 지우는 대신 틀렸다고 말한다. */
+td.c.dupe{box-shadow:inset 0 0 0 2px var(--miss)}
+td.c .dup{display:inline-block;margin-left:4px;padding:0 3px;border-radius:3px;font-size:9px;
+  font-weight:700;background:var(--miss);color:var(--panel);letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+#dupWarn{margin:0 0 10px;padding:8px 10px;border-radius:6px;font-size:12px;line-height:1.5;
+  background:var(--miss-bg);color:var(--miss);border:1px solid var(--miss)}
 td.c.gtd{font-weight:700}
 td.c.gtd .dt{background:var(--ok);color:var(--panel);opacity:1}
 td.c.crs .dt{outline:1px solid var(--ok);outline-offset:-1px}
@@ -494,6 +501,8 @@ ${(J.sandbox?.stale || []).length ? `<div class="stalebar">
   <div class="stat"><b>${TOT.agree}<small style="font-size:12px;color:var(--dim)"> / ${TOT.board}</small></b><span>배치표 칸 일치</span></div>
   <div class="stat"><b>${TOT.kakaoOnly}</b><span>카카오만(당추 후보)</span></div>
 </div>
+
+<p id="dupWarn" hidden></p>
 
 <div class="parts">
 ${['1', '2', '3'].map(partTable).join('\n')}

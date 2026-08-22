@@ -331,10 +331,43 @@
   const GUARANTEED_RE = /(^|[^0-9])(54|찾근)([^0-9]|$)/;
   const CROSS_RE = /(^|[^0-9])(54|1[,、]\s*3|2[,、]\s*3)([^0-9]|$)/;
 
+  // 티오프 칸 → 순번 지도. ★겹침을 삼키지 않는다 — 한 칸에 두 순번이 오면
+  //  앞 순번이 칸을 지키고, 뒤에 온 사람은 dup에 따로 든다.
+  //  예전엔 뒤에 온 사람이 지도를 덮어써 앞 사람이 화면에서 통째로 사라졌다.
+  //  ★실사고 2026-08-23: 판독이 10번과 11번을 둘 다 '17:35 OUT'으로 읽었다. 대조표는
+  //   10번 다음 바로 12번을 그렸고, 11번 강혜영은 어느 줄에도 없었다.
+  //   사진이 틀렸으면 틀렸다고 보여줘야 사람이 고친다. 조용히 지우는 것이 제일 나쁘다.
+  function slotMap(part) {
+    const at = new Map(); const dup = new Map();
+    (tee[part] || []).forEach((t, i) => {
+      if (!t) return;
+      const k = K(t.time, t.course);
+      if (at.has(k)) { if (!dup.has(k)) dup.set(k, []); dup.get(k).push(i + 1); }
+      else at.set(k, i + 1);
+    });
+    return { at, dup };
+  }
+  // 겹친 칸을 화면 위에 한 줄로 모아 말한다 — 칸 배지는 좁아서 놓치기 쉽다.
+  const dupBy = {};
+  function dupNote(part, dup) {
+    dupBy[part] = [...dup.entries()].map(([k, list]) => {
+      const [time, course] = k.split('|');
+      const first = slotMap(part).at.get(k) || 0;
+      const who = [first, ...list].filter(Boolean)
+        .map((q) => q + ' ' + bare((roster[part] || [])[q - 1] || '')).join(' · ');
+      return part + '부 ' + time + ' ' + course + ' — ' + who;
+    });
+    const box = document.getElementById('dupWarn'); if (!box) return;
+    const all = PARTS.flatMap((p) => dupBy[p] || []);
+    box.hidden = !all.length;
+    box.textContent = all.length
+      ? '같은 티오프에 순번이 둘 이상입니다 — ' + all.join(' / ') + '. 원본과 대조해 고쳐주세요(지금은 앞 순번만 칸을 차지합니다).'
+      : '';
+  }
+
   function paint(part) {
-    // 티오프 칸 → 순번 지도를 매번 새로 만든다(옮기기로 대응이 바뀌므로).
-    const at = new Map();
-    tee[part].forEach((t, i) => { if (t) at.set(K(t.time, t.course), i + 1); });
+    const { at, dup } = slotMap(part);
+    dupNote(part, dup);
     document.querySelectorAll('td.c[data-p="' + part + '"]').forEach((td) => {
       const key = K(td.dataset.t, td.dataset.c);
       if (interns[part].has(key)) {                             // 인턴 칸 — 순번을 안 먹는다
@@ -346,6 +379,7 @@
       let pe = td.querySelector('.pos'), nm = td.querySelector('.nm'), dt = td.querySelector('.dt');
       if (!pos) {                                               // 이 칸엔 아무도 없다(빈 티오프)
         if (pe) pe.textContent = ''; if (nm) nm.textContent = ''; if (dt) dt.style.display = 'none';
+        const d0 = td.querySelector('.dup'); if (d0) d0.remove(); td.classList.remove('dupe');
         td.className = 'c empty';
         return;
       }
@@ -371,6 +405,16 @@
       if (tg0 && !dt) { dt = document.createElement('span'); dt.className = 'dt'; td.appendChild(dt); }
       if (dt) { dt.textContent = tg0; dt.style.display = tg0 ? '' : 'none'; }
       // 부 간 대바 자국 — 이 자리에 앉은 사람이 어느 부에서 왔는지.
+      // 겹친 사람은 칸 안에도 남긴다 — 숫자만 쓰고 이름은 설명에(칸이 좁다).
+      const extra = dup.get(key) || [];
+      let dp = td.querySelector('.dup');
+      if (extra.length) {
+        if (!dp) { dp = document.createElement('span'); dp.className = 'dup'; td.appendChild(dp); }
+        dp.textContent = '+' + extra.join('·');
+        dp.title = '이 티오프에 순번이 둘 이상입니다 — ' + pos + ' ' + bare(cell) + ' · '
+          + extra.map((q) => q + ' ' + bare(roster[part][q - 1] || '')).join(' · ') + '. 원본과 대조해 고쳐주세요.';
+      } else if (dp) dp.remove();
+      td.classList.toggle('dupe', extra.length > 0);
       const from = crossMark[part].get(nkd(cell));
       let xp = td.querySelector('.xp');
       if (from) {
@@ -640,9 +684,7 @@
   const posAt = (part, el) => {
     if (!el) return 0;
     if (el.dataset && el.dataset.pos) return Number(el.dataset.pos) || 0;   // 스페어 칩
-    const at = new Map();
-    tee[part].forEach((t, i) => { if (t) at.set(K(t.time, t.course), i + 1); });
-    return at.get(K(el.dataset.t, el.dataset.c)) || 0;
+    return slotMap(part).at.get(K(el.dataset.t, el.dataset.c)) || 0;   // 그린 것과 같은 규칙 — 겹치면 앞 순번
   };
   const unit = (el) => (el && el.closest ? (el.closest('td.c') || el.closest('.sp') || el.closest('.pk') || el.closest('.offc')) : null);
   const isPool = (el) => !!(el && el.classList && el.classList.contains('pk'));
