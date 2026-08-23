@@ -68,6 +68,9 @@ function partsOf() {
         //  이걸 안 실으면 대조판은 그 사람을 스페어로 보여주고, 반영하면 근태가 통째로 지워진다.
         crewDuty: { ...(d.crewDuty || {}) },
       };
+      // ★판본 서명 — board-review가 검수 탭에 주는 것과 같은 식이라야 한다.
+      //  이걸 반영 요청에 실어 보내면 서버가 '그 사이 바뀌었는지'를 대신 세어준다.
+      out[p].syncSig = `${bp.at || ''}|${(d._adminCorrected && d._adminCorrected.at) || ''}`;
       freshAt[p] = Math.max(Number(d._adminCorrected?.at) || 0, Number(d._at) || 0, Number(bp.at) || 0);
       dateLabel = dateLabel || d.dateLabel || bp.dateLabel || '';
     }
@@ -84,6 +87,7 @@ function partsOf() {
         crewDuty: { ...(v.crewDuty || {}) },
         _autoInterns: (v.internTees || []).map((t) => ({ time: norm(t.time), course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).filter((t) => t.time),
       };
+      out['3'].syncSig = `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`;
       freshAt['3'] = Math.max(Number(v._adminCorrected?.at) || 0, Number(lb.at) || 0);
       dateLabel = v.dateLabel || lb.dateLabel || dateLabel;
     }

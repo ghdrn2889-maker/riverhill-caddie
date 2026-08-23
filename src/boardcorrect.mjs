@@ -94,11 +94,14 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
   //   그 뒤 새 배치표의 노란 칸 판독이 조용히 무시된다.
   const ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
   const sig = (a) => (a || []).map((t) => teeKey({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' })).sort().join(' ');
-  // 수동 지정에는 '전부'를 남긴다 — 안 주면(검수 탭 등 옛 호출) 넘어온 것이 곧 전부다.
+  // 수동 지정에는 '전부'를 남긴다.
+  //  ★안 주면 추측하지 않는다. 예전엔 '넘어온 것이 곧 전부'로 알아들었는데, 그 추측이
+  //   인턴을 건드리지도 않은 교정에서 그날 수동 지정을 판독값으로 덮어 지웠다.
+  //   말하지 않은 것과 '비웠다'는 다르다 — 안 실은 호출은 인턴을 손대지 않은 것으로 본다.
   const manTees = Array.isArray(allInterns)
     ? allInterns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean)
-    : iTees;
-  if (ikey) {
+    : null;
+  if (ikey && manTees) {
     const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : []));
     if (before !== sig(manTees)) {
       try { setManual(ikey, manTees, { by, note: '배치표 교정' }); }

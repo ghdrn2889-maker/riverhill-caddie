@@ -27,6 +27,7 @@
       booked: new Set(src.booked || []),
       intern: new Set(src.intern || []),
       roster: (src.roster || []).slice(),
+      syncSig: String(src.syncSig || ''),   // 불러온 판 — 반영할 때 그대로 되돌려준다
     };
   }
   const snap = () => JSON.stringify(PARTS.map((p) => ({ p, slots: S[p].slots, booked: [...S[p].booked], intern: [...S[p].intern], roster: S[p].roster })));
@@ -269,6 +270,7 @@
         teeGrid: seats.map((x, i) => ({ pos: i + 1, time: x.time, course: x.course })),
         internTees: [...S[p].intern].map((k) => ({ time: k.split('|')[0], course: k.split('|')[1] })),
         cut: seats.length,
+        syncSig: S[p].syncSig,
       };
       if (partSnap(S[p]) !== partSnap(base[p])) touched.push(p);
     }

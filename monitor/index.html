@@ -1467,7 +1467,7 @@
       '<div class="rv-warn" id="rvWarn"></div>'+
       '<div class="rv-pager" id="rvPager"></div>'+
       '<div class="rv-list" id="rvList"></div>'+
-      '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
+      '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)'+((rvBoard&&rvBoard.internSource==='수동')?' <span style="font-weight:400;color:var(--tx3)">— 이 날은 <b>수동 지정</b>이 판독을 이깁니다. 아래가 실제로 쓰이는 값입니다.</span>':'')+'</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
       '<button class="rv-reord" id="rvReord" type="button" style="width:100%;margin-top:11px;font:inherit;font-weight:800;font-size:14px;border:1.5px solid var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--panel));color:var(--acc);border-radius:12px;padding:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M4 9h16M4 15h16"/><path d="m8 5-4 4 4 4M16 11l4 4-4 4"/></svg>순서 바꾸기 · 드래그로 끼워넣기</button>'+
       '<button class="rv-addrow" id="rvAddRow" type="button" style="width:100%;margin-top:8px;font:inherit;font-weight:700;font-size:13.5px;border:1px dashed var(--bord2);background:var(--panel2);color:var(--tx2);border-radius:11px;padding:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 5v14M5 12h14"/></svg>캐디 추가 · 판독이 놓친 사람 직접 넣기</button>'+
       '<div class="rv-savebar"><label class="rv-notify"><input type="checkbox" id="rvNotify"> 알림</label><button class="rv-save" id="rvSave">저장 · 전원 반영 <span class="pd" id="rvPd"></span></button></div>'+
@@ -1491,8 +1491,25 @@
     var ok=$('rvBlkOk'); if(ok) ok.addEventListener('click',function(){ var mo=$('rvModal'); if(mo)mo.classList.remove('show'); var c=rvConf()[0]; if(c)rvJump(c.rows[0].pos); });
     rvPaint();
   }
-  async function rvPostCorrect(part, rows, interns, cutLine, notify){
-    var r=await fetch(apiUrl('/api/board-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:part,rows:rows,interns:interns,cutLine:cutLine,notify:notify})});
+  // ★인턴은 두 갈래로 싣는다.
+  //  interns    = 실제 배치표에 팀이 있는 칸만 → 배치표의 인턴 목록이 된다.
+  //               팀 없는 칸을 여기 넣으면 없는 팀이 유령으로 생겨 순번 밀림이 통째로 어긋난다.
+  //  allInterns = 화면이 들고 있는 전부 → 그날 인턴 '수동 지정'이 된다.
+  //               안 실으면 서버가 인턴을 손대지 않은 교정으로 보고 수동 지정을 그대로 둔다.
+  //               예전엔 서버가 '넘어온 게 곧 전부'로 추측해서, 인턴을 건드리지도 않은
+  //               이름 교정 한 번에 그날 수동 지정이 판독값으로 덮여 사라졌다.
+  function rvInternSplit(rows, interns){
+    var slot={};
+    (rows||[]).forEach(function(r){ if(r.tee) slot[r.tee+'|'+(r.course||'OUT')]=1; });
+    ((rvBoard&&rvBoard.boardInterns)||[]).forEach(function(x){ slot[x.time+'|'+x.course]=1; });
+    var all=(interns||[]).map(function(x){ return {time:x.time, course:x.course}; });
+    return { onBoard: all.filter(function(x){ return slot[x.time+'|'+x.course]; }), all: all };
+  }
+  async function rvPostCorrect(part, rows, interns, cutLine, notify, allInterns, baseSig){
+    var body={part:part,rows:rows,interns:interns,cutLine:cutLine,notify:notify};
+    if(Array.isArray(allInterns)) body.allInterns=allInterns;
+    if(baseSig) body.baseSig=baseSig;   // 불러온 판 — 그 사이 바뀌었으면 서버가 막는다
+    var r=await fetch(apiUrl('/api/board-correct'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     return await r.json();
   }
   async function rvSaveCorrect(){
@@ -1519,7 +1536,9 @@
       var workCount=_wk.length;
       var interns=[]; Array.prototype.forEach.call(document.querySelectorAll('#rvInterns .br-intern'),function(row){ var t=row.querySelector('.itime').value.trim(); if(t)interns.push({time:t,course:row.querySelector('.icrs').value}); });
       var notify=($('rvNotify')||{}).checked;
-      var res=await rvPostCorrect(brPart, srcRows, interns, workCount, notify);
+      var iSplit=rvInternSplit(srcRows, interns);
+      var res=await rvPostCorrect(brPart, srcRows, iSplit.onBoard, workCount, notify, iSplit.all, rvSyncSig);
+      if(res.stale){ save.disabled=false; msg.textContent=''; rvBlock('그 사이 배치표가 <b>갱신</b>됐어요.','다른 화면에서 고쳤거나 새 배치표가 들어왔습니다. 최신본을 다시 불러온 뒤 교정하세요.'); brSig=''; setTimeout(function(){ loadBoardReview(true); },500); return; }
       if(!res.ok) throw new Error(res.error||'저장 실패');
       var moveMsg='';
       for(var tp in byTarget){
@@ -1528,9 +1547,12 @@
         var trows=(tj.board.rows||[]).map(function(x){ return {pos:x.pos,name:x.name,tee:x.tee,course:x.course,duty:x.duty}; });
         var maxp=trows.reduce(function(mx,x){return Math.max(mx,Number(x.pos)||0);},0);
         byTarget[tp].forEach(function(nm){ maxp++; trows.push({pos:maxp,name:nm,tee:'',course:'',duty:''}); });
-        var tints=(tj.board.interns||[]).map(function(x){return {time:x.time,course:x.course};});
+        // 그 부 인턴은 방금 받은 그대로 되돌려준다 — 옮기기는 인턴을 건드리는 일이 아니다.
+        //  배치표에는 사진이 읽은 칸(boardInterns)만, 수동 지정에는 실제로 쓰이는 전부(interns)를.
+        var tints=(tj.board.boardInterns||tj.board.interns||[]).map(function(x){return {time:x.time,course:x.course};});
+        var tall=(tj.board.interns||[]).map(function(x){return {time:x.time,course:x.course};});
         var tcut=Number(tj.board.cutLine)||0;
-        await rvPostCorrect(tp, trows, tints, tcut, false);
+        await rvPostCorrect(tp, trows, tints, tcut, false, tall, String(tj.board.syncSig||''));   // 방금 받은 판 그대로
         moveMsg+=' · '+byTarget[tp].join(',')+'→'+tp+'부';
       }
       msg.className='rv-msg ok'; msg.textContent='저장됨 · '+(res.updated||0)+'명 재계산'+moveMsg;

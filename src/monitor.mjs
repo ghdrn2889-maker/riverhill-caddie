@@ -29,6 +29,7 @@ import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
 import { setPartRange, setPartOneway, setPartSlot, clearPart, dayFrameParts } from './dayframe.mjs';
 import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
+import { keyFromLabel } from './boardpending.mjs';   // 수동 인턴은 날짜에 붙는다 — 라벨을 키로 바꾼다
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { renderBooking } from '../tools/gen-booking.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
@@ -451,7 +452,17 @@ app.get('/api/board-review', gate, (req, res) => {
       const t = teeAt(p); const name = roster[p - 1] || '';
       rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
     }
-    const interns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+    // ★인턴은 수동 지정이 판독을 이긴다(interns.mjs). 화면에도 '실제로 쓰이는 값'이 그려져야 한다.
+    //  판독값만 보여주면, 관리자가 인턴을 건드리지도 않았는데 저장하는 순간 그날 수동 지정이
+    //  판독값으로 덮여 사라진다 — 대조판이 같은 사고를 겪고 이미 고친 자리다(boardcorrect.mjs 주석).
+    //  boardInterns(사진이 읽은 칸)는 따로 준다. 그게 '실제 배치표의 팀'이고, 저장할 때
+    //  팀 없는 칸이 인턴으로 섞여 들어가는 걸 막는 기준이 된다.
+    const boardInterns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+    const _ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
+    const interns = _ikey
+      ? internTeesFor(_ikey, boardInterns).map((t) => ({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' }))
+      : boardInterns;
+    const internSource = _ikey && internManualFor(_ikey) ? '수동' : '자동';
     flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
     reflectCrossPartSwaps(part, rows, memberSet);   // 대바 셀을 실제 배치 캐디 이름으로 단순화(rawName 보존)
     // ★원본 이미지: '전체 배치표'(article 본문) 우선. latestImage는 3부만 잘린 당추 변동 크롭이라
@@ -464,7 +475,7 @@ app.get('/api/board-review', gate, (req, res) => {
       // ★신선도 서명 — 얼어붙은 at 대신 today.json(_t1Sig) 기준 → 당추·커트로 대시보드가 바뀌면 검수도 재렌더.
       syncSig: `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`,
       at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
-      cutLine, cutoffName: v.cutoffName || '', rows, interns,
+      cutLine, cutoffName: v.cutoffName || '', rows, interns, boardInterns, internSource,
       dayTimes: buildDayTimes(v.teeTimes, grid),
     } });
   } catch (e) { console.error('board-review 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
@@ -613,6 +624,28 @@ async function reconcilePulls(justCorrected, token) {
   return done;
 }
 
+// ── 판본 서명 ── 이 배치표가 '내가 불러온 그것' 그대로인가.
+//  ★세 화면(배치표 검수·대조판·예약 구성판)이 모두 브라우저가 들고 있는 배치표를 통째로 되쓴다.
+//   그 사이 다른 화면이 고쳤거나 새 배치표가 판독됐어도 서버는 묻지 않았고, 나중에 저장한 쪽이
+//   앞선 수정을 경고 없이 지웠다. 검수 탭에만 이 검사가 있었는데(클라이언트), 그건 그 화면 하나만
+//   지킨다. 문이 하나(board-correct)니 검사도 문에 달아 세 화면이 함께 물려받게 한다.
+//  board-review가 내려주는 syncSig와 같은 식이라야 한다 — 다르면 검사가 늘 걸려 아무도 저장 못 한다.
+function boardSigOf(part) {
+  const p = String(part);
+  try {
+    if (p !== '3') {
+      const bp = loadBoardPartsStore();
+      const pd = bp && bp.parts && bp.parts[p];
+      if (!pd) return '';
+      return `${bp.at || ''}|${(pd._adminCorrected && pd._adminCorrected.at) || ''}`;
+    }
+    const lb = loadLastBoard();
+    if (!lb || !lb.rawVerdict) return '';
+    const v = effectivePart3Verdict(lb);
+    return `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`;
+  } catch { return ''; }
+}
+
 app.post('/api/board-correct', gate, async (req, res) => {
   const part = String(req.body?.part || '3');
   const _tok = req.query.k || req.get('x-monitor-token') || '';
@@ -629,6 +662,18 @@ app.post('/api/board-correct', gate, async (req, res) => {
   const movedOut = Array.isArray(req.body?.movedOut) ? req.body.movedOut : null;
   const movedIn = Array.isArray(req.body?.movedIn) ? req.body.movedIn : null;
   if (!rows) return res.status(400).json({ ok: false, error: 'rows 필요' });
+  // ★불러온 뒤 배치표가 바뀌었으면 저장하지 않는다 — 덮어쓰기는 되돌릴 수 없다.
+  //  baseSig를 안 싣는 호출(옛 화면·스크립트)은 그대로 통과시킨다. 검사를 강제하면
+  //  아직 안 고친 화면이 통째로 멎는다 — 문을 좁히되 잠가버리진 않는다.
+  {
+    const baseSig = String(req.body?.baseSig || '');
+    const nowSig = boardSigOf(part);
+    if (baseSig && nowSig && baseSig !== nowSig) {
+      console.warn(`🚫 [monitor] ${part}부 교정 거절 — 그 사이 배치표가 바뀌었다(불러온 판 ${baseSig} · 지금 ${nowSig})`);
+      return res.status(409).json({ ok: false, stale: true, nowSig,
+        error: '그 사이 배치표가 바뀌었습니다. 새로고침해서 최신본을 보고 다시 고쳐주세요.' });
+    }
+  }
   // ★깨진 배치표는 저장 자체를 안 한다. 8/18에 같은 시각에 두세 명이 겹친 채로 반영돼
   //  다섯 명이 화면에서 사라졌다. 그때 막은 건 브라우저뿐이었다 — 브라우저는 우회할 수 있고,
   //  이 API를 부르는 길은 대조판 말고도 있다. 세는 일은 서버가 한 번 더 한다.
@@ -1052,9 +1097,14 @@ app.get('/api/daejo-data', gate, (req, res) => {
   catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ★대조판 저장은 테스트판으로만 간다 — 회원 앱·알림·엔진은 이 값을 보지 않는다.
-//  실제 배치표 교정은 '배치표 검수' 탭(/api/board-correct)에서만 한다.
-//  덜 여문 화면이 살아 있는 데이터를 직접 만지던 구조가 8/17 사고의 뿌리였다.
+// ── 배치표를 만지는 화면은 셋이다. 문은 하나다. ────────────────────────────────
+//  · 배치표 검수(모니터 탭)  — "판독이 틀렸다". 행 단위로 사실을 바로잡는다. 근태·대바까지 다룬다.
+//  · 대조판(/daejo)          — "카카오 예상과 배치표가 다르다". 나란히 놓고 고른다. 테스트판 + 반영.
+//  · 예약 구성판(/booking)   — "아직 없는 예약을 짠다". 예약팀장이 쓰고, 관리자가 승인해야 반영된다.
+//  살아 있는 배치표를 쓰는 통로는 셋 다 /api/board-correct 하나뿐이다(부 간 대바만 /api/board-swap).
+//  무결성 검사·교정 로그·회원 재계산이 거기 한 군데서 일어난다. 새 화면을 만들더라도 이 문으로만 들어온다.
+//  ★그 문에 판본 검사(baseSig)가 달려 있다 — 세 화면 모두 배치표를 통째로 되쓰기 때문에,
+//   불러온 뒤 바뀌었는지 묻지 않으면 나중에 저장한 쪽이 앞선 수정을 경고 없이 지운다.
 // ── 예약 구성판 ── 예약팀장이 직접 짜는 화면.
 //  대조판은 '읽는' 화면이고 이건 '짜는' 화면이다. 같은 데이터(buildDaejoData)를 보지만,
 //  칸을 누를 때마다 그 결정이 캐디 한 사람의 하루를 어떻게 바꾸는지 옆 폰에 그려준다.
@@ -1098,11 +1148,13 @@ app.post('/api/booking-save', gate, async (req, res) => {
         return { pos: i + 1, name: String(nm || ''), tee: g ? g.time : '', course: g ? g.course : '' };
       });
       const body = { part: String(p), rows, interns: v.internTees || [], allInterns: v.internTees || [],
-        cutLine: Number(v.cut) || 0, notify: false };
+        cutLine: Number(v.cut) || 0, notify: false,
+        baseSig: String(v.syncSig || '') };   // 화면을 연 뒤 배치표가 바뀌었으면 서버가 막는다
       const r = await fetch(`http://127.0.0.1:${PORT}/api/board-correct${_tok ? `?k=${encodeURIComponent(_tok)}` : ''}`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
       });
       const j = await r.json();
+      if (j.stale) throw new Error(`${p}부 — 그 사이 배치표가 바뀌었습니다. 새로고침해서 최신본을 보고 다시 짜주세요.`);
       if (!j.ok) throw new Error(`${p}부 반영 실패 - ${j.error || ''}`);
       done.push(`${p}부 ${j.updated || 0}명`);
     }

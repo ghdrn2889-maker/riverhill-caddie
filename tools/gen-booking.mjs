@@ -38,7 +38,8 @@ export function renderBooking(J, opts = {}) {
     const intern = [];
     for (const g of (src?.teeGrid || [])) { const k = K(g.time, g.course); if (k && !booked.includes(k)) booked.push(k); }
     for (const t of (src?.internTees || [])) { const k = K(t.time, t.course); if (!k) continue; if (!booked.includes(k)) booked.push(k); if (!intern.includes(k)) intern.push(k); }
-    parts[p] = { slots, booked, intern, roster: (src?.roster || []).map((x) => String(x || '')) };
+    // syncSig — 불러온 판. 반영할 때 그대로 되돌려주면 서버가 '그 사이 바뀌었는지'를 센다.
+    parts[p] = { slots, booked, intern, roster: (src?.roster || []).map((x) => String(x || '')), syncSig: String(src?.syncSig || '') };
   }
   const D = { dateKey: J.dateKey || '', dateLabel: J.dateLabel || '', parts, admin };
 

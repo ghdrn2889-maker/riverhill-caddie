@@ -1501,6 +1501,9 @@
     const teamSet = new Set((origOcc.real[part] || []).map((s) => K(s.time, s.course)));
     return {
       part: part,
+      // ★불러온 판 — 그 사이 다른 화면이 고쳤거나 새 배치표가 들어왔으면 서버가 저장을 막는다.
+      //  이 화면은 배치표를 통째로 되쓴다. 묻지 않으면 앞선 수정이 경고 없이 사라진다.
+      baseSig: String((BOARD[part] || {}).syncSig || ''),
       // 이 부에서 다른 부로 대바로 나간 사람 / 다른 부에서 이 부로 들어온 사람.
       movedOut: mv.out, movedIn: mv.into,
       // ★명단 밖 사람의 근태 — rows로는 말할 수 없다(rows는 순번 명단이다). 따로 싣는다.
@@ -1613,6 +1616,8 @@
           body: JSON.stringify(p),
         });
         const j = await r.json();
+        // ★그 사이 배치표가 바뀌었다 — 덮어쓰면 앞선 수정이 사라진다. 여기서 멈추고 다시 불러오게 한다.
+        if (j.stale) throw new Error(part + '부 — 그 사이 배치표가 바뀌었습니다. 새로고침해서 최신본을 보고 다시 고쳐주세요.');
         if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));   // 서버도 배치가 성립하는지 센다
         done.push(`${part}부 ${j.updated || 0}명`);
         if (j.auto) AUTO.push({ part: part, ...j.auto });
