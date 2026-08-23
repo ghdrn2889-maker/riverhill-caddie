@@ -291,9 +291,24 @@ function spareAnchorCut(article, roster) {
   return null;
 }
 
+// ★같은 문장에 '몇 팀'이 같이 오면, 그 숫자로 이름을 검산한다.
+//  실측 2026-08-23 #27554: "3부 16팀, 오동현(조하빈)님까지 근무됩니다."
+//   괄호 점유자 규칙만 쓰면 조하빈(명단 10번)이 컷이 되어 '16팀'과 6칸 어긋났다.
+//   그 바람에 티오프를 들고 있던 11~15번이 통째로 스페어로 꺼졌다(박준서 17:14·최재영 17:21·박수현 17:28).
+//   한 문장 안에 답이 두 개 들어 있으면, 둘이 서로 맞는 쪽을 고르는 게 옳다.
+//  ★괄호 규칙 자체는 그대로 둔다 — "송민지님(박준서)까지"처럼 팀 수가 없는 글에선 여전히 괄호가 답이다.
+//   팀 수가 같이 왔고, 괄호 이름은 어긋나는데 앞 이름이 딱 맞을 때만 앞 이름을 쓴다.
+const TEAMS_RE = /(\d{1,2})\s*팀/;
+function announcedTeams(article) {
+  const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
+  const m = t.match(TEAMS_RE);
+  const n = m ? Number(m[1]) : 0;
+  return n >= 1 && n <= 40 ? n : 0;
+}
+
 // 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
 //  · 표기 이름은 그대로 두되(예: "송민지님까지" 문구), 위치는 실제 주인(박준서=18) 자리로.
-function resolveCutoff(verdict, article, today = null) {
+export function resolveCutoff(verdict, article, today = null) {   // export는 검사용 — 커트 판정은 조용히 틀리면 제일 비싸다
   if (!verdict) return;
   const roster = (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length)
     ? verdict.part3Roster
@@ -303,11 +318,25 @@ function resolveCutoff(verdict, article, today = null) {
     verdict.cutoffAnnounced = true;
     // 위치: 명단에서 홀더(괄호 점유자) 자리 → 없으면 이미지가 준 기존 위치 유지 → 그것도 없으면 텍스트 'N번'.
     //  (raw 홀더로 조회 — 점유자가 명단에 두 번(자기 자리+빌린 자리) 나오는 이름은 스냅하면 자기 홈 자리로 오조회됨.)
-    const cpos = roster.length ? rosterPosOf(roster, pc.holder) : 0; // 괄호 점유자 자리 = 진짜 컷
+    const cposHolder = roster.length ? rosterPosOf(roster, pc.holder) : 0;  // 괄호 점유자 자리
+    const cposDisp = roster.length ? rosterPosOf(roster, pc.display) : 0;   // 앞 이름 자리
+    const teams = announcedTeams(article);
+    let cpos = cposHolder;
+    let who = pc.holder;
+    // ★팀 수가 같이 왔을 때만 검산한다. 괄호가 어긋나고 앞 이름이 딱 맞으면 앞 이름이 컷이다.
+    if (teams > 0 && cposDisp === teams && cposHolder !== teams) {
+      cpos = cposDisp; who = pc.display;
+      verdict._cutSource = `팀수검산(${teams}팀 ↔ ${pc.display}=${cposDisp}번 · 괄호 ${pc.holder}=${cposHolder || '?'}번은 어긋남)`;
+      console.log(`·  [커트] "${pc.display}(${pc.holder})님까지" — ${teams}팀과 맞는 쪽은 ${pc.display}(${cposDisp}번). 괄호 이름 ${pc.holder}(${cposHolder || '?'}번)은 쓰지 않습니다.`);
+    } else if (teams > 0 && cposHolder > 0 && cposHolder !== teams && cposDisp !== teams) {
+      // 어느 쪽도 팀 수와 안 맞는다 — 조용히 한쪽을 고르면 그게 다음 사고가 된다. 사람이 보게 남긴다.
+      console.warn(`⚠️ [커트] "${teams}팀"인데 이름으로 잡힌 자리는 ${cposHolder}번(${pc.holder}) — 팀 수와 어긋납니다. 배치표 검수에서 확인이 필요합니다.`);
+      verdict._cutMismatch = { teams, holder: pc.holder, holderPos: cposHolder, display: pc.display, displayPos: cposDisp };
+    }
     if (cpos > 0) verdict.cutoffPosition = cpos;
     else if (pc.pos != null && !(Number(verdict.cutoffPosition) > 0)) verdict.cutoffPosition = pc.pos;
     // ★이름: 공지 텍스트 오탈자를 확정 사전으로 보정(예: "김도우"→유일 1글자차 확정명 "김동우"). 위치는 위에서 이미 확정.
-    verdict.cutoffName = snapName(pc.holder);
+    verdict.cutoffName = snapName(who);
   } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
     const holder = normRosterName(verdict.cutoffName).name;         // "연승준(서동환)" → 서동환
     verdict.cutoffName = snapName(holder);                          // 오탈자 보정
