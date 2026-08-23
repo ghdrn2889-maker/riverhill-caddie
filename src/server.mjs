@@ -1726,6 +1726,44 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 //   1·2부는 표본이 0건이다. 0에서 판단할 수는 없어서, 켜기 전에 먼저 센다.
 //  ★1·2부라고 무주공산이 아니다 — (1,3)·(2,3) 두 탕을 뛰는 회원이 그 부 카드를 들고 있다
 //   (2026-08-23 실측 6명). 그래서 이 단계에서는 절대 반영하지 않는다.
+// ── 카카오 보조 · 그 부 판독에 얹기 ────────────────────────────────
+//  판독한 그 부의 티오프표를 카카오 예약과 맞춰 본다. 그 부가 켜져 있으면(assistOn) 실제로 얹고,
+//  꺼져 있으면 기록만 남긴다. 얹으면 회원 카드·알림까지 그대로 따라간다 — 그게 '맡긴다'는 뜻이다.
+//  ★1·2부에도 두 탕((1,3)·(2,3)) 회원이 있다(8/23 실측 6명). 맡긴다는 건 그 사람들 카드도 맡긴다는 것이다.
+async function kakaoForPart(vp, part, dateISO) {
+  if (!vp || !dateISO) return null;
+  try {
+    const a = await kakaoAssist({
+      dateISO, part,
+      boardOk: Array.isArray(vp.teeGrid) && vp.teeGrid.length > 0,
+      teeGrid: vp.teeGrid || [], roster: vp.part3Roster || [],
+      cut: Number(vp.cutoffPosition) || 0,
+      internTees: internTeesFor(dateISO, vp.internTees || []),
+    });
+    if (a.mode === 'augment') {
+      const who = (a.promoted || []).map((x) => `${x.pos}번 ${x.name}`).join(', ');
+      console.log(`⛳ [보조 ${part}부] ${a.why} — ${a.applied ? '적용' : '관측만'}${who ? ` · 승격 ${who}` : ''}`);
+      if (a.applied) {
+        vp.teeGrid = a.teeGrid;
+        vp.cutoffPosition = a.cut;
+        vp.teamCount = a.cut;
+        vp._kakaoAssist = { added: a.added, prevCut: a.prevCut, cut: a.cut };
+      }
+    } else if (a.mode === 'substitute') {
+      console.warn(`⛳ [보조 ${part}부] ${a.why} — ${a.applied ? '적용(이름 없음·팀 수만)' : '관측만'}`);
+      if (a.applied && !(vp.teeGrid || []).length) {
+        vp.teamCount = a.teamCount;   // 이름은 못 만든다 — 팀 수만 넣는다
+        vp._kakaoAssist = { substitute: true, teamCount: a.teamCount };
+      }
+    } else if (a.mode === 'conflict' || a.mode === 'refuse') {
+      console.warn(`⛳ [보조 ${part}부] 손대지 않음 — ${a.why}`);
+    }
+    return a;
+  } catch (e) { console.error(`[보조 ${part}부] 오류:`, e.message); return null; }
+}
+
+// ── 카카오 보조 · 1·2부 관측(그 부를 이번에 판독하지 않은 날) ────────
+//  판독 경로를 안 탄 부는 store에 있는 마지막 판독으로 재기만 한다. 여기서는 절대 얹지 않는다.
 async function observeMinorKakao(dateISO) {
   if (!dateISO) return;
   let store = null;
@@ -2019,6 +2057,9 @@ async function observeMinorKakao(dateISO) {
       const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
+      // ★카카오를 여기서 얹는다 — setBoardPart(모니터)와 회원 처리 '앞'이라야 둘이 같은 판을 본다.
+      //  뒤에 얹으면 모니터엔 카카오, 회원 카드엔 사진 판독이 남아 같은 날 두 개의 배치표가 생긴다.
+      await kakaoForPart(vp, p, worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || boardISO);
       if (Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
         try {
           setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || out.rawVerdict?.dateLabel || '',
@@ -2057,7 +2098,6 @@ async function observeMinorKakao(dateISO) {
       await applyDutyList(full);   // ★당번·벌당 배정 반영(판독 실패면 기존 유지)
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
-  await observeMinorKakao(boardISO);   // 1·2부 카카오 관측(반영 없음)
 
   // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
   if (opts.previewMode) { try { await sendDailyPreview(boardISO, full, opts); } catch (e) { console.error('[내일 예고 오류]', e.message); } }

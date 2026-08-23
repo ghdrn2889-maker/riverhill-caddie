@@ -20,9 +20,24 @@ import { loadSnapshot, kakaoHealth } from './kakaogolf.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 
 // 즉시 토글(재시작 불필요). 롤백 = rm data/use-kakao-assist
-export function assistOn() {
-  if (['1', 'true', 'yes'].includes(String(process.env.KAKAO_ASSIST || '').toLowerCase())) return true;
-  try { return fs.existsSync(path.join(DATA_DIR, 'use-kakao-assist')); } catch { return false; }
+// 어느 부를 카카오에 맡길 것인가 — 부마다 따로 켠다.
+//  ★전역 하나로 켜면 3부까지 같이 켜진다. 일주일 계측에서 3부는 커트를 두 번 높게 불렀고
+//   (8/21 최재영 29번 · 8/22 박준서 34번, 둘 다 실제로는 스페어) 켰다면 오알림이 나갔다.
+//   1·2부는 같은 기간에 승격 제안이 0건이었다 — 그래서 부를 나눠 켠다.
+//  · KAKAO_ASSIST=1        전부(옛 동작)
+//  · KAKAO_ASSIST=1,2      그 부만
+//  · data/use-kakao-assist      전부(옛 파일 스위치)
+//  · data/use-kakao-assist-2    그 부만
+export function assistOn(part = '') {
+  const env = String(process.env.KAKAO_ASSIST || '').toLowerCase().trim();
+  if (['1', 'true', 'yes', 'all'].includes(env)) return true;                      // 전부(옛 동작 그대로)
+  //  부를 고를 때는 반드시 목록으로 적는다("1,2"). '1' 하나는 옛 뜻(=켬)이라 부 번호로 읽으면 안 된다.
+  if (env.includes(',') && part && env.split(/[,\s]+/).filter(Boolean).includes(String(part))) return true;
+  try {
+    if (fs.existsSync(path.join(DATA_DIR, 'use-kakao-assist'))) return true;
+    if (part && fs.existsSync(path.join(DATA_DIR, `use-kakao-assist-${part}`))) return true;
+  } catch { /* 파일이 없으면 꺼진 것이다 */ }
+  return false;
 }
 
 const toMin = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? +m[1] * 60 + +m[2] : NaN; };
@@ -205,7 +220,7 @@ export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid
   // ★observeOnly = 부르는 쪽이 결과를 어디에도 안 얹는다고 밝힌 호출(1·2부 관측).
   //  전역 스위치가 나중에 켜져도 이 기록은 'applied:false'여야 한다 —
   //  안 그러면 켠 적 없는 부의 기록이 켠 것처럼 남아, 재려던 그 숫자가 거짓이 된다.
-  const rec = { at: Date.now(), date, part, boardOk, applied: observeOnly ? false : assistOn(),
+  const rec = { at: Date.now(), date, part, boardOk, applied: observeOnly ? false : assistOn(part),
     observeOnly: !!observeOnly,
     internCount: (internTees || []).length, internKnown: boardOk, ...r };
   appendJSONL('kakao-assist.jsonl', rec);
