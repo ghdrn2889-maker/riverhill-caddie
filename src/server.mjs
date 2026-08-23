@@ -416,39 +416,116 @@ app.post('/api/test', requireAdmin, async (req, res) => {
 // ── 인턴 티오프(관리자 전용) — 자동 판독(노란 칸)이 놓치면 손으로 지정한다 ──────────
 //  인턴은 티오프 칸을 차지하되 정규 순번을 안 먹는다. 하나만 틀려도 그 뒤 전원의 티오프가 밀린다.
 //  ★수동이 자동을 이긴다(관리자는 원본을 보고 있다). 빈 배열 저장 = '인턴 없음'을 명시한 것.
-function _autoInternTees(dateKey) {
-  // 그 날짜 배치표 판독이 잡은 노란 칸 — 수동 지정이 없을 때의 기본값이자, 편집 화면의 출발점.
+function _autoInternTees(dateKey, part = '3') {
+  // 그 날짜 그 부의 배치표 판독이 잡은 노란 칸 — 수동 지정이 없을 때의 기본값이자, 편집 화면의 출발점.
+  //  ★부마다 티오프표가 따로다. 3부는 lastboard, 1·2부는 board-parts-store에 있다.
   try {
-    const lb = loadJSON('lastboard.json', {}) || {};
-    if (keyFromLabel(lb.dateLabel || '') === dateKey) return (lb.rawVerdict?.internTees) || [];
+    if (String(part) === '3') {
+      const lb = loadJSON('lastboard.json', {}) || {};
+      if (keyFromLabel(lb.dateLabel || '') === dateKey) return (lb.rawVerdict?.internTees) || [];
+      return [];
+    }
+    const bp = loadBoardPartsStore();
+    const d = bp && bp.parts && bp.parts[String(part)];
+    if (!d) return [];
+    const iso = String(d._targetISO || bp.targetISO || '').replace(/\D/g, '').slice(0, 8);
+    if (iso && iso !== dateKey) return [];
+    return d.internTees || [];
   } catch { /* noop */ }
   return [];
 }
 app.get('/api/admin/intern-tees', requireAdmin, (req, res) => {
   const date = String(req.query.date || '').replace(/\D/g, '').slice(0, 8);
+  const part = String(req.query.part || '3');
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
-  const auto = _autoInternTees(date);
-  const man = internManualFor(date);
-  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto),
+  if (!['1', '2', '3'].includes(part)) return res.status(400).json({ ok: false, error: 'part는 1·2·3 중 하나' });
+  const auto = _autoInternTees(date, part);
+  const man = internManualFor(date, part);
+  res.json({ ok: true, date, part, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto, part),
     source: man ? '수동' : '자동', at: man?.at || 0, by: man?.by || '' });
 });
-app.post('/api/admin/intern-tees', requireAdmin, (req, res) => {
+app.post('/api/admin/intern-tees', requireAdmin, async (req, res) => {
   const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  const part = String(req.body?.part || '3');
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  if (!['1', '2', '3'].includes(part)) return res.status(400).json({ ok: false, error: 'part는 1·2·3 중 하나' });
   const by = String(req.user?.name || req.user?.id || '관리자');
+  const sigOf = (a) => (a || []).map((t) => t.time + '|' + t.course).sort().join(' ');
+  const before = sigOf(internTeesFor(date, _autoInternTees(date, part), part));
   try {
-    if (req.body?.clear) { clearInternTees(date, by); }
+    if (req.body?.clear) { clearInternTees(date, by, part); }
     else if (req.body?.toggle) {
       const { time, course } = req.body.toggle;
-      toggleInternTee(date, time, course, _autoInternTees(date), { by });
+      toggleInternTee(date, time, course, _autoInternTees(date, part), { by, part });
     } else if (Array.isArray(req.body?.tees)) {
-      setInternTees(date, req.body.tees, { by, note: String(req.body?.note || '') });
+      setInternTees(date, req.body.tees, { by, part, note: String(req.body?.note || '') });
     } else return res.status(400).json({ ok: false, error: 'tees[] 또는 toggle{time,course} 또는 clear:true 필요' });
   } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
-  const auto = _autoInternTees(date);
-  const man = internManualFor(date);
-  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
+  const auto = _autoInternTees(date, part);
+  const man = internManualFor(date, part);
+  const eff = internTeesFor(date, auto, part);
+  // ★인턴이 실제로 달라졌으면 그 부 회원 카드를 다시 센다.
+  //  예전엔 저장만 하고 끝났다 — 관리자가 인턴을 고쳐도 회원 판정은 옛 인턴 수로 굳어 있었다.
+  //  (카드의 티오프 자체는 사진의 teeGrid에서 온다. 여기서 달라지는 건 근무선 산출의 마지막 보루
+  //   'N팀 − 인턴수'와, 그 값을 읽는 대조판·카카오 계산이다.)
+  let recomputed = 0;
+  const changed = before !== sigOf(eff);
+  if (changed) {
+    try { recomputed = await recomputeInternPart(part, date, eff, { by }); }
+    catch (e) { console.error('[인턴] 재계산 오류:', e.message); }
+  }
+  res.json({ ok: true, date, part, auto, manual: man ? man.tees : null, effective: eff,
+    source: man ? '수동' : '자동', changed, recomputed });
 });
+
+// 인턴이 달라진 그 부의 회원 카드를 다시 센다 — 저장소의 인턴 값을 고치고 회원별로 재판정한다.
+//  ★알림은 보내지 않는다(noPush). 인턴 정정은 사람이 배치표를 다시 본 결과지 새 사건이 아니다.
+async function recomputeInternPart(part, dateKey, effTees, { by = '' } = {}) {
+  const p = String(part);
+  const tees = (effTees || []).map((t) => ({ time: t.time, course: t.course }));
+  let vp = null, dateLabel = '';
+  if (p === '3') {
+    const lb = loadJSON('lastboard.json', {}) || {};
+    const v = lb.rawVerdict;
+    if (!v || keyFromLabel(v.dateLabel || lb.dateLabel || '') !== dateKey) return 0;   // 다른 날 배치표 — 손대지 않는다
+    v.internTees = tees; v.internCount = tees.length;
+    try { saveJSON('lastboard.json', lb); } catch (e) { console.error('[인턴] lastboard 저장 실패:', e.message); }
+    vp = v; dateLabel = v.dateLabel || lb.dateLabel || '';
+  } else {
+    const bp = loadBoardPartsStore();
+    const d = bp && bp.parts && bp.parts[p];
+    if (!d) return 0;
+    const iso = String(d._targetISO || bp.targetISO || '').replace(/\D/g, '').slice(0, 8);
+    if (iso && iso !== dateKey) return 0;
+    d.internTees = tees; d.internCount = tees.length;
+    try { saveBoardPartsStore(bp); } catch (e) { console.error('[인턴] store 저장 실패:', e.message); }
+    dateLabel = d.dateLabel || bp.dateLabel || '';
+    vp = { part: p, category: '배치표', relevant: true, rosterReliable: !!d.rosterReliable,
+      dateLabel, part3Roster: (d.roster || []).slice(),
+      teeGrid: Array.isArray(d.teeGrid) ? d.teeGrid.slice() : [],
+      teeTimes: Array.isArray(d.teeTimes) ? d.teeTimes.slice() : [],
+      teamCount: Number(d.teamCount) || 0,
+      cutoffPosition: Number(d.cutLine || d.cutoffPosition) || 0,
+      cutoffName: d.cutoffName || '', internTees: tees, internCount: tees.length,
+      crewDuty: { ...(d.crewDuty || {}) } };
+  }
+  const pseudo = { id: 'intern-' + dateKey + '-' + p + '-' + Date.now(),
+    subject: p + '부 인턴 정정(' + (by || '관리자') + ')', text: '', writeDate: Date.now(), images: [] };
+  const win = partWindow(p);
+  let n = 0;
+  for (const m of activeMembers()) {
+    try {
+      const mp = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+      const mo = interpretForMember(pseudo, JSON.parse(JSON.stringify(vp)), mp, loadToday(m.id, p));
+      if (p === '3') await processForMember(m.id, mp, mo, pseudo, { noPush: true });
+      else await processForMemberPart(m.id, mp, mo, pseudo, { noPush: true, crewDuty: vp.crewDuty });
+      n++;
+    } catch (e) { console.error('[인턴] ' + p + '부 회원 ' + m.id + ' 재계산 오류:', e.message); }
+  }
+  console.log('🟡 [인턴] ' + dateKey + ' ' + p + '부 ' + tees.length + '칸으로 재계산 — 회원 ' + n + '명 (알림 없음)');
+  try { reconcileCrossPartConsistency(dateLabel); } catch { /* 무해 */ }
+  return n;
+}
 
 // ── 회원 관리(관리자 전용) — 외부인 배제: 신규 가입은 pending, 관리자가 승인해야 active ──
 app.get('/api/admin/members', requireAdmin, (req, res) => {
@@ -1738,7 +1815,7 @@ async function kakaoForPart(vp, part, dateISO) {
       boardOk: Array.isArray(vp.teeGrid) && vp.teeGrid.length > 0,
       teeGrid: vp.teeGrid || [], roster: vp.part3Roster || [],
       cut: Number(vp.cutoffPosition) || 0,
-      internTees: internTeesFor(dateISO, vp.internTees || []),
+      internTees: internTeesFor(dateISO, vp.internTees || [], part),
     });
     if (a.mode === 'augment') {
       const who = (a.promoted || []).map((x) => `${x.pos}번 ${x.name}`).join(', ');
@@ -1869,7 +1946,7 @@ async function observeMinorKakao(dateISO) {
         boardOk: Array.isArray(d.teeGrid) && d.teeGrid.length > 0,
         teeGrid: d.teeGrid || [], roster: d.roster || [],
         cut: Number(d.cutLine || d.cutoffPosition) || 0,
-        internTees: internTeesFor(dateISO, d.internTees || []),
+        internTees: internTeesFor(dateISO, d.internTees || [], p),   // ★그 부의 인턴만 — 3부 인턴이 1부 계산에 새던 자리
       });
       const what = a.mode === 'augment'
         ? `커트 ${a.prevCut} → ${a.cut}${(a.promoted || []).length ? ` · 승격 후보 ${a.promoted.map((x) => `${x.pos}번 ${x.name}`).join(', ')}` : ''}`
@@ -1976,7 +2053,7 @@ async function observeMinorKakao(dateISO) {
         teeGrid: _v.teeGrid || [], roster: _v.part3Roster || [], cut: Number(_v.cutoffPosition) || 0,
         // ★인턴 칸은 티오프를 차지하되 정규 순번을 안 먹는다 — 안 넘기면 인턴 하나당 그 뒤 전원이 밀린다.
         //  관리자가 손으로 지정했으면 그게 전부다(판독의 노란 칸 검출을 이긴다).
-        internTees: internTeesFor(dbISO, _v.internTees || []),
+        internTees: internTeesFor(dbISO, _v.internTees || [], '3'),
       });
       if (a.mode === 'augment') {
         const tag = a.applied ? '적용' : '관측만(끄면 이대로)';

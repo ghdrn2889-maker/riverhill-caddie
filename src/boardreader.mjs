@@ -1311,6 +1311,9 @@ function verdictFromPart(article, member, pd, allParts, offList = [], roleList =
     cutoffPosition: cutPos || null,
     cutoffName: cutPos ? parseCell(roster[cutPos - 1] || '').name : '',
     cutoffAnnounced: !!cutPos,
+    // ★Claude 판독은 노란 칸(인턴)을 보지 않는다 — 여기는 언제나 0이다.
+    //  인턴은 judge.mjs의 전용 판독(analyzeInterns)이 따로 채운다. 이 값을 '판독했는데 없더라'로
+    //  읽으면 안 된다 — '아직 안 봤다'는 뜻이다.
     internCount: 0, internTees: [],
     dateLabel: dm ? dm[0].trim() : '',
     boardTables: (allParts || []).map((p) => ({ part: Number(p), color: '' })),

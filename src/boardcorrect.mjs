@@ -102,9 +102,9 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     ? allInterns.map((x) => { const t = (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0]; return t ? { time: t, course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') } : null; }).filter(Boolean)
     : null;
   if (ikey && manTees) {
-    const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : []));
+    const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : [], '3'));
     if (before !== sig(manTees)) {
-      try { setManual(ikey, manTees, { by, note: '배치표 교정' }); }
+      try { setManual(ikey, manTees, { by, part: '3', note: '배치표 교정' }); }
       catch (e) { console.error('인턴 수동 지정 저장 실패:', e.message); }
     }
   }

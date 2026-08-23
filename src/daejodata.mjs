@@ -118,7 +118,7 @@ export function buildDaejoData(date = '') {
   //   그걸 실제 팀 목록에 더하면 없는 팀이 유령으로 생겨 밀림이 통째로 어긋난다.
   if (parts['3']) {
     parts['3'].boardInternTees = (parts['3']._autoInterns || []).map((t) => ({ time: t.time, course: t.course }));
-    parts['3'].internTees = internTeesFor(dateKey, parts['3']._autoInterns || []).map((t) => ({ time: t.time, course: t.course }));
+    parts['3'].internTees = internTeesFor(dateKey, parts['3']._autoInterns || [], '3').map((t) => ({ time: t.time, course: t.course }));
     delete parts['3']._autoInterns;
   }
   for (const p of ['1', '2']) if (parts[p]) parts[p].boardInternTees = parts[p].internTees.slice();

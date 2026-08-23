@@ -69,9 +69,10 @@ console.log('\n[★인턴 — 말하지 않은 것을 추측하지 않는다]');
   ok(/: null;\n  if \(ikey && manTees\) \{/.test(bc),
     '★안 실은 호출은 인턴을 손대지 않은 것으로 본다',
     "예전엔 '넘어온 게 곧 전부'로 추측해서, 이름만 고친 교정이 그날 수동 지정을 지웠다");
-  ok(/const internSource = _ikey && internManualFor\(_ikey\)/.test(mon), '수동 지정이 있는 날인지 화면에 말해준다');
-  ok(/const interns = _ikey\n\s+\? internTeesFor\(_ikey, boardInterns\)/.test(mon),
-    '★검수 탭이 실제로 쓰이는 인턴을 본다', '판독값만 보여주면 관리자가 틀린 걸 보고 틀린 걸 저장한다');
+  ok(/const internSource = _ikey && internManualFor\(_ikey, '3'\)/.test(mon)
+    && /const internSource = _ikeyP && internManualFor\(_ikeyP, part\)/.test(mon), '수동 지정이 있는 날인지 화면에 말해준다');
+  ok(mon.includes("internTeesFor(_ikey, boardInterns, '3')") && mon.includes('internTeesFor(_ikeyP, boardInterns, part)'),
+    '★검수 탭이 실제로 쓰이는 인턴을 본다(세 부 모두)', '판독값만 보여주면 관리자가 틀린 걸 보고 틀린 걸 저장한다');
   ok(/rows, interns, boardInterns, internSource,/.test(mon), '사진이 읽은 칸은 따로 준다');
   ok(/function rvInternSplit\(rows, interns\)/.test(idx), '검수 탭이 두 갈래로 나눠 싣는다');
   ok(/onBoard: all\.filter\(function\(x\)\{ return slot\[x\.time\+'\|'\+x\.course\]; \}\)/.test(idx),

@@ -32,7 +32,7 @@ if (!lb || !lb.rawVerdict) { console.error('현재 배치표가 없습니다.');
 const v = lb.rawVerdict;
 const crew = v.crewDuty || {};
 const ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
-const allInterns = internTeesFor(ikey, v.internTees || []).map((t) => ({ time: t.time, course: t.course }));
+const allInterns = internTeesFor(ikey, v.internTees || [], '3').map((t) => ({ time: t.time, course: t.course }));
 const boardInterns = (v.internTees || []).map((t) => ({ time: t.time, course: t.course }));
 
 const rows = poss.map((p) => {

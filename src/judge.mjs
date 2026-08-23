@@ -6,7 +6,9 @@ import { callGeminiJSON, analyzeRoster, analyzeCrews, analyzeInterns, analyzePar
 import { statusTitle as notifyStatusTitle, partLabel as notifyPartLabel } from './notifytext.mjs';
 import { labelToISO } from './worklog.mjs';
 import { correctAndLearn, snapName, learnCrews, alreadyHarvested, markHarvested } from './roster.mjs';
-import { loadJSON } from './store.mjs';
+import { loadJSON, DATA_DIR as DATA_DIR_J } from './store.mjs';
+import fsSync from 'node:fs';
+import pathMod from 'node:path';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
 import { readBoardClaudeVerdict, useClaudeReader, claudeReadFault } from './boardreader.mjs';
 import { looksLikeBoardPost } from './analyzer.mjs';
@@ -15,6 +17,21 @@ import { looksLikeBoardPost } from './analyzer.mjs';
 //  Claude가 특정 부를 못 읽어도(부분 크롭에 그 부 없음) Gemini로 넘겨 429·과금을 일으키지 않는다.
 //  되살리려면 서버 .env 에 GEMINI_FALLBACK=1.
 const useGeminiFallback = () => ['1', 'true', 'yes'].includes(String(process.env.GEMINI_FALLBACK || '').toLowerCase());
+
+// ★인턴(노란 칸) 판독만 따로 켜는 문 — 비싼 Gemini 폴백과 분리한다.
+//  GEMINI_FALLBACK을 켜면 readBoardConsensus(배치표 통째 재판독)까지 같이 켜진다. 그게
+//  2026-08-03 크레딧 급소진의 원인이었다. 인턴은 flash 한 번이면 되므로 문을 따로 냈다.
+//  · 기본: Gemini 키가 있으면 켬(부당 1회, 이미지·부별 캐시 — 배치표 한 장에 최대 3회)
+//  · 끄기: INTERN_READ=0  또는  data/no-intern-read 파일
+//  ★인턴을 안 읽으면 배치표에서 노란 칸이 사라지는 게 아니라 '못 본' 상태가 된다.
+//   인턴 하나를 못 보면 그 뒤 전원의 티오프가 한 칸씩 밀린다 — 끄기 전에 그걸 알고 꺼야 한다.
+const useInternRead = () => {
+  const v = String(process.env.INTERN_READ || '').toLowerCase();
+  if (['0', 'false', 'no'].includes(v)) return false;
+  if (['1', 'true', 'yes'].includes(v)) return true;
+  try { if (fsSync.existsSync(pathMod.join(DATA_DIR_J, 'no-intern-read'))) return false; } catch { /* 파일이 없으면 켠 것이다 */ }
+  return !!process.env.GEMINI_API_KEY;
+};
 
 // ★관리자가 '진짜 동명이인'으로 등록한 이름들(data/homonyms.json = ["이지은", ...]).
 //  배치표에 같은 이름이 여러 순번에 뜨는 건 대개 '재인쇄'(같은 사람)라 기본은 접는다.
@@ -1312,6 +1329,30 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   if (!verdict?._resolved) resolveTeeByGrid(verdict, member);
   // ★순번별 '이름' 명단 — 통합 판독이 자주 놓쳐서(타임아웃·부분) 전용 판독으로 다시 뽑아 위치정렬로 저장.
   //  신뢰할 만큼 완전할 때만 채택. 부실하면 []로 비워, today가 이전(마지막 정상) 명단을 보존하게 한다.
+  // ── 인턴(노란 칸) 전용 판독 ─────────────────────────────────────────────────
+  //  ★판독기가 무엇이든 돈다. 예전엔 아래 블록 안에 있어서 '로컬 VLM·Claude는 이미 인턴을 채웠다'는
+  //   이유로 통째로 스킵됐는데, 두 경로 모두 internTees를 빈 배열로 박아둔다
+  //   (boardreader.verdictFromPart · localvlm). 그래서 Claude가 주 판독자가 된 뒤로
+  //   노란 칸이 한 번도 자동으로 잡히지 않았다 — 인턴이 잡힌 날은 전부 관리자가 손으로 넣은 날이었다.
+  //  인턴은 티오프 칸을 차지하되 정규 순번을 먹지 않는다. 하나 놓치면 그 뒤 전원이 한 칸씩 밀린다.
+  //  ★값은 싸다 — 이미지·부별로 캐시되는 flash 한 번(배치표 한 장당 그 부에 1회).
+  //  ★수동 지정이 있으면 그쪽이 이긴다(interns.mjs). 여기서 채우는 건 '자동'의 자리다.
+  //   자동은 오탐 이력이 있다(2026-08-18: 4칸 잡았는데 관리자가 '없음'으로 정정) — 그래서 수동이 위다.
+  if (isBoard && verdict && useInternRead()) {
+    try {
+      const interns = await analyzeInterns(article, member.part);
+      if (interns) {
+        const had = Number(verdict.internCount) || 0;
+        verdict.internCount = interns.internCount;
+        verdict.internTees = interns.internTees;
+        if (interns.internCount !== had) {
+          const w = interns.internTees.map((t) => `${t.time}${t.course[0]}`).join(' ') || '(없음)';
+          console.log(`🟡 [인턴] ${member.part}부 노란칸 ${had} → ${interns.internCount}칸: ${w}`);
+        }
+      }
+    } catch (e) { console.error(`[인턴] ${member.part}부 노란칸 판독 오류:`, e.message); }
+  }
+
   if (isBoard && verdict && !verdict._local && !verdict._claude && useGeminiFallback()) {   // ★로컬 VLM·Claude 판독은 이미 명단·인턴을 채웠으므로 Gemini 재판독 스킵(비용0·회귀0). ★Gemini 폴백 OFF(크레딧 고갈)면 죽은 Gemini로 낙하하지 않고 마지막 정상 명단 보존(today 프레임보호).
     try {
       // ★몰림 방지: 명단 판독과 조 배치표 판독을 '동시(Promise.all)'로 쏘던 것을 '순차'로 —
@@ -1344,9 +1385,6 @@ export async function judge(article, today = null, member = memberFromEnv()) {
         const mk = base(member.name);
         if (mk && verdict.assignMap[mk]) verdict.myAssign = verdict.assignMap[mk];
       }
-      // ★인턴(노란칸) 전용 판독으로 통합판독의 오탐을 교정(표시 정확도). 실패하면 통합판독값 유지.
-      const interns = await analyzeInterns(article, member.part);
-      if (interns) { verdict.internCount = interns.internCount; verdict.internTees = interns.internTees; }
       const crews = doCrew ? await analyzeCrews(article) : [];
       // ★조 배치표 전원을 전역 캐디 사전에 축적(원본 그대로 — 새 캐디 발견). 이 사전이 오탈자 보정의 근거.
       if (crews.length) {

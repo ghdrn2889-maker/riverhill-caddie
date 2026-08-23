@@ -423,14 +423,18 @@ app.get('/api/board-review', gate, (req, res) => {
         const t = teeAt(p); const name = roster[p - 1] || '';
         rows.push({ pos: p, name, tee: t.time, course: t.course, isMember: memberSet.has(nkey(name)), duty: dutyKind(crew[nkey(name)]) });
       }
-      const interns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+      // ★3부와 같은 규칙 — 수동 지정이 판독을 이긴다. 이제 1·2부에도 부별 수동 지정이 생길 수 있다.
+      const boardInterns = (Array.isArray(pd.internTees) ? pd.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
+      const _ikeyP = String(pd._targetISO || bp.targetISO || '').replace(/\D/g, '').slice(0, 8);
+      const interns = _ikeyP ? internTeesFor(_ikeyP, boardInterns, part).map((t) => ({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' })) : boardInterns;
+      const internSource = _ikeyP && internManualFor(_ikeyP, part) ? '수동' : '자동';
       flagMisreads(rows);   // 쌍둥이 이름 오독 표시(1·2부)
       reflectCrossPartSwaps(part, rows, memberSet);   // 대바 셀을 실제 배치 캐디 이름으로 단순화(rawName 보존)
       return res.json({ ok: true, part, board: {
         articleId: bp.articleId, dateLabel: pd.dateLabel || bp.dateLabel || '', subject: bp.subject || '',
         image: bp.image || '', url: bp.url || '', at: bp.at, corrected: pd._adminCorrected || null,
         syncSig: `${bp.at || ''}|${(pd._adminCorrected && pd._adminCorrected.at) || ''}`,   // 신선도(store 기준)
-        uncertain: pd.uncertain || '', teamCount: Number(pd.teamCount) || 0, cutLine, cutoffName: pd.cutoffName || '', rows, interns,
+        uncertain: pd.uncertain || '', teamCount: Number(pd.teamCount) || 0, cutLine, cutoffName: pd.cutoffName || '', rows, interns, boardInterns, internSource,
         dayTimes: buildDayTimes(pd.teeTimes, grid),
       } });
     }
@@ -460,9 +464,9 @@ app.get('/api/board-review', gate, (req, res) => {
     const boardInterns = (Array.isArray(v.internTees) ? v.internTees : []).map((x) => ({ time: (String(x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: (/IN/i.test(String(x.course)) ? 'IN' : 'OUT') })).filter((x) => x.time);
     const _ikey = keyFromLabel(v.dateLabel || lb.dateLabel || '') || '';
     const interns = _ikey
-      ? internTeesFor(_ikey, boardInterns).map((t) => ({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' }))
+      ? internTeesFor(_ikey, boardInterns, '3').map((t) => ({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' }))
       : boardInterns;
-    const internSource = _ikey && internManualFor(_ikey) ? '수동' : '자동';
+    const internSource = _ikey && internManualFor(_ikey, '3') ? '수동' : '자동';
     flagMisreads(rows);   // 쌍둥이 이름 오독 표시(3부)
     reflectCrossPartSwaps(part, rows, memberSet);   // 대바 셀을 실제 배치 캐디 이름으로 단순화(rawName 보존)
     // ★원본 이미지: '전체 배치표'(article 본문) 우선. latestImage는 3부만 잘린 당추 변동 크롭이라
@@ -1204,8 +1208,18 @@ app.post('/api/daejo-reset', gate, (req, res) => {
 
 // 인턴 티오프 수동 지정 — 앱 서버(3000)에도 같은 API가 있지만, 대조판은 모니터에서 뜨므로 여기에도 둔다.
 //  같은 interns.mjs·같은 data/를 쓰니 어느 쪽으로 저장해도 결과는 하나다.
-function _autoInternTees(dateKey) {
+function _autoInternTees(dateKey, part = '3') {
+  // 그 날짜 그 부가 판독한 노란 칸 — 부마다 티오프표가 따로다.
+  //  3부는 lastboard, 1·2부는 board-parts-store에 있다.
   try {
+    if (String(part) !== '3') {
+      const bp = loadBoardPartsStore();
+      const d = bp && bp.parts && bp.parts[String(part)];
+      if (!d) return [];
+      const iso = String(d._targetISO || bp.targetISO || '').replace(/\D/g, '').slice(0, 8);
+      if (iso && iso !== dateKey) return [];
+      return d.internTees || [];
+    }
     const lb = loadJSON('lastboard.json', {}) || {};
     const v = lb.rawVerdict ? effectivePart3Verdict(lb) : null;
     if (v && String(v.dateLabel || lb.dateLabel || '').replace(/\D/g, '').slice(0, 8) === dateKey) return v.internTees || [];
@@ -1214,23 +1228,29 @@ function _autoInternTees(dateKey) {
 }
 app.get('/api/admin/intern-tees', gate, (req, res) => {
   const date = String(req.query.date || '').replace(/\D/g, '').slice(0, 8);
+  const part = String(req.query.part || '3');
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
-  const auto = _autoInternTees(date);
-  const man = internManualFor(date);
-  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
+  if (!['1', '2', '3'].includes(part)) return res.status(400).json({ ok: false, error: 'part는 1·2·3 중 하나' });
+  const auto = _autoInternTees(date, part);
+  const man = internManualFor(date, part);
+  res.json({ ok: true, date, part, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto, part), source: man ? '수동' : '자동' });
 });
+// ★여기는 저장만 한다. 회원 카드 재계산은 앱(server.mjs)의 같은 경로가 한다 — 카드는 앱이 주인이다.
+//  모니터에서 인턴을 고칠 일이면 '배치표 검수'로 하는 게 맞다(그 길은 board-correct라 재계산까지 간다).
 app.post('/api/admin/intern-tees', gate, (req, res) => {
   const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  const part = String(req.body?.part || '3');
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  if (!['1', '2', '3'].includes(part)) return res.status(400).json({ ok: false, error: 'part는 1·2·3 중 하나' });
   try {
-    if (req.body?.clear) clearInternTees(date, '모니터');
-    else if (req.body?.toggle) { const { time, course } = req.body.toggle; toggleInternTee(date, time, course, _autoInternTees(date), { by: '모니터' }); }
-    else if (Array.isArray(req.body?.tees)) setInternTees(date, req.body.tees, { by: '모니터', note: String(req.body?.note || '') });
+    if (req.body?.clear) clearInternTees(date, '모니터', part);
+    else if (req.body?.toggle) { const { time, course } = req.body.toggle; toggleInternTee(date, time, course, _autoInternTees(date, part), { by: '모니터', part }); }
+    else if (Array.isArray(req.body?.tees)) setInternTees(date, req.body.tees, { by: '모니터', part, note: String(req.body?.note || '') });
     else return res.status(400).json({ ok: false, error: 'tees[] 또는 toggle{time,course} 또는 clear:true 필요' });
   } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
-  const auto = _autoInternTees(date);
-  const man = internManualFor(date);
-  res.json({ ok: true, date, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto), source: man ? '수동' : '자동' });
+  const auto = _autoInternTees(date, part);
+  const man = internManualFor(date, part);
+  res.json({ ok: true, date, part, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto, part), source: man ? '수동' : '자동' });
 });
 
 app.get('/', gate, (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')); });
