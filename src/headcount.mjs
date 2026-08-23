@@ -81,7 +81,13 @@ export function scoreHeadcount(declared, rc) {
   add('설명', declared.total, counted.placed, true);          // ★총원 중 자리를 찾아준 사람
   add('가용', declared.available, counted.available, false);
   add('총원', declared.total, counted.total, false);          // 정본 명부 크기 — 판독이 아니라 명부 이야기
-  add('제외인원', declared.excluded, counted.excluded, false);
+  // ★배치표가 말하는 '제외인원'은 근태 + 역할을 다 담은 수다 — 상자 표에 당번·배치·프리·벌당이
+  //  휴가·병가·휴무와 나란히 인쇄되고, 제외인원은 그 표의 합계 자리에 찍힌다.
+  //  우리 쪽 '불가용'(근태만)을 그 수에 맞대면 역할 인원만큼 매일 모자란 것처럼 보인다.
+  //   실측 2026-08-23: 우리 13 vs 배치표 18로 다섯 명이 새는 것처럼 찍혔는데,
+  //   역할 4명(프리2·배치1·벌당1)을 더하면 17이고 배치표 상세 합도 17이다 — 진짜 차이는 한 명이었다.
+  //  틀린 자로 재면 진짜 어긋남이 가짜 어긋남에 묻힌다. 같은 바구니끼리 맞댄다.
+  add('제외인원', declared.excluded, counted.excluded + counted.role, false);
   const bd = declared.breakdown || {};
   for (const k of [...OFF_KEYS, ...ROLE_KEYS]) add(k, bd[k], counted.breakdown[k] || 0, false);
 
