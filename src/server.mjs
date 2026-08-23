@@ -1484,8 +1484,10 @@ async function rememberBoard(full, out) {
         //  통째로 되쓰면 새 배치표의 진짜 변경(대바)까지 같이 막힌다. 2026-08-23 #27554에서
         //  10번 조하빈↔16번 오동현 대바가 15:06 교정본에 막혀 앱에 끝내 안 떴다.
         //  '오독으로부터 교정을 지킨다'와 '새 사실을 막는다'는 다르다.
+        // ★목록이 '있으면' 그 목록이 전부다 — 비어 있으면 지킬 게 없다는 뜻이지 전부 지키라는 뜻이 아니다.
+        //  (없을 때만 옛 교정본으로 보고 통째로 지킨다.)
         const kept = (pv._adminCorrected && pv._adminCorrected.names) || null;
-        if (kept && Object.keys(kept).length) {
+        if (kept) {
           const hit = [];
           for (const [posStr, nm] of Object.entries(kept)) {
             const i = Number(posStr) - 1;

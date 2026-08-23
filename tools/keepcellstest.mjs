@@ -43,6 +43,14 @@ console.log('\n[★보존이 칸 단위인가]');
   const whole = (seg.match(/v\.part3Roster = pv\.part3Roster\.slice\(\);/g) || []).length;
   ok(whole === 1, `★명단 통째 되쓰기는 한 곳(옛 교정본 폴백)만 남았다 (${whole}곳)`,
     '두 곳이면 새 경로에도 통째 되쓰기가 살아 있다는 뜻이다');
+  {   // ★빈 목록은 「지킬 게 없다」이지 「전부 지켜라」가 아니다.
+    //  빈 목록을 「전부 지켜라」로 읽으면, 아무것도 안 고친 교정 한 번이 그날 새 배치표를 통째로 막는다.
+    const at2 = seg.indexOf('const kept =');
+    const cond = seg.slice(at2, at2 + 200).replace(/\s+/g, ' ');   // 공백·줄바꿈을 한 번에 하나로
+    ok(/\|\| null; if \(kept\) \{/.test(cond),
+      '★빈 목록도 목록으로 읽는다(전부 지키기로 넘어가지 않는다)',
+      'Object.keys(kept).length 로 걸러버리면 빈 목록이 옛 교정본과 구분되지 않는다');
+  }
   ok(/옛 교정본/.test(seg) && /다음 교정부터 칸 단위/.test(seg),
     '옛 교정본은 종전대로 두되 그렇다고 말한다', '업그레이드 당일에 보호가 사라지면 안 된다');
 }
