@@ -1546,12 +1546,76 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  명단이 있으면(배치표/대바) authoritative. 없으면 no-op(기존 판독 유지).
   if (verdict) {
     resolveCutoff(verdict, article, today);
+    // ★컷이 정해진 다음에 티오프표를 스스로 검산한다 — 컷이 있어야 '구멍'을 판별할 수 있다.
+    auditTeeGrid(verdict);
     fixMemberPosByRoster(verdict, member, today);   // today = 이전 상태 → '순번에 있었다 사라짐'(off:removed) 감지
   }
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
   applySelfCancel(verdict, article, today, member); // ★텍스트 취소("내 이름+취소") → 순번 제외(off:removed), AI 추가 없음
   return { ...decide(article, verdict, member), rawVerdict: verdict };
+}
+
+// ── ★티오프표 자가 검산 ────────────────────────────────────────────────────
+//  티오프표에는 지어낼 수 없는 구조가 둘 있다. 그래서 표 스스로가 판독 오류를 고발할 수 있다.
+//   ① 근무선(컷) 안의 순번은 빠짐없이 티오프를 갖는다 — 인턴(노란 칸)은 순번을 안 먹으니 구멍을 내지 않는다.
+//   ② 순번이 뒤면 시각도 뒤다 — 팀은 순번 순으로 나간다(당추로 중간에 끼워 넣어도 재매칭되어 순서는 지켜진다).
+//   ③ 한 티오프 칸(시각+코스)에는 순번이 하나다 — 한 순번이 한 팀이고, 한 팀이 한 칸이다.
+//  2026-08-23 #27554 실사고: 16:53 OUT 한 칸을 못 읽어 6~10번이 한 칸씩 밀리고 16번이 티오프를 잃었다.
+//   컷은 16인데 표는 15칸까지였다 — 그 자체로 모순인데, 시스템은 그 표를 들고도 조용히 알림을 보냈다.
+//  ★고치지는 않는다. 어느 칸이 틀렸는지는 표만 봐선 알 수 없다(빠진 건지 밀린 건지 구분 불가).
+//   대신 "이 표는 앞뒤가 안 맞는다"를 남긴다 — 조용히 틀리는 것보다 시끄럽게 모르는 게 낫다.
+export function auditTeeGrid(verdict) {
+  if (!verdict) return null;
+  const TRE = /(\d{1,2}):(\d{2})/;
+  const grid = (Array.isArray(verdict.teeGrid) ? verdict.teeGrid : [])
+    .map((g) => ({ pos: Number(g && g.pos) || 0, course: (g && g.course) || '', m: String((g && g.time) || '').match(TRE) }))
+    .filter((g) => g.pos > 0 && g.m)
+    .map((g) => ({ pos: g.pos, time: g.m[0], course: g.course, min: Number(g.m[1]) * 60 + Number(g.m[2]) }))
+    .sort((a, b) => a.pos - b.pos);
+  delete verdict._gridFlaw;
+  if (grid.length < 4) return null;          // 표를 거의 못 읽은 것 — 프레임보호가 다루는 다른 문제다
+  const maxPos = grid[grid.length - 1].pos;
+  const cut = Number(verdict.cutoffPosition) || Number(verdict.teamCount) || 0;
+  const flaw = {};
+  // ① 구멍 — 근무선 안인데 티오프가 없는 순번.
+  //  ★표가 근무선 언저리까지 닿았을 때만 본다. 부분 크롭(앞 절반만 읽힘)은 구멍이 무더기로 나오는데
+  //   그건 '표가 어긋난' 게 아니라 '표를 못 읽은' 것이라 여기서 다룰 문제가 아니다.
+  if (cut > 0 && maxPos >= cut - 2) {
+    const have = new Set(grid.map((g) => g.pos));
+    const holes = [];
+    for (let p = 1; p <= cut; p++) if (!have.has(p)) holes.push(p);
+    if (holes.length && holes.length <= 3) flaw.holes = holes;
+  }
+  // ② 역행 — 순번은 뒤인데 시각이 앞선다.
+  const back = [];
+  for (let i = 1; i < grid.length; i++) {
+    if (grid[i].min < grid[i - 1].min) {
+      back.push(`${grid[i - 1].pos}번 ${grid[i - 1].time} → ${grid[i].pos}번 ${grid[i].time}`);
+    }
+  }
+  if (back.length) flaw.backsteps = back;
+  // ③ 겹침 — 한 티오프 칸(시각+코스)에 순번이 둘.
+  //  한 순번은 한 팀이고 한 팀은 한 칸이다. 겹치면 판독이 같은 칸을 두 번 쓴 것이다.
+  //  (2026-08-10 실데이터: 28·29번이 24·25번과 같은 18:31 칸에, 30·31번이 26·27번과 같은 18:38 칸에 얹혀 있었다.)
+  const slot = new Map();
+  const dup = [];
+  for (const x of grid) {
+    const k = `${x.time}|${/IN/i.test(String(x.course || '')) ? 'IN' : 'OUT'}`;
+    if (slot.has(k)) dup.push(`${x.time} ${/IN/i.test(String(x.course || '')) ? 'IN' : 'OUT'}에 ${slot.get(k)}번·${x.pos}번`);
+    else slot.set(k, x.pos);
+  }
+  if (dup.length) flaw.dups = dup;
+  if (!flaw.holes && !flaw.backsteps && !flaw.dups) return null;
+  const say = [];
+  if (flaw.holes) say.push(`근무선이 ${cut}번까지인데 ${flaw.holes.join('·')}번에 티오프가 없습니다`);
+  if (flaw.backsteps) say.push(`순번은 뒤인데 시각이 앞섭니다(${flaw.backsteps.slice(0, 3).join(', ')})`);
+  if (flaw.dups) say.push(`한 티오프 칸에 순번이 둘입니다(${flaw.dups.slice(0, 3).join(', ')})`);
+  flaw.text = say.join(' · ');
+  flaw.cut = cut;
+  verdict._gridFlaw = flaw;
+  console.warn(`⚠️ [티오프표] ${flaw.text} — 배치표 검수에서 확인이 필요합니다.`);
+  return flaw;
 }
 
 // 표 배경색 이름 → 부(部). 리버힐: 1부=연분홍, 2부=하늘색, 3부=보라.

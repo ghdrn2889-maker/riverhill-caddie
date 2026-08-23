@@ -479,6 +479,7 @@ app.get('/api/board-review', gate, (req, res) => {
       // ★신선도 서명 — 얼어붙은 at 대신 today.json(_t1Sig) 기준 → 당추·커트로 대시보드가 바뀌면 검수도 재렌더.
       syncSig: `${v._t1Sig || ''}|${(v._adminCorrected && v._adminCorrected.at) || ''}`,
       at: lb.at, corrected: v._adminCorrected || null, uncertain: v._uncertain || '', teamCount: Number(v.teamCount) || 0,
+      gridFlaw: (v._gridFlaw && v._gridFlaw.text) || '',   // 티오프표 자가 검산 — 표가 앞뒤가 안 맞는다고 스스로 말한 내용
       cutLine, cutoffName: v.cutoffName || '', rows, interns, boardInterns, internSource,
       dayTimes: buildDayTimes(v.teeTimes, grid),
     } });

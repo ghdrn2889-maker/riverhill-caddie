@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from './store.mjs';
 import { loadToday, saveToday, dayKey, applyVerdict } from './today.mjs';
-import { interpretForMember } from './judge.mjs';
+import { interpretForMember, auditTeeGrid } from './judge.mjs';
 import { activeMembers } from './users.mjs';
 import { keyFromLabel } from './boardpending.mjs';
 import { internTeesFor, setManual, teeKey } from './interns.mjs';
@@ -122,6 +122,9 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     v._adminCorrected = { at: Date.now(), by, names: keptNames };
   }
   delete v._uncertain;
+  // ★교정본에도 같은 검산을 건다. 사람이 고쳤다고 표가 맞아지는 건 아니다 —
+  //  고쳤으면 경고가 저절로 사라지고, 어긋난 채로 저장했으면 경고가 그대로 남아 다시 눈에 띈다.
+  auditTeeGrid(v);
   lb.rawVerdict = v;
   try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
   if (cellDiffs.length) {
