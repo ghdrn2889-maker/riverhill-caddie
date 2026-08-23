@@ -70,7 +70,7 @@ const OPS_TITLES = [
   ['src/monitor.mjs', '시스템 진단'],
   ['src/server.mjs', '네이버 쿠키 만료'],
   ['src/server.mjs', '새 캐디 가입'],
-  ['src/server.mjs', '판독 실패 — 확인 필요'],
+  ['src/server.mjs', '못 읽은 글 — 확인 필요'],   // 옛 이름은 '판독 실패' — 판독기가 안 돈 글까지 실패라 불러 잡담에 알림이 갔다(2026-08-23)
   ['src/server.mjs', '테스트 알림'],
 ];
 for (const [file, title] of OPS_TITLES) {

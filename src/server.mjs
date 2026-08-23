@@ -2123,11 +2123,14 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       await processForMember(m.id, member, mout, full, opts);
     } catch (e) { console.error(`[회원 ${m.id} 판독 처리 오류]`, e.message); }
   }
-  // ★판독이 실패한 글은 관리자에게만, 그것도 회원 수와 무관하게 한 번만 알린다.
+  // ★못 읽은 글은 관리자에게만, 그것도 회원 수와 무관하게 한 번만 알린다.
+  //  ★'판독 실패'라고 부르지 않는다 — 판독기가 아예 안 도는 경우도 여기로 오기 때문이다.
+  //   무엇을 못 했는지가 아니라 무엇이 안 됐는지를 적는다: 이 글에서 반영할 값을 못 뽑았다.
+  //   (판독기가 안 돌았고 반영할 값도 없는 잡담은 애초에 여기 오지 않는다 — judge.decide가 거른다.)
   if (out.adminOnly && !opts.noPush && !opts.previewMode) {
     try {
-      await broadcastAdmins({ title: '판독 실패 — 확인 필요',
-        body: `${full.subject || '새 글'} — 자동 판독이 실패했습니다. 회원에게는 보내지 않았습니다.`,
+      await broadcastAdmins({ title: '못 읽은 글 — 확인 필요',
+        body: `${full.subject || '새 글'} — 이 글에서 반영할 값을 읽지 못했습니다. 회원에게는 보내지 않았습니다.`,
         url: '/', level: 'check' });
     } catch (e) { console.error('판독 실패 관리자 알림 오류:', e.message); }
   }

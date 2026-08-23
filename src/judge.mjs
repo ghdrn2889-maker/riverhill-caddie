@@ -120,6 +120,21 @@ export function scheduleHint(text) {
 // 값싼 사전 판정: 명백히 '남의 일'이면 'other'(Gemini 생략·푸시 안 함), 아니면 'unknown'(Gemini/폴백에 맡김).
 //  Gemini 할당량(429) 절약 + 판독 실패 시 남의 부·개인근태까지 알림 나가는 스팸 방지.
 //  ★보수적으로: 내 이름/3부 언급이 있으면 절대 'other'로 버리지 않는다(놓침 방지).
+// ★'읽을 만한 사실'이 글 안에 실제로 들어 있나 — scheduleHint보다 훨씬 좁다.
+//  scheduleHint는 '부'나 '님' 한 글자로도 참이 된다(놓침 방지용 그물). 그물로 잡은 걸 전부
+//  '판독 실패'라 부르면, 단톡방 잡담 한 줄에 관리자 폰이 울린다(2026-08-23 "3부순번은 마감때 바꿀께요").
+//  여기서 보는 건 '지금 읽어서 반영할 수 있는 값'이다 — 팀 수, 티오프 시각, 순번, 커트 발표.
+//  예고("바꿀께요"·"짤릴수있습니다")나 안내("신청 받습니다")에는 반영할 값이 없다. 그건 실패가 아니다.
+export function hardScheduleFact(text) {
+  const t = String(text || '');
+  return /\d{1,2}\s*팀/.test(t)                       // "16팀"
+    || /님까지/.test(t)                               // "○○님까지" — 커트 발표
+    || /\d{1,2}:\d{2}/.test(t)                        // "17:35" — 티오프 시각
+    || /\d{1,3}\s*번(?!호)/.test(t)                   // "12번" — 순번 지목("번호"는 제외)
+    || /스페어\s*\d/.test(t)                          // "스페어 1번" — 컷 앵커
+    || /(당일\s*추가|당추)/.test(t);                    // 당일추가
+}
+
 export function cheapRelevance(text, member = memberFromEnv()) {
   const t = String(text || '');
   const { name, part } = member;
@@ -728,12 +743,23 @@ const PUSH_STATUSES = new Set(['your_turn', 'near', 'assigned', 'work', 'waiting
 
 // verdict(raw) → { relevant, push, title, body, status, verdict, computed }
 //  push: 'high'(바로 알림) | 'low'(피드만) | 'check'(확인필요 알림)
-export function decide(article, verdict, member = memberFromEnv()) {
+export function decide(article, verdict, member = memberFromEnv(), { readerRan = true } = {}) {
   const { name, part: myPart } = member;
   if (!verdict) {
     // Gemini 실패(429/타임아웃 등) → 놓침 방지로 '확인필요' 알림. 단 잡담/광고/사진까지
     //  알림 보내면 스팸이므로, 일정 단서(부·근무·시간·순번·"○○까지" 등)가 있을 때만 푸시.
     const blob = `${article.subject || ''} ${article.text || ''}`;
+    // ★판독기가 한 번도 안 돌았는데 '실패'라고 부르면 그건 거짓말이다.
+    //  텍스트 글은 코드 정규식이 먼저 본다. 읽을 값이 없으면 코드는 정상적으로 null을 주고 물러난다
+    //  ("부 신호 불충분 → 위임"). 그런데 넘겨받을 Gemini가 꺼져 있으면 그 null이 여기까지 와서
+    //  '자동 판독 실패'가 되어 관리자 폰을 울렸다 — 아무도 실패하지 않았는데.
+    //   2026-08-23: "3부순번은 마감때 바꿀께요"(단톡방 잡담) → 관리자에게 '판독 실패' 알림.
+    //  가르는 기준은 둘이다. 판독기가 실제로 돌았다면 실패가 맞으니 알린다.
+    //  안 돌았다면, 글 안에 지금 반영할 값이 있는 글일 때만 알린다(그건 우리가 놓친 게 맞다).
+    if (cheapRelevance(blob, member) !== 'other' && scheduleHint(blob) && !readerRan && !hardScheduleFact(blob)) {
+      return { relevant: true, push: 'low', status: 'unknown', verdict: null,
+        title: '', body: article.subject || '' };
+    }
     if (cheapRelevance(blob, member) !== 'other' && scheduleHint(blob)) {
       // ★회원에게는 보내지 않는다(2026-08-20). 7일 실측에서 이 알림 하나가 전체의 20%였고,
       //  회원 한 사람이 하루 1.6건씩 받았다. 그런데 '우리 판독이 실패했다'는 건 회원이 할 수 있는
@@ -1321,6 +1347,9 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   //  ★로컬 VLM 스위치(data/use-local-vlm) — 배치표 판독을 홈 GPU(qwen2.5vl)로. 비용0. 실패하면 Gemini 폴백.
   //   롤백: rm data/use-local-vlm (즉시). 로컬 verdict는 _local=true → 아래 Gemini 명단 재판독 블록을 건너뛴다.
   let verdict;
+  //  ★판독기가 실제로 돌았나. 안 돈 걸 '실패'라고 부르지 않으려고 센다(decide가 쓴다).
+  //   배치표(이미지)는 어느 경로로든 판독기가 돈다. 텍스트 글만 '코드가 물러나고 아무도 안 받은' 경우가 생긴다.
+  let readerRan = true;
   if (isBoard && useClaudeReader()) {
     // ★주 판독자 = 서버 Claude(MAX 구독, 무과금). 합본은 캐시로 1회 판독 후 이 회원 부만 변환.
     //  실패·해당부 없음·캡초과 → 로컬 VLM(켜졌으면) → Gemini 순으로 폴백(회귀 0).
@@ -1352,6 +1381,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     verdict = codeReadTextVerdict(article, member, today);
     if (verdict) console.log(`[codetext] 코드 판독 채택(cut=${verdict.cutoffName || '-'}, team=${verdict.teamCount || '-'})`);
     else if (useGeminiFallback()) verdict = await callGeminiJSON(buildPrompt(article, member), img, null);
+    else readerRan = false;   // 코드가 "읽을 값이 없다"며 물러났고, 넘겨받을 판독기가 없었다 = 실패가 아니다
   }
   // 합의 판독(_resolved)은 이미 표결 안에서 순번→티오프 확정 + 결론기준 불확실 판정을 마쳤다.
   //  그걸 다시 resolveTeeByGrid 하면 구조적 잡음(행번호매기기 등)이 '불확실'로 재주입되므로 건너뛴다.
@@ -1553,7 +1583,7 @@ export async function judge(article, today = null, member = memberFromEnv()) {
   applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
   applySelfCancel(verdict, article, today, member); // ★텍스트 취소("내 이름+취소") → 순번 제외(off:removed), AI 추가 없음
-  return { ...decide(article, verdict, member), rawVerdict: verdict };
+  return { ...decide(article, verdict, member, { readerRan }), rawVerdict: verdict };
 }
 
 // ── ★티오프표 자가 검산 ────────────────────────────────────────────────────
