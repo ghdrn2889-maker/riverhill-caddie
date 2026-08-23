@@ -1480,7 +1480,26 @@ async function rememberBoard(full, out) {
       //   당추 중간삽입은 순번이 밀리므로 위치기반 복사가 오염을 낳음 → 동일 명단수일 때만 보존.)
       const pv = prev.rawVerdict;
       if (pv && pv._adminCorrected && prevRoster === newRoster && Array.isArray(pv.part3Roster) && pv.part3Roster.length) {
-        v.part3Roster = pv.part3Roster.slice();
+        // ★사람이 고친 칸만 지킨다 — 명단을 통째로 되쓰지 않는다.
+        //  통째로 되쓰면 새 배치표의 진짜 변경(대바)까지 같이 막힌다. 2026-08-23 #27554에서
+        //  10번 조하빈↔16번 오동현 대바가 15:06 교정본에 막혀 앱에 끝내 안 떴다.
+        //  '오독으로부터 교정을 지킨다'와 '새 사실을 막는다'는 다르다.
+        const kept = (pv._adminCorrected && pv._adminCorrected.names) || null;
+        if (kept && Object.keys(kept).length) {
+          const hit = [];
+          for (const [posStr, nm] of Object.entries(kept)) {
+            const i = Number(posStr) - 1;
+            if (i < 0 || i >= v.part3Roster.length) continue;
+            if (String(v.part3Roster[i] || '') === String(nm || '')) continue;   // 이미 같다 — 손댈 것 없음
+            hit.push(`${i + 1}번 ${v.part3Roster[i] || '(빈칸)'}→${nm}`);
+            v.part3Roster[i] = nm;
+          }
+          if (hit.length) console.log(`·  [교정보존] 사람이 고친 ${hit.length}칸만 지킴: ${hit.slice(0, 6).join(' · ')}${hit.length > 6 ? ` 외 ${hit.length - 6}` : ''}`);
+        } else {
+          // 옛 교정본(고친 칸 목록이 없다) — 종전대로 명단을 통째로 지킨다. 다음 교정부터 칸 단위가 된다.
+          v.part3Roster = pv.part3Roster.slice();
+          console.log('·  [교정보존] 고친 칸 목록이 없는 옛 교정본 — 명단 통째로 유지(다음 교정부터 칸 단위)');
+        }
         if (pv.crewDuty) v.crewDuty = pv.crewDuty;
         v._adminCorrected = pv._adminCorrected;
         console.log(`·  lastboard 갱신 — 카톡 라이브(#${full.id}) 구조 반영 + 관리자 교정 이름 보존(동일 명단수 ${newRoster})`);

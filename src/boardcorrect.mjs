@@ -111,7 +111,17 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
   v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
   // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다(1·2부 경로와 같은 이유).
   if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.teamCount = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
-  v._adminCorrected = { at: Date.now(), by }; delete v._uncertain;
+  // ★'사람이 실제로 고친 칸'을 적어 둔다 — 다음 배치표가 왔을 때 이 칸만 지키기 위해서다.
+  //  예전엔 표식만 남기고 보존은 '명단 통째로'였다. 그래서 그날 한 번 교정하고 나면
+  //  이후 새 배치표의 진짜 변경(대바 등)이 앱에 못 들어왔다(2026-08-23 #27554 실사고:
+  //  10번 조하빈↔16번 오동현 대바가 15:06 교정본에 막혀 앱에 끝내 안 떴다).
+  //  교정은 여러 번 쌓이므로 이전 목록과 합친다 — 1차에서 고치고 2차에서 안 건드린 칸도 지켜야 한다.
+  {
+    const keptNames = { ...((v._adminCorrected && v._adminCorrected.names) || {}) };
+    for (const c of cellDiffs) if (c.field === 'name' && Number(c.pos) > 0) keptNames[c.pos] = c.admin;
+    v._adminCorrected = { at: Date.now(), by, names: keptNames };
+  }
+  delete v._uncertain;
   lb.rawVerdict = v;
   try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
   if (cellDiffs.length) {
