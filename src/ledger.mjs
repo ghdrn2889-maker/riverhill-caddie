@@ -72,6 +72,17 @@ export function effPartsFor(dateISO, userId = 1) {
   if (r.length) return r.slice().sort();
   return null;
 }
+// 그날 정산에 실제로 잡힌 값 — 알림이 '얼마가 기록됐는지' 말할 수 있게.
+//  ★summary()와 같은 함수(partsForDay·dayRevenue)를 쓴다. 여기서 따로 세면 알림과 화면이 갈라진다.
+export function daySettle(dateISO, userId = 1) {
+  const d = load(userId);
+  const day = journal.getDay(dateISO, userId);
+  if (!day) return null;
+  const parts = partsForDay(day, d);
+  const hole = d.holeSettle[dateISO] || null;
+  return { parts, revenue: dayRevenue(parts, hole), tip: Math.max(0, Number(d.tips[dateISO]) || 0) };
+}
+
 // 수동보정 존재 여부(일지의 '직접 지정' 표시용).
 export function hasDayPartsOverride(dateISO, userId = 1) { return Array.isArray(load(userId).dayParts[dateISO]); }
 

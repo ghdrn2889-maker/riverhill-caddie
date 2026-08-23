@@ -2938,6 +2938,71 @@ async function checkTimelineReminders() {
 setInterval(checkTimelineReminders, 60 * 1000); // 1분마다 체크
 console.log(`⏰ 출근 타임라인 리마인더: 출발 ${LEAVE_REMIND_BEFORE}분전·출발정각·도착·티오프 ${TEE_REMIND_BEFORE}분전 (1분 체크)`);
 
+// ── 근무 마침 알림 ── 그날 수익이 정산에 잡히는 바로 그 순간, 회원에게 한 번 알린다.
+//  ★수익은 따로 '기록되는' 순간이 없다. isWorkDone(티오프 + 4시간 30분)이 참이 되면 그날이
+//   정산의 '예정'에서 '근무 확정'으로 넘어가고, 그 순간부터 금액이 합계에 들어간다.
+//   걸 이벤트가 없으니 여기서 그 문턱을 넘는 순간을 지켜본다.
+//  ★두 탕이면 마지막 라운드가 끝날 때 한 번만 — settleAtMin이 이미 '마지막 티오프' 기준이고,
+//   보낸 기록도 날짜 하나로만 남긴다. 라운드마다 울리면 번거롭다(관리자 요청 2026-08-23).
+//  ★판정과 알림이 같은 함수를 본다(workday.isWorkDone·settleAtMin). 여기서 따로 세면
+//   "기록됐다"고 알렸는데 화면에는 아직 안 잡힌 날이 생긴다.
+const SETTLE_NOTIFY_ON = !['0', 'false', 'no'].includes(String(process.env.SETTLE_NOTIFY ?? '').toLowerCase());
+const SETTLE_GRACE_MIN = Number(process.env.SETTLE_GRACE_MIN ?? 180);   // 이보다 늦게 발견하면 조용히 넘긴다
+const manwon = (n) => {
+  const v = Math.round(Number(n) || 0);
+  if (!v) return '0원';
+  return v % 10000 === 0 ? `${v / 10000}만원` : `${v.toLocaleString('ko-KR')}원`;
+};
+
+async function checkSettleNotices() {
+  if (!SETTLE_NOTIFY_ON) return;
+  try {
+    const todayISO = todayISOKST();
+    const kst = new Date(Date.now() + 9 * 3600 * 1000);
+    const nowMin = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    for (const mem of activeMembers()) {
+      try {
+        const store = loadUserJSON(mem.id, 'settle-notify.json', {});
+        if (store.date === todayISO && store.at) continue;              // 오늘 것은 이미 보냈다
+        const day = journal.getDay(todayISO, mem.id);
+        if (!day || !wd.isWorkDone(day)) continue;                      // 아직 안 마쳤거나 근무가 아닌 날
+        const at = wd.settleAtMin(day);
+        if (at == null) continue;                                       // 티오프를 모르면 마쳤다고 보지 않는다
+        const late = nowMin - at;
+        const mark = { date: todayISO, at: Date.now(), settleMin: at };
+        if (late > SETTLE_GRACE_MIN) {
+          // 서버가 오래 멈췄다가 켜진 경우 — 한참 지난 일을 지금 알리면 그게 더 이상하다.
+          //  수익은 어차피 잡혀 있다. 보낸 것으로 표시만 하고 넘어간다.
+          saveUserJSON(mem.id, 'settle-notify.json', { ...mark, skipped: `${late}분 지남` });
+          console.log(`·  [근무마침] 회원${mem.id} ${todayISO} — ${late}분 지나 알림 생략(수익은 이미 반영됨)`);
+          continue;
+        }
+        const info = ledger.daySettle(todayISO, mem.id);
+        const parts = (info?.parts || []).map((p) => notifyPartLabel(p)).join('·');
+        const money = manwon(info?.revenue || 0);
+        const what = parts ? `${parts} ${money}` : money;
+        // ★조용시간(22시~)이라도 보낸다 — 3부 마지막 티오프면 마치는 시각이 23시가 된다.
+        //  자는 사람을 깨우는 게 아니라 방금 일을 끝낸 사람에게 보내는 것이다.
+        //  다만 새벽(07시 전)은 예외로 두지 않는다 — 그 시각에 마쳐지는 라운드는 없고,
+        //  있다면 뭔가 잘못된 것이므로 아침 대기열로 미루는 편이 낫다.
+        const h = kst.getUTCHours();
+        await broadcast({
+          title: '오늘 수익이 자동 기록되었습니다',
+          body: `${what} — 정확하게 기재되었는지 확인하세요.`,
+          url: '/#settle', level: 'normal', bypassQuiet: h >= 7,
+        }, mem.id);
+        saveUserJSON(mem.id, 'settle-notify.json', { ...mark, sent: what });
+        console.log(`💰 [근무마침] 회원${mem.id} ${todayISO} ${what} — 알림 발송(마침 ${Math.floor(at / 60)}:${String(at % 60).padStart(2, '0')})`);
+      } catch (e) { console.error(`[근무마침] 회원${mem.id} 오류:`, e.message); }
+    }
+  } catch (e) { console.error('근무 마침 알림 오류:', e.message); }
+}
+setInterval(checkSettleNotices, 5 * 60 * 1000);         // 5분마다 — 분 단위 정확도는 필요 없다
+setTimeout(checkSettleNotices, 70 * 1000);              // 기동 직후 한 번(재시작 중에 넘어간 건 없나)
+console.log(SETTLE_NOTIFY_ON
+  ? `💰 근무 마침 알림: 마지막 티오프 + ${wd.ROUND_MIN}분에 회원당 하루 1회 (${SETTLE_GRACE_MIN}분 지나면 생략)`
+  : '💰 근무 마침 알림: 꺼짐(SETTLE_NOTIFY=0)');
+
 // ── 아침 정정 대기열 flush ── 밤(조용시간) 동안 쌓인 회원 정정 알림을 아침 시각(기본 8시)에 한꺼번에 발송.
 //  칠판(단일 진실원) 변동·야간 판독 교정이 새벽에 회원을 깨우지 않고 humane한 시각에 도착하게 한다.
 const MORNING_FLUSH_HOUR = Number(process.env.MORNING_FLUSH_HOUR ?? 8);

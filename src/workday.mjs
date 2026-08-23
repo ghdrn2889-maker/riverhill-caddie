@@ -29,6 +29,14 @@ export function isSettled(dateISO, tees = [], now = Date.now()) {
   return (k.getUTCHours() * 60 + k.getUTCMinutes()) >= Math.max(...mins) + ROUND_MIN;
 }
 
+// 그날이 '마쳐지는' KST 분(하루의 몇 분째인가). 두 탕이면 마지막 라운드 기준이다.
+//  isSettled가 참이 되는 바로 그 시각 — 판정과 알림이 같은 숫자를 보게 하려고 여기서 낸다.
+//  티오프를 모르면 null(그런 날은 마쳤다고 보지 않는다).
+export function settleAtMin(day) {
+  const mins = teesOf(day).map(toMin).filter((v) => v != null);
+  return mins.length ? Math.max(...mins) + ROUND_MIN : null;
+}
+
 // 그날 일지에 적힌 티오프 전부(대표 + 부별 라운드) — 두 탕이면 마지막 것이 기준이 된다.
 export function teesOf(day) {
   if (!day) return [];
