@@ -2968,6 +2968,17 @@ async function checkSettleNotices() {
         if (!day || !wd.isWorkDone(day)) continue;                      // 아직 안 마쳤거나 근무가 아닌 날
         const at = wd.settleAtMin(day);
         if (at == null) continue;                                       // 티오프를 모르면 마쳤다고 보지 않는다
+        // ★근무 라운드 중 티오프를 모르는 게 하나라도 있으면 그 하루가 언제 끝나는지 알 수 없다.
+        //  기다린다 — 티오프가 채워지면 그때 제대로 알린다. 하루가 넘어가면 그냥 안 간다.
+        if (!wd.allWorkTeesKnown(day)) {
+          if (store.date !== todayISO || !store.waiting) {
+            saveUserJSON(mem.id, 'settle-notify.json', { date: todayISO, waiting: true });
+            const miss = Object.entries(day.rounds || {})
+              .filter(([, r]) => r && r.kind === 'work' && !r.teeTime).map(([p]) => `${p}부`).join('·');
+            console.log(`·  [근무마침] 회원${mem.id} 대기 — ${miss || '대표'} 티오프를 몰라 아직 알리지 않는다`);
+          }
+          continue;
+        }
         const late = nowMin - at;
         const mark = { date: todayISO, at: Date.now(), settleMin: at };
         if (late > SETTLE_GRACE_MIN) {

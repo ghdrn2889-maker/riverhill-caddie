@@ -29,6 +29,18 @@ export function isSettled(dateISO, tees = [], now = Date.now()) {
   return (k.getUTCHours() * 60 + k.getUTCMinutes()) >= Math.max(...mins) + ROUND_MIN;
 }
 
+// 근무 라운드 전부의 티오프를 알고 있는가.
+//  ★isSettled는 '아는 티오프 중 마지막'으로 판정한다 — 정산·트로피가 그 규칙 위에 서 있어 건드리지 않는다.
+//   하지만 사람에게 '오늘 근무가 다 끝났다'고 말하려면 그보다 엄격해야 한다.
+//   실측(2026-08-23 박수현): 2부 12:25 + 3부(티오프 미상)인데, 아는 티오프만 보면 16:55에
+//   '다 끝났다'가 된다. 3부를 아직 나가지도 않은 사람에게 그렇게 알릴 뻔했다.
+//   모르면 기다린다 — 티오프가 채워지면 그때 제대로 알린다.
+export function allWorkTeesKnown(day) {
+  const rs = Object.values((day && day.rounds) || {}).filter((r) => r && r.kind === 'work');
+  if (rs.length) return rs.every((r) => toMin(r.teeTime) != null);
+  return toMin(day && day.teeTime) != null;
+}
+
 // 그날이 '마쳐지는' KST 분(하루의 몇 분째인가). 두 탕이면 마지막 라운드 기준이다.
 //  isSettled가 참이 되는 바로 그 시각 — 판정과 알림이 같은 숫자를 보게 하려고 여기서 낸다.
 //  티오프를 모르면 null(그런 날은 마쳤다고 보지 않는다).

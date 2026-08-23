@@ -38,6 +38,27 @@ console.log('\n[★언제 마쳐지는가 — 두 탕이면 마지막 라운드]
     '티오프를 모르면 null', '모르는 걸 마쳤다고 하지 않는다');
 }
 
+console.log('\n[★근무 라운드 하나라도 티오프를 모르면 기다린다]');
+{
+  // 실측(2026-08-23 박수현): 2부 12:25 + 3부(티오프 미상).
+  //  아는 티오프만 보면 16:55에 '다 끝났다'가 된다 — 3부를 나가지도 않은 사람에게.
+  const half = { date: '2026-08-23', kind: 'work', teeTime: '12:25',
+    rounds: { 2: { kind: 'work', teeTime: '12:25' }, 3: { kind: 'work', teeTime: '' } } };
+  ok(wd.allWorkTeesKnown(half) === false, '★3부 티오프를 모르면 아직 모른다고 답한다',
+    '2부만 보고 16:55에 알리면 3부를 남겨둔 사람에게 거짓말이 된다');
+  const full = { date: '2026-08-23', kind: 'work', teeTime: '12:25',
+    rounds: { 2: { kind: 'work', teeTime: '12:25' }, 3: { kind: 'work', teeTime: '17:21' } } };
+  ok(wd.allWorkTeesKnown(full) === true, '채워지면 안다고 답한다');
+  ok(wd.settleAtMin(full) === 17 * 60 + 21 + 270, `그때 마침은 ${hm(wd.settleAtMin(full))}`);
+  // 스페어 라운드는 티오프가 없어도 상관없다 — 뛰는 게 아니니 끝날 일도 없다
+  const sp = { date: '2026-08-23', kind: 'work', teeTime: '12:25',
+    rounds: { 2: { kind: 'work', teeTime: '12:25' }, 3: { kind: 'spare', teeTime: '' } } };
+  ok(wd.allWorkTeesKnown(sp) === true, '스페어 라운드는 안 센다');
+  ok(srv.includes('if (!wd.allWorkTeesKnown(day)) {'), '틱이 이 문을 지킨다');
+  ok(srv.includes('store.waiting'), '기다리는 중이라고 한 번 남긴다',
+    '알림이 안 온 이유를 나중에 알 수 있어야 한다');
+}
+
 console.log('\n[판정과 알림이 같은 숫자를 보는가]');
 {
   const day = { date: '2026-08-23', kind: 'work', teeTime: '17:14', rounds: { 3: { kind: 'work', teeTime: '17:14' } } };
