@@ -61,6 +61,9 @@ console.log('\n[갱신이 함부로 돌지 않는가]');
   ok(/if \(!roster\.length\) return false;/.test(UPD), '베이스가 없으면 아무것도 만들지 않는다');
   ok(/if \(!iso\) return false;/.test(UPD), '어느 날 베이스인지 모르면 손대지 않는다');
   ok(/if \(iso < todayISOKST\(\)\) return false;/.test(UPD), '지나간 날은 갱신하지 않는다');
+  ok(/nowH >= Number\(w\.max\)/.test(UPD),
+    '★오늘이라도 이미 끝난 부는 건드리지 않는다',
+    '1부는 아침에 끝난다 — 오후 3시에 고쳐서 근무 배정 을 보내면 이미 끝난 라운드 이야기다');
   ok(/if \(after\.cut === before\.cut && after\.tees === before\.tees\) return false;/.test(UPD),
     '★바뀐 게 없으면 아무 일도 하지 않는다',
     '5분마다 도는 자리다 — 변화가 없는데 저장·알림이 돌면 그게 스팸이다');

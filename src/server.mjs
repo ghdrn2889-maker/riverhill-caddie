@@ -1781,6 +1781,13 @@ async function kakaoUpdatePart(part, dateISO, { reason = '', opts = {} } = {}) {
   if (!iso) return false;                               // 어느 날 베이스인지 모르면 손대지 않는다
   if (dateISO && iso !== dateISO) return false;         // 다른 날 베이스
   if (iso < todayISOKST()) return false;                // 지나간 날은 갱신하지 않는다
+  // ★오늘이면 그 부가 아직 안 끝났을 때만 — 1부는 아침에 끝난다.
+  //  오후 3시에 1부를 고치고 '근무 배정'을 보내면 이미 끝난 라운드 이야기다.
+  if (iso === todayISOKST()) {
+    const nowH = Number(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul', hour: '2-digit', hour12: false }));
+    const w = partWindow(p);
+    if (Number.isFinite(nowH) && Number(w.max) > 0 && nowH >= Number(w.max)) return false;
+  }
 
   // 베이스를 판정 한 장으로 세운다(사진 판독 없이).
   const vp = {
