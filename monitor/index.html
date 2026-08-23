@@ -98,6 +98,12 @@
   .ud-lockchip{ font-size:10px; font-weight:800; color:var(--warn); background:color-mix(in srgb,var(--warn) 14%,transparent); border-radius:999px; padding:1px 7px; }
   .ud-edit{ margin-top:11px; padding:11px; background:var(--panel2); border:1px solid var(--bord); border-radius:11px; display:flex; flex-direction:column; gap:9px; }
   .ude-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  /* 당번 날짜(오늘·내일) — 종류·부보다 먼저 고르는 값이라 앞에 세운다. */
+  .ude-dday{ display:inline-flex; border:1px solid var(--bord2); border-radius:9px; overflow:hidden; }
+  .ude-dday button{ appearance:none; border:0; background:var(--panel2); color:var(--tx2);
+    font:inherit; font-size:12px; font-weight:700; padding:6px 13px; cursor:pointer; }
+  .ude-dday button + button{ border-left:1px solid var(--bord2); }
+  .ude-dday button.on{ background:var(--acc); color:#fff; }
   .ude-row>label{ font-size:11.5px; font-weight:700; color:var(--tx3); min-width:34px; }
   .ude-row select,.ude-row input{ font:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--bord); border-radius:8px; background:var(--panel); color:var(--tx); min-width:0; }
   /* 당번 줄 — 선택지 글자가 잘리면(‘당번(7시2’) 고른 게 맞는지 확인이 안 된다. 넉넉히. */
@@ -1228,7 +1234,11 @@
         '<label>순번</label><input class="ude-pos" type="number" min="0" value="'+(u.myPos||'')+'">'+
         '<label>확정선</label><input class="ude-cut" type="number" min="0" value="'+(u.cut||'')+'"></div>'+
       // ★당번·벌당 — 배치표 하단 배정표 판독이 틀렸을 때 여기서 교정. 시각은 고정 시간표라 부·종류만 고르면 된다.
-      '<div class="ude-row ude-drow"><label>당번 · 벌당 (종류와 부를 고른 뒤 저장)</label><select class="ude-dkind">'+
+      //  ★어느 날인지 먼저 고른다. 당번은 하루 전에 정해지는 일인데 예전엔 오늘로만 저장돼서,
+      //   관리자가 내일 당번을 넣어도 오늘로 들어가고 회원 화면엔 끝내 안 떴다(2026-08-23 홍준표 2부 당번).
+      '<div class="ude-row ude-drow"><label>당번 · 벌당 (날짜 · 종류 · 부를 고른 뒤 저장)</label>'+
+        '<div class="ude-dday">'+[['0','오늘'],['1','내일']].map(function(o){ return '<button type="button" data-dday="'+o[0]+'"'+(o[0]==='0'?' class="on"':'')+'>'+o[1]+'</button>'; }).join('')+'</div>'+
+        '<select class="ude-dkind">'+
         '<option value=""'+(!u.duty?' selected':'')+'>없음</option>'+
         '<option value="당번"'+((u.duty&&u.duty.kind==='당번')?' selected':'')+'>당번(7시간)</option>'+
         '<option value="벌당"'+((u.duty&&u.duty.kind==='벌당')?' selected':'')+'>벌당(13시간)</option>'+
@@ -1278,6 +1288,10 @@
     Array.prototype.forEach.call(root.querySelectorAll('.ude-dsave'), function(b){
       b.onclick=function(){ udSaveDuty(Number(b.getAttribute('data-uid')), b); };
     });
+    // 오늘·내일 토글 — 하나만 켜진다.
+    Array.prototype.forEach.call(root.querySelectorAll('.ude-dday button'), function(b){
+      b.onclick=function(){ Array.prototype.forEach.call(b.parentNode.children, function(x){ x.classList.remove('on'); }); b.classList.add('on'); };
+    });
   }
   // 당번·벌당 저장 — 시각은 서버 고정 시간표가 채우므로 부·종류만 보낸다.
   async function udSaveDuty(id, btn){
@@ -1291,12 +1305,18 @@
       if(msg){ msg.className='ude-msg'; msg.textContent='취소됨 — 종류를 고른 뒤 다시 저장하세요.'; }
       return;
     }
+    var dsel=btn.closest('.ude-drow').querySelector('.ude-dday button.on');
+    var doff=dsel?Number(dsel.getAttribute('data-dday')):0;
+    var dayW=doff>0?'내일':'오늘';
+    var dd=new Date(); dd.setDate(dd.getDate()+doff);
+    var date=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
     btn.disabled=true; if(msg){ msg.className='ude-msg'; msg.textContent='저장 중…'; }
     try{
-      var r=await fetch(apiUrl('/api/duty-set'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,kind:kind,part:part})});
+      var r=await fetch(apiUrl('/api/duty-set'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:id,kind:kind,part:part,date:date})});
       var j=await r.json();
       if(!j.ok) throw new Error(j.error||'실패');
-      if(msg){ msg.className='ude-msg ok'; msg.textContent = j.duty ? (j.duty.part+'부 '+j.duty.kind+' 저장됨 ('+j.duty.start+'~'+j.duty.end+')') : '당번 해제됨'; }
+      // ★언제 저장됐는지 같이 말한다 — 예전엔 "저장됨"만 떠서, 오늘로 잘못 들어간 걸 알 길이 없었다.
+      if(msg){ msg.className='ude-msg ok'; msg.textContent = (j.duty ? (dayW+' '+j.duty.part+'부 '+j.duty.kind+' 저장됨 ('+j.duty.start+'~'+j.duty.end+')') : (dayW+' 당번 해제됨')) + ' · '+date; }
       setTimeout(function(){ udEditing=0; loadUserDash(); }, 900);
     }catch(e){ if(msg){ msg.className='ude-msg err'; msg.textContent=e.message; } }
     finally{ btn.disabled=false; }

@@ -533,19 +533,23 @@ function stashNotify(pending, part = '3', kind = '배치표 정정') {
   });
 }
 // ★당번·벌당 수동 교정 — 하단 배정표 판독이 틀렸거나(부분 크롭 등) 구두 지시로 바뀌었을 때.
-//  body: { userId, kind:'당번'|'벌당'|'', part:'1'|'2'|'3' } · kind 빈값 = 해제.
+//  body: { userId, kind:'당번'|'벌당'|'', part:'1'|'2'|'3', date?:'YYYY-MM-DD' } · kind 빈값 = 해제.
+//  ★date를 안 주면 오늘. 당번은 하루 전에 정해지는 일이라 앞날도 받는다 —
+//   예전엔 오늘로만 저장돼서, 관리자가 내일 당번을 넣어도 오늘로 들어가고 화면엔 안 떴다(2026-08-23).
 app.post('/api/duty-set', gate, (req, res) => {
   const id = Number(req.body?.userId) || 0;
   if (!id) return res.status(400).json({ error: 'userId 필요' });
   const kind = String(req.body?.kind ?? '');
   const part = String(req.body?.part ?? '');
   if (kind && !dutyMod.DUTY_KINDS.includes(kind)) return res.status(400).json({ error: '종류는 당번 또는 벌당' });
-  const today = todayISOkst();
-  dutyMod.saveDuty(id, today, kind, part, 'admin');   // ★관리자 확정 — 자동판독이 덮지 못함
-  const duty = dutyMod.dutyForToday(id, today);
+  const asked = String(req.body?.date ?? '').trim();
+  if (asked && !/^\d{4}-\d{2}-\d{2}$/.test(asked)) return res.status(400).json({ error: '날짜는 YYYY-MM-DD' });
+  const date = asked || todayISOkst();
+  dutyMod.saveDuty(id, date, kind, part, 'admin');   // ★관리자 확정 — 자동판독이 덮지 못함
+  const duty = dutyMod.dutyForToday(id, date);
   // 받은 원본을 함께 남긴다 — '저장을 눌렀는데 해제됨' 류 신고를 즉시 판별하기 위해.
-  console.log(`✏️ [monitor] 회원 #${id} 당번 교정: ${duty ? `${duty.part}부 ${duty.kind}(${duty.start}~${duty.end})` : '해제'} · 수신값 kind=[${kind}] part=[${part}]`);
-  res.json({ ok: true, duty });
+  console.log(`✏️ [monitor] 회원 #${id} 당번 교정(${date}): ${duty ? `${duty.part}부 ${duty.kind}(${duty.start}~${duty.end})` : '해제'} · 수신값 kind=[${kind}] part=[${part}]`);
+  res.json({ ok: true, date, duty });
 });
 
 // ★자동이 이미 보낸 사람은 '손으로 보낼 목록'에서 뺀다 — 안 빼면 같은 사람 폰이 두 번 울린다.

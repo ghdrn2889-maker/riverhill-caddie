@@ -786,18 +786,24 @@ function dutyDoneHTML() {
     + '<g class="carts"><g transform="translate(200,86) scale(.9)"><use href="#dtCartS"/></g></g></svg></div>';
 }
 const _dtMin = (s) => { const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1]) * 60 + Number(m[2])) : null; };
-function dutyPhaseNow(d) {
+// 지금이 근무 전/중/후 어디인가. ★앞날이면 시계와 무관하게 늘 '전'이다 —
+//  내일 당번을 오늘 밤 시계로 재면 "이미 마쳤어요"가 떠버린다.
+function dutyPhaseNow(d, off) {
+  if ((Number(off) || 0) > 0) return 'before';
   const s = _dtMin(d && d.start), e = _dtMin(d && d.end);
   if (s == null || e == null) return 'before';
   const n = new Date(), now = n.getHours() * 60 + n.getMinutes();
   return now < s ? 'before' : (now < e ? 'during' : 'done');
 }
 // 히어로를 통째로 당번 보드로. 처리했으면 true(호출부는 이후 일반 렌더를 건너뛴다).
-function renderDutyHero(d) {
+function renderDutyHero(d, off) {
   const hero = $('todayHero'), slot = $('boardSlot');
   if (!hero || !slot || !d || !d.kind) return false;
   const rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ph = dutyPhaseNow(d);
+  const dayOff = Number(off) || 0;
+  const ph = dutyPhaseNow(d, dayOff);
+  // 나머지 화면과 같은 말을 쓴다(오늘·내일·모레) — 여기만 '오늘'로 굳으면 내일 당번이 오늘 일처럼 읽힌다.
+  const dayW = dayOff <= 0 ? '오늘' : dayOff === 1 ? '내일' : dayOff === 2 ? '모레' : `${dayOff}일 뒤`;
   const label = `${d.part}부 ${d.kind}`;
   stopOffTitle();
   // ★hero-off 제거 — 휴무 전용 스타일(#heroTitle 18px·응원문구 배치·제목 로테이션)이 당번 보드를 덮어쓴다.
@@ -814,13 +820,13 @@ function renderDutyHero(d) {
     $('heroSub').innerHTML = `<b>${esc(doneTx)}</b>째 근무 중<span class="dot">·</span>${esc(d.end)} 종료`;
     if (!slot.querySelector('.bn-roof')) slot.innerHTML = dutyBarnHTML(rm);
   } else if (ph === 'before') {
-    $('heroLabel').textContent = '오늘 내 상황';
-    $('heroTitle').textContent = `오늘 ${label}이에요`;
+    $('heroLabel').textContent = `${dayW} 내 상황`;
+    $('heroTitle').textContent = `${dayW} ${label}이에요`;
     $('heroSub').textContent = `${d.start}까지 출근해서 카트대기장을 맡아요.`;
     if (!slot.querySelector('.yd-ground')) slot.innerHTML = dutyYardHTML(rm);
   } else {
-    $('heroLabel').textContent = '오늘 내 상황';
-    $('heroTitle').textContent = `오늘 ${label} 마쳤어요`;
+    $('heroLabel').textContent = `${dayW} 내 상황`;
+    $('heroTitle').textContent = `${dayW} ${label} 마쳤어요`;
     $('heroSub').textContent = `${d.start}부터 ${d.end}까지 ${d.hours}시간, 수고하셨어요.`;
     if (!slot.querySelector('.dt-scene')) slot.innerHTML = dutyDoneHTML();
   }
@@ -925,7 +931,10 @@ function renderToday(t) {
   //  (당번인 사람은 당번 시간까지만 일하므로 순번 라운드 카드는 띄우지 않는다.)
   //  ★단 '오늘' 화면일 때만 — 내일 배치표가 뜨면 t.dayOffset이 1이 되는데, 그때까지 오늘 당번 보드를
   //   붙들고 있으면 내일 근무를 못 본다(당번 끝난 뒤에도 '마쳤어요'가 계속 남던 문제).
-  if (t && t.duty && (Number(t.dayOffset) || 0) <= 0 && renderDutyHero(t.duty)) { renderRoundsStack(null); return; }
+  // ★예전엔 dayOffset<=0(오늘)일 때만 그렸다. 서버가 오늘 당번만 내려보내던 시절의 빗장인데,
+  //  저녁엔 화면이 내일 배치표를 보고 있어서 내일 당번이 어느 날에도 못 떴다(2026-08-23 홍준표 2부 당번).
+  //  이제 서버가 '화면이 보는 날짜'의 당번을 내려준다 → 빗장을 풀고 말(오늘·내일)만 맞춘다.
+  if (t && t.duty && renderDutyHero(t.duty, t.dayOffset)) { renderRoundsStack(null); return; }
   $('todayHero').classList.remove('duty-live', 'duty-on');
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
@@ -4714,7 +4723,7 @@ async function main() {
   //  (시계는 당번 것, 그림은 휴무 것으로 섞이던 원인). 대신 당번 보드를 갱신해 시계도 최신으로 유지한다.
   setInterval(() => {
     tickDate(); refreshSky();
-    if (lastToday && lastToday.duty && (Number(lastToday.dayOffset) || 0) <= 0 && renderDutyHero(lastToday.duty)) { /* 당번 보드 유지·시계 갱신 */ }
+    if (lastToday && lastToday.duty && renderDutyHero(lastToday.duty, lastToday.dayOffset)) { /* 당번 보드 유지·시계 갱신 */ }
     else if (lastToday) renderBoard(lastToday);
     if (document.body.classList.contains('on-board')) applyBoardSky();
   }, 20000);

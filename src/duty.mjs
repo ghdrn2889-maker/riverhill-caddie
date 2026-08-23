@@ -11,38 +11,68 @@ import { setDayDuty } from './journal.mjs';
 export const DUTY_KINDS = ['당번', '벌당'];
 
 const FILE = 'duty.json';
+const KEEP_DAYS = 30;              // 지난 당번은 한 달만 들고 있는다(일지가 영구 기록을 갖는다)
 
-// 회원별 '그날의 역할' 저장 — { date:'2026-08-14', kind:'당번', part:'3' }.
-//  ★날짜가 오늘이 아니면 없는 것으로 본다(어제 당번이 오늘 화면에 남지 않게).
-export function loadDuty(userId, todayISO) {
-  const d = loadUserJSON(userId, FILE, null);
-  if (!d || !d.kind || (todayISO && d.date !== todayISO)) return null;
-  return d;
+// ── 저장 형태 ───────────────────────────────────────────────
+//  { "2026-08-24": { kind:'당번', part:'2', by:'admin', at:… }, … } — 날짜별.
+//  ★예전엔 회원당 한 건이었고 그 한 건이 '오늘'이 아니면 없는 것으로 쳤다.
+//   어제 당번이 오늘 화면에 남지 않게 하려던 장치인데, 내일 당번을 미리 넣을 자리까지 같이 없앴다.
+//   당번은 원래 하루 전에 알려주는 일이라 그릇이 하루치뿐인 게 문제였다
+//   (2026-08-23 실사고: 관리자가 내일 당번을 넣었는데 오늘로 저장되고, 화면엔 끝내 안 떴다).
+//  옛 한 건짜리 파일은 읽을 때 자동으로 날짜별로 옮긴다(멱등).
+function loadAll(userId) {
+  const raw = loadUserJSON(userId, FILE, null);
+  if (!raw || typeof raw !== 'object') return {};
+  if (raw.kind && raw.date) return { [String(raw.date)]: { kind: raw.kind, part: raw.part || '', by: raw.by || '', at: raw.at || 0 } };
+  return raw;
+}
+function saveAll(userId, all) {
+  const keys = Object.keys(all).sort();
+  while (keys.length > KEEP_DAYS) delete all[keys.shift()];
+  saveUserJSON(userId, FILE, Object.keys(all).length ? all : null);
+}
+
+// 그 날짜의 역할. 날짜를 안 주면 아무것도 돌려주지 않는다 — '어느 날' 없이는 답이 없다.
+export function loadDuty(userId, dateISO) {
+  const d = String(dateISO || '');
+  if (!d) return null;
+  const rec = loadAll(userId)[d];
+  return (rec && rec.kind) ? { date: d, ...rec } : null;
 }
 // by: 'admin'(모니터 수동) | 'board'(하단 배정표 자동판독).
 //  ★admin이 넣은 값은 그날 자동판독이 덮지 못한다 — 안 그러면 수동 교정이 90초 뒤 배치표 재판독에 지워진다.
 export function saveDuty(userId, date, kind, part, by = 'admin') {
   const k = String(kind || '').trim(), p = String(part || '').replace(/[^123]/g, '');
   const d = String(date || '');
+  if (!d) return null;                                      // 날짜 없는 저장은 받지 않는다
+  const all = loadAll(userId);
   if (!k) {
-    saveUserJSON(userId, FILE, null);                       // 빈 값 = 해제
-    try { if (d) setDayDuty(d, null, userId); } catch { /* 일지 기록 실패는 무해 */ }
+    delete all[d];                                          // 빈 값 = 그 날짜만 해제(다른 날은 그대로)
+    saveAll(userId, all);
+    try { setDayDuty(d, null, userId); } catch { /* 일지 기록 실패는 무해 */ }
     return null;
   }
-  const rec = { date: d, kind: k, part: p, by, at: Date.now() };
-  saveUserJSON(userId, FILE, rec);
+  const rec = { kind: k, part: p, by, at: Date.now() };
+  all[d] = rec;
+  saveAll(userId, all);
   // ★근무 기록에도 남긴다 — 히어로에만 뜨고 일지에 안 남으면 그날 일한 사실이 사라진다.
-  try { if (d) setDayDuty(d, { kind: k, part: p }, userId); } catch { /* 무해 */ }
-  return rec;
+  try { setDayDuty(d, { kind: k, part: p }, userId); } catch { /* 무해 */ }
+  return { date: d, ...rec };
 }
-// 오늘 이 회원의 당번이 '관리자 확정'인가 — 자동판독이 건너뛸지 판단.
-export function isAdminSet(userId, todayISO) {
-  const d = loadDuty(userId, todayISO);
+// 그 회원이 '역할'을 가진 날짜들 — 미리 넣어둔 앞날을 화면이 찾아갈 때 쓴다.
+export function dutyDates(userId) {
+  const all = loadAll(userId);
+  return Object.keys(all).filter((d) => all[d] && all[d].kind).sort();
+}
+// 그날 이 회원의 당번이 '관리자 확정'인가 — 자동판독이 건너뛸지 판단.
+export function isAdminSet(userId, dateISO) {
+  const d = loadDuty(userId, dateISO);
   return !!(d && d.by === 'admin');
 }
 // 회원 화면에 내려줄 형태 — 시각·근무시간을 고정 시간표에서 채워 반환. 없으면 null.
-export function dutyForToday(userId, todayISO) {
-  const d = loadDuty(userId, todayISO);
+//  ★이름은 'ForToday'지만 날짜를 받는다 — 화면이 내일 배치표를 보고 있으면 내일 당번을 물어야 한다.
+export function dutyForToday(userId, dateISO) {
+  const d = loadDuty(userId, dateISO);
   if (!d) return null;
   const s = dutySummary(d.kind, d.part);
   return { kind: s.kind, part: s.part, start: s.start, end: s.end, hours: s.hours, label: s.label };

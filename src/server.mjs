@@ -380,8 +380,9 @@ app.post('/api/journal/duty', (req, res) => {
   const k = String(kind || '').trim();
   if (k && !dutyMod.DUTY_KINDS.includes(k)) return res.status(400).json({ error: '종류는 당번 또는 벌당' });
   const day = journal.setDayDuty(date, k ? { kind: k, part } : null, uid);
-  // 오늘 날짜면 히어로용 duty 저장소도 함께 맞춘다(일지에서 고쳤는데 홈은 그대로이던 어긋남 방지).
-  if (date === todayISOKST()) dutyMod.saveDuty(uid, date, k, part || '', 'admin');
+  // 히어로용 duty 저장소도 함께 맞춘다(일지에서 고쳤는데 홈은 그대로이던 어긋남 방지).
+  //  ★예전엔 '오늘'일 때만 맞췄다 — 저장소가 하루치뿐이라 어쩔 수 없었다. 이제 날짜별이라 앞날도 그대로 들어간다.
+  if (date) dutyMod.saveDuty(uid, date, k, part || '', 'admin');
   res.json({ ok: true, day });
 });
 // 그날의 한 줄 메모·기분(mood) 저장 — 근무 상태는 안 건드리고 memo/mood만 병합(비파괴적).
@@ -827,11 +828,15 @@ app.get('/api/today', (req, res) => {
   const nowISO = todayISOKST();
   // ★당번·벌당 — 순번 근무와 별개인 그날의 역할. 배치표가 없어도(명단 밖이어도) 떠야 하므로 여기서 먼저 읽어
   //  아래 모든 응답 경로에 함께 실어 보낸다.
-  const duty = dutyMod.dutyForToday(uid, nowISO);
+  //  ★일단 오늘 것으로 잡고, 아래에서 화면이 보는 날짜(tISO)가 정해지면 그 날짜 것으로 바꾼다.
+  //   저녁엔 대시보드가 내일 배치표를 보고 있는데 당번만 오늘 것을 물어, 내일 당번이 어느 화면에도
+  //   못 뜨던 문제(2026-08-23 홍준표 2부 당번). 화면과 당번이 같은 날을 봐야 한다.
+  let duty = dutyMod.dutyForToday(uid, nowISO);
   // ★대표부(홈 베이스)·라운드 해석은 공용 모듈(rounds.mjs)로 — 모니터 user-dash와 '같은 로직'을 써 화면이 갈라지지 않게.
   //  (1·2부 섀도 게이트·순수 1/2부날 대표선정 규칙 전부 resolvePrimary 안에 있음. 앱 출력 100% 동일.)
   const minorPartOn = minorPartActive();
   const { base: t, primaryPart, tISO } = resolvePrimary({ uid, minorPartOn, todayISO: nowISO });
+  if (tISO && tISO !== nowISO) duty = dutyMod.dutyForToday(uid, tISO) || null;   // 화면 날짜의 당번으로 교체
   if (!t) return res.json({ ok: true, empty: true, duty, message: '아직 오늘 파악된 상황이 없어요.' });
 
   // ── 낡은 상태 가드 ── (대표가 3부일 때만; 1·2부 대표는 위에서 이미 낡음 제외)
@@ -1602,11 +1607,14 @@ function systemRelevant(full) {
 // ★당번·벌당 반영 — 판독한 배정표를 회원 duty.json에 쓴다(이름 대조).
 //  본배치표(이미지)에만 적용. 배정이 바뀌면 그 날짜의 기존 값을 덮고, 이름이 빠지면 해제한다.
 //  ★판독이 아예 실패(null)면 아무것도 건드리지 않는다 — 실패를 '오늘 당번 없음'으로 오해하면 안 되니까.
-async function applyDutyList(article) {
+async function applyDutyList(article, boardISO = '') {
   let rows;
   try { rows = await claudeDutyList(article); } catch { return; }
   if (!Array.isArray(rows)) return;                     // 판독 실패·미판독 → 기존 유지
-  const today = todayISOKST();
+  // ★그 배치표가 말하는 날짜에 쓴다. 3부 배치표는 밤에 '내일치'로 올라오는데
+  //  오늘 칸에 쓰면 내일 당번이 오늘 얹히고, 정작 내일은 비어 있게 된다(2026-08-23 홍준표 건과 같은 뿌리).
+  //  날짜를 못 읽었으면 오늘로 — 예전과 같은 행동이라 회귀가 없다.
+  const today = boardISO || todayISOKST();
   const key = (s) => String(s || '').replace(/\([^)]*\)/g, '').replace(/\s/g, '').trim();
   const byName = new Map(rows.map((r) => [key(r.name), r]));
   let set = 0, cleared = 0;
@@ -2284,7 +2292,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         } catch (e) { console.error(`[회원 ${m.id} ${p}부 처리 오류]`, e.message); }
       }
       reconcileCrossPartConsistency(vp.dateLabel || out.rawVerdict?.dateLabel || '');   // ★대바 점유자의 다른 부 스페어 잔재 정리(전 부 store 기준)
-      await applyDutyList(full);   // ★당번·벌당 배정 반영(판독 실패면 기존 유지)
+      await applyDutyList(full, worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || '');   // ★당번·벌당 배정 반영(그 배치표 날짜에 · 판독 실패면 기존 유지)
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 
