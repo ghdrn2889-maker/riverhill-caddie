@@ -187,7 +187,7 @@ export function substituteTeamCount(snap, part) {
 //  boardOk=false(사진 판독 실패)면 대체, true면 보강을 시도한다.
 //  ★반환만 하고 아무것도 안 바꾼다. 적용 여부는 호출부가 assistOn()으로 정한다 —
 //   이 파일이 스스로 상태를 바꾸면, 켜지지 않은 줄 알았던 장치가 조용히 일하는 그 사고가 또 난다.
-export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid = [], roster = [], cut = 0, internTees = [] }) {
+export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid = [], roster = [], cut = 0, internTees = [], observeOnly = false }) {
   const date = ymdOf(dateISO);
   if (!date) return { mode: 'none', why: '날짜 없음' };
   const t = kakaoTrustworthy(date);
@@ -202,7 +202,11 @@ export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid
   appendJSONL('intern-history.jsonl', { at: Date.now(), date, part, boardOk,
     internCount: (internTees || []).length, tees: (internTees || []).map((x) => `${x.time}|${x.course}`),
     boardTees: (teeGrid || []).length, kakaoTees: kakaoSlots(t.snap, part).length });
-  const rec = { at: Date.now(), date, part, boardOk, applied: assistOn(),
+  // ★observeOnly = 부르는 쪽이 결과를 어디에도 안 얹는다고 밝힌 호출(1·2부 관측).
+  //  전역 스위치가 나중에 켜져도 이 기록은 'applied:false'여야 한다 —
+  //  안 그러면 켠 적 없는 부의 기록이 켠 것처럼 남아, 재려던 그 숫자가 거짓이 된다.
+  const rec = { at: Date.now(), date, part, boardOk, applied: observeOnly ? false : assistOn(),
+    observeOnly: !!observeOnly,
     internCount: (internTees || []).length, internKnown: boardOk, ...r };
   appendJSONL('kakao-assist.jsonl', rec);
 

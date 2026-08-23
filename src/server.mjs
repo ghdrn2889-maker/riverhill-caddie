@@ -1720,7 +1720,40 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     }
   }
 
-  // ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
+  // ── 카카오 보조 · 1·2부 관측(1단계) ──────────────────────────────────
+//  재기만 한다. 결과를 어디에도 얹지 않는다 — 회원 카드도 알림도 이 함수를 통과하지 않는다.
+//  ★왜 재기부터 하나: 일주일 계측에서 카카오가 "커트를 올려라"고 한 22건이 전부 3부였다.
+//   1·2부는 표본이 0건이다. 0에서 판단할 수는 없어서, 켜기 전에 먼저 센다.
+//  ★1·2부라고 무주공산이 아니다 — (1,3)·(2,3) 두 탕을 뛰는 회원이 그 부 카드를 들고 있다
+//   (2026-08-23 실측 6명). 그래서 이 단계에서는 절대 반영하지 않는다.
+async function observeMinorKakao(dateISO) {
+  if (!dateISO) return;
+  let store = null;
+  try { store = loadBoardPartsStore(); } catch { return; }
+  const parts = (store && store.parts) || {};
+  for (const p of ['1', '2']) {
+    const d = parts[p];
+    if (!d || !Array.isArray(d.roster) || !d.roster.length) continue;
+    // 그 부 배치표가 이 날짜의 것일 때만 잰다 — 어제 명단으로 오늘 카카오를 재면 숫자가 통째로 거짓이 된다.
+    const dISO = worklog.labelToISO(d.dateLabel || '') || '';
+    if (dISO && dISO !== dateISO) continue;
+    try {
+      const a = await kakaoAssist({
+        dateISO, part: p, observeOnly: true,
+        boardOk: Array.isArray(d.teeGrid) && d.teeGrid.length > 0,
+        teeGrid: d.teeGrid || [], roster: d.roster || [],
+        cut: Number(d.cutLine || d.cutoffPosition) || 0,
+        internTees: internTeesFor(dateISO, d.internTees || []),
+      });
+      const what = a.mode === 'augment'
+        ? `커트 ${a.prevCut} → ${a.cut}${(a.promoted || []).length ? ` · 승격 후보 ${a.promoted.map((x) => `${x.pos}번 ${x.name}`).join(', ')}` : ''}`
+        : (a.why || a.mode);
+      console.log(`⛳ [보조·관측 ${p}부] ${a.mode} — ${what} (관측만 · 회원 반영 없음)`);
+    } catch (e) { console.error(`[보조·관측 ${p}부] 오류:`, e.message); }
+  }
+}
+
+// ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
   const out = await judge(full, loadToday(1), primary);
 
   // ★내일 예고(통합) 판단 — '전체 배치표'가 그 날짜로 처음 판독되면 previewMode:
@@ -1934,6 +1967,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       } else if (full.images && full.images.length) {
         console.log(`·  [1·2부 판독 스킵] MINOR_PART_PUSH 꺼짐 — 크레딧 절약(배치표당 Gemini ~5회 유지): ${full.subject}`);
       }
+      await observeMinorKakao(boardISO);   // 1·2부 카카오 관측(반영 없음)
       if (opts.previewMode) await sendDailyPreview(boardISO, full, opts);
       return primaryRet;
     }
@@ -2018,6 +2052,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       await applyDutyList(full);   // ★당번·벌당 배정 반영(판독 실패면 기존 유지)
     }
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
+  await observeMinorKakao(boardISO);   // 1·2부 카카오 관측(반영 없음)
 
   // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
   if (opts.previewMode) { try { await sendDailyPreview(boardISO, full, opts); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
