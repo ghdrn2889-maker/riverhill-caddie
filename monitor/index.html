@@ -485,6 +485,9 @@
     <button class="tb" data-tab="notice">📢 공지</button>
     <!-- 대조판은 탭이 아니라 별도 페이지(/daejo)다 — 토큰을 그대로 물려줘야 401이 안 난다. -->
     <a class="tb" id="daejoLink" href="/daejo" target="_blank" rel="noopener" style="text-decoration:none">⚖ 대조판</a>
+    <!-- 예약 구성판도 별도 페이지(/booking). 이 링크는 관리자 링크(admin=1)라 '회원 앱에 반영' 버튼이 붙는다.
+         예약팀장에게 넘길 때는 admin=1 을 뺀 주소를 준다 — 그러면 연습만 되고 회원 앱은 그대로다. -->
+    <a class="tb" id="bookLink" href="/booking" target="_blank" rel="noopener" style="text-decoration:none">✎ 예약 구성판</a>
   </nav>
 </header>
 
@@ -1038,6 +1041,11 @@
   var MEMBERS_MS = 5000, mTimer = null, membersBusy = false;
   function apiUrl(pth){ var k = new URLSearchParams(location.search).get('k') || ''; return pth + (k?('?k='+encodeURIComponent(k)):''); }
   (function(){ var a = document.getElementById('daejoLink'); if (a) a.href = apiUrl('/daejo'); })();
+  (function(){
+    var b = document.getElementById('bookLink'); if (!b) return;
+    var u = apiUrl('/booking');
+    b.href = u + (u.indexOf('?') >= 0 ? '&' : '?') + 'admin=1';
+  })();
   function memberCard(m, pend){
     var known = m.boardName ? (m.nameKnown ? '<span class="mc-known ok">✅ 명부일치</span>' : '<span class="mc-known no">⚠️ 명부없음</span>') : '<span style="color:var(--tx3)">이름 미입력</span>';
     var blocked = (m.status==='disabled' && m.blockReason) ? '<span style="color:var(--bad);font-weight:700">차단: '+(BLOCK_KO[m.blockReason]||'기타')+'</span>' : '';

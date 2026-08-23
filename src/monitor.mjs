@@ -30,6 +30,7 @@ import { setPartRange, setPartOneway, setPartSlot, clearPart, dayFrameParts } fr
 import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
 import { renderDaejo } from '../tools/gen-daejo.mjs';
+import { renderBooking } from '../tools/gen-booking.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
 
 loadEnv();
@@ -1054,6 +1055,61 @@ app.get('/api/daejo-data', gate, (req, res) => {
 // ★대조판 저장은 테스트판으로만 간다 — 회원 앱·알림·엔진은 이 값을 보지 않는다.
 //  실제 배치표 교정은 '배치표 검수' 탭(/api/board-correct)에서만 한다.
 //  덜 여문 화면이 살아 있는 데이터를 직접 만지던 구조가 8/17 사고의 뿌리였다.
+// ── 예약 구성판 ── 예약팀장이 직접 짜는 화면.
+//  대조판은 '읽는' 화면이고 이건 '짜는' 화면이다. 같은 데이터(buildDaejoData)를 보지만,
+//  칸을 누를 때마다 그 결정이 캐디 한 사람의 하루를 어떻게 바꾸는지 옆 폰에 그려준다.
+//  ★?admin=1 로 열어야 반영 버튼이 보인다 — 링크를 넘길 때 그 글자를 빼면 손님은 연습만 한다.
+app.get('/booking', gate, (req, res) => {
+  try {
+    const J = buildDaejoData(String(req.query.date || ''));
+    if (!Object.keys(J.parts || {}).length) return res.status(503).send('아직 읽은 배치표가 없습니다 — 배치표가 올라온 날짜로 열어주세요.');
+    res.set('Cache-Control', 'no-store, must-revalidate').type('html')
+      .send(renderBooking(J, { admin: String(req.query.admin || '') === '1' }));
+  } catch (e) { console.error('예약 구성판 오류:', e.message); res.status(500).send('예약 구성판 생성 실패: ' + e.message); }
+});
+// 저장은 언제나 테스트판으로 간다. apply=true 는 관리자 링크에서만 받고, 그때만 검수 경로(board-correct)를 탄다.
+//  ★예약팀장이 누른 것이 곧바로 회원 13명의 카드로 나가지 않게 하는 것 — 이 갈림길이 이 기능의 전부다.
+app.post('/api/booking-save', gate, async (req, res) => {
+  const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
+  const parts = req.body?.parts;
+  if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
+  if (!parts || typeof parts !== 'object') return res.status(400).json({ ok: false, error: 'parts 필요' });
+  const apply = req.body?.apply === true && String(req.query.admin || '') === '1';
+  try {
+    const sb = {};
+    for (const [p, v] of Object.entries(parts)) {
+      sb[p] = { roster: v.roster || [], teeGrid: v.teeGrid || [],
+        internTees: v.internTees || [], boardInternTees: v.internTees || [], cut: Number(v.cut) || 0 };
+    }
+    saveSandbox(date, sb, { by: apply ? '예약구성판(관리자)' : '예약구성판' });
+    if (!apply) return res.json({ ok: true, applied: false, date });
+    const _tok = req.query.k || req.get('x-monitor-token') || '';
+    // ★손댄 부만 회원 앱으로 간다. 이 화면은 세 부를 한꺼번에 들고 있어서 1부만 고쳐도
+    //  2·3부가 그대로 실려 온다. 그걸 반영하면 건드리지도 않은 3부가 이 화면이 다시 그린 값으로
+    //  덮이고, 관리자 교정과 수동 인턴 지정이 함께 지워진다. 테스트판에는 세 부를 다 남긴다.
+    const touched = Array.isArray(req.body?.touched) ? req.body.touched.map(String) : Object.keys(parts);
+    if (!touched.length) return res.status(400).json({ ok: false, error: '바꾼 것이 없습니다.' });
+    const done = [];
+    for (const [p, v] of Object.entries(parts)) {
+      if (!touched.includes(String(p))) continue;
+      const grid = {}; (v.teeGrid || []).forEach((g) => { grid[Number(g.pos)] = g; });
+      const rows = (v.roster || []).map((nm, i) => {
+        const g = grid[i + 1];
+        return { pos: i + 1, name: String(nm || ''), tee: g ? g.time : '', course: g ? g.course : '' };
+      });
+      const body = { part: String(p), rows, interns: v.internTees || [], allInterns: v.internTees || [],
+        cutLine: Number(v.cut) || 0, notify: false };
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/board-correct${_tok ? `?k=${encodeURIComponent(_tok)}` : ''}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(`${p}부 반영 실패 - ${j.error || ''}`);
+      done.push(`${p}부 ${j.updated || 0}명`);
+    }
+    console.log(`[예약구성판] ${date} 회원 반영 - ${done.join(', ') || '없음'} (손댄 부: ${touched.join('/')})`);
+    res.json({ ok: true, applied: true, date, done });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
 app.post('/api/daejo-save', gate, (req, res) => {
   const date = String(req.body?.date || '').replace(/\D/g, '').slice(0, 8);
   if (!date) return res.status(400).json({ ok: false, error: 'date(YYYYMMDD) 필요' });
