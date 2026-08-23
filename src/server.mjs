@@ -1762,6 +1762,82 @@ async function kakaoForPart(vp, part, dateISO) {
   } catch (e) { console.error(`[보조 ${part}부] 오류:`, e.message); return null; }
 }
 
+// ── 카카오가 1·2부 '업데이트'를 맡는다 ──────────────────────────────
+//  ★역할 분담(관리자 확정 2026-08-23):
+//    · 본배치표(전체) = 사진 판독. 순번·가용/비가용 인원이 거기에만 있다. 베이스는 사진이 만든다.
+//    · 그 뒤 변동     = 카카오. 1·2부 수정배치표 자동 판독은 멈춰 있고(MINOR_PART_UPDATE=0),
+//                      그 빈자리를 카카오가 대신한다. 사진을 다시 읽지 않는다(크레딧 0).
+//  베이스(board-parts-store)를 판정 한 장으로 세우고, 카카오가 더 본 칸만 얹어 다시 저장한다.
+//  바뀐 게 없으면 아무 일도 하지 않는다 — 5분마다 도는 자리라 '변화 없음'이 대부분이어야 정상이다.
+async function kakaoUpdatePart(part, dateISO, { reason = '', opts = {} } = {}) {
+  const p = String(part);
+  if (!assistOn(p)) return false;                       // 그 부를 맡기지 않았으면 손대지 않는다
+  let store = null;
+  try { store = loadBoardPartsStore(); } catch { return false; }
+  const d = (store && store.parts && store.parts[p]) || null;
+  const roster = (d && Array.isArray(d.roster) ? d.roster : []).filter((x) => String(x || '').trim());
+  if (!roster.length) return false;                     // 베이스가 없다 — 카카오는 이름을 만들지 못한다
+  const iso = String(d._targetISO || store.targetISO || '');
+  if (!iso) return false;                               // 어느 날 베이스인지 모르면 손대지 않는다
+  if (dateISO && iso !== dateISO) return false;         // 다른 날 베이스
+  if (iso < todayISOKST()) return false;                // 지나간 날은 갱신하지 않는다
+
+  // 베이스를 판정 한 장으로 세운다(사진 판독 없이).
+  const vp = {
+    part: p, category: '배치표', relevant: true, rosterReliable: !!d.rosterReliable,
+    dateLabel: store.dateLabel || '', part3Roster: d.roster.slice(),
+    teeGrid: Array.isArray(d.teeGrid) ? d.teeGrid.slice() : [],
+    teeTimes: Array.isArray(d.teeTimes) ? d.teeTimes.slice() : [],
+    teamCount: Number(d.teamCount) || 0,
+    cutoffPosition: Number(d.cutLine || d.cutoffPosition) || 0,
+    cutoffName: d.cutoffName || '',
+    internTees: Array.isArray(d.internTees) ? d.internTees.slice() : [],
+    internCount: Number(d.internCount) || 0,
+    crewDuty: { ...(d.crewDuty || {}) },
+  };
+  const before = { cut: Number(vp.cutoffPosition) || 0, tees: (vp.teeGrid || []).length };
+  const a = await kakaoForPart(vp, p, iso);
+  if (!a || !a.applied || a.mode !== 'augment') return false;
+  const after = { cut: Number(vp.cutoffPosition) || 0, tees: (vp.teeGrid || []).length };
+  if (after.cut === before.cut && after.tees === before.tees) return false;   // 실제로 바뀐 게 없다
+
+  console.log(`⛳ [카카오 갱신 ${p}부] ${iso} 커트 ${before.cut} → ${after.cut} · 칸 ${before.tees} → ${after.tees}${reason ? ` (${reason})` : ''}`);
+  try {
+    setBoardPart(`kakao-${iso}-${p}-${Date.now()}`, {
+      at: Date.now(), dateLabel: vp.dateLabel || '', subject: `${p}부 예약 변동(카카오)`,
+      image: '', url: '', scope: [p], scopeSource: 'kakao',
+    }, { id: `kakao-${iso}-${p}`, subject: `${p}부 예약 변동(카카오)`, images: [] }, p, {
+      roster: vp.part3Roster.slice(), teeGrid: vp.teeGrid || [], teeTimes: vp.teeTimes || [],
+      teamCount: Number(vp.teamCount) || 0, internTees: vp.internTees || [],
+      internCount: Number(vp.internCount) || 0, cutoffPosition: Number(vp.cutoffPosition) || null,
+      cutoffName: vp.cutoffName || '', crewDuty: vp.crewDuty || {},
+      rosterReliable: !!vp.rosterReliable, uncertain: '',
+    });
+  } catch (e) { console.error(`[카카오 갱신 ${p}부] 저장 오류:`, e.message); return false; }
+
+  // 회원 카드·알림까지 따라간다 — 그게 '맡긴다'는 말의 나머지 절반이다.
+  const pseudo = { id: `kakao-${iso}-${p}-${Date.now()}`, subject: `${p}부 예약 변동(카카오)`,
+    text: '', writeDate: Date.now(), images: [] };
+  const win = partWindow(p);
+  for (const m of activeMembers()) {
+    try {
+      const memberP = { name: m.board_name, part: p, commuteMin: Number(m.commute_min), teeMin: win.min, teeMax: win.max };
+      const moutP = interpretForMember(pseudo, JSON.parse(JSON.stringify(vp)), memberP, loadToday(m.id, p));
+      await processForMemberPart(m.id, memberP, moutP, pseudo, { ...opts, crewDuty: vp.crewDuty });
+    } catch (e) { console.error(`[카카오 갱신 ${p}부] 회원 ${m.id} 오류:`, e.message); }
+  }
+  try { reconcileCrossPartConsistency(vp.dateLabel || ''); } catch { /* 무해 */ }
+  return true;
+}
+
+// 5분마다 — 예약이 차는 건 글이 올라오는 것과 무관하게 일어난다.
+async function kakaoUpdateMinorTick() {
+  for (const p of ['1', '2']) {
+    try { await kakaoUpdatePart(p, '', { reason: '예약 관측' }); }
+    catch (e) { console.error(`[카카오 갱신 ${p}부] 오류:`, e.message); }
+  }
+}
+
 // ── 카카오 보조 · 1·2부 관측(그 부를 이번에 판독하지 않은 날) ────────
 //  판독 경로를 안 탄 부는 store에 있는 마지막 판독으로 재기만 한다. 여기서는 절대 얹지 않는다.
 async function observeMinorKakao(dateISO) {
@@ -2048,6 +2124,9 @@ async function observeMinorKakao(dateISO) {
       //  회원 처리(today1/today2)도 이 아래에 있으므로 함께 멈춘다 — 그게 관리자가 멈추라고 한 그 과정이다.
       if (minorReadFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts)) {
         frozenLog(p, full.subject);
+        // ★멈춰둔 자리를 카카오가 대신한다 — 사진을 다시 읽지 않고, 베이스 위에 예약 변동만 얹는다.
+        await kakaoUpdatePart(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || boardISO,
+          { reason: `수정배치표 #${full.id}`, opts });
         continue;
       }
       if (!hasTable && isFullBoard) console.log(`·  [${p}부] 안전망 판독 — 전체 배치표라 boardTables와 무관하게 ${p}부 확인: ${full.subject}`);
@@ -2057,9 +2136,8 @@ async function observeMinorKakao(dateISO) {
       const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
-      // ★카카오를 여기서 얹는다 — setBoardPart(모니터)와 회원 처리 '앞'이라야 둘이 같은 판을 본다.
-      //  뒤에 얹으면 모니터엔 카카오, 회원 카드엔 사진 판독이 남아 같은 날 두 개의 배치표가 생긴다.
-      await kakaoForPart(vp, p, worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || boardISO);
+      // ★여기는 본배치표(그 근무일 첫 판독)다 — 카카오를 얹지 않는다.
+      //  순번·가용/비가용 인원은 사진에만 있다. 베이스는 사진이 만들고, 그 뒤 변동만 카카오가 맡는다.
       if (Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
         try {
           setBoardPart(full.id, { at: Date.now(), dateLabel: vp.dateLabel || out.rawVerdict?.dateLabel || '',
@@ -2899,7 +2977,10 @@ if (kakaoOn()) {
     const h = new Date().getHours();
     // 예약은 배치표 나오기 전 낮~밤에 몰린다. 새벽엔 굳이 두드리지 않는다.
     if (h < 7 || h >= 24) return;
-    kakaoGolfTick({ days: h >= 12 ? 3 : 2 }).catch((e) => console.error('[카카오골프]', e.message));
+    kakaoGolfTick({ days: h >= 12 ? 3 : 2 })
+      // ★관측이 끝난 다음에 갱신한다 — 방금 본 예약으로 1·2부를 고쳐야 한 틱을 벌 수 있다.
+      .then(() => kakaoUpdateMinorTick())
+      .catch((e) => console.error('[카카오골프]', e.message));
   };
   setTimeout(kakaoTick, 20000);
   setInterval(kakaoTick, KAKAO_TICK_MS);
