@@ -72,6 +72,19 @@ console.log('\n[갱신이 함부로 돌지 않는가]');
 
 console.log('\n[예약이 차는 건 글과 무관하다]');
 {
+  // ★실서버가 5분마다 "kakaoUpdateMinorTick is not defined" 를 뱉었다 —
+  //  네 함수가 notifyForArticle 안에 갇혀 있어서 글이 올라올 때 부르는 길만 살아 있었고,
+  //  스스로 도는 길(예약이 차는 걸 보는 쪽)은 한 번도 돌지 않았다. 중괄호 깊이로 못 박는다.
+  const depthAt = (needle) => {
+    const at = srv.indexOf(needle); if (at < 0) return -1;
+    const head = srv.slice(0, at).replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, '');
+    let d = 0; for (const c of head) { if (c === '{') d++; else if (c === '}') d--; }
+    return d;
+  };
+  for (const f of ['kakaoForPart', 'kakaoUpdatePart', 'kakaoUpdateMinorTick', 'observeMinorKakao']) {
+    ok(depthAt('async function ' + f) === 0, `★${f} 가 최상위에 있다`,
+      '5분 틱은 모듈 최상위에서 부른다 — 함수가 다른 함수 안에 있으면 그 자리에서 죽는다');
+  }
   ok(/async function kakaoUpdateMinorTick\(\)/.test(srv), '5분 틱에서도 갱신을 시도한다');
   ok(/\.then\(\(\) => kakaoUpdateMinorTick\(\)\)/.test(srv), '카카오 관측이 끝난 뒤에 갱신한다',
     '방금 본 예약으로 고쳐야 한 틱을 번다');

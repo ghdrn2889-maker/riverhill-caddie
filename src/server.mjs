@@ -1757,52 +1757,9 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
 }
 
 // 크롤러 진입점: board를 ★한 번만★ 읽고(Gemini 1회), 회원마다 코드로 재해석해 각자 처리.
-async function notifyForArticle(full, result = {}, opts = {}) {
-  const primary = envMember(); // 1번 회원(김홍구)
-  // ★가배치 예고 수집 — 카페 글·댓글도 같은 입구를 쓴다("내일가배치입니다 비가용67명…" 실측 8/16).
-  //  배치표 그림엔 가배치 표시가 없으므로, 이 말이 유일한 단서다.
-  try {
-    const t = [full.subject, full.text, ...((full.comments || []).map((c) => c.content))].filter(Boolean).join(' ');
-    noteProvisional(t, { source: isKakaoSource(full) ? '카톡' : '카페', id: String(full.id || ''), at: Number(full.writeDate) || Date.now() });
-  } catch { /* noop */ }
-
-  // ★단독 부-배치표 라우팅(1·2부) — 3부 경로에 넣으면 오독·정본오염 → 감지 시 전용 처리 후 종료(3부 코드 미진입).
-  const _declaredPart = detectDeclaredBoardPart(full);
-  if (_declaredPart && _declaredPart !== '3' && full.images && full.images.length) {
-    console.log(`·  [단독 ${_declaredPart}부 배치표 감지] 3부 경로 우회 → 전용 처리: ${full.subject}`);
-    return await handleStandalonePartBoard(full, _declaredPart, opts);
-  }
-
-  // ★비용절감 사전필터 완화(2026-08-06) — Claude 정액 판독이라 '남의 부'라고 읽기 전에 버리지 않는다.
-  //  기존 cheapRelevance(3부 1인 기준)는 2부 배치표·텍스트 당추(12~13시)를 '창 밖'이라 폐기해서
-  //  아래 1·2부 감지 블록(부별 흡수)에 닿지도 못했다. 이제 '시스템 전체 관련성'으로 판단:
-  //  일정 영향 있으면 어느 부든 통과(3부 judge는 남의 부를 '무관' 반환 → 3부 불변), 순수 잡담만 버림.
-  //  RELEVANCE_FILTER_OFF=0 으로 옛 동작 복귀. Claude 판독 OFF면 자동으로 옛 필터(비용보호) 사용.
-  const _relText = `${full.subject || ''} ${full.text || ''}`;
-  const _filterRelax = useClaudeReader() && !['0', 'false', 'no'].includes(String(process.env.RELEVANCE_FILTER_OFF ?? '').toLowerCase());
-  if (!opts.force) {
-    if (_filterRelax) {
-      const _sysRel = systemRelevant(full);
-      // 섀도우 관찰: 옛 필터라면 버렸을 걸 이제 통과시킨 건수·내용을 기록(정확도·과통과 점검용).
-      if (cheapRelevance(_relText, primary) === 'other') {
-        try { fs.appendFileSync(path.join(DATA_DIR, 'filter-relax.jsonl'), JSON.stringify({ at: Date.now(), id: String(full.id || ''), subject: full.subject || '', hasImg: !!(full.images && full.images.length), pass: _sysRel }) + '\n'); } catch { /* noop */ }
-      }
-      if (!_sysRel) {
-        console.log(`·  (사전필터[완화]: 일정신호 없음 → 무시) ${full.subject}`);
-        return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
-      }
-    } else if (cheapRelevance(_relText, primary) === 'other') {
-      console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
-      return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
-    }
-  }
-
-  // ── 카카오 보조 · 1·2부 관측(1단계) ──────────────────────────────────
-//  재기만 한다. 결과를 어디에도 얹지 않는다 — 회원 카드도 알림도 이 함수를 통과하지 않는다.
-//  ★왜 재기부터 하나: 일주일 계측에서 카카오가 "커트를 올려라"고 한 22건이 전부 3부였다.
-//   1·2부는 표본이 0건이다. 0에서 판단할 수는 없어서, 켜기 전에 먼저 센다.
-//  ★1·2부라고 무주공산이 아니다 — (1,3)·(2,3) 두 탕을 뛰는 회원이 그 부 카드를 들고 있다
-//   (2026-08-23 실측 6명). 그래서 이 단계에서는 절대 반영하지 않는다.
+// ★이 네 함수는 최상위에 있어야 한다 — 5분 틱(kakaoUpdateMinorTick)이 모듈 최상위에서 부른다.
+//  예전엔 notifyForArticle 안에 있어서, 글이 올라올 때 부르는 길만 동작하고
+//  스스로 도는 길은 5분마다 ReferenceError로 죽었다(실서버 로그로 확인).
 // ── 카카오 보조 · 그 부 판독에 얹기 ────────────────────────────────
 //  판독한 그 부의 티오프표를 카카오 예약과 맞춰 본다. 그 부가 켜져 있으면(assistOn) 실제로 얹고,
 //  꺼져 있으면 기록만 남긴다. 얹으면 회원 카드·알림까지 그대로 따라간다 — 그게 '맡긴다'는 뜻이다.
@@ -1956,6 +1913,52 @@ async function observeMinorKakao(dateISO) {
   }
 }
 
+async function notifyForArticle(full, result = {}, opts = {}) {
+  const primary = envMember(); // 1번 회원(김홍구)
+  // ★가배치 예고 수집 — 카페 글·댓글도 같은 입구를 쓴다("내일가배치입니다 비가용67명…" 실측 8/16).
+  //  배치표 그림엔 가배치 표시가 없으므로, 이 말이 유일한 단서다.
+  try {
+    const t = [full.subject, full.text, ...((full.comments || []).map((c) => c.content))].filter(Boolean).join(' ');
+    noteProvisional(t, { source: isKakaoSource(full) ? '카톡' : '카페', id: String(full.id || ''), at: Number(full.writeDate) || Date.now() });
+  } catch { /* noop */ }
+
+  // ★단독 부-배치표 라우팅(1·2부) — 3부 경로에 넣으면 오독·정본오염 → 감지 시 전용 처리 후 종료(3부 코드 미진입).
+  const _declaredPart = detectDeclaredBoardPart(full);
+  if (_declaredPart && _declaredPart !== '3' && full.images && full.images.length) {
+    console.log(`·  [단독 ${_declaredPart}부 배치표 감지] 3부 경로 우회 → 전용 처리: ${full.subject}`);
+    return await handleStandalonePartBoard(full, _declaredPart, opts);
+  }
+
+  // ★비용절감 사전필터 완화(2026-08-06) — Claude 정액 판독이라 '남의 부'라고 읽기 전에 버리지 않는다.
+  //  기존 cheapRelevance(3부 1인 기준)는 2부 배치표·텍스트 당추(12~13시)를 '창 밖'이라 폐기해서
+  //  아래 1·2부 감지 블록(부별 흡수)에 닿지도 못했다. 이제 '시스템 전체 관련성'으로 판단:
+  //  일정 영향 있으면 어느 부든 통과(3부 judge는 남의 부를 '무관' 반환 → 3부 불변), 순수 잡담만 버림.
+  //  RELEVANCE_FILTER_OFF=0 으로 옛 동작 복귀. Claude 판독 OFF면 자동으로 옛 필터(비용보호) 사용.
+  const _relText = `${full.subject || ''} ${full.text || ''}`;
+  const _filterRelax = useClaudeReader() && !['0', 'false', 'no'].includes(String(process.env.RELEVANCE_FILTER_OFF ?? '').toLowerCase());
+  if (!opts.force) {
+    if (_filterRelax) {
+      const _sysRel = systemRelevant(full);
+      // 섀도우 관찰: 옛 필터라면 버렸을 걸 이제 통과시킨 건수·내용을 기록(정확도·과통과 점검용).
+      if (cheapRelevance(_relText, primary) === 'other') {
+        try { fs.appendFileSync(path.join(DATA_DIR, 'filter-relax.jsonl'), JSON.stringify({ at: Date.now(), id: String(full.id || ''), subject: full.subject || '', hasImg: !!(full.images && full.images.length), pass: _sysRel }) + '\n'); } catch { /* noop */ }
+      }
+      if (!_sysRel) {
+        console.log(`·  (사전필터[완화]: 일정신호 없음 → 무시) ${full.subject}`);
+        return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+      }
+    } else if (cheapRelevance(_relText, primary) === 'other') {
+      console.log(`·  (사전필터: 남의 부/개인근태 → 무시·Gemini 생략) ${full.subject}`);
+      return { pushed: false, push: 'low', relevant: false, title: '', body: full.subject || '' };
+    }
+  }
+
+  // ── 카카오 보조 · 1·2부 관측(1단계) ──────────────────────────────────
+//  재기만 한다. 결과를 어디에도 얹지 않는다 — 회원 카드도 알림도 이 함수를 통과하지 않는다.
+//  ★왜 재기부터 하나: 일주일 계측에서 카카오가 "커트를 올려라"고 한 22건이 전부 3부였다.
+//   1·2부는 표본이 0건이다. 0에서 판단할 수는 없어서, 켜기 전에 먼저 센다.
+//  ★1·2부라고 무주공산이 아니다 — (1,3)·(2,3) 두 탕을 뛰는 회원이 그 부 카드를 들고 있다
+//   (2026-08-23 실측 6명). 그래서 이 단계에서는 절대 반영하지 않는다.
 // ★board 1회 읽기(비싼 부분) — 1번 회원 기준. 이 rawVerdict를 다른 회원이 재사용.
   const out = await judge(full, loadToday(1), primary);
 
