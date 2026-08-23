@@ -5,6 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadUserJSON, saveUserJSON, userDataDir } from './store.mjs';
+import * as journal from './journal.mjs';
+import { labelToISO } from './worklog.mjs';
 
 const FILE = 'today.json';
 
@@ -17,7 +19,42 @@ function fileFor(part) {
 
 // ★userId 미지정이면 1번 회원(김홍구) — 기존 호출부 무변화. part='2'면 2부 슬롯.
 export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, fileFor(part), null); }
-export function saveToday(s, userId = 1, part = '3') { saveUserJSON(userId, fileFor(part), s); }
+// ★오늘 카드와 일일 근무 일지는 같은 사실을 말해야 한다 — 카드를 쓰는 곳에서 일지도 함께 쓴다.
+//
+//  실측 2026-08-23: 검수에서 3부 배치표를 교정하자 회원 카드는 새 순번·티오프로 바뀌었는데
+//  일지는 8분 전 값에 멈췄다(회원17 — 카드 14번 17:21 / 일지 20번 12:46).
+//  monitor.mjs·boardcorrect.mjs 어디에도 일지를 쓰는 코드가 없었다. import조차 없었다.
+//  일지는 정산 수익 산정의 단일 소스다(ledger.summary). 그러니 이건 '화면이 틀린' 문제가 아니라
+//  '돈이 틀린' 문제였다 — 교정할 때마다 조용히.
+//
+//  카드를 쓰는 자리마다 일지 호출을 따라 붙이면 새 자리가 생길 때마다 또 샌다(실제로 일곱 군데였다).
+//  그래서 길목 하나에서 함께 쓴다.
+export function saveToday(s, userId = 1, part = '3') {
+  saveUserJSON(userId, fileFor(part), s);
+  syncJournal(s, userId, part);
+}
+
+// 카드 한 장을 일지의 그 날 그 부 라운드로 옮긴다.
+//  ★일지는 부수 기록이다 — 여기서 실패해도 카드 저장을 되돌리지 않는다(카드가 먼저 저장된 이유).
+//  ★상태가 '미상'이면 journal이 알아서 기록하지 않는다(확정 상태만 일지에 남는다).
+function syncJournal(s, userId, part) {
+  try {
+    if (!s || !s.status) return;
+    const iso = labelToISO(s.date || '');
+    if (!iso) return;                       // 어느 날 카드인지 모르면 일지에 적지 않는다
+    journal.recordDayStatus(iso, {
+      status: s.status,
+      teeTime: s.teeTime || '',
+      course: s.course || '',
+      myPosition: s.myPosition ?? null,
+      cutoffName: s.cutoffName || '',
+      offReason: s.offReason || s._offReason || '',
+      prevPosition: s.prevPosition ?? null,
+      offType: s.offType || null,
+      part: String(part || '3'),
+    }, userId);
+  } catch { /* 일지 실패가 카드 저장을 막지 않는다 */ }
+}
 
 // 부별 슬롯 삭제 — 옛 날짜 잔재(예: 1,3 근무자의 지난주 2부 today2) 정리용.
 //  ★1·2부 슬롯만 정리한다(3부 기본 today.json은 '스테일 표시' 기능 보존 위해 삭제하지 않음).
