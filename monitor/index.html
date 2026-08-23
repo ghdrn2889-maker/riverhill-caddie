@@ -194,13 +194,16 @@
   #page-review .rv-img .box{ border:1px solid color-mix(in srgb,var(--info) 25%,transparent); border-top:none; border-radius:0 0 11px 11px; background:var(--panel); padding:10px; }
   #page-review .rv-img img{ width:100%; border-radius:8px; display:block; border:1px solid var(--bord); }
   #page-review .rv-img .noimg{ padding:22px; text-align:center; color:var(--tx3); font-size:12px; }
-  #page-review .rv-warn{ background:color-mix(in srgb,var(--bad) 9%,var(--panel)); border:1px solid color-mix(in srgb,var(--bad) 38%,transparent); border-radius:12px; padding:11px 13px; margin-bottom:9px; display:none; }
+  /* 경고 상자 — 저장을 막는 경고(빨강)와 표가 어긋났다고 알리는 경고(주황)가 같은 모양을 쓴다. */
+  #page-review .rv-warn{ --wc:var(--bad); background:color-mix(in srgb,var(--wc) 9%,var(--panel)); border:1px solid color-mix(in srgb,var(--wc) 38%,transparent); border-radius:12px; padding:11px 13px; margin-bottom:9px; display:none; }
+  #page-review .rv-warn.amber{ --wc:var(--warn); }
   #page-review .rv-warn.show{ display:block; }
-  #page-review .rv-warn .wt{ font-size:12.5px; font-weight:800; color:var(--bad); display:flex; align-items:center; gap:7px; }
+  #page-review .rv-warn .wt{ font-size:12.5px; font-weight:800; color:var(--wc); display:flex; align-items:center; gap:7px; }
   #page-review .rv-warn .wt svg{ width:16px; height:16px; flex:none; }
-  #page-review .rv-witem{ font-size:12px; color:var(--tx); background:var(--panel); border:1px solid color-mix(in srgb,var(--bad) 25%,transparent); border-radius:9px; padding:7px 10px; margin-top:7px; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
-  #page-review .rv-witem b{ color:var(--bad); }
-  #page-review .rv-wgo{ font-size:11px; font-weight:800; color:var(--bad); white-space:nowrap; }
+  #page-review .rv-witem{ font-size:12px; color:var(--tx); background:var(--panel); border:1px solid color-mix(in srgb,var(--wc) 25%,transparent); border-radius:9px; padding:7px 10px; margin-top:7px; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; }
+  #page-review .rv-witem b{ color:var(--wc); }
+  #page-review .rv-wgo{ font-size:11px; font-weight:800; color:var(--wc); white-space:nowrap; }
+  #page-review .rv-warn .ws{ font-size:11.5px; color:var(--tx2); font-weight:600; margin-top:5px; }
   #page-review .rv-pager{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
   #page-review .rv-rng{ font-size:12.5px; font-weight:800; color:var(--tx2); }
   #page-review .rv-rng b{ color:var(--tx); }
@@ -1378,6 +1381,26 @@
   function rvHi(name,q){ if(!q)return esc(name); var i=name.indexOf(q); if(i<0)return esc(name); return esc(name.slice(0,i))+'<span class="h">'+esc(name.slice(i,i+q.length))+'</span>'+esc(name.slice(i+q.length)); }
   function rvTabs(){ return '<div class="rv-parts">'+['1','2','3'].map(function(p){return '<button class="rv-pt p'+p+(p===brPart?' on':'')+'" data-tab-p="'+p+'">'+p+'부</button>';}).join('')+'</div>'; }
   function rvWireTabs(root){ Array.prototype.forEach.call(root.querySelectorAll('.rv-pt'),function(b){ b.onclick=function(){ brPart=b.getAttribute('data-tab-p'); brDirty=false; rvSearch=''; rvPage=0; loadBoardReview(true); }; }); }
+  // ★티오프표 자가 검산 — 표에는 지어낼 수 없는 구조가 있어서, 표 스스로 판독 오류를 고발할 수 있다.
+  //  겹침(한 칸에 둘)은 위 rvConf가 이미 본다. 여기서는 서버(judge.auditTeeGrid)와 같은 눈으로 나머지 둘을 본다.
+  //   ① 구멍 — 근무선 안인데 티오프가 없는 순번.
+  //   ② 역행 — 순번은 뒤인데 시각이 앞선 칸. 팀은 순번 순으로 나가므로 있을 수 없다.
+  //  2026-08-23 #27554: 16:53 OUT 한 칸을 놓쳐 6~10번이 밀리고 16번이 티오프를 잃었는데,
+  //   컷은 16인데 표는 15칸뿐이었다. 그 모순이 화면 어디에도 안 떠서 아무도 못 봤다.
+  //  ★막지는 않는다(저장은 그대로 된다). 사람이 보게만 한다 — 표가 맞는지는 사람이 사진으로 판단할 일이다.
+  function rvGridFlaw(){
+    var out=[], cut=rvCutPos();
+    if(cut>=4){
+      var holes=[];
+      for(var p=1;p<=cut;p++){ var r=rvRows.find(function(x){return x.pos===p;}); if(r&&!rvOff(r)&&!r.moveTo&&!r.tee) holes.push(p); }
+      // 구멍이 넷 이상이면 '표가 어긋난' 게 아니라 '표를 못 읽은' 것 — 다른 문제라 여기서 말하지 않는다.
+      if(holes.length&&holes.length<=3) out.push({ t:'근무선 '+cut+'번까지인데 '+holes.join('·')+'번에 티오프가 없습니다', pos:holes[0], go:holes[0]+'번' });
+    }
+    var seq=rvRows.filter(function(r){return r.status==='work'&&!rvOff(r)&&!r.moveTo&&r.tee;}).sort(function(a,b){return a.pos-b.pos;});
+    for(var i=1;i<seq.length;i++) if(rvMin(seq[i].tee)<rvMin(seq[i-1].tee))
+      out.push({ t:seq[i-1].pos+'번 '+seq[i-1].tee+' 다음이 '+seq[i].pos+'번 '+seq[i].tee+' — 순번은 뒤인데 시각이 앞섭니다', pos:seq[i].pos, go:seq[i].pos+'번' });
+    return out;
+  }
   function rvMeta(b){ return '<div class="rv-meta"><span class="rv-chip">글 #'+esc(String(b.articleId||'-'))+'</span>'+(b.dateLabel?'<span class="rv-chip">'+esc(b.dateLabel)+'</span>':'')+'<span class="rv-chip">판독 '+rel(b.at)+'</span>'+(b.corrected?'<span class="rv-chip ok">관리자 교정됨</span>':(b.uncertain?'<span class="rv-chip warn">불확실</span>':''))+'<span class="rv-cut" id="rvCut"></span></div>'; }
   function rvImg(b){ var note=(b.imageId&&String(b.imageId)!==String(b.articleId))?' · 변동 #'+esc(String(b.imageId)):''; if(!b.image) return '<details class="rv-img"><summary>원본 배치표 (이미지 없음 · 텍스트 공지)</summary><div class="box"><div class="noimg">이 배치표엔 이미지가 없어요. 표만 보고 교정하세요.</div></div></details>'; return '<details class="rv-img"><summary>원본 배치표 이미지 보기'+note+'</summary><div class="box"><img src="'+esc(b.image)+'" referrerpolicy="no-referrer" alt="원본"></div></details>'; }
   function rvInternRow(it){ var isIn=it&&it.course==='IN'; return '<div class="br-intern"><input class="itime" value="'+esc((it&&it.time)||'')+'" placeholder="예 18:38"><select class="icrs"><option value="OUT"'+(isIn?'':' selected')+'>OUT</option><option value="IN"'+(isIn?' selected':'')+'>IN</option></select><button class="br-idel" type="button">삭제</button></div>'; }
@@ -1418,6 +1441,8 @@
     var pg=$('rvPager'); if(pg) pg.innerHTML='<button class="rv-pg" data-pg="-1"'+(rvPage<=0?' disabled':'')+'><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>앞</button><span class="rv-rng"><b>'+a+'–'+b2+'</b> / '+total+'명</span><button class="rv-pg" data-pg="1"'+(rvPage>=pages-1?' disabled':'')+'>뒤<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg></button>';
     var cs=rvConf(); var w=$('rvWarn');
     if(w){ if(!cs.length){ w.className='rv-warn'; w.innerHTML=''; } else { w.className='rv-warn show'; w.innerHTML='<div class="wt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>티오프 중복 '+cs.length+'건 — 저장하려면 먼저 정리</div>'+cs.map(function(c){return '<div class="rv-witem" data-jump="'+c.rows[0].pos+'"><span><b>'+c.tee+' '+c.course+'</b> · '+c.rows.map(function(r){return esc(r.name);}).join(' · ')+'</span><span class="rv-wgo">이동 ›</span></div>';}).join(''); } }
+    var fl=rvGridFlaw(); var fw=$('rvFlaw');
+    if(fw){ if(!fl.length){ fw.className='rv-warn amber'; fw.innerHTML=''; } else { fw.className='rv-warn amber show'; fw.innerHTML='<div class="wt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>티오프표 앞뒤가 안 맞습니다 · '+fl.length+'건</div>'+fl.map(function(c){return '<div class="rv-witem" data-jump="'+c.pos+'"><span>'+esc(c.t)+'</span><span class="rv-wgo">'+esc(c.go)+' ›</span></div>';}).join('')+'<div class="ws">원본 사진과 대조해 보세요. 저장을 막지는 않습니다.</div>'; } }
     var cp=rvConfPos();
     var page=rows.slice(rvPage*RV_PER,(rvPage+1)*RV_PER);
     var list=$('rvList'); if(list) list.innerHTML= page.length? page.map(function(r){return rvCard(r,q,cp);}).join('') : '<div class="muted" style="padding:20px;text-align:center">검색 결과가 없어요</div>';
@@ -1465,6 +1490,7 @@
       '<div class="rv-sb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg><input class="rv-search" id="rvSearch" inputmode="search" placeholder="이름 또는 순번으로 찾기" value="'+esc(rvSearch)+'"><button class="rv-clr'+(rvSearch?' show':'')+'" id="rvClr" type="button">✕</button></div>'+
       rvMeta(b)+ rvImg(b)+
       '<div class="rv-warn" id="rvWarn"></div>'+
+      '<div class="rv-warn amber" id="rvFlaw"></div>'+
       '<div class="rv-pager" id="rvPager"></div>'+
       '<div class="rv-list" id="rvList"></div>'+
       '<div class="br-intbox" style="margin-top:12px"><div class="br-intlab">인턴 캐디 (노란칸 · 순번 없음)'+((rvBoard&&rvBoard.internSource==='수동')?' <span style="font-weight:400;color:var(--tx3)">— 이 날은 <b>수동 지정</b>이 판독을 이깁니다. 아래가 실제로 쓰이는 값입니다.</span>':'')+'</div><div id="rvInterns">'+rvInterns.map(rvInternRow).join('')+'</div><button class="br-iadd" type="button" id="rvIAdd">+ 인턴 추가</button></div>'+
@@ -1481,7 +1507,7 @@
     // ★이름 입력을 실시간으로 r.name에 반영 — '이 사람 적용'을 안 눌러도 저장 payload에 항상 실린다(이름 저장 안 되던 근본 수정).
     if(list) list.addEventListener('input',function(e){ var t=e.target; if(!t||!t.classList||!t.classList.contains('e-name'))return; var card=t.closest('.rv-card'); if(!card)return; var pos=Number(card.getAttribute('data-pos')); var r=rvRows.find(function(x){return x.pos===pos;}); if(!r)return; r.name=t.value.trim(); rvSaveState(); card.classList.toggle('dirty',!!rvDirtyMap()[r._id]); });
     var pager=$('rvPager'); if(pager) pager.addEventListener('click',function(e){ var b2=e.target.closest('[data-pg]'); if(!b2||b2.disabled)return; rvPage+=Number(b2.getAttribute('data-pg')); rvPaint(); });
-    var warn=$('rvWarn'); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); });
+    ['rvWarn','rvFlaw'].forEach(function(id){ var warn=$(id); if(warn) warn.addEventListener('click',function(e){ var it=e.target.closest('[data-jump]'); if(it) rvJump(Number(it.getAttribute('data-jump'))); }); });
     var sv=$('rvSave'); if(sv) sv.addEventListener('click',rvSaveCorrect);
     var rord=$('rvReord'); if(rord) rord.addEventListener('click',rvReorderOpen);
     var aadd=$('rvAddRow'); if(aadd) aadd.addEventListener('click',rvAddRow);

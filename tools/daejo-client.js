@@ -402,6 +402,19 @@
       if (!nm) { nm = document.createElement('span'); nm.className = 'nm'; td.appendChild(nm); }
       pe.textContent = String(pos);
       nm.textContent = bare(cell);
+      // ★원래 그 순번의 주인을 같이 보여준다 — 배치표 원본이 "조하빈(54)오동현"처럼 두 이름을 적는 이유다.
+      //  맞바꾸기를 하면 이름만 자리를 옮기는데, 그러면 '이 순번이 원래 누구 것이었나'가 화면에서 사라진다.
+      //  실제 배치표에는 그게 남아 있어서, 표를 대조하며 손으로 고칠 때 관리자가 헷갈리게 된다(2026-08-23).
+      //  순번은 그대로 두고 표기만 원본을 따라간다 — 맞바꾸기 동작 자체는 바꾸지 않는다.
+      const own0 = bare(String(((BOARD[part] || {}).roster || [])[pos - 1] || ''));
+      const nowNm = bare(cell);
+      let ow = td.querySelector('.own');
+      if (own0 && nowNm && nkd(own0) !== nkd(nowNm)) {
+        if (!ow) { ow = document.createElement('span'); ow.className = 'own'; td.insertBefore(ow, nm); }
+        ow.textContent = own0;
+        ow.title = pos + '번은 원래 ' + own0 + '님 자리입니다 — 지금 ' + nowNm + '님이 들어와 있습니다.';
+        td.classList.add('swapped');
+      } else { if (ow) ow.remove(); td.classList.remove('swapped'); }
       if (tg0 && !dt) { dt = document.createElement('span'); dt.className = 'dt'; td.appendChild(dt); }
       if (dt) { dt.textContent = tg0; dt.style.display = tg0 ? '' : 'none'; }
       // 부 간 대바 자국 — 이 자리에 앉은 사람이 어느 부에서 왔는지.

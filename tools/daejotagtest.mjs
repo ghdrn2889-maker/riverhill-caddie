@@ -115,5 +115,20 @@ const BASE = () => ({
     !/roster\[part\]\[pos - 1\] = next\.trim\(\) \+ \(tg \? '\(' \+ tg \+ '\)' : ''\);/.test(SRC));
 }
 
+// ── 10. 원래 주인 표기 — 맞바꾼 칸에만, 판독 원본과 다를 때만 ──
+//  배치표 원본은 "조하빈(54)오동현"처럼 한 칸에 두 이름을 적고 순번은 고정한다.
+//  대조판은 맞바꾸면 이름만 옮겨가 '이 순번이 원래 누구 것이었나'가 화면에서 사라졌다 —
+//  표를 대조하며 손으로 고칠 때 관리자가 헷갈리는 원인이었다(2026-08-23).
+{
+  check('원본 명단(BOARD.roster)과 대조해서 원래 주인을 뽑는다',
+    /const own0 = bare\(String\(\(\(BOARD\[part\] \|\| \{\}\)\.roster \|\| \[\]\)\[pos - 1\] \|\| ''\)\);/.test(SRC));
+  check('★같을 땐 표시하지 않는다 — 안 바뀐 칸까지 취소선이 붙으면 표를 못 읽는다',
+    /if \(own0 && nowNm && nkd\(own0\) !== nkd\(nowNm\)\) \{/.test(SRC));
+  check('★되돌리면 표식이 지워진다(남아 있으면 유령 대바가 된다)',
+    /else \{ if \(ow\) ow\.remove\(\); td\.classList\.remove\('swapped'\); \}/.test(SRC));
+  check('순번 자체는 건드리지 않는다 — 원본도 순번은 고정하고 점유자 표기만 바꾼다',
+    /pe\.textContent = String\(pos\);/.test(SRC));
+}
+
 console.log(bad ? `\n${bad}건 실패` : '\n전부 통과');
 process.exit(bad ? 1 : 0);

@@ -236,6 +236,11 @@ td.c{width:calc(50% - 26px);height:27px;text-align:center;border:1px solid var(-
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.c .pos{display:inline-block;min-width:16px;font-weight:700;font-size:11px;opacity:.75;margin-right:3px}
 td.c .nm{font-size:12px}
+/* 원래 그 순번의 주인 — 맞바꾼 칸에만. 배치표 원본의 "조하빈(54)오동현" 표기를 화면에서 잇는다. */
+td.c .own{display:block;font-size:9px;line-height:1.15;opacity:.7;text-decoration:line-through;
+  text-decoration-thickness:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.c.swapped{box-shadow:inset 0 0 0 2px var(--warn)}
+td.c.swapped .nm{font-weight:700}
 td.c .tag{display:inline-block;font-size:9px;opacity:.6;margin-right:3px;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums}
 td.c .dt{display:inline-block;font-size:9px;margin-left:3px;padding:0 3px;border-radius:3px;
