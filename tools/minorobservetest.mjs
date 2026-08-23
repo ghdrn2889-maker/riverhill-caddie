@@ -33,8 +33,12 @@ console.log('\n[1·2부를 재기는 하는가]');
   ok(/for \(const p of \['1', '2'\]\)/.test(fn), '1부와 2부를 돈다');
   ok(/loadBoardPartsStore\(\)/.test(fn), '그 부 배치표는 store에서 읽는다', '3부 판독 결과로 1·2부를 재면 안 된다');
   ok(/kakaoAssist\(\{/.test(fn) && /part: p/.test(fn), '카카오 보조를 그 부로 부른다');
-  ok(/if \(dISO && dISO !== dateISO\) continue;/.test(fn),
-    '★날짜가 다른 store는 재지 않는다', '어제 명단으로 오늘 카카오를 재면 숫자가 통째로 거짓이 된다');
+  ok(/d\._targetISO \|\| store\.targetISO/.test(fn),
+    '★날짜를 store가 실제로 쓰는 자리에서 읽는다(_targetISO·targetISO)',
+    'd.dateLabel만 보면 언제나 빈 값이라 가드가 걸린 적이 없다 — 가드가 아니라 장식이 된다');
+  ok(/if \(!dISO\) \{[\s\S]*?continue; \}/.test(fn), '★날짜를 모르면 재지 않는다',
+    '재는 일에서 아마 오늘 것 은 재지 않는 것만 못하다');
+  ok(/if \(dISO !== dateISO\) continue;/.test(fn), '다른 날 store는 재지 않는다');
   ok((srv.match(/await observeMinorKakao\(boardISO\);/g) || []).length === 2,
     '두 경로(발송 잠금·1·2부 판독) 모두에서 부른다', '한쪽만 붙이면 그 날의 표본이 통째로 빈다');
 }

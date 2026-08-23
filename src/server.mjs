@@ -1735,8 +1735,13 @@ async function observeMinorKakao(dateISO) {
     const d = parts[p];
     if (!d || !Array.isArray(d.roster) || !d.roster.length) continue;
     // 그 부 배치표가 이 날짜의 것일 때만 잰다 — 어제 명단으로 오늘 카카오를 재면 숫자가 통째로 거짓이 된다.
-    const dISO = worklog.labelToISO(d.dateLabel || '') || '';
-    if (dISO && dISO !== dateISO) continue;
+    //  ★날짜는 부 안이 아니라 store 맨 위(targetISO·dateLabel)와 부의 _targetISO에 있다.
+    //   d.dateLabel만 보면 언제나 빈 값이라 가드가 걸린 적이 없다 — 가드가 아니라 장식이 된다.
+    //  ★모르면 재지 않는다. 재는 일에서 '아마 오늘 것'은 재지 않는 것만 못하다.
+    const dISO = String(d._targetISO || store.targetISO || '')
+      || worklog.labelToISO(store.dateLabel || '') || '';
+    if (!dISO) { console.log(`·  [보조·관측 ${p}부] 배치표 날짜를 몰라 재지 않음`); continue; }
+    if (dISO !== dateISO) continue;
     try {
       const a = await kakaoAssist({
         dateISO, part: p, observeOnly: true,
