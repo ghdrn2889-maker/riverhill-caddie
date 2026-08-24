@@ -10,7 +10,7 @@ import { loadJSON, DATA_DIR as DATA_DIR_J } from './store.mjs';
 import fsSync from 'node:fs';
 import pathMod from 'node:path';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
-import { readBoardClaudeVerdict, useClaudeReader, claudeReadFault } from './boardreader.mjs';
+import { readBoardClaudeVerdict, useClaudeReader, claudeReadFault, claudeBoardParts } from './boardreader.mjs';
 import { looksLikeBoardPost } from './analyzer.mjs';
 
 // ★Gemini 판독 폴백 스위치 — 기본 OFF(더 이상 사용 안 함). Claude(주)+로컬VLM만 사용.
@@ -1362,10 +1362,19 @@ export async function judge(article, today = null, member = memberFromEnv()) {
       //   전에는 둘이 같은 문장으로 찍혀 로그가 거짓말을 했고, 옆에 켜둔 공짜 로컬 VLM으로도 안 갔다.
       const fault = claudeReadFault(article);
       const next = useLocalVLM() ? '로컬VLM' : (useGeminiFallback() ? 'Gemini' : '');
+      // ★'없는 것'과 '못 읽은 것'을 가른다 — 판독이 다른 부는 멀쩡히 읽었는데 이 부만 없다면,
+      //  그건 이 배치표에 그 부가 실리지 않은 것이다. 폴백으로 내려가 봐야 없는 표를 지어낼 뿐이고,
+      //  로컬 VLM은 한 장에 수 분씩 잡아먹어 뒤따르는 1·2부 반영까지 통째로 늦춘다
+      //  (2026-08-25 샷건날 실측: 3부가 없는데 VLM이 매달려 재판독이 2분 넘게 안 끝났다).
+      let othersRead = null;
+      try { othersRead = await claudeBoardParts(article); } catch { /* 캐시 조회 실패는 무해 */ }
+      const partAbsent = !fault && Array.isArray(othersRead) && othersRead.length > 0
+        && !othersRead.includes(String(member.part).replace(/\D/g, '') || '3');
       if (fault) console.warn(`[claude] ★판독 고장(${fault}) — ${member.part}부 → ${next || '폴백 없음(로컬VLM을 켜세요: touch data/use-local-vlm)'}`);
+      else if (partAbsent) console.log(`[claude] 이 배치표엔 ${member.part}부 표가 없습니다(실린 부: ${othersRead.join('·')}부) — 폴백 없이 기존 상태 유지`);
       else console.log(`[claude] 이 부(${member.part}) 판독 없음(정상 — 이 배치표엔 ${member.part}부 표가 없음) → ${next || '스킵(기존 유지)'}`);
-      if (useLocalVLM()) verdict = await readBoardLocalVerdict(article, member);
-      if (!verdict && useGeminiFallback()) verdict = await readBoardConsensus(article, member);
+      if (!partAbsent && useLocalVLM()) verdict = await readBoardLocalVerdict(article, member);
+      if (!partAbsent && !verdict && useGeminiFallback()) verdict = await readBoardConsensus(article, member);
       // 고장인데 폴백도 실패 = 이 배치표는 아무도 못 읽었다. 조용히 넘기지 않는다 —
       //  대기표·끝점 검사가 이 사실을 사람에게 전달한다(boardReadFailed 신호는 server.mjs가 붙인다).
       if (fault && !verdict) console.error(`[claude] ${member.part}부 판독 전부 실패(${fault}) — 대기표에 남깁니다`);
