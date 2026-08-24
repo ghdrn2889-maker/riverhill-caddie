@@ -1192,7 +1192,9 @@ function renderBoard(bd) {
     else if (nowS < T) phase = 3;
     else               phase = 4;
     // 가운데 지점 morph: 도착 전이면 '도착'(=출근시각), 도착 이후면 '백대기'
-    const midLabel = phase <= 1 ? '도착' : '백대기';
+    //  ★샷건처럼 고정 시간표인 날(c.fixed)의 가운데 지점은 백대기가 아니라 '출석 확인'이다 — 늦으면 벌당.
+    const midKo = c.fixed ? '출석 확인' : '백대기';
+    const midLabel = phase <= 1 ? '도착' : midKo;
     const midTime  = phase <= 1 ? c.arrive : c.standby;
     // 게이지·타깃(초 단위 실시간 이동). animate=true인 구간만 실시간 채움.
     let big, cap, pct, targetPct, targetS, animate;
@@ -1203,7 +1205,7 @@ function renderBoard(bd) {
     else                  { big = c.tee;     cap = '근무 중';                                        pct = 100; targetPct = 100; targetS = T; animate = false; }
     pct = Math.max(0, Math.min(100, pct));
     const act = off >= 1 ? `${dayW} 출발 준비`
-      : ['집에서 출발 준비', '골프장으로 이동 중', '도착 · 백대기 대기', '백대기 · 티오프 준비', '근무 중'][phase];
+      : ['집에서 출발 준비', '골프장으로 이동 중', `도착 · ${midKo} 대기`, `${midKo} · 티오프 준비`, '근무 중'][phase];
     const crs = s.course ? ` ${esc(s.course)}` : '';
     // 지점 상태(done=지남·노랑, next=다음 목표·글로우)
     const pStart = phase === 0 ? 'next' : 'done';
@@ -1217,8 +1219,8 @@ function renderBoard(bd) {
     const filling = animate ? ' filling' : '';
     const alert = phase === 0 ? [`${off >= 1 ? dayW + ' ' : ''}${hhmm(Math.round(L / 60) - 10)}에 출발 알림을 보내드릴게요`, off >= 1 ? '출발 전' : '10분 전']
       : phase === 1 ? [`곧 골프장 도착 예정(${c.arrive})`, '이동 중']
-      : phase === 2 ? [`백대기 시간(${c.standby})까지 잠시 대기`, '도착']
-      : phase === 3 ? [`티오프(${c.tee}) 준비 시간이에요`, '백대기 중']
+      : phase === 2 ? [`${midKo} 시간(${c.standby})까지 잠시 대기`, '도착']
+      : phase === 3 ? [`티오프(${c.tee}) 준비 시간이에요`, c.fixed ? '출석 확인 후' : '백대기 중']
       : ['좋은 라운드 되세요!', '근무 중'];
     slot.innerHTML = `<div class="actionboard">
       <div class="actiontop"><b>다음 행동 · ${act}</b><span class="clock">현재 ${hhmm(nowMinNow)}</span></div>
@@ -1237,7 +1239,7 @@ function renderBoard(bd) {
       </div>
       <div class="alert"><span>${alert[0]}</span><b>${alert[1]}</b></div>
       <div class="minirow">
-        <div class="mini"><span>백대기 <small>티오프 ${c.backWaitMin || 50}분 전</small></span><b>${esc(c.standby)}</b></div>
+        <div class="mini"><span>${midKo} <small>${c.fixed ? esc(c.note || '고정 시간표') : `티오프 ${c.backWaitMin || 50}분 전`}</small></span><b>${esc(c.standby)}</b></div>
         <div class="mini"><span>티오프</span><b>${esc(c.tee)}<small>${crs}</small></b></div>
       </div>
     </div>`;

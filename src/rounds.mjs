@@ -4,6 +4,7 @@
 //  ★출력/필터는 server.mjs GET /api/today(리팩터 전) 로직과 100% 동일 — 앱 회귀 0.
 import { loadToday } from './today.mjs';
 import { commuteInfo } from './judge.mjs';
+import { dayPlanFor, planCommute } from './dayplan.mjs';
 import * as worklog from './worklog.mjs';
 
 const WORK = ['assigned', 'work', 'your_turn'];
@@ -57,12 +58,17 @@ export function buildMemberRounds({ uid, primaryPart, base, minorPartOn, tISO, t
     const tpISO = worklog.labelToISO(tp.date);
     const sameDay = !tpISO || tpISO === tISO || (!tISO && tpISO >= todayISO);
     if (!sameDay) continue;
+    // ★샷건처럼 그날 그 부만 시간표가 다른 날 — 티오프 역산 대신 고정 시간표를 쓴다(dayplan.mjs).
+    //  배치표의 티오프 칸이 '근무 인원을 줄세운 것'뿐인 날이 있어, 그대로 두면 앱이 틀린 출발 시각을 단언한다.
+    const plan = dayPlanFor(tpISO || tISO || todayISO, pp);
+    const pc = (isWork && plan) ? planCommute(plan, commuteMin) : null;
     rounds.push({
       part: pp, kind: isWork ? 'work' : 'spare', status: tp.status,
-      teeTime: tp.teeTime || '', course: tp.course || '', myPosition: tp.myPosition || null,
+      teeTime: pc ? pc.tee : (tp.teeTime || ''), course: pc ? '' : (tp.course || ''), myPosition: tp.myPosition || null,
       cutLine: tp.cutLine || null, cutoffName: tp.cutoffName || null,
       assign: pp === '1' ? (tp.assign || null) : null,
-      commute: (isWork && tp.teeTime) ? commuteInfo(tp.teeTime, commuteMin) : null,
+      commute: pc || ((isWork && tp.teeTime) ? commuteInfo(tp.teeTime, commuteMin) : null),
+      dayPlan: plan ? { kind: plan.kind, note: plan.note || '', arrive: plan.arrive, standby: plan.standby, tee: plan.tee } : null,
       roster3: Array.isArray(tp.roster3) ? tp.roster3 : null,
       teeGrid: Array.isArray(tp.teeGrid) ? tp.teeGrid : null,
       date: tp.date || base.date,

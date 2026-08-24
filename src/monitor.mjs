@@ -17,6 +17,7 @@ import * as worklog from './worklog.mjs';
 import { DATA_DIR, loadJSON } from './store.mjs';
 import { loadBoardPartsStore, saveBoardPartsStore } from './boardparts.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
+import { dayPlanFor, setDayPlan, listDayPlans } from './dayplan.mjs';
 import { resolveWorkParts } from './boardreader.mjs';
 import { collectPartRosters, buildCrossPartSwaps, actualCaddieName } from './crossparts.mjs';
 import { addNotice, listNotices } from './notices.mjs';
@@ -1055,6 +1056,20 @@ app.post('/api/notice', gate, (req, res) => {
     console.log(`[notice] 공지 등록 — "${n.title}" (대상 ${audKo})${notifyToken ? ' · 긴급 푸시 초안 대기' : ''}`);
     res.json({ ok: true, notice: n, audience: n.audience, count: n.userIds.length, notifyToken });
   } catch (e) { console.error('notice 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
+});
+// ── 고정 시간표(샷건 등) ── 그날 그 부만 티오프 역산을 버리고 출근·출석·티오프를 못박는다.
+//  ★푸시가 아니라 '앱이 단언하는 시각' 자체를 바꾼다 — 공지는 앱을 열어야 보이지만 이건 안 열어도 맞다.
+app.get('/api/dayplan', gate, (req, res) => {
+  res.json({ ok: true, plans: listDayPlans() });
+});
+app.post('/api/dayplan', gate, (req, res) => {
+  try {
+    const { date, part, arrive, standby, tee, kind, note, remove } = req.body || {};
+    const saved = setDayPlan(date, part, remove ? null : { arrive, standby, tee, kind, note }, '관리자 김홍구');
+    if (saved) console.log(`[dayplan] ${saved.date} ${saved.part}부 ${saved.kind} — 출근 ${saved.arrive}·출석 ${saved.standby}·티오프 ${saved.tee}`);
+    else console.log(`[dayplan] ${date} ${part}부 고정 시간표 해제`);
+    res.json({ ok: true, plan: saved });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
 });
 app.get('/api/notice/list', gate, (req, res) => {
   try { res.json({ ok: true, notices: listNotices().slice(-20).reverse() }); }

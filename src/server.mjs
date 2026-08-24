@@ -45,6 +45,7 @@ import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, 
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
+import { dayPlanFor, planCommute } from './dayplan.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
 import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount, claudeBoardParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
@@ -847,13 +848,19 @@ app.get('/api/today', (req, res) => {
     });
   }
 
-  const p = [];
-  if (t.myPosition) p.push(`순번 ${t.myPosition}번`);
-  p.push(statusKo(t.status));
-  if (t.teeTime) p.push(`티오프 ${t.teeTime}${t.course ? `(${t.course})` : ''}`);
-  if (t.cutoffName) p.push(`${t.cutoffName}님까지 확정`);
   const prof = getProfile(uid) || {};
-  const commute = t.teeTime ? commuteInfo(t.teeTime, prof.commute_min) : null;
+  // ★샷건처럼 그날 그 부만 시간표가 다른 날 — 대표부도 티오프 역산을 버리고 고정 시간표를 따른다.
+  //  rounds.mjs와 같은 근거(dayplan.mjs)를 써야 히어로와 카드가 갈라지지 않는다.
+  const primaryPlan = dayPlanFor(tISO, primaryPart);
+  const primaryWork = ['assigned', 'work', 'your_turn'].includes(t.status);
+  const pc = (primaryWork && primaryPlan) ? planCommute(primaryPlan, prof.commute_min) : null;
+  const tv = pc ? { ...t, teeTime: pc.tee, course: '' } : t;   // 배치표의 티오프 칸은 그날 인원 줄세우기일 뿐
+  const p = [];
+  if (tv.myPosition) p.push(`순번 ${tv.myPosition}번`);
+  p.push(statusKo(tv.status));
+  if (tv.teeTime) p.push(`티오프 ${tv.teeTime}${tv.course ? `(${tv.course})` : ''}`);
+  if (tv.cutoffName) p.push(`${tv.cutoffName}님까지 확정`);
+  const commute = pc || (tv.teeTime ? commuteInfo(tv.teeTime, prof.commute_min) : null);
   // 근무 대상일이 며칠 뒤인지(0=오늘, 1=내일…). 저녁에 뜬 '내일 배치표'를 오늘로 오인하지 않게.
   let dayOffset = 0;
   if (tISO) dayOffset = Math.round((Date.parse(tISO) - Date.parse(nowISO)) / 86400000);
@@ -865,7 +872,9 @@ app.get('/api/today', (req, res) => {
   // 하위호환: 기존 프론트가 쓰는 round2(2부 근무일 때만)
   const r2 = rounds.find((r) => r.part === '2' && r.kind === 'work');
   const round2 = r2 ? { status: r2.status, teeTime: r2.teeTime, course: r2.course, myPosition: r2.myPosition, commute: r2.commute } : null;
-  res.json({ ok: true, date: t.date, dayOffset, primaryPart, duty, summary: `${t.name || ''} — ${p.join(' · ')}`, state: t, commute, rounds, roundsSummary, round2, ownerName: prof.board_name || '' });
+  res.json({ ok: true, date: t.date, dayOffset, primaryPart, duty, summary: `${tv.name || ''} — ${p.join(' · ')}`, state: tv, commute, rounds, roundsSummary, round2,
+    dayPlan: primaryPlan ? { part: primaryPlan.part, kind: primaryPlan.kind, note: primaryPlan.note || '' } : null,
+    ownerName: prof.board_name || '' });
 });
 
 // ── ★전 부 배치표(1·2·3부) — 회원이 자기 부가 아닌 부의 순번표도 볼 수 있게. ──
@@ -2915,12 +2924,14 @@ const toMinOfDay = (hhmm) => { const m = String(hhmm || '').match(/(\d{1,2}):(\d
 function timelineReminders(c, name) {
   const L = toMinOfDay(c.leave), A = toMinOfDay(c.arrive), T = toMinOfDay(c.tee);
   if (L == null || A == null || T == null) return [];
+  // 고정 시간표(샷건)인 날의 가운데 지점은 '백대기'가 아니라 '출석 확인'이다 — 늦으면 벌당이라 말이 정확해야 한다.
+  const midKo = c.fixed ? '출석 확인' : '백대기';
   return [
     // ★이 넷은 '행동을 요구하는' 알림이라 청유형을 남긴다(상태 알림의 서술형 규칙과 다른 이유).
     //  다만 느낌표는 뺀다 — 알림은 그 자체로 이미 다급하다. 제목의 부는 부르는 쪽이 붙인다.
     { key: 'leave10', at: L - LEAVE_REMIND_BEFORE, level: 'check', title: '곧 출발', body: `${name}님, ${LEAVE_REMIND_BEFORE}분 뒤 ${c.leave} 출발입니다. 준비해주세요.` },
     { key: 'leave',   at: L,                       level: 'high',  title: '출발 시간', body: `${name}님, 지금 출발하세요. 도착 ${c.arrive} · 티오프 ${c.tee}.` },
-    { key: 'arrive',  at: A,                       level: 'check', title: '도착·백대기', body: `${name}님, 골프장 도착 시간입니다. 백대기 ${c.standby}까지 준비해주세요.` },
+    { key: 'arrive',  at: A,                       level: 'check', title: `도착·${midKo}`, body: `${name}님, 골프장 도착 시간입니다. ${midKo} ${c.standby}까지 준비해주세요.` },
     { key: 'tee',     at: T - TEE_REMIND_BEFORE,   level: 'high',  title: '곧 티오프', body: `${name}님, ${TEE_REMIND_BEFORE}분 뒤 ${c.tee} 티오프입니다. 코스로 이동해주세요.` },
   ];
 }
@@ -2940,7 +2951,9 @@ async function fireRoundReminders(mem, name, t, prefix, roundLabel, store, nowMi
   if (prefix && !['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase())) return false;
   const tISO = worklog.labelToISO(t.date);
   if (tISO && tISO !== todayISO) return false;           // 오늘 근무만(내일 배치표는 제외)
-  const c = commuteInfo(t.teeTime, mem.commute_min);
+  // ★히어로가 보는 시간표와 푸시가 보는 시간표가 다르면, 화면은 맞는데 폰만 틀리게 울린다.
+  const plan = dayPlanFor(tISO || todayISO, prefix ? prefix.replace(/\D/g, '') : '3');
+  const c = plan ? planCommute(plan, mem.commute_min) : commuteInfo(t.teeTime, mem.commute_min);
   if (!c) return false;
   // ★조출(1부) 근무 알림만 조용시간(22~07시) 예외로 통과 — 새벽 출발이라 안 울리면 지각 위험.
   const bypassQuiet = prefix === 'p1-';
