@@ -52,6 +52,9 @@ function syncJournal(s, userId, part) {
       prevPosition: s.prevPosition ?? null,
       offType: s.offType || null,
       part: String(part || '3'),
+      // ★이 부 자리를 대바로 남에게 넘겼다는 표식. 카드는 '미상'으로 비워지는데,
+      //  일지가 그걸 '아직 모르겠다'로 읽으면 넘긴 부의 옛 근무가 그대로 남아 두 탕이 된다.
+      swappedOut: !!s._swappedOut,
     }, userId);
   } catch { /* 일지 실패가 카드 저장을 막지 않는다 */ }
 }

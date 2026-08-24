@@ -16,7 +16,13 @@ export function dayKind(status) {
 export function recordDayStatus(dateISO, info = {}, userId = 1) {
   if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) return;
   const kind = dayKind(info.status);
-  if (kind === 'unknown') return; // 미상 상태는 일지에 남기지 않음(확정 상태만)
+  // ★'모르겠다'와 '이제 내 근무가 아니다'는 다르다.
+  //  대바로 다른 부에 자리를 넘기면 그 부 카드는 status:'unknown'으로 비워진다(3부는 삭제가 안 되는 제약).
+  //  일지가 그걸 '아직 모르겠다'로 읽고 그냥 물러나면, 넘긴 부의 옛 근무가 라운드에 그대로 남아
+  //  하루가 '두 탕'으로 잡힌다(2026-08-24 김홍구↔강혜영 대바: 2부로 갔는데 일지는 2·3부 근무).
+  //  넘겼다는 표식(swappedOut)이 오면 물러나지 않고 그 부 라운드를 지운다.
+  const swappedOut = !!info.swappedOut;
+  if (kind === 'unknown' && !swappedOut) return; // 미상 상태는 일지에 남기지 않음(확정 상태만)
   const part = String(info.part || '3');
   const j = loadUserJSON(userId, FILE, {});
   const prev = j[dateISO] || {};
@@ -41,7 +47,19 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   if (prev.excluded && !(part === '3' || info.teeTime)) return;
   // ★"2,3 출근" 두 탕: rounds[부]에 부별 결과 보관. 대표 kind = 어느 라운드든 work면 work(둘 다 스페어면 spare).
   const rounds = { ...(prev.rounds || {}) };
-  rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };
+  if (swappedOut) delete rounds[part];      // 넘긴 부는 그날의 내 라운드가 아니다
+  else rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };
+  // 넘기고 나니 남은 라운드가 없다 = 그날 내 근무가 통째로 사라진 것. 메모·기분만 남기고 기록은 지운다.
+  if (swappedOut && !Object.keys(rounds).length) {
+    if (prev.memo != null || prev.mood != null) {
+      const keep = { date: dateISO, rounds: {}, twoRounds: false, updatedAt: Date.now() };
+      if (prev.memo != null) keep.memo = prev.memo;
+      if (prev.mood != null) keep.mood = prev.mood;
+      j[dateISO] = keep;
+    } else delete j[dateISO];
+    saveUserJSON(userId, FILE, j);
+    return;
+  }
   const kinds = Object.values(rounds).map((r) => r.kind);
   // ★근태 확정 오프(병가·휴가)는 그날 전부 오프 — 다른 부의 스페어 오판독이 덮지 못하게 우선.
   //  (일반 off는 '3부 부재 + 2부 스페어'처럼 교차부 정상 케이스가 있어 기존대로 spare 우선 유지.)
@@ -64,10 +82,16 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
     date: dateISO,
     kind: overall,
     offType,
-    status: (part === '3' ? info.status : prev.status) || info.status || prev.status || '',
-    teeTime: primary?.teeTime || (kind === 'work' ? info.teeTime : '') || prev.teeTime || '',
-    course: primary?.course || (kind === 'work' ? info.course : '') || prev.course || '',
-    myPosition: part === '3' ? (info.myPosition ?? prev.myPosition ?? null) : (prev.myPosition ?? info.myPosition ?? null),
+    // ★넘긴 부의 값이 대표 자리에 남지 않게, 남은 라운드에서 다시 세운다.
+    //  (평소엔 예전과 같다 — swappedOut일 때만 갈라진다.)
+    status: swappedOut ? (primary?.status || Object.values(rounds)[0]?.status || '')
+      : ((part === '3' ? info.status : prev.status) || info.status || prev.status || ''),
+    teeTime: swappedOut ? (primary?.teeTime || '')
+      : (primary?.teeTime || (kind === 'work' ? info.teeTime : '') || prev.teeTime || ''),
+    course: swappedOut ? (primary?.course || '')
+      : (primary?.course || (kind === 'work' ? info.course : '') || prev.course || ''),
+    myPosition: swappedOut ? (primary?.myPosition ?? Object.values(rounds)[0]?.myPosition ?? null)
+      : (part === '3' ? (info.myPosition ?? prev.myPosition ?? null) : (prev.myPosition ?? info.myPosition ?? null)),
     cutoffName: info.cutoffName || prev.cutoffName || '',
     rounds,
     twoRounds: workCount >= 2,
