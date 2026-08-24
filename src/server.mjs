@@ -2173,7 +2173,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
         try {
           const mparts = await claudeMonitorParts(full, ['1', '2']);
           if (mparts) {
-            const _sc = boardScope(full, out.rawVerdict, null);
+            const _sc = boardScope(full, out.rawVerdict, null, readParts);   // 판독기가 읽어낸 부도 근거로(3부 없는 날 '미상' 방지)
             const meta = { at: Date.now(), dateLabel: out.rawVerdict?.dateLabel || '', subject: full.subject || '',
               image: (full.images && full.images[0]) || '', url: full.url || '', scope: _sc.parts, scopeSource: _sc.source };
             // ★명단이 있는 부만 저장 — 빈 명단으로 형제 부를 덮지 않도록(오독 방어).
@@ -2229,7 +2229,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
     if (readParts) console.log(`·  [판독된 부] ${readParts.join('·')}부 — 판독기가 실제로 읽어낸 표`);
     // ★이 배치표의 범위 — 아래 부별 판독·저장 전부가 이 값을 근거로 움직인다(추측 금지).
-    const _scope = boardScope(full, out.rawVerdict, null);
+    const _scope = boardScope(full, out.rawVerdict, null, readParts);
     console.log(`·  [배치표 범위] ${_scope.parts.length ? _scope.parts.join('·') + '부' : '미상'} (근거: ${_scope.source}) — 범위 밖 부는 이 배치표로 절대 안 바꿈: ${full.subject}`);
     const crewDuty = out.rawVerdict?.crewDuty || null;   // 조배치표 근무표시 맵(3부 판독에서 수확) → 부별 알림 게이트 근거
     // ★이름 중복 교차확인(두 탕) — board당 1회. 각 부 근무자 집합(순번≤팀수)을 교차해 '이름→뛰는 부' authoritative 맵.

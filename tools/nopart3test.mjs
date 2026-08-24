@@ -53,5 +53,20 @@ console.log('\n── 부 목록은 한 번만 구한다 ──');
   ok(iFetch > 0 && iUse > iFetch, '★구한 뒤에 쓴다', '쓰는 자리가 위면 언제나 null이라 고친 게 무효가 된다');
 }
 
+console.log('\n── 저장 관문(범위)도 같은 근거를 쓴다 ──');
+{
+  const BP = fs.readFileSync(path.join(ROOT, 'src', 'boardparts.mjs'), 'utf8');
+  ok(/export function boardScope\(full, verdict, declaredPart, readParts = null\)/.test(BP),
+    'boardScope가 판독된 부 목록을 받는다');
+  ok(/if \(rp\.length\) return \{ parts: rp, source: 'read' \};/.test(BP),
+    "★근거를 'read'로 남긴다 — 어디서 온 범위인지 로그로 되짚을 수 있다");
+  const iTables = BP.indexOf("source: 'tables'"), iRead = BP.indexOf("source: 'read'");
+  ok(iTables > 0 && iRead > iTables, '★제목·표가 먼저고 판독 목록은 마지막 근거다',
+    '판독 목록이 제목보다 앞서면 "3부 배치표"라고 적힌 글의 범위를 판독이 뒤집는다');
+  const n2 = (SRV.match(/boardScope\(full, out\.rawVerdict, null, readParts\)/g) || []).length;
+  ok(n2 === 2, `★범위를 묻는 두 자리 모두 같은 근거를 쓴다(지금 ${n2}곳)`,
+    '한 곳만 고치면 저장은 되는데 반영이 안 되거나 그 반대가 된다');
+}
+
 console.log(`\n${fail ? 'X' : 'ok'}  ${pass}건 통과${fail ? ` · ${fail}건 실패` : ''}`);
 process.exit(fail ? 1 : 0);

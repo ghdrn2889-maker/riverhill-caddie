@@ -15,7 +15,11 @@ const FILE = 'board-parts-store.json';
 //  근거 우선순위: ①호출자가 못박은 부(단독 부 라우터·관리자 업로드) ②제목의 'N부 배치표' ③제목의 '전체'
 //   ④이미지에서 실제로 보인 부 표(boardTables).
 //  ★넷 다 없으면 '미상'([]) — 미상이면 아무 부도 폐기하지 않는다(모르면 안 지운다).
-export function boardScope(full, verdict, declaredPart) {
+// readParts: 판독기가 이 배치표에서 실제로 읽어낸 부 목록(있으면). 제목·verdict가 아무 말도 안 할 때의 마지막 근거.
+//  ★2026-08-25 샷건날: 3부 없는 배치표라 verdict가 null이고 제목엔 부 표기가 없어 범위가 '미상'이 됐다.
+//   그러면 저장 관문이 "범위 밖이라 건드리지 않음"으로 1·2부를 통째로 보존해 버려, 멀쩡히 읽은 표가 버려졌다.
+//   판독기가 눈으로 본 표보다 확실한 근거는 없다.
+export function boardScope(full, verdict, declaredPart, readParts = null) {
   const subject = String(full?.subject || '');
   if (declaredPart) return { parts: [String(declaredPart)], source: 'declared' };
   if (/전체|전부/.test(subject)) return { parts: ['1', '2', '3'], source: 'subject-full' };
@@ -26,6 +30,8 @@ export function boardScope(full, verdict, declaredPart) {
   const tables = Array.isArray(verdict?.boardTables) ? verdict.boardTables : [];
   const ps = [...new Set(tables.map((t) => String(t?.part || '')).filter((p) => ['1', '2', '3'].includes(p)))].sort();
   if (ps.length) return { parts: ps, source: 'tables' };
+  const rp = [...new Set((readParts || []).map(String).filter((p) => ['1', '2', '3'].includes(p)))].sort();
+  if (rp.length) return { parts: rp, source: 'read' };
   return { parts: [], source: 'unknown' };
 }
 
