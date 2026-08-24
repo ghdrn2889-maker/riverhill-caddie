@@ -1406,6 +1406,23 @@ export async function readBoardClaudeVerdict(article, member) {
   return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList, board.roleList);
 }
 
+// ★이 배치표에 실제로 실린 부(部) 목록 — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
+//  왜 필요한가: 그동안 '어떤 부가 있나'를 주회원(3부) verdict의 boardTables로만 알았다.
+//  그래서 3부가 없는 날엔 그 verdict가 null이 되고, 배치표에 멀쩡히 있는 1·2부까지
+//  "이 배치표엔 N부 표 없음"으로 건너뛰었다(2026-08-25 청송 군수배 샷건날 — 3부 없이 1부 13팀·2부 44팀).
+//  판독기는 이미 부별로 다 읽어 놓았다. 물어보기만 하면 된다.
+export async function claudeBoardParts(article) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img || !_boardCache.has(img)) return null;          // 아직 안 읽음 — 모른다(빈 배열과 구분)
+  try {
+    const b = await _boardCache.get(img);
+    if (!b || !b.parts) return null;
+    return Object.keys(b.parts)
+      .filter((p) => Array.isArray(b.parts[p]?.roster) && b.parts[p].roster.filter(Boolean).length)
+      .sort();
+  } catch { return null; }
+}
+
 // ★당번·벌당 배정 — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
 //  캐시에 없으면 null(판독 안 켜졌거나 아직 안 읽음) → 호출부는 아무것도 하지 않는다.
 export async function claudeDutyList(article) {

@@ -46,7 +46,7 @@ import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs'
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
-import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount } from './boardreader.mjs';
+import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount, claudeBoardParts } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
 
@@ -2110,12 +2110,25 @@ async function notifyForArticle(full, result = {}, opts = {}) {
 
   // 1번 회원(김홍구) 처리 — 기존과 동일한 결과.
   const primaryRet = await processForMember(1, primary, out, full, opts);
+  // ★이 배치표에 실제로 실린 부(部) 목록 — 판독기가 이미 부별로 읽어 둔 것을 캐시에서 꺼낸다(추가 호출 0).
+  //  주회원(3부) verdict만 보고 판단하면, 3부가 없는 날 배치표 전체를 못 읽은 것으로 오해한다.
+  let readParts = null;
+  if (_isBoardImg) {
+    try { readParts = await claudeBoardParts(full); }
+    catch (e) { console.error('[부 목록 조회 오류]', e.message); }
+  }
+  // ★'3부가 없는 배치표'와 '배치표를 못 읽음'은 다르다.
+  //  2026-08-25 청송 군수배는 샷건이라 3부가 아예 없었다(1부 13팀·2부 44팀).
+  //  판독기는 1·2부·근태·역할·인원요약까지 멀쩡히 읽었는데, 3부 verdict가 없다는 이유로
+  //  '판독 실패' 처리되어 6번 재시도하고 대기표에 쌓이고 관리자 폰을 울렸다 — 실패한 건 아무것도 없었다.
+  const _noPart3 = _isBoardImg && Array.isArray(readParts) && readParts.length > 0 && !readParts.includes('3');
+  if (_noPart3) console.log(`·  [3부 없음] 이 배치표엔 3부 표가 없습니다(실린 부: ${readParts.join('·')}부) — 판독 실패가 아닙니다`);
   if (primaryRet && typeof primaryRet === 'object') {
-    primaryRet.boardReadFailed = _boardReadFailed;
+    primaryRet.boardReadFailed = _boardReadFailed && !_noPart3;
     // ★대기표가 '어느 날짜 배치표인가'를 알아야 반영 확인이 된다. 판독이 실패해 날짜조차 못 읽었으면
     //  제목에서 뽑는다("2026년 8월 17일 월요일 배치표입니다.") — 실패했을 때일수록 이 값이 필요하다.
     primaryRet.dateLabel = out.rawVerdict?.dateLabel || full.subject || '';
-    if (_boardReadFailed) {
+    if (_boardReadFailed && !_noPart3) {
       const _v = out.rawVerdict || {};
       primaryRet.boardReadReason = _v.rosterReliable === false ? '명단 신뢰 불가'
         : !Array.isArray(_v.teeGrid) || !_v.teeGrid.length ? '티오프표를 못 읽음' : '판독 불완전';
@@ -2214,6 +2227,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const txt = `${full.subject || ''} ${full.text || ''}`;
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
+    if (readParts) console.log(`·  [판독된 부] ${readParts.join('·')}부 — 판독기가 실제로 읽어낸 표`);
     // ★이 배치표의 범위 — 아래 부별 판독·저장 전부가 이 값을 근거로 움직인다(추측 금지).
     const _scope = boardScope(full, out.rawVerdict, null);
     console.log(`·  [배치표 범위] ${_scope.parts.length ? _scope.parts.join('·') + '부' : '미상'} (근거: ${_scope.source}) — 범위 밖 부는 이 배치표로 절대 안 바꿈: ${full.subject}`);
@@ -2235,7 +2249,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     ];
     for (const cfg of PARTS) {
       const p = cfg.part;
-      const hasTable = boardTables.some((t) => String(t?.part) === p);
+      const hasTable = boardTables.some((t) => String(t?.part) === p) || (readParts || []).includes(p);
       const isText = !isBoardImg && chgKw && (cfg.word || cfg.time);
       const run = (isBoardImg && (hasTable || isFullBoard)) || isText;
       if (!run) { if (isBoardImg) console.log(`·  [${p}부] 스킵 — 이 배치표엔 ${p}부 표 없음(크레딧 절약): ${full.subject}`); continue; }
