@@ -91,6 +91,13 @@ function describe(it) {
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':
       return { title: '카카오골프 예약 관측 중단', body: String(it.note || '연속 실패 — 예약 현황이 갱신되지 않습니다.').slice(0, 200) };
+    // ★두 판매처(카카오·티스캐너)는 같은 물량을 판다 — 어긋나면 그게 곧 고장 신호다.
+    //  실측 8일 493칸이 한 칸도 안 어긋났기에, 어긋남 자체가 드물고 그래서 값어치가 있다.
+    case 'source_mismatch':
+      return { title: '예약 판매처 둘이 어긋납니다', body: String(it.note || '').slice(0, 200)
+        + ' — 한쪽이 낡았거나 응답 형식이 바뀌었을 수 있습니다.' };
+    case 'teescanner_auth':
+      return { title: '티스캐너 로그인이 안 됩니다', body: String(it.note || '').slice(0, 200) };
     default:
       return { title: `${p} 판독 이상`, body: String(it.note || it.kind || '').slice(0, 120) };
   }

@@ -38,6 +38,7 @@ import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { kakaoAssist, assistOn } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
+import { crossTick as teeCrossTick } from './teescross.mjs';
 import { buildBoardsView } from './boardsview.mjs';
 import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
@@ -3207,6 +3208,9 @@ if (kakaoOn()) {
     kakaoGolfTick({ days: h >= 12 ? 3 : 2 })
       // ★관측이 끝난 다음에 갱신한다 — 방금 본 예약으로 1·2부를 고쳐야 한 틱을 벌 수 있다.
       .then(() => kakaoUpdateMinorTick())
+      // ★두 판매처 대조 — 카카오 스냅샷이 갓 찍힌 뒤라야 같은 순간을 견준다.
+      //  대조가 실패해도 카카오 관측은 이미 끝나 있다(뒤에 붙인 이유).
+      .then(() => teeCrossTick({ days: 2 }).catch((e) => console.error('[티스캐너]', e.message)))
       .catch((e) => console.error('[카카오골프]', e.message));
   };
   setTimeout(kakaoTick, 20000);

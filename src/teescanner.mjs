@@ -56,7 +56,16 @@ function saveAuth(a) { _mem = a; saveJSON(AUTH_FILE, a); }
 
 export function forgetAuth() { _mem = null; saveJSON(AUTH_FILE, null); }
 
+// ★토큰은 4시간짜리다(실측: 15:35 발급 → 19:35 만료). 평소 호출로는 갱신되지 않는다
+//  (x-token-yn이 안 온다). 그래서 만료되면 다시 로그인해야 하고, 비밀번호가 필요하다.
+const AUTH_COOLDOWN_MS = Number(process.env.TEESCANNER_COOLDOWN_MS || 6 * 3600 * 1000);
+
 export async function login() {
+  const h0 = loadJSON(HEALTH_FILE, {}) || {};
+  if (h0.authCooldownUntil && Date.now() < h0.authCooldownUntil) {
+    const left = Math.round((h0.authCooldownUntil - Date.now()) / 60000);
+    throw new TeeAuthError(`티스캐너 로그인을 쉬는 중입니다(${left}분 남음) — 앞서 거절당했습니다`);
+  }
   const id = String(process.env.TEESCANNER_ID || '').trim();
   const pw = String(process.env.TEESCANNER_PW || '');
   if (!id || !pw) throw new TeeAuthError('TEESCANNER_ID·TEESCANNER_PW가 .env에 없습니다');
@@ -94,21 +103,31 @@ export async function login() {
   if (!token || !codeOk) {
     // ★여기서 아이디·비번을 되풀이하지 않는다. 서버가 준 말만 옮긴다.
     const said = (body && body.message) ? String(body.message).slice(0, 120) : `HTTP ${res.status} · Code ${body?.data?.Code ?? '-'}`;
-    health({ authFail: (loadJSON(HEALTH_FILE, {})?.authFail || 0) + 1, lastErr: `토큰 없음: ${said}` });
+    // ★거절당했으면 한동안 쉰다. 되풀이해 두드리는 게 계정을 잠그는 가장 빠른 길이다.
+    health({ authFail: (loadJSON(HEALTH_FILE, {})?.authFail || 0) + 1, lastErr: `토큰 없음: ${said}`,
+      authCooldownUntil: Date.now() + AUTH_COOLDOWN_MS });
     throw new TeeAuthError(`티스캐너 로그인 실패 — ${said}`);
   }
   const userSeq = body?.data?.user_seq ?? null;
   saveAuth({ token, refreshToken, at: Date.now(), userSeq });
-  health({ authOk: (loadJSON(HEALTH_FILE, {})?.authOk || 0) + 1, lastAuth: Date.now(), lastErr: '' });
+  health({ authOk: (loadJSON(HEALTH_FILE, {})?.authOk || 0) + 1, lastAuth: Date.now(), lastErr: '', authCooldownUntil: 0 });
   console.log('[티스캐너] 로그인 성공 — 토큰 확보');
   return _mem;
 }
 
 // 로그인한 채로 한 번 부른다. 토큰이 죽었으면(result -100) 한 번만 다시 로그인하고 재시도.
 //  ★재시도는 한 번뿐이다. 비밀번호가 틀렸는데 무한히 다시 시도하면 계정이 잠긴다.
+function nearExpiry(token) {
+  try {
+    const p = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64').toString('utf8'));
+    return p.exp ? (p.exp * 1000 - Date.now() < 10 * 60 * 1000) : false;   // 10분 안에 죽으면 미리 바꾼다
+  } catch { return false; }
+}
+
 async function call(path, params = {}, { retried = false } = {}) {
   let auth = loadAuth();
   if (!auth || !auth.token) auth = await login();
+  else if (nearExpiry(auth.token)) { forgetAuth(); auth = await login(); }
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v == null) continue;
