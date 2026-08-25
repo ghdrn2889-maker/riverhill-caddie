@@ -2093,7 +2093,14 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //   사진이 읽었으면 → 빠진 칸만 채운다(당추 보강). 사진이 실패했으면 → 팀 수만 준다(대체).
   //   ★기본은 관측이다. 회원에게 반영하려면 관리자가 켜야 한다(touch data/use-kakao-assist).
   //   켜지 않아도 '켰다면 무엇을 했을지'는 전부 기록되고, 어긋남은 무조건 관리자에게 간다.
-  if ((full.images || []).length) {
+  // ★본배치표를 제대로 읽었으면 카카오·티스캐너를 얹지 않는다 — 그날의 정답은 본배치표다.
+  //  예약처가 다르게 말하면 그건 본배치표가 틀린 게 아니라, 예약처가 취소·노쇼를 못 보기 때문이다.
+  //  (본배치표 판독이 실패했을 때만 예약처가 대신 선다 — 그때는 비어 있는 것보다 낫다.)
+  const _mainBoardWins = _isBoardImg && _isFullBoard && !_boardReadFailed;
+  if (_mainBoardWins) {
+    console.log(`·  [보조] 본배치표가 기준입니다 — 카카오·티스캐너를 얹지 않습니다: ${String(full.subject || '').slice(0, 40)}`);
+  }
+  if ((full.images || []).length && !_mainBoardWins) {
     try {
       const _v = out.rawVerdict || {};
       const a = await kakaoAssist({
@@ -2239,11 +2246,16 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       return primaryRet;
     }
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
-    const isFullBoard = /전체|전부/.test(full.subject || '');
     const txt = `${full.subject || ''} ${full.text || ''}`;
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
     if (readParts) console.log(`·  [판독된 부] ${readParts.join('·')}부 — 판독기가 실제로 읽어낸 표`);
+    // ★본배치표 = 그날의 정답(2026-08-25 사장님 기준). 리버힐이 카페에 올리는 공식 표이고,
+    //  다음 날 모든 근무의 출발점이다. 카카오·티스캐너가 뭐라 하든 이게 기준이다.
+    //  ★제목으로 판정하지 않는다 — 제목은 사람이 적어 틀린다. 실제로 부 표가 여럿 실렸는지로 본다.
+    //   (8/25 사고: 세 부가 다 실린 본배치표인데 제목에 '전체'가 없어 수정본으로 접혔다.)
+    const isFullBoard = /전체|전부/.test(full.subject || '')
+      || boardTables.length >= 2 || (readParts || []).length >= 2;
     // ★이 배치표의 범위 — 아래 부별 판독·저장 전부가 이 값을 근거로 움직인다(추측 금지).
     const _scope = boardScope(full, out.rawVerdict, null, readParts);
     console.log(`·  [배치표 범위] ${_scope.parts.length ? _scope.parts.join('·') + '부' : '미상'} (근거: ${_scope.source}) — 범위 밖 부는 이 배치표로 절대 안 바꿈: ${full.subject}`);
@@ -2271,7 +2283,14 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       if (!run) { if (isBoardImg) console.log(`·  [${p}부] 스킵 — 이 배치표엔 ${p}부 표 없음(크레딧 절약): ${full.subject}`); continue; }
       // ★수정배치표 잠금 — 판독(judge) 앞에서 막는다. 뒤에서 막으면 크레딧은 이미 쓴 뒤다.
       //  회원 처리(today1/today2)도 이 아래에 있으므로 함께 멈춘다 — 그게 관리자가 멈추라고 한 그 과정이다.
-      if (minorReadFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts)) {
+      // ★본배치표는 잠금을 지나지 않는다 — 이건 수정본이 아니라 그날의 새 기준이다.
+      //  잠금은 원래 "2부 8팀 시간표입니다" 같은 부분 수정본이 본배치표를 덮는 걸 막으려던 것이지,
+      //  본배치표 자체를 막으려던 게 아니다. 8/25에 그게 뒤집혀 1·2부가 하루치 낡은 채로 남았다.
+      const _wouldFreeze = minorReadFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts);
+      if (_wouldFreeze && isFullBoard) {
+        console.log(`·  [${p}부] 본배치표 — 수정배치표 잠금을 지나갑니다(그날의 새 기준): ${String(full.subject || '').slice(0, 40)}`);
+      }
+      if (_wouldFreeze && !isFullBoard) {
         frozenLog(p, full.subject);
         // ★멈춰둔 자리를 카카오가 대신한다 — 사진을 다시 읽지 않고, 베이스 위에 예약 변동만 얹는다.
         await kakaoUpdatePart(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || boardISO,
