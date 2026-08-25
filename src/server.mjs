@@ -39,6 +39,7 @@ import { kakaoAssist, assistOn } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { crossTick as teeCrossTick } from './teescross.mjs';
+import { fetchOpen as teeFetchOpen, teescannerOn } from './teescanner.mjs';
 import { buildBoardsView } from './boardsview.mjs';
 import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
@@ -3205,7 +3206,10 @@ if (kakaoOn()) {
     const h = new Date().getHours();
     // 예약은 배치표 나오기 전 낮~밤에 몰린다. 새벽엔 굳이 두드리지 않는다.
     if (h < 7 || h >= 24) return;
-    kakaoGolfTick({ days: h >= 12 ? 3 : 2 })
+    // ★카카오가 멈춘 날 관측이 통째로 비지 않게, 같은 물량을 파는 티스캐너를 대타로 넘긴다.
+    //  평소엔 안 불린다 — 카카오가 실패했을 때만 그 날짜에 한 번 쓰인다.
+    kakaoGolfTick({ days: h >= 12 ? 3 : 2,
+      fallback: teescannerOn() ? teeFetchOpen : null, fallbackName: '티스캐너' })
       // ★관측이 끝난 다음에 갱신한다 — 방금 본 예약으로 1·2부를 고쳐야 한 틱을 벌 수 있다.
       .then(() => kakaoUpdateMinorTick())
       // ★두 판매처 대조 — 카카오 스냅샷이 갓 찍힌 뒤라야 같은 순간을 견준다.

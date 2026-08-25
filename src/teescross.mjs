@@ -25,16 +25,27 @@ const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0'
 
 export const teeCrossState = () => loadJSON(STATE_FILE, null);
 
-// 어긋남을 매 틱 알리지 않는다 — 5분마다 같은 말을 하면 그건 배경음이 된다.
-//  날짜+어긋난 칸 묶음이 그대로면 하루에 한 번만 알린다.
+// ★한 틱만 어긋난 건 알리지 않는다 — 두 판매처의 갱신 시차다.
+//  실측(2026-08-25 20:0x): 8/27 18:03|IN 한 칸이 어긋나 보였는데, 30초 뒤 세 번을 다시 보니
+//  72칸 대 72칸으로 똑같았고 그 칸은 양쪽에서 사라져 있었다 — 마침 그 순간 예약이 들어간 것이다.
+//  예약이 들어갈 때마다 알리면 알림이 예약 알림이 된다. 같은 어긋남이 두 틱(≈5분) 이어질 때만 알린다.
+//  그리고 같은 어긋남은 하루 한 번까지 — 5분마다 같은 말을 하면 그건 배경음이 된다.
 function shouldTell(date, sig) {
   const st = loadJSON(STATE_FILE, {}) || {};
   const prev = st[date];
-  if (prev && prev.sig === sig && Date.now() - prev.at < 24 * 3600 * 1000) return false;
-  st[date] = { sig, at: Date.now() };
-  for (const k of Object.keys(st)) if (Date.now() - (st[k]?.at || 0) > 7 * 86400000) delete st[k];
+  const now = Date.now();
+  for (const k of Object.keys(st)) if (now - (st[k]?.at || 0) > 7 * 86400000) delete st[k];
+  if (!prev || prev.sig !== sig) {           // 처음 본 어긋남 — 다음 틱까지 기다린다
+    st[date] = { sig, at: now, seen: 1, told: 0 };
+    saveJSON(STATE_FILE, st);
+    return false;
+  }
+  const seen = (prev.seen || 1) + 1;
+  const told = prev.told || 0;
+  const tell = seen >= 2 && (!told || now - told > 24 * 3600 * 1000);
+  st[date] = { sig, at: now, seen, told: tell ? now : told };
   saveJSON(STATE_FILE, st);
-  return true;
+  return tell;
 }
 
 export async function crossTick({ days = 2 } = {}) {
@@ -50,6 +61,12 @@ export async function crossTick({ days = 2 } = {}) {
     const date = ymd(d);
     const snap = loadSnapshot(date);
     if (!snap || !Array.isArray(snap.openKeys)) continue;   // 카카오가 아직 안 본 날은 견줄 게 없다
+    // ★그 스냅샷을 티스캐너가 채웠으면 견줄 게 없다 — 자기 자신과 비교해 '일치'로 읽으면
+    //  카카오가 멈춘 걸 '두 판매처가 잘 맞는다'로 덮어버린다. 감시기가 사고를 가리는 모양이 된다.
+    if (snap.source && snap.source !== 'kakao') {
+      console.log(`[티스캐너] ${date} 대조 건너뜀 — 이 스냅샷은 티스캐너가 채운 것입니다(카카오가 멈춘 날)`);
+      continue;
+    }
     const age = Date.now() - Number(snap.at || 0);
     if (age > FRESH_MS) {
       console.log(`[티스캐너] ${date} 대조 건너뜀 — 카카오 스냅샷이 ${Math.round(age / 60000)}분 전 것입니다(같은 순간이 아님)`);
@@ -81,9 +98,12 @@ export async function crossTick({ days = 2 } = {}) {
     const say = `${date} 두 판매처가 어긋납니다 — 카카오 ${K.size}칸 · 티스캐너 ${T.size}칸`
       + (onlyTee.length ? ` · 티스캐너에만 ${onlyTee.length}칸(${onlyTee.slice(0, 5).join(' ')})` : '')
       + (onlyKk.length ? ` · 카카오에만 ${onlyKk.length}칸(${onlyKk.slice(0, 5).join(' ')})` : '');
-    console.warn(`⚠️ [티스캐너] ${say}`);
     if (shouldTell(date, sig)) {
+      console.warn(`⚠️ [티스캐너] ${say}`);
       raiseBoardIssue({ kind: 'source_mismatch', part: 3, note: say.slice(0, 110) });
+    } else {
+      // 아직 한 번만 봤다 — 예약이 막 들어간 순간일 수 있다. 기록만 남기고 다음 틱을 본다.
+      console.log(`[티스캐너] ${say} (한 틱만 — 다음 틱에도 그대로면 알립니다)`);
     }
     await sleep(1200);   // 남의 서버다
   }

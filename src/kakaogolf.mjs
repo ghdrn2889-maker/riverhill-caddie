@@ -225,12 +225,15 @@ export function blindSlots(sell, fixed, mature = SELL_MATURE) {
   return blind;
 }
 
-export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
+//  ★openFrom을 갈아끼우면 다른 판매처의 '판매중 목록'으로 같은 계산을 할 수 있다(티스캐너 대타).
+//   여집합·마감선·비움칸 판정은 소스와 무관하다 — 바뀌는 건 '무엇이 판매중인가' 하나뿐이다.
+//   0칸 고장 검사도 그대로 걸린다: 대타가 0칸을 주면 그것도 똑같이 의심한다.
+export async function bookedFor(dateYYYYMMDD, prevSnap = null, { openFrom = fetchOpen, sourceName = 'kakao' } = {}) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
   if (!prevSnap) prevSnap = loadSnapshot(String(dateYYYYMMDD));
   const base = fixedSlots();
   if (!base.length) throw new Error(`고정 티오프 시간표(${SCHEDULE_FILE}) 없음 — 엔진의 기준표다`);
-  const open = await fetchOpen(dateYYYYMMDD);
+  const open = await openFrom(dateYYYYMMDD);
   const openSet = new Set(open.map((o) => key(o.mins, o.course)));
 
   // ── 그날의 '틀'을 정한다 — 기본틀은 고정이 아니라 예약팀이 앞뒤로 늘리고 줄인다 ──────────
@@ -493,7 +496,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null) {
   for (const [p, arr] of Object.entries(byPart)) {
     if (!peakByPart[p] || arr.length > peakByPart[p].length) peakByPart[p] = arr.map((x) => ({ time: x.time, course: x.course }));
   }
-  return { date: String(dateYYYYMMDD), at: Date.now(), fixedCount: fixed.length,
+  return { date: String(dateYYYYMMDD), at: Date.now(), source: sourceName, fixedCount: fixed.length,
     openCount: open.length, bookedCount: booked.length, byPart, peakByPart, unknown,
     frameExtra: [...frameExtra].sort(),             // 이 날짜에서 살아난(=예약팀이 쓰는) 비움 칸
     flexOpen,                                       // 이번 틱에 새로 살아난 칸 = 틀이 늘어난 순간
@@ -596,7 +599,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // from..days-1 일치를 훑는다. 가까운 날은 자주, 먼 날은 드물게 부르기 위해 시작점을 받는다.
 //  ★먼 날부터 봐둬야 '한 번이라도 판매중인 걸 봤는가'가 쌓인다. 하루 전에야 처음 보면
 //   이미 팔린 칸과 골프장이 지운 칸이 똑같이 '한 번도 안 열림'으로 보인다(실측: 8/17을 8/16 저녁에 처음 봤다).
-export async function tick({ days = 3, from = 0 } = {}) {
+//  fallback: 카카오가 멈췄을 때 대신 '판매중 목록'을 줄 함수(티스캐너). 없으면 예전 그대로 실패로 남는다.
+export async function tick({ days = 3, from = 0, fallback = null, fallbackName = '대타' } = {}) {
   if (!kakaoOn()) return;
   const today = new Date();
   for (let i = from; i < days; i++) {
@@ -604,7 +608,17 @@ export async function tick({ days = 3, from = 0 } = {}) {
     const date = ymd(d);
     try {
       const prev = loadSnapshot(date);
-      const snap = await bookedFor(date);
+      let snap;
+      try {
+        snap = await bookedFor(date, prev);
+      } catch (e) {
+        // ★카카오가 멈춘 날 관측이 통째로 비는 게 진짜 손해다. 같은 물량을 파는 다른 창구가 있으면 그걸로 채운다.
+        //  (실측: 두 판매처가 8일 493칸 한 칸도 안 어긋났다 — 그래서 대신 채워도 같은 답이다.)
+        if (!fallback) throw e;
+        console.error(`[카카오골프] ${date} 조회 실패:`, e.message);
+        snap = await bookedFor(date, prev, { openFrom: fallback, sourceName: fallbackName });
+        console.log(`·  [${fallbackName}] ${date} 카카오가 멈춰 대신 채웠습니다 — 찬 티오프 ${snap.bookedCount}/${snap.fixedCount}칸`);
+      }
       const dif = diffSnapshots(prev, snap);
       saveSnapshot(snap);
       // ★캔슬 감지 — 찼던 칸이 다시 판매중으로 돌아왔다. 사람이 글로 알리기 전에 우리가 먼저 본다.
