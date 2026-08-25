@@ -40,7 +40,7 @@ try {
   line(`  X  ${e.message}`);
   line('  → 검색 응답 원문을 봅니다:');
   try {
-    const j = await ts.raw('search/getSearchKeywordGolfClubAutoCompleteList', { keyword: '리버힐' });
+    const j = await ts.raw('search/getSearchKeywordGolfClubAutoCompleteList', { golfclub_autocomp_keyword: '리버힐', is_tget: '' });
     line('     ' + JSON.stringify(j).slice(0, 600));
   } catch (e2) { line(`     조회도 실패: ${e2.message}`); }
   process.exit(1);

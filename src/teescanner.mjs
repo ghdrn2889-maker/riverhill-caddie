@@ -11,7 +11,11 @@
 //  robots.txt: `User-agent: * / Disallow:` (2026-08-25 확인) — 전 경로 허용.
 import { loadJSON, saveJSON } from './store.mjs';
 
+// ★주소에 판 번호가 들어간다: foapi.teescanner.com/v1/<경로>.
+//  이걸 빼면 어느 경로든 똑같이 "로그아웃 되었습니다"가 온다 — 인증 문제처럼 보이지만 주소 문제다.
+//  (하루를 여기서 날릴 뻔했다. 응답이 같으니 비밀번호를 의심하게 된다.)
 const API = 'https://foapi.teescanner.com';
+const VER = 'v1';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const AUTH_FILE = 'teescanner-auth.json';     // { token, refreshToken, at, userSeq }
 const HEALTH_FILE = 'teescanner-health.json';
@@ -56,14 +60,19 @@ export async function login() {
   const id = String(process.env.TEESCANNER_ID || '').trim();
   const pw = String(process.env.TEESCANNER_PW || '');
   if (!id || !pw) throw new TeeAuthError('TEESCANNER_ID·TEESCANNER_PW가 .env에 없습니다');
+  // 로그인 폼이 보내는 것과 같은 차례로 담는다.
   const form = new FormData();
+  form.append('user_ip', String(process.env.TEESCANNER_IP || ''));
+  form.append('platform', String(process.env.TEESCANNER_PLATFORM || 'WEB'));
   form.append('id', id);
   form.append('pw', pw);
   form.append('service_code', 'TEESCANNER');
-  form.append('platform', String(process.env.TEESCANNER_PLATFORM || 'WEB'));
+  // ★funnels가 없으면 서버가 GCAccountV2에서 널을 만나 500을 낸다(유입경로 통계용 값으로 보인다).
+  //  앱 번들엔 이 필드가 없다 — 앱은 다른 창구로 로그인하기 때문이다. 0으로 넣으면 통과한다.
+  form.append('funnels', '0');
   let res;
   try {
-    res = await fetch(`${API}/login/authMemberLoginV2`, {
+    res = await fetch(`${API}/${VER}/login/authMemberLoginV2`, {
       method: 'POST',
       headers: { 'User-Agent': UA, Accept: 'application/json', Origin: 'https://www.teescanner.com', Referer: 'https://www.teescanner.com/' },
       body: form,
@@ -73,13 +82,18 @@ export async function login() {
     health({ authFail: (loadJSON(HEALTH_FILE, {})?.authFail || 0) + 1, lastErr: `로그인 연결 실패: ${e.message}` });
     throw new TeeAuthError(`티스캐너 로그인 연결 실패(${e.message})`);
   }
-  const token = res.headers.get('x-token') || '';
-  const refreshToken = res.headers.get('x-refresh-token') || '';
   let body = null;
-  try { body = await res.json(); } catch { /* 본문이 JSON이 아닐 수도 있다 — 토큰만 있으면 된다 */ }
-  if (!token) {
+  try { body = await res.json(); } catch { /* 본문이 JSON이 아닐 수도 있다 */ }
+  // ★토큰은 본문(data.token)으로 온다. 헤더(x-token)는 그 뒤 호출에서 갱신될 때만 쓰인다.
+  //  헤더만 보다가 '로그인 실패'로 읽고 한참 헤맸다 — 실제로는 성공해 있었다.
+  const token = String(body?.data?.token || res.headers.get('x-token') || '');
+  const refreshToken = String(body?.data?.refreshToken || body?.data?.refresh_token || res.headers.get('x-refresh-token') || '');
+  // 성공 판정은 앱과 같은 기준으로: data.Code === '100' 이고 result가 음수가 아니다.
+  //  (본문 message에 GCAccount 쪽 500 잡음이 섞여 와도 이 둘이 맞으면 로그인은 된 것이다.)
+  const codeOk = String(body?.data?.Code ?? '') === '100' && Number(body?.result ?? 0) >= 0;
+  if (!token || !codeOk) {
     // ★여기서 아이디·비번을 되풀이하지 않는다. 서버가 준 말만 옮긴다.
-    const said = (body && body.message) ? String(body.message).slice(0, 80) : `HTTP ${res.status}`;
+    const said = (body && body.message) ? String(body.message).slice(0, 120) : `HTTP ${res.status} · Code ${body?.data?.Code ?? '-'}`;
     health({ authFail: (loadJSON(HEALTH_FILE, {})?.authFail || 0) + 1, lastErr: `토큰 없음: ${said}` });
     throw new TeeAuthError(`티스캐너 로그인 실패 — ${said}`);
   }
@@ -100,7 +114,7 @@ async function call(path, params = {}, { retried = false } = {}) {
     if (v == null) continue;
     qs.append(k, Array.isArray(v) ? v.join(',') : String(v));
   }
-  const url = `${API}/${path}${qs.toString() ? `?${qs}` : ''}`;
+  const url = `${API}/${VER}/${path}${qs.toString() ? `?${qs}` : ''}`;
   let res, j;
   try {
     res = await fetch(url, {
@@ -138,16 +152,34 @@ export async function findClub(keyword = process.env.TEESCANNER_CLUB || '리버�
   if (fixed > 0) return { golfclub_seq: fixed, name: `(고정값 ${fixed})`, at: Date.now() };
   const cached = loadJSON(SEQ_FILE, null);
   if (cached && cached.golfclub_seq) return cached;
-  const j = await call('search/getSearchKeywordGolfClubAutoCompleteList', { keyword });
+  const j = await call('search/getSearchKeywordGolfClubAutoCompleteList', { golfclub_autocomp_keyword: keyword, is_tget: '' });
   const rows = pickRows(j);
   if (!rows.length) throw new TeeShapeError(`티스캐너에서 '${keyword}'를 못 찾았습니다`);
   const hit = rows.find((r) => String(r.golfclub_name || r.name || '').includes(keyword)) || rows[0];
   const seq = Number(hit.golfclub_seq || hit.seq || 0);
   if (!seq) throw new TeeShapeError('검색 결과에 golfclub_seq가 없습니다 — 응답 형식이 바뀌었을 수 있습니다');
-  const rec = { golfclub_seq: seq, name: String(hit.golfclub_name || hit.name || keyword), at: Date.now() };
+  const rec = { golfclub_seq: seq, name: unent(hit.golfclub_name || hit.name || keyword), at: Date.now() };
   saveJSON(SEQ_FILE, rec);
   console.log(`[티스캐너] 골프장 확정 — ${rec.name} (seq ${seq})`);
   return rec;
+}
+
+// ★코스 이름을 카카오와 같은 말로 맞춘다. 티스캐너는 한글('인'·'아웃'), 카카오는 영문(IN·OUT)이다.
+//  이걸 안 맞추면 두 소스가 똑같은 날에도 '전부 다르다'로 나온다 — 실제로 첫 대조에서 66칸이
+//  전부 어긋나 보였다. 다르다고 우기는 실패는 조용한 실패보다 낫지만, 어쨌든 틀린 답이다.
+function normCourse(v) {
+  const t = String(v || '').replace(/\s+/g, '').toUpperCase();
+  if (!t) return '';
+  if (/^(인|IN)$/.test(t) || t.includes('IN코스')) return 'IN';
+  if (/^(아웃|OUT)$/.test(t) || t.includes('OUT코스')) return 'OUT';
+  if (t.includes('아웃')) return 'OUT';
+  if (t.includes('인')) return 'IN';
+  return t;
+}
+
+// 골프장 이름에 섞여 오는 HTML 문자표기(&#40; 등)를 사람이 읽는 글자로.
+function unent(v) {
+  return String(v || '').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, '&');
 }
 
 // 응답 안에서 '줄 목록'을 찾아낸다. 감싸는 이름은 엔드포인트마다 다르고 바뀌기도 한다.
@@ -156,7 +188,7 @@ function pickRows(j) {
   const d = j && (j.data ?? j.result_data ?? j.list);
   if (Array.isArray(d)) return d;
   if (d && typeof d === 'object') {
-    for (const k of ['list', 'teetime_list', 'teetimeList', 'items', 'rows', 'golfclub_list', 'result']) {
+    for (const k of ['search_golfclub_autocomp_list', 'list', 'teetime_list', 'teetimeList', 'items', 'rows', 'golfclub_list', 'result']) {
       if (Array.isArray(d[k])) return d[k];
     }
     // 이름을 모르면 '배열인 칸' 중 가장 긴 것을 쓴다 — 이름이 바뀌어도 살아남게.
@@ -182,15 +214,24 @@ export async function fetchOpen(dateYYYYMMDD) {
   const out = rows.map((x) => {
     const t = x.teetime_time ?? x.teetime ?? x.tee_time ?? x.time ?? '';
     const mins = toMin(t);
-    const course = String(x.course_name ?? x.teetime_zone ?? x.course ?? x.zone ?? '').toUpperCase().trim();
+    const course = normCourse(x.course_name ?? x.course ?? x.teetime_zone ?? x.zone ?? '');
     return { mins, time: mins == null ? '' : toHM(mins), course, fee: Number(x.green_fee ?? x.greenFee ?? 0) || 0, raw: x };
   }).filter((x) => x.mins != null && x.course);
   if (rows.length && !out.length) {
     health({ streak: (loadJSON(HEALTH_FILE, {})?.streak || 0) + 1, lastErr: '시각·코스 해석 실패' });
     throw new TeeShapeError(`티스캐너 ${rows.length}건을 받았지만 시각·코스를 하나도 못 읽었습니다 — 값 형식이 바뀌었을 수 있습니다`);
   }
-  health({ ok: (loadJSON(HEALTH_FILE, {})?.ok || 0) + 1, streak: 0, lastOk: Date.now(), lastCount: out.length });
-  return out.map(({ raw, ...keep }) => keep);
+  // ★한 칸에 상품이 여러 개면 줄도 여러 개로 온다(같은 06:30 아웃이 두 줄). 칸 단위로 접는다 —
+  //  안 접으면 '판매중 칸 수'가 부풀어 카카오와 못 견준다. 값은 가장 싼 것을 남긴다.
+  const byKey = new Map();
+  for (const x of out) {
+    const k = `${x.time}|${x.course}`;
+    const prev = byKey.get(k);
+    if (!prev || (x.fee && (!prev.fee || x.fee < prev.fee))) byKey.set(k, x);
+  }
+  const slots = [...byKey.values()].sort((a, b) => a.mins - b.mins || a.course.localeCompare(b.course));
+  health({ ok: (loadJSON(HEALTH_FILE, {})?.ok || 0) + 1, streak: 0, lastOk: Date.now(), lastCount: slots.length, rawCount: out.length });
+  return slots.map(({ raw, ...keep }) => keep);
 }
 
 // 진단용 — 응답 원문 그대로. 파서를 고칠 때 '무엇이 왔는지' 보려고 쓴다.
