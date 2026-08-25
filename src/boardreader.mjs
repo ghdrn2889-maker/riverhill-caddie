@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows, readHeadcountBox } from './claudereader.mjs';
+import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows, readHeadcountBox, readHeaderDate } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
@@ -1060,7 +1060,7 @@ export async function incrPlan(img) {
 }
 
 // 이번 판독 결과를 다음 비교의 기준으로 남긴다. ★결함 있는 판독(_fault)은 재사용 금지 — 오독을 대물림한다.
-function incrRemember(img, { bounds, cuts, parts, offList, roleList, dutyList, headcount, clean }) {
+function incrRemember(img, { bounds, cuts, parts, offList, roleList, dutyList, headcount, dateLabel, clean }) {
   if (!incrOn() || !clean || !bounds || !bounds.length) return;
   try {
     fs.mkdirSync(INCR_DIR, { recursive: true });
@@ -1069,7 +1069,7 @@ function incrRemember(img, { bounds, cuts, parts, offList, roleList, dutyList, h
     const prev = incrLoad();   // ★한 번만 읽는다 — 두 번 읽으면 객체가 달라져 '남길 것'까지 지운다
     const list = [{ img: dst, at: Date.now(), bounds, cuts: cuts || {}, parts: parts || {},
       offList: offList || null, roleList: roleList || [], dutyList: dutyList === undefined ? null : dutyList,
-      headcount: headcount || null }, ...prev].slice(0, INCR_KEEP);
+      headcount: headcount || null, dateLabel: dateLabel || '' }, ...prev].slice(0, INCR_KEEP);
     const keepImgs = new Set(list.map((e) => e.img));
     for (const e of prev) if (!keepImgs.has(e.img)) { try { fs.unlinkSync(e.img); } catch { /* noop */ } }
     saveJSON(INCR_FILE, list);
@@ -1222,7 +1222,26 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   }
   const used = startBudget - claudeBudgetLeft();
   // 다음 배치표가 왔을 때 견줄 기준으로 남긴다(결함 있는 판독은 안 남긴다 — 오독 대물림 방지).
-  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, roleList, dutyList, headcount, clean: !lastFault });
+  // ── 머리말 날짜 ── 그림이 스스로 적어둔 근무일. 글 제목보다 이걸 믿는다.
+  //  ★제목은 사람이 손으로 적어 틀린다. 2026-08-25에 실제로 그랬다 — 26일 배치표 제목이 '8월25일'이라
+  //   시스템이 어제 근무일로 알았고, "같은 근무일에 이미 판독본 있음 = 수정본"으로 접혀 1·2부를 통째로 건너뛰었다.
+  //   날짜 하나가 틀리면 그 뒤의 모든 판단이 조용히 어긋난다.
+  let dateLabel = '';
+  if (keep('sum') && plan.entry.dateLabel) {
+    dateLabel = plan.entry.dateLabel;
+    console.log(`[증분] 머리말 그대로 → 날짜 판독 건너뜀(${dateLabel})`);
+  } else if (claudeBudgetLeft() > 0) {
+    try {
+      const dPath = path.join(TMP, `hdr_${Date.now()}.png`);
+      await runPy({ image: img, crop_only: dPath, trim: true, slice: { x0: 0, x1: 1, y0: 0, y1: 0.07 }, scale: 4 }, 30000);
+      const hd = await readHeaderDate(dPath);
+      try { fs.unlinkSync(dPath); } catch { /* noop */ }
+      if (hd) { dateLabel = hd.label; console.log(`[boardreader] 머리말 날짜 판독: ${dateLabel}`); }
+      else console.log('[boardreader] 머리말에서 날짜를 못 읽음 — 글 제목의 날짜를 씁니다');
+    } catch (e) { console.error('[boardreader] 머리말 날짜 판독 실패:', e.message); }
+  }
+
+  incrRemember(img, { bounds: bestBounds, cuts, parts: best, offList: offOk ? offList : null, roleList, dutyList, headcount, dateLabel, clean: !lastFault });
   if (plan) {
     console.log(`[증분] 이번 판독 ${used}콜 — 그대로 쓴 구역: ${[...plan.unchanged].join(',') || '없음'}`);
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [...plan.unchanged],
@@ -1230,7 +1249,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   } else {
     appendJSONL('board-incremental.jsonl', { at: Date.now(), calls: used, unchanged: [], full: true, fault: lastFault || '' });
   }
-  return { boundaries: bestBounds, parts: best, offList, roleList, dutyList, headcount, _claudeCalls: used, _fault: lastFault };
+  return { boundaries: bestBounds, parts: best, offList, roleList, dutyList, headcount, dateLabel, _claudeCalls: used, _fault: lastFault };
 }
 
 // ★즉시 토글(재시작 불필요) — data/use-claude-reader 파일 있으면 배치표 판독을 서버 Claude로. 롤백=rm 파일.
@@ -1264,7 +1283,7 @@ function parseCell(cell) {
 
 // 부별 Claude 판독({roster,tee,cut}) → judge()가 쓰는 verdict 형식. localvlm.readBoardLocalVerdict와 동일 계약 +
 //  괄호 태그에서 crewDuty·guaranteedWork(54/찾근)·crossPartNames를 파생(3부 54·1,3 근무판정 게이트 근거).
-function verdictFromPart(article, member, pd, allParts, offList = [], roleList = []) {
+function verdictFromPart(article, member, pd, allParts, offList = [], roleList = [], boardDate = '') {
   const roster = Array.isArray(pd?.roster) ? pd.roster.slice() : [];
   if (!roster.length) return null;
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
@@ -1315,7 +1334,8 @@ function verdictFromPart(article, member, pd, allParts, offList = [], roleList =
     //  인턴은 judge.mjs의 전용 판독(analyzeInterns)이 따로 채운다. 이 값을 '판독했는데 없더라'로
     //  읽으면 안 된다 — '아직 안 봤다'는 뜻이다.
     internCount: 0, internTees: [],
-    dateLabel: dm ? dm[0].trim() : '',
+    // ★그림 머리말의 날짜가 이긴다. 글 제목은 사람이 적는 것이라 틀린다(2026-08-25 사고).
+    dateLabel: boardDate || (dm ? dm[0].trim() : ''),
     boardTables: (allParts || []).map((p) => ({ part: Number(p), color: '' })),
     crewDuty,
     guaranteedWork: [...new Set(guaranteed)],
@@ -1403,7 +1423,7 @@ export async function readBoardClaudeVerdict(article, member) {
     return null;
   }
   _clearReadFault(img);
-  return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList, board.roleList);
+  return verdictFromPart(article, member, pd, Object.keys(board.parts), board.offList, board.roleList, board.dateLabel || '');
 }
 
 // ★이 배치표에 실제로 실린 부(部) 목록 — 이미 캐시된 whole-board 판독에서 꺼낸다(추가 Claude 호출 0).
@@ -1443,6 +1463,14 @@ export async function claudeHeadcount(article) {
 
 // 모니터(board-parts-store) 채움용 — 이미 캐시된 whole-board 판독에서 지정 부들을 뽑아 setBoardPart payload로.
 //  ★추가 Claude 호출 0(캐시 히트만). 캐시에 없으면 null(판독 안 켜졌거나 아직 안 읽음).
+// 판독된 '그림 머리말의 날짜'. 캐시만 본다(추가 호출 0). 아직 안 읽었거나 못 읽었으면 ''.
+export async function claudeBoardDate(article) {
+  const img = article?.images?.[0] || article?.image || '';
+  if (!img || !_boardCache.has(img)) return '';
+  try { const b = await _boardCache.get(img); return String(b?.dateLabel || ''); }
+  catch { return ''; }
+}
+
 export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
   const img = article?.images?.[0] || article?.image || '';
   if (!img || !_boardCache.has(img)) return null;
@@ -1453,7 +1481,7 @@ export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
   for (const p of wantParts) {
     const pd = board.parts[String(p)];
     if (!pd || !Array.isArray(pd.roster) || !pd.roster.length) continue;
-    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList, board.roleList);
+    const v = verdictFromPart(article, { name: '', part: p }, pd, Object.keys(board.parts), board.offList, board.roleList, board.dateLabel || '');
     out[String(p)] = {
       roster: v.part3Roster.slice(), teeGrid: v.teeGrid, teeTimes: v.teeTimes || [], teamCount: Number(v.teamCount) || 0,
       internTees: v.internTees, internCount: v.internCount,

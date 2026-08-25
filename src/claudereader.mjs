@@ -433,6 +433,40 @@ const HEADCOUNT_PROMPT = (
   + '"breakdown":{"휴가":1,"병가":1,"동반":0,"휴무":16,"당번":1,"배치":1,"접종":0,"프리":0,"벌당":0}}'
 );
 const HC_KEYS = ['휴가', '병가', '동반', '휴무', '당번', '배치', '접종', '프리', '벌당'];
+// 배치표 맨 위 머리말의 날짜 — "2026년 08월 26일 수요일 배치표".
+//  ★글 제목이 아니라 그림에서 읽는다. 제목은 사람이 손으로 적어 틀린다(2026-08-25 실제 사고:
+//   26일 배치표에 제목이 '8월25일'이라, 시스템이 어제 근무일로 알고 1·2부 판독을 통째로 건너뛰었다).
+//   배치표 그림의 날짜는 같은 시스템이 찍어내므로 사람 손이 안 탄다.
+const HEADER_DATE_PROMPT = (
+  'This image is the TOP header strip of a Korean golf caddie assignment board (배치표). '
+  + 'It contains a large title like "2026년 08월 26일 수요일 배치표". '
+  + 'Read ONLY the date printed in that title. Do not infer or guess from anything else. '
+  + 'Return strict JSON: {"found": true, "year": 2026, "month": 8, "day": 26} '
+  + 'If no date is legible in this strip, return {"found": false}. JSON only, no prose.'
+);
+
+export async function readHeaderDate(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null;
+  if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 머리말 날짜 판독 스킵'); return null; }
+  let out;
+  try { out = await runClaude(`${HEADER_DATE_PROMPT}
+Image path: ${imagePath}`, '머리말날짜'); }
+  catch (e) { console.error('[claude] 머리말 날짜 판독 오류:', e.message); return null; }
+  bumpCalls();
+  const m = String(out || '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const j = JSON.parse(m[0]);
+    if (j.found === false) return null;
+    const y = Number(j.year), mo = Number(j.month), d = Number(j.day);
+    // ★말이 되는 값만 받는다. 날짜가 틀리면 그날 배치표가 통째로 엉뚱한 날에 붙는다.
+    if (!Number.isInteger(y) || y < 2020 || y > 2100) return null;
+    if (!Number.isInteger(mo) || mo < 1 || mo > 12) return null;
+    if (!Number.isInteger(d) || d < 1 || d > 31) return null;
+    return { year: y, month: mo, day: d, label: `${y}년 ${String(mo).padStart(2, '0')}월 ${String(d).padStart(2, '0')}일` };
+  } catch { return null; }
+}
+
 export async function readHeadcountBox(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null;
   if (claudeBudgetLeft() <= 0) { console.warn('[claude] 캡 도달 — 인원요약 판독 스킵'); return null; }
