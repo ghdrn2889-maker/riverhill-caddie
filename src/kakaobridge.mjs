@@ -64,6 +64,51 @@ export function kakaoTrustworthy(dateYYYYMMDD) {
 
 // 카카오가 본 그 부의 '찬 칸'을 규칙대로 정렬 — 시각 순, 같은 시각이면 OUT 먼저.
 //  (실증 8/16 본배치표: 1번 16:25 OUT, 2번 16:25 IN, 3번 16:32 OUT …)
+// ── 취소·노쇼 칸 ───────────────────────────────────────────────────────────
+//  ★사장님 기준(2026-08-25): 본배치표가 그날의 정답이다. 본배치표가 올라온 그 순간에
+//   카카오는 '찼다'고 보는데 배치표에는 팀이 없는 칸이 있다면, 그건 예약이 아니라
+//   예약 취소이거나 노쇼다. 골프장은 그걸 알면서 그 칸을 비워 배치표를 만든 것이다.
+//
+//  실제 사례(2026-08-26 배치표): 카카오는 13:07|IN을 찼다고 봤지만 배치표는 비어 있었다.
+//   카카오의 찬 칸 수는 배치표가 올라오기 전부터 56으로 그대로였다 — 새 예약이 아니었다.
+//   그런데 보조가 그 한 칸을 끼워 넣어 2부 커트를 24→25로 올리고, 15번부터 뒤 순번이
+//   전부 한 칸씩 밀렸다. 없는 팀 하나가 그 아래 모두를 어긋나게 한다.
+//
+//  그래서 그 칸들을 그날치로 적어두고, 이후 보조는 그 칸을 절대 더하지 않는다.
+//  ★새로 찬 칸(진짜 당추)은 이 목록에 없으므로 그대로 보강된다 — 막는 건 '이미 유령이던 칸'뿐이다.
+const NOSHOW_FILE = 'board-noshow.json';
+
+function loadNoshowAll() {
+  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, NOSHOW_FILE), 'utf8')) || {}; }
+  catch { return {}; }
+}
+
+export function loadNoshow(dateYYYYMMDD) {
+  const rec = loadNoshowAll()[String(dateYYYYMMDD)];
+  return new Set(Array.isArray(rec?.keys) ? rec.keys : []);
+}
+
+// 본배치표를 읽은 직후 부른다. boardKeys = 그 배치표가 가진 티오프 칸 전부(부 상관없이).
+export function markBoardNoshow(dateYYYYMMDD, boardKeys) {
+  const date = String(dateYYYYMMDD);
+  if (!/^\d{8}$/.test(date)) return null;
+  const snap = loadSnapshot(date);
+  if (!snap || !snap.byPart) return null;                 // 카카오가 아직 안 본 날 — 견줄 게 없다
+  const board = new Set(boardKeys || []);
+  if (!board.size) return null;                           // 배치표 칸을 못 받았다 — 전부 유령이 될 뻔했다
+  const booked = Object.values(snap.byPart).flat().map((x) => K(x.time, x.course));
+  const ghosts = [...new Set(booked.filter((k) => !board.has(k)))].sort();
+  const all = loadNoshowAll();
+  all[date] = { at: Date.now(), keys: ghosts, boardCount: board.size, bookedCount: booked.length };
+  for (const k of Object.keys(all)) if (Date.now() - (all[k]?.at || 0) > 14 * 86400000) delete all[k];
+  try { fs.writeFileSync(path.join(DATA_DIR, NOSHOW_FILE), JSON.stringify(all, null, 2)); }
+  catch (e) { console.error('[취소·노쇼 기록 실패]', e.message); return null; }
+  if (ghosts.length) {
+    console.log(`·  [취소·노쇼] ${date} 카카오는 찼다는데 본배치표엔 없는 칸 ${ghosts.length}개 — 앞으로 이 칸은 안 더합니다: ${ghosts.slice(0, 8).join(' ')}`);
+  }
+  return { date, ghosts };
+}
+
 export function kakaoSlots(snap, part) {
   return (snap?.byPart?.[String(part)] || [])
     .map((x) => ({ time: x.time, course: x.course, m: toMin(x.time) }))
@@ -119,7 +164,7 @@ export function assignPositions(slots, { roster = [], internTees = [] } = {}) {
 //   ② 채울 칸이 있어야 한다(없으면 할 일 없음).
 //   ③ 너무 많이 늘면 거부한다. 격자가 갑자기 배로 늘어나는 건 당추가 아니라 고장이다.
 const MAX_ADD = Number(process.env.KAKAO_ASSIST_MAX_ADD || 8);
-export function augmentGrid({ teeGrid = [], roster = [], cut = 0, internTees = [] }, snap, part) {
+export function augmentGrid({ teeGrid = [], roster = [], cut = 0, internTees = [], noshow = null }, snap, part) {
   const ks = kakaoSlots(snap, part);
   if (!ks.length) return { mode: 'none', why: '카카오가 본 찬 칸 없음' };
   const kset = new Set(ks.map((s) => s.k));
@@ -130,8 +175,13 @@ export function augmentGrid({ teeGrid = [], roster = [], cut = 0, internTees = [
       boardOnly: boardOnly.map((g) => g.k) };
   }
   const bset = new Set(board.map((g) => g.k));
-  const add = ks.filter((s) => !bset.has(s.k));
-  if (!add.length) return { mode: 'agree', why: '격자 완전 일치 — 채울 칸 없음', cut, newCut: board.length };
+  // ★본배치표가 올라온 순간부터 유령이던 칸은 더하지 않는다 — 예약이 아니라 취소·노쇼다.
+  const ghost = noshow instanceof Set ? noshow : new Set();
+  const addAll = ks.filter((s) => !bset.has(s.k));
+  const add = addAll.filter((s) => !ghost.has(s.k));
+  const skipped = addAll.filter((s) => ghost.has(s.k)).map((s) => s.k);
+  if (skipped.length) console.log(`·  [보조 ${part}부] 취소·노쇼 칸 ${skipped.length}개는 더하지 않습니다: ${skipped.join(' ')}`);
+  if (!add.length) return { mode: 'agree', why: skipped.length ? `채울 칸 없음(취소·노쇼 ${skipped.length}개 제외)` : '격자 완전 일치 — 채울 칸 없음', cut, newCut: board.length, skipped };
   if (add.length > MAX_ADD) {
     return { mode: 'refuse', why: `채울 칸이 ${add.length}개(상한 ${MAX_ADD}) — 당추라기엔 너무 많다. 고장을 의심`, add: add.map((s) => s.k) };
   }
@@ -208,7 +258,7 @@ export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid
   const t = kakaoTrustworthy(date);
   if (!t.ok) return { mode: 'none', why: `카카오 신뢰 불가 — ${t.why}` };
   const r = boardOk
-    ? augmentGrid({ teeGrid, roster, cut, internTees }, t.snap, part)
+    ? augmentGrid({ teeGrid, roster, cut, internTees, noshow: loadNoshow(date) }, t.snap, part)
     : substituteTeamCount(t.snap, part);
   // ★인턴 이력 — 지금까지 어디에도 안 남기고 있었다(판독 기록 3,505건에 인턴 항목 0).
   //  그래서 '인턴이 얼마나 자주·몇 명인가'를 아무도 모른다. 이 엔진의 최대 오차원인데 크기를 모른다.

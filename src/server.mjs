@@ -35,7 +35,7 @@ import { pendingFor as noticePendingFor, markSeen as noticeMarkSeen } from './no
 import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
 import { checkPending, keyFromLabel } from './boardpending.mjs';
-import { kakaoAssist, assistOn } from './kakaobridge.mjs';
+import { kakaoAssist, assistOn, markBoardNoshow } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { crossTick as teeCrossTick } from './teescross.mjs';
@@ -2346,6 +2346,22 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   } catch (e) { console.error('[1·2부 감지 오류]', e.message); }
 
   // ★내일 예고 통합 발송 — 본배치표 최초면 판독된 전 회원에게 각자 1건(위에서 개별 알림은 억제됨).
+  // ★본배치표를 다 반영한 뒤, 그 순간의 '유령 칸'을 적어둔다.
+  //  카카오는 찼다는데 본배치표엔 팀이 없는 칸 = 예약이 아니라 취소·노쇼다(사장님 기준 2026-08-25).
+  //  이후 보조는 이 칸들을 절대 더하지 않는다 — 없는 팀 하나가 그 아래 순번을 전부 밀어버린다.
+  if (_mainBoardWins && boardISO) {
+    try {
+      const keys = [];
+      for (const t of out.rawVerdict?.teeGrid || []) if (t?.time) keys.push(`${t.time}|${String(t.course || '').toUpperCase()}`);
+      const st = loadBoardPartsStore();
+      for (const pp of ['1', '2']) {
+        const d = st?.parts?.[pp];
+        if (!d || String(d._targetISO || '') !== boardISO) continue;
+        for (const t of d.teeGrid || []) if (t?.time) keys.push(`${t.time}|${String(t.course || '').toUpperCase()}`);
+      }
+      markBoardNoshow(boardISO.replace(/-/g, ''), keys);
+    } catch (e) { console.error('[취소·노쇼 기록 오류]', e.message); }
+  }
   if (opts.previewMode) { try { await sendDailyPreview(boardISO, full, opts); } catch (e) { console.error('[내일 예고 오류]', e.message); } }
 
   // ★배치표 한 판이 끝나면 업적을 본다 — 어제 마친 근무가 여기서 반영된다.

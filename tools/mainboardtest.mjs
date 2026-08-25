@@ -64,5 +64,26 @@ console.log('\n── 잠금 판정 자체는 그대로다(순수 함수) ──
     '관리자가 일부러 다시 읽히면 지나간다');
 }
 
+console.log('\n── 취소·노쇼 칸은 다시 더하지 않는다 ──');
+{
+  const KB = fs.readFileSync(path.join(ROOT, 'src', 'kakaobridge.mjs'), 'utf8');
+  ok(KB.includes('export function markBoardNoshow(dateYYYYMMDD, boardKeys)'),
+    '본배치표 순간의 유령 칸을 적어두는 문이 있다');
+  ok(KB.includes('if (!board.size) return null;'),
+    '★배치표 칸을 못 받으면 아무것도 안 적는다',
+    '빈 배열을 받으면 카카오가 찼다는 칸 전부가 유령이 되어 그날 보조가 통째로 죽는다');
+  ok(KB.includes('const add = addAll.filter((s) => !ghost.has(s.k));'),
+    '★보조는 유령 칸을 더하지 않는다');
+  ok(KB.includes('취소·노쇼 칸 '), '건너뛴 사실을 로그에 남긴다 — 조용히 빼면 왜 안 늘었는지 못 되짚는다');
+  ok(KB.includes('noshow: loadNoshow(date)'), 'kakaoAssist가 그날 목록을 실어 보낸다');
+  ok(KB.includes('14 * 86400000'), '오래된 날짜 기록은 스스로 지운다');
+  ok(SRV.includes('if (_mainBoardWins && boardISO) {'),
+    '★본배치표를 제대로 읽은 뒤에만 적는다', '판독 실패한 배치표로 유령 목록을 만들면 정반대가 된다');
+  const iMark = SRV.indexOf('markBoardNoshow(boardISO.replace');
+  const iStore = SRV.indexOf('const st = loadBoardPartsStore();', SRV.indexOf('if (_mainBoardWins && boardISO)'));
+  ok(iStore > 0 && iMark > iStore, '★1·2부 저장이 끝난 뒤 그 칸까지 모아서 적는다',
+    '3부 칸만 모으면 1·2부 칸이 전부 유령으로 등록된다');
+}
+
 console.log(`\n${fail ? 'X' : 'ok'}  ${pass}건 통과${fail ? ` · ${fail}건 실패` : ''}`);
 process.exit(fail ? 1 : 0);
