@@ -4693,7 +4693,10 @@ function initAccount() {
   $('ovEnableBtn').onclick = enableNotifications;
   initMenu();
   initGrowth();
-  { const t = $('hwTrophy'); if (t) t.onclick = () => gwOpen(); }
+  { const t = $('hwTrophy'); if (t) {
+      if (trophyLocked()) { t.hidden = true; const tl = $('homeTiles'); if (tl) tl.classList.add('tl2'); }
+      else t.onclick = () => gwOpen();
+    } }
   $('obClose').onclick = () => closeOv();
   // 카드 바깥(어두운 배경) 클릭 시 닫기 — 계정 화면에서만(가입 화면은 무시).
   $('ov').addEventListener('click', (e) => { if (e.target === $('ov') && ovDismissable) closeOv(); });
@@ -4717,7 +4720,7 @@ async function main() {
   loadMe();
   loadToday(); loadWatchHealth(); loadHomeWidgets();
   setTimeout(hideSplash, 2000);   // 안전장치: 어떤 이유로든 2초 뒤엔 대기화면 해제(무한 대기 방지)
-  setTimeout(() => { gwBootCheck(); }, 2600);   // 업적 축하 — 첫 화면이 뜬 뒤에(부팅을 막지 않는다)
+  if (!trophyLocked()) setTimeout(() => { gwBootCheck(); }, 2600);   // 업적 축하 — 첫 화면이 뜬 뒤에(부팅을 막지 않는다)
   // 서비스워커 등록·푸시 상태는 렌더를 막지 않게 백그라운드로.
   registerSW().then(() => refreshPushHealth()).catch(() => { /* 무해 */ });
   setInterval(() => { loadToday(); loadWatchHealth(); refreshPushHealth(); }, 30000);
@@ -4817,6 +4820,10 @@ const scrollToCard = (id, gap = 10) => {
   setTimeout(() => sc.addEventListener('scroll', off, { passive: true }), 520);
 };
 
+// ★업적(성장 공간) 잠금 — 서버가 /api/me로 내려주는 값 하나만 본다. 화면이 스스로 정하지 않는다.
+//  판정이 아직 여러 군데서 틀려서 잠갔다. 잠긴 동안엔 홈 타일·바로가기·축하 팝업이 전부 나오지 않는다.
+function trophyLocked() { return !(meState && meState.trophyOn); }
+
 // ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
 //  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리).
 //  ★목표·정산서·지출은 이 목록의 원래 취지 그대로다 — 셋 다 정산 탭에 들어가 스크롤해야 나온다.
@@ -4858,7 +4865,7 @@ function renderMenu() {
   const p = (meState && meState.profile) || {};
   $('mnuName').textContent = p.boardName || '회원';
   $('mnuTag').textContent = (caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디') + ' · 리버힐';
-  $('mnuGrid').innerHTML = MENU_ITEMS.map((x, i) =>
+  $('mnuGrid').innerHTML = MENU_ITEMS.map((x, i) => (x.k === 'trophy' && trophyLocked()) ? '' :
     `<button class="mnu-q${x.off ? ' off' : ''}" type="button" data-i="${i}"`
     + `${x.off ? ` aria-disabled="true" aria-label="${esc(x.t)} — ${esc(x.off)} 중"` : ''}>`
     + `<span class="g"><svg viewBox="0 0 24 24" aria-hidden="true">${MENU_ICONS[x.k]}</svg>`
@@ -5335,6 +5342,7 @@ function startHeartbeat() {
 
   // ── 열고 닫기 ──
   async function gwOpen() {
+    if (trophyLocked()) return;          // ★잠김 — 어느 경로로 불려도 열리지 않는다
     const ov = $('growOv'); if (!ov) return;
     ov.hidden = false;
     void ov.offsetWidth;

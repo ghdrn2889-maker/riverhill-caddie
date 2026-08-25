@@ -89,6 +89,8 @@
 
     /* 작은 타일 — 숫자가 없고 갈 곳만 있는 것들 */
     .tl { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px; }
+    /* 업적이 잠기면 타일은 둘뿐 — 3칸 격자에 두 개만 두면 오른쪽이 빈 채로 남는다. */
+    .tl.tl2 { grid-template-columns:repeat(2,1fr); }
     .tl-b { position:relative; border:1px solid #e2e8e3; border-radius:16px; padding:13px 11px; min-height:86px;
             display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
             text-align:left; font-family:inherit; color:inherit; background:#fff; cursor:pointer;

@@ -126,6 +126,8 @@ app.post('/api/first-view', (req, res) => {
 //  ★처음 조회하는 회원은 지금까지 딴 걸 전부 '본 것'으로 덮는다(소급분으로 축하가 열 몇 개씩 터지지 않게).
 app.get('/api/trophies', (req, res) => {
   if (!req.user) return res.status(401).json({ ok: false });
+  // ★잠김 — 판정 자체를 돌리지 않는다. 빈 결과를 그리는 게 아니라 화면이 아예 안 열린다.
+  if (!trophy.trophyOn()) return res.json({ ok: true, locked: true, new: [] });
   try {
     const prof = getProfile(req.user.id) || {};
     const r = trophy.sweep(req.user.id);
@@ -141,6 +143,7 @@ app.get('/api/trophies', (req, res) => {
 // 축하 화면을 다 보여줬다 — 그 트로피들을 대기에서 지운다.
 app.post('/api/trophies/ack', (req, res) => {
   if (!req.user) return res.status(401).json({ ok: false });
+  if (!trophy.trophyOn()) return res.json({ ok: true, cleared: 0, locked: true });
   const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
   let n = 0;
   try { n = trophy.ackCelebrated(req.user.id, ids); } catch { /* noop */ }
@@ -180,6 +183,7 @@ async function runRollCall(article = null) {
 
 let _trophyBusy = false;
 async function sweepTrophies({ notify = true } = {}) {
+  if (!trophy.trophyOn()) return { checked: 0, notified: 0, locked: true };   // ★잠김: 판정도 알림도 없다
   if (_trophyBusy) return { checked: 0, notified: 0 };
   _trophyBusy = true;
   let checked = 0, notified = 0;
@@ -203,7 +207,8 @@ async function sweepTrophies({ notify = true } = {}) {
 
 // 현재 로그인한 회원 + 프로필 (앱 부팅 시 조회).
 app.get('/api/me', (req, res) => {
-  const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured() };
+  const base = { ok: true, solo: soloMode(), naverEnabled: naverConfigured(), googleEnabled: googleConfigured(),
+    trophyOn: trophy.trophyOn() };
   if (!req.user) return res.json({ ...base, authed: false });
   recordVisit(req.user.id, { role: req.user.role, status: req.user.status }); // 방문(앱 오픈) 기록 — 10분 스로틀
   //  ★'처음 온 날'만 남긴다 — 몇 번 왔는지는 세지 않는다(업적은 자부심의 공간이지 감시 장부가 아니다).

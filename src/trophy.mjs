@@ -423,6 +423,13 @@ function lk(t, id, label) {
 //  ★앱 안에서만 알 수 있는 것들(첫 방문·탭 첫 열기·정산서 발급)은 기록이 없으면 판정도 못 한다.
 //   그래서 '처음 그 일이 일어난 날'만 남긴다 — 몇 번 봤는지는 세지 않는다(감시 도구로 쓰지 않는다).
 const FIRSTS_FILE = 'firsts.json';
+// ── 잠금 ── 판정이 아직 여러 군데서 틀린다(사장님 지적). 열려 있으면 틀린 축하가 회원 폰까지 간다.
+//  ★기본값은 '잠김'이다 — 켜는 쪽이 명시적이어야 한다. 새 서버·새 배포가 조용히 열리면 안 된다.
+//  ★잠겨도 markFirst('처음 열어본 날')는 계속 적는다. 그건 판정이 아니라 사실이고, 지금 안 적으면 영영 잃는다.
+export function trophyOn() {
+  return ['1', 'true', 'yes'].includes(String(process.env.TROPHY_ON || '').toLowerCase());
+}
+
 export function markFirst(userId, what, dateISO = todayISO(), meta = {}) {
   if (!userId || !what) return false;
   const f = loadUserJSON(userId, FIRSTS_FILE, {}) || {};
