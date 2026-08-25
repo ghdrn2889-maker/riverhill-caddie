@@ -63,7 +63,7 @@ export async function crossTick({ days = 2 } = {}) {
     if (!snap || !Array.isArray(snap.openKeys)) continue;   // 카카오가 아직 안 본 날은 견줄 게 없다
     // ★그 스냅샷을 티스캐너가 채웠으면 견줄 게 없다 — 자기 자신과 비교해 '일치'로 읽으면
     //  카카오가 멈춘 걸 '두 판매처가 잘 맞는다'로 덮어버린다. 감시기가 사고를 가리는 모양이 된다.
-    if (snap.source && snap.source !== 'kakao') {
+    if (snap.source && snap.source !== '카카오골프') {
       console.log(`[티스캐너] ${date} 대조 건너뜀 — 이 스냅샷은 티스캐너가 채운 것입니다(카카오가 멈춘 날)`);
       continue;
     }

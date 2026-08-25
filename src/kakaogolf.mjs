@@ -228,7 +228,7 @@ export function blindSlots(sell, fixed, mature = SELL_MATURE) {
 //  ★openFrom을 갈아끼우면 다른 판매처의 '판매중 목록'으로 같은 계산을 할 수 있다(티스캐너 대타).
 //   여집합·마감선·비움칸 판정은 소스와 무관하다 — 바뀌는 건 '무엇이 판매중인가' 하나뿐이다.
 //   0칸 고장 검사도 그대로 걸린다: 대타가 0칸을 주면 그것도 똑같이 의심한다.
-export async function bookedFor(dateYYYYMMDD, prevSnap = null, { openFrom = fetchOpen, sourceName = 'kakao' } = {}) {
+export async function bookedFor(dateYYYYMMDD, prevSnap = null, { openFrom = fetchOpen, sourceName = '카카오골프' } = {}) {
   // 이전 스냅샷의 '열린 적 있음' 기록을 이어받는다 — 완판과 미운영을 가르는 유일한 근거다.
   if (!prevSnap) prevSnap = loadSnapshot(String(dateYYYYMMDD));
   const base = fixedSlots();
@@ -288,7 +288,7 @@ export async function bookedFor(dateYYYYMMDD, prevSnap = null, { openFrom = fetc
   //  ★검사는 다른 계산보다 먼저 한다 — 고장난 응답으로 마감선을 배우거나 로그를 더럽히면 안 된다.
   const dayOver = isPast || (isToday && nowMin + Math.max(Number(prevSnap?.closeLead || 0), MIN_LEAD, SALE_CLOSE_LEAD) >= lastFixed);
   if (!open.length && !dayOver && dayGap >= 0 && dayGap <= 3 && Number(prevSnap?.everOpenCount || 0) > 0) {
-    throw new KakaoShapeError(`카카오골프 ${dateYYYYMMDD} 판매중 0칸 — 직전엔 ${prevSnap.everOpenCount}칸 있었다. 만석보다 고장을 의심(전 칸 만석 처리 금지)`);
+    throw new KakaoShapeError(`${sourceName} ${dateYYYYMMDD} 판매중 0칸 — 직전엔 ${prevSnap.everOpenCount}칸 있었다. 만석보다 고장을 의심(전 칸 만석 처리 금지)`);
   }
 
   // ── 이번 틱에 판매중에서 사라진 칸 ──────────────────────────────────────
@@ -616,7 +616,14 @@ export async function tick({ days = 3, from = 0, fallback = null, fallbackName =
         //  (실측: 두 판매처가 8일 493칸 한 칸도 안 어긋났다 — 그래서 대신 채워도 같은 답이다.)
         if (!fallback) throw e;
         console.error(`[카카오골프] ${date} 조회 실패:`, e.message);
-        snap = await bookedFor(date, prev, { openFrom: fallback, sourceName: fallbackName });
+        try {
+          snap = await bookedFor(date, prev, { openFrom: fallback, sourceName: fallbackName });
+        } catch (e2) {
+          // ★대타도 같은 답을 내놓으면 그건 고장이 아니라 사실이다(둘 다 0칸 = 정말 팔 게 없다).
+          //  그 경우 억지로 채우지 않는다 — 없는 팀을 만들어내는 것보다 비어 있는 게 낫다.
+          console.error(`[${fallbackName}] ${date} 대타도 같은 판정 — 채우지 않습니다: ${e2.message}`);
+          throw e;
+        }
         console.log(`·  [${fallbackName}] ${date} 카카오가 멈춰 대신 채웠습니다 — 찬 티오프 ${snap.bookedCount}/${snap.fixedCount}칸`);
       }
       const dif = diffSnapshots(prev, snap);
