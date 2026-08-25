@@ -15,6 +15,11 @@ import { fetchOpen, teescannerOn, teeHealth, TeeAuthError } from './teescanner.m
 import { raiseBoardIssue } from './boardalert.mjs';
 
 const STATE_FILE = 'teescanner-cross.json';
+// ★같은 순간을 견뎌야 한다. 카카오 스냅샷이 낡았으면 어긋나는 게 당연하고, 그건 고장이 아니다.
+//  실제로 첫 틱에서 이걸로 헛경보가 났다: 오늘 카카오가 '판매중 0칸'을 받고 고장을 의심해
+//  저장을 거부하는 바람에 파일엔 몇 시간 전 값이 남아 있었고, 방금 받은 티스캐너와 견주니 14칸이 어긋났다.
+//  낡은 스냅샷은 '두 판매처가 다르다'가 아니라 '카카오가 멈췄다'는 뜻이다 — 그건 kakao_down이 알린다.
+const FRESH_MS = Number(process.env.TEESCANNER_FRESH_MS || 15 * 60 * 1000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 
@@ -45,6 +50,11 @@ export async function crossTick({ days = 2 } = {}) {
     const date = ymd(d);
     const snap = loadSnapshot(date);
     if (!snap || !Array.isArray(snap.openKeys)) continue;   // 카카오가 아직 안 본 날은 견줄 게 없다
+    const age = Date.now() - Number(snap.at || 0);
+    if (age > FRESH_MS) {
+      console.log(`[티스캐너] ${date} 대조 건너뜀 — 카카오 스냅샷이 ${Math.round(age / 60000)}분 전 것입니다(같은 순간이 아님)`);
+      continue;
+    }
     let tee;
     try {
       tee = await fetchOpen(date);
