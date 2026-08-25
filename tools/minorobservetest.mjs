@@ -43,8 +43,10 @@ console.log('\n[★베이스는 사진이 만든다]');
 
 console.log('\n[멈춰둔 1·2부 수정 판독을 카카오가 대신하는가]');
 {
-  const i = srv.indexOf('if (minorReadFrozen(p, worklog.labelToISO(');   // 1·2부 판독 경로의 그 자리
-  const seg = srv.slice(i, i + 500);
+  // ★앵커가 사라지면 slice(-1)이 엉뚱한 데를 보고 조용히 실패한다 — 못 찾은 걸 먼저 말하게 한다.
+  const i = srv.indexOf('const _wouldFreeze = minorReadFrozen(p,');   // 1·2부 판독 경로의 그 자리
+  ok(i > 0, '잠금 판정 자리를 찾았다(코드가 옮겨지면 여기부터 알려준다)');
+  const seg = i > 0 ? srv.slice(i, i + 900) : '';
   ok(/frozenLog\(p, full\.subject\);/.test(seg), '잠금은 그대로 — 사진 재판독은 여전히 안 한다');
   ok(/await kakaoUpdatePart\(p,/.test(seg),
     '★멈춘 자리에서 카카오가 갱신한다', '이게 대신한다는 말의 실제 내용이다');
