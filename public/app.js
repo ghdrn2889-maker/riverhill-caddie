@@ -1515,7 +1515,9 @@ function boardStateHero(badge, line, kind) {
 function boardHeroCore(r) {
   // ★옆 부 — '내 티오프'가 없으니 그 부의 규모(팀 수)를 주인공으로. 내 상태인 척하지 않는다.
   if (r.viewOnly) {
-    const teams = r.teamCount || 0;
+    // ★인턴도 티오프를 받아 나가는 한 팀이다 — 순번을 안 쓴다고 팀 수에서 빼면 실제와 어긋난다.
+    //  집계 전(teamCount 0)에는 더하지 않는다. 인턴 수만으로 '2팀 편성'이라고 말하면 거짓이 된다.
+    const teams = r.teamCount ? r.teamCount + (r.interns || []).length : 0;
     const head = teams
       ? `<div class="fb-bigtee"><span class="fb-teenum">${teams}</span><span class="fb-teeunit">팀<br>편성</span></div>`
       : `<div class="fb-bigtee"><span class="fb-teenum">${r.roster.length}</span><span class="fb-teeunit">명<br>명단</span></div>`;
@@ -1684,7 +1686,13 @@ function boardListHTML(r) {
     const big = e.tee ? `<span class="fb-big">${esc(e.tee)}</span>` : '<span class="fb-big dim">—</span>';
     return `<div class="fb-row ${cls}"><span class="fb-nb">${e.p}</span><span class="fb-nm">${esc(e.nm || '—')}</span>${crs}${big}</div>`;
   };
-  return entries.map((e) => rowHTML(e) + (cut && e.p === cut ? '<div class="fb-cut"><span>확정선 · 여기까지 근무</span></div>' : '')).join('');
+  // ★확정선은 '순번 몇 번'이 아니라 '어디까지 근무하는가'의 선이다. 인턴도 티오프를 받아
+  //  그날 실제로 나가는 한 팀이므로, 마지막 근무 줄이 인턴이면 선은 그 아래에 그어져야 한다.
+  //  (2026-08-26: 인턴 18:38 OUT이 그날 마지막 칸이었는데 선을 순번으로만(e.p === cut) 그어
+  //   인턴이 선 아래 대기 구역에 놓였다 — 근무하는 캐디를 안 하는 사람처럼 보이게 했다.)
+  let lastWork = -1;
+  entries.forEach((e, i) => { if (e.intern || (cut && e.p > 0 && e.p <= cut)) lastWork = i; });
+  return entries.map((e, i) => rowHTML(e) + (cut && i === lastWork ? '<div class="fb-cut"><span>확정선 · 여기까지 근무</span></div>' : '')).join('');
 }
 function boardTilesHTML(r) {
   const h = boardHeroFor(r);

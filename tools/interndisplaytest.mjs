@@ -88,5 +88,32 @@ console.log('\n── 스타일: 다른 줄과 같은 동그라미, 색만 노�
     '줄 전체를 칠하지 않는다', '배경·테두리·레일까지 노랗게 하면 촌스럽다(사용자 판단)');
 }
 
+console.log('\n── 확정선: 순번이 아니라 마지막 근무 줄에 긋는다 ──');
+//  2026-08-26 두 번째 사고: 인턴이 두 칸(17:35 OUT·18:38 OUT)이 됐는데 18:38이 그날 마지막
+//   칸이었다. 선을 순번으로만(e.p === cut) 그으니 선이 순번 11 뒤에 그어져 인턴이 선 아래
+//   '대기' 구역에 놓였다. 근무하는 캐디를 안 하는 사람처럼 보이게 한 것이다.
+//  ★확정선은 '순번 몇 번'이 아니라 '어디까지 근무하는가'의 선이다.
+{
+  const i = JS.indexOf('let lastWork = -1;');
+  ok(i > 0, '★마지막 근무 줄을 따로 찾는다');
+  const blk = i > 0 ? JS.slice(i, i + 500) : '';
+  ok(/entries\.forEach\(\(e, i\) => \{ if \(e\.intern \|\| \(cut && e\.p > 0 && e\.p <= cut\)\) lastWork = i; \}\);/.test(blk),
+    '인턴도 근무 줄로 센다', '인턴은 순번이 없다 — 순번만 세면 선 계산에서 통째로 빠진다');
+  ok(/cut && i === lastWork \?/.test(blk), '선은 그 줄 뒤에 긋는다');
+  ok(!/cut && e\.p === cut \?/.test(JS), '옛 규칙(순번으로만 긋기)이 남아 있지 않다',
+    '두 규칙이 같이 있으면 선이 두 번 그어진다');
+  ok(/if \(cut && i === lastWork/.test(blk) || /\(cut && i === lastWork/.test(blk),
+    '확정선이 없는 날(cut 0)에는 안 긋는다', '집계 중에 선을 그으면 없는 경계를 지어낸다');
+}
+
+console.log('\n── 팀 수: 인턴도 나가는 한 팀이다 ──');
+{
+  ok(/const teams = r\.teamCount \? r\.teamCount \+ \(r\.interns \|\| \[\]\)\.length : 0;/.test(JS),
+    '★옆 부 팀 수에 인턴 칸을 더한다',
+    '인턴은 순번을 안 쓸 뿐 티오프를 받아 나간다 — 빼고 세면 실제 팀 수와 어긋난다');
+  ok(/r\.teamCount \? /.test(JS), '집계 전(teamCount 0)에는 더하지 않는다',
+    "인턴 수만으로 '2팀 편성'이라고 말하면 거짓이 된다");
+}
+
 console.log(`\n${fail ? 'X' : 'ok'}  ${pass}개 통과${fail ? ` · ${fail}개 실패` : ''}\n`);
 process.exit(fail ? 1 : 0);

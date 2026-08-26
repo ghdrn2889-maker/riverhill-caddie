@@ -1,6 +1,6 @@
 // 서비스워커: (1)백그라운드 푸시 알림 (2)network-first로 항상 최신 앱 서빙 + 자동 갱신.
 //  ★버전 문자열을 바꾸면 브라우저가 이 파일의 변경을 감지해 새 SW를 설치→활성화한다.
-const SW_VERSION = 'v11-nonav-2026-08-26';
+const SW_VERSION = 'v12-cutline-intern-2026-08-26';
 const SHELL_CACHE = 'rh-shell-v5';
 
 self.addEventListener('install', () => self.skipWaiting());
