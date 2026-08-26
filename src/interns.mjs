@@ -62,7 +62,9 @@ export function internTeesFor(date, autoTees = [], part = '3') {
 }
 
 // 관리자 저장 — 그 날짜의 인턴 칸을 통째로 교체한다(빈 배열 = '인턴 없음'을 명시).
-export function setManual(date, tees, { by = '', note = '', part = '3' } = {}) {
+//  ★boardId — 이 지정을 '어느 배치표를 보고' 했는지. 지정은 그 배치표의 그 칸이지 그 날짜의 무언가가 아니다.
+//   이걸 안 남기면 새 본배치표가 올라와도 지정이 그대로 남아 새 판독을 이긴다(2026-08-26 사고).
+export function setManual(date, tees, { by = '', note = '', part = '3', boardId = '' } = {}) {
   const k = partKey(date, part);
   if (!k) throw new Error('날짜가 필요합니다(YYYYMMDD)');
   const clean = [];
@@ -78,7 +80,8 @@ export function setManual(date, tees, { by = '', note = '', part = '3' } = {}) {
   clean.sort((a, b) => toMin(a.time) - toMin(b.time) || (a.course === 'OUT' ? -1 : 1));
   const all = load();
   const prev = all[k];
-  all[k] = { date: dateKey(date), part: String(part || '3'), tees: clean, at: Date.now(), by: String(by || '').slice(0, 40), note: String(note || '').slice(0, 120) };
+  all[k] = { date: dateKey(date), part: String(part || '3'), tees: clean, at: Date.now(), by: String(by || '').slice(0, 40), note: String(note || '').slice(0, 120),
+    boardId: String(boardId || prev?.boardId || '') };
   saveJSON(FILE, all);
   const before = (prev?.tees || []).map(teeKey).join(' ') || '(없음)';
   console.log(`[인턴] ${dateKey(date)} ${part}부 수동 지정 ${clean.length}칸: ${clean.map(teeKey).join(' ') || '(없음)'} (이전 ${before})`);
@@ -97,6 +100,41 @@ export function clearManual(date, by = '', part = '3') {
   console.log(`[인턴] ${dateKey(date)} ${part}부 수동 지정 해제 — 자동 판독을 따릅니다(이전 ${(prev.tees || []).length}칸)`);
   appendJSONL('intern-tees.jsonl', { at: Date.now(), date: dateKey(date), part: String(part || '3'), kind: 'clear', prev: (prev.tees || []).map(teeKey), by });
   return true;
+}
+
+// ★새 본배치표가 올라오면 지정을 버린다 — 지정은 '그 배치표의 그 칸'이지 '그 날짜'가 아니다.
+//
+//  2026-08-26에 있었던 일: 대조판에서 인턴을 지정한 뒤 본배치표가 새로 올라와도 지정이 그대로
+//   남아 새 판독을 계속 이겼다. 지우는 코드가 아예 없었다 — clearManual은 import만 되고
+//   호출되는 곳이 테스트뿐이었다. "수동이 자동을 이긴다"는 규칙은 *같은 배치표를 다시 읽을 때*
+//   자동의 오검출을 관리자가 뺄 수 있게 만든 것인데, 티오프 사다리가 통째로 바뀌는 새 배치표에도
+//   같은 규칙이 걸렸다. [[correction-carryforward-shrink]]와 같은 병 — 낡은 출처가 신선한 출처를
+//   조용히 이긴다.
+//
+//  반환: null(할 일 없음) | {stamped}(옛 기록에 글번호를 처음 새김) | {cleared}(버림)
+//  ★글번호를 모르는 옛 기록은 지우지 않고 지금 배치표의 번호를 새긴다. 어느 배치표를 보고 한
+//   지정인지 모르는 채로 버리면, 사람이 방금 한 일을 지울 수 있다. 다음 배치표부터 규칙이 걸린다.
+export function clearIfBoardChanged(date, part = '3', boardId = '') {
+  const id = String(boardId || '');
+  const k = partKey(date, part);
+  if (!k || !id) return null;
+  const all = load();
+  const man = all[k];
+  if (!man) return null;
+  if (!man.boardId) {
+    all[k] = { ...man, boardId: id };
+    saveJSON(FILE, all);
+    console.log(`[인턴] ${dateKey(date)} ${part}부 수동 지정에 배치표 글번호 #${id}를 새김 — 다음 본배치표부터 초기화 대상`);
+    return { stamped: id, tees: man.tees || [] };
+  }
+  if (String(man.boardId) === id) return null;         // 같은 배치표 재판독 — 지정은 그대로가 맞다
+  delete all[k];
+  saveJSON(FILE, all);
+  const was = (man.tees || []).map(teeKey).join(' ') || '(없음)';
+  console.log(`[인턴] ${dateKey(date)} ${part}부 수동 지정 초기화 — 새 본배치표 #${id}(이전 #${man.boardId}). 버린 칸: ${was}`);
+  appendJSONL('intern-tees.jsonl', { at: Date.now(), date: dateKey(date), part: String(part || '3'), kind: 'clear-newboard',
+    prev: (man.tees || []).map(teeKey), fromBoard: String(man.boardId), toBoard: id, by: '새 본배치표' });
+  return { cleared: (man.tees || []).slice(), fromBoard: String(man.boardId), toBoard: id };
 }
 
 // 칸 하나 켜고 끄기 — 화면에서 칸을 눌러 바꾸는 경로. 현재 상태(자동 포함)에서 시작한다.

@@ -101,5 +101,67 @@ console.log('\n[카카오가 그 부의 인턴만 보는가]');
   ok(/internTees: internTeesFor\(dbISO, _v\.internTees \|\| \[\], '3'\)/.test(srv), '3부 경로는 3부를 명시한다');
 }
 
+console.log('\n[★새 본배치표가 오면 수동 지정을 버리는가]');
+//  2026-08-26: 대조판에서 인턴을 지정한 뒤 본배치표가 새로 올라와도 지정이 그대로 남아 새 판독을
+//   계속 이겼다. 지우는 코드가 아예 없었다 — clearManual은 import만 되고 호출은 테스트뿐이었다.
+//  ★지정은 '그 배치표의 그 칸'이지 '그 날짜'가 아니다. 같은 병: [[correction-carryforward-shrink]].
+{
+  const D = '20990103';
+  ok(typeof I.clearIfBoardChanged === 'function', '★버리는 함수가 있다');
+
+  I.setManual(D, [{ time: '17:35', course: 'OUT' }], { by: 'test', part: '3', boardId: '111' });
+  ok((I.manualFor(D, '3') || {}).boardId === '111', '지정이 어느 배치표를 보고 한 것인지 남는다',
+    '이걸 안 남기면 새 배치표인지 재판독인지 구분할 방법이 없다');
+
+  ok(I.clearIfBoardChanged(D, '3', '111') === null && K(I.internTeesFor(D, [], '3')) === '17:35O',
+    '★같은 배치표 재판독이면 그대로 둔다',
+    "그게 '수동이 자동을 이긴다'가 원래 지키려던 경우다 — 자동의 오검출을 관리자가 뺀 상태");
+
+  const r = I.clearIfBoardChanged(D, '3', '222');
+  ok(!!(r && r.cleared && r.cleared.length === 1), '★새 배치표면 버린다');
+  ok(r && r.fromBoard === '111' && r.toBoard === '222', '어느 배치표에서 어느 배치표로인지 말한다',
+    '조용히 지우면 사람이 손으로 넣은 것이 말없이 사라진다');
+  ok(K(I.internTeesFor(D, [{ time: '18:00', course: 'IN' }], '3')) === '18:00I',
+    '버린 뒤에는 새 배치표의 자동 판독을 따른다');
+
+  // 글번호를 모르는 옛 기록 — 지우지 않고 새긴다.
+  I.setManual(D, [{ time: '17:35', course: 'OUT' }], { by: 'test', part: '3' });
+  ok(!(I.manualFor(D, '3') || {}).boardId, '글번호 없이도 저장은 된다(옛 기록)');
+  const s = I.clearIfBoardChanged(D, '3', '333');
+  ok(!!(s && s.stamped === '333') && K(I.internTeesFor(D, [], '3')) === '17:35O',
+    '★글번호를 모르는 옛 기록은 버리지 않고 새긴다',
+    '어느 배치표를 보고 한 지정인지 모르는 채로 버리면 사람이 방금 한 일을 지울 수 있다');
+  ok(!!(I.clearIfBoardChanged(D, '3', '444') || {}).cleared, '새긴 다음 배치표부터는 규칙이 걸린다');
+
+  ok(I.clearIfBoardChanged(D, '3', '555') === null, '지정이 없으면 할 일이 없다');
+  ok(I.clearIfBoardChanged(D, '3', '') === null, '글번호가 없으면 아무것도 안 한다',
+    '모르면 안 지운다 — 이 저장소의 일관된 규칙이다');
+  I.clearManual(D, 'test', '3');
+}
+
+console.log('\n[★배치표 채택 자리에 실제로 걸려 있는가]');
+{
+  ok(/clearIfBoardChanged as clearInternsOnNewBoard/.test(srv), '서버가 그 함수를 들여온다');
+  const i = srv.indexOf('async function rememberBoard');
+  ok(i > 0, '배치표를 정본으로 삼는 자리를 찾았다');
+  const fn = srv.slice(i, i + 7000);
+  ok(/if \(prev && String\(prev\.id\) !== String\(full\.id\)\) \{/.test(fn),
+    '★글번호가 바뀌었을 때만 부른다', '같은 글 재판독까지 버리면 교정이 매번 날아간다');
+  ok(/clearInternsOnNewBoard\(keyFromLabel\(v\.dateLabel \|\| ''\) \|\| '', '3', String\(full\.id\)\)/.test(fn),
+    '그 배치표의 근무일·부·글번호로 부른다');
+  const call = fn.indexOf('clearInternsOnNewBoard');
+  // ★앞쪽 '약한 변동' 분기에도 saveJSON('lastboard.json', prev)가 있다(그 길은 return으로 끝난다).
+  //  비교할 상대는 이 배치표를 정본으로 삼는 마지막 저장이다.
+  const save = fn.lastIndexOf("saveJSON('lastboard.json'");
+  ok(call > 0 && save > 0 && call < save,
+    "★lastboard를 저장하기 '전에' 지운다",
+    '순서가 곧 규칙이다 — 나중에 지우면 이번 회원 처리·검수가 옛 인턴으로 계산된다');
+  ok(/kind: 'intern_reset'/.test(fn), '버렸다는 사실을 관리자에게 알린다');
+  ok(/case 'intern_reset':/.test(read('src/boardalert.mjs')), '그 알림에 제 문구가 있다',
+    "문구가 없으면 default로 빠져 '판독 이상'이라고만 뜬다");
+  ok(/boardId: String\(lb\.id \|\| ''\)/.test(read('src/boardcorrect.mjs')),
+    '★검수·대조 반영이 글번호를 같이 남긴다', '안 남기면 다음 배치표에서 버릴지 말지 알 수 없다');
+}
+
 console.log(`\n${fail ? 'X' : 'OK'}  통과 ${pass} · 실패 ${fail}\n`);
 process.exit(fail ? 1 : 0);

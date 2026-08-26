@@ -104,7 +104,8 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
   if (ikey && manTees) {
     const before = sig(internTeesFor(ikey, Array.isArray(v.internTees) ? v.internTees : [], '3'));
     if (before !== sig(manTees)) {
-      try { setManual(ikey, manTees, { by, part: '3', note: '배치표 교정' }); }
+      // ★어느 배치표를 보고 한 지정인지 같이 남긴다 — 새 본배치표가 오면 이걸로 버릴지 정한다.
+      try { setManual(ikey, manTees, { by, part: '3', note: '배치표 교정', boardId: String(lb.id || '') }); }
       catch (e) { console.error('인턴 수동 지정 저장 실패:', e.message); }
     }
   }

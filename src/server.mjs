@@ -36,7 +36,7 @@ import { raiseBoardIssue } from './boardalert.mjs';
 import { noteFromText as noteProvisional, boardIsProvisional } from './provisional.mjs';
 import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { kakaoAssist, assistOn, markBoardNoshow } from './kakaobridge.mjs';
-import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor } from './interns.mjs';
+import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor, clearIfBoardChanged as clearInternsOnNewBoard } from './interns.mjs';
 import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
 import { crossTick as teeCrossTick } from './teescross.mjs';
 import { fetchOpen as teeFetchOpen, teescannerOn } from './teescanner.mjs';
@@ -1558,6 +1558,19 @@ async function rememberBoard(full, out) {
       v._adminCorrected = pv._adminCorrected;
       console.log(`·  lastboard 재판독(#${full.id}) — 관리자 교정 이름·표식 보존`);
     }
+  }
+  // ★새 본배치표면 인턴 수동지정을 버린다 — 지정은 '그 배치표의 그 칸'이지 '그 날짜'가 아니다.
+  //  같은 글 재판독(#같음)이면 그대로 둔다. 그게 "수동이 자동을 이긴다"가 원래 지키려던 경우다.
+  //  ★여기서 지워야 아래 회원 처리·검수가 새 배치표의 자동 판독을 그대로 쓴다. 순서가 곧 규칙이다.
+  if (prev && String(prev.id) !== String(full.id)) {
+    try {
+      const r = clearInternsOnNewBoard(keyFromLabel(v.dateLabel || '') || '', '3', String(full.id));
+      if (r && r.cleared) {
+        console.log(`·  [인턴] 새 본배치표 #${full.id} — 이전 배치표(#${r.fromBoard}) 기준 수동 지정 ${r.cleared.length}칸을 버렸습니다(자동 판독을 따릅니다).`);
+        raiseBoardIssue({ kind: 'intern_reset', part: 3, articleId: full.id,
+          from: r.fromBoard, tees: r.cleared.map((t) => `${t.time}${t.course}`) });
+      }
+    } catch (e) { console.error('인턴 지정 초기화 실패:', e.message); }
   }
   // ★가입 소급용: 이 배치표의 판독결과(rawVerdict)+원문을 저장 → 중간 가입 회원이 Gemini 재호출 없이 반영받게.
   //  latestImage* = '원본 배치표' 표시 이미지 추적(정본 판독이면 자기 이미지가 곧 최신).

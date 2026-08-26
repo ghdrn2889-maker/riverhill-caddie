@@ -87,6 +87,12 @@ function describe(it) {
           + (miss ? ` 어긋난 곳: ${miss}.` : '')
           + ' 명단을 못 읽은 자리가 있습니다 — 검수에서 확인해 주세요.' };
     }
+    // ★인턴 지정을 버렸다 — 조용히 지우면 안 된다. 사람이 손으로 넣은 것이고,
+    //  새 배치표에도 그 인턴이 그대로면 다시 넣어야 한다는 뜻이다(2026-08-26).
+    case 'intern_reset':
+      return { title: `${p} 인턴 지정을 새 배치표에 맞춰 비웠습니다`,
+        body: `이전 배치표에서 지정한 ${(it.tees || []).join(' ')} ${(it.tees || []).length}칸을 비웠습니다. `
+          + '새 배치표에도 인턴이 있으면 검수나 대조판에서 다시 지정해주세요.' };
     case 'board_not_reflected':
       return { title: '새 배치표가 아직 반영 안 됐습니다', body: String(it.note || '').slice(0, 200) };
     case 'kakao_down':
