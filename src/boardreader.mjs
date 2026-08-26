@@ -537,8 +537,8 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
             //  재판독은 '구멍만 채움'(기존 값은 안 덮음) → 오판독으로 나빠질 일 없음. 재판독에도 빈 자리는
             //  원본이 진짜 빈 것(작성자 미매칭: 신지현·홍아름)으로 확정. ※코스 오독(있는 티의 IN/OUT 뒤바뀜)은 별개.
             if (cut > 0 && claudeBudgetLeft() > 0) {
-              const have = new Set((h.tees || []).map((t) => Number(t.pos)));
-              const gaps = []; for (let p = 1; p <= cut; p++) if (!have.has(p)) gaps.push(p);
+              // ★시각까지 읽힌 칸만 '있다'로 센다 — 순번만 있고 시각이 빈 칸은 회원에게 줄 게 없다.
+              const gaps = teeGaps(h.tees || [], cut);
               if (gaps.length) {
                 console.log(`[boardreader] 3부 티오프 누락 감지(컷 이내 티없음 ${gaps.join(',')}) → 집중 재판독`);
                 try {
@@ -549,8 +549,7 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
                     for (const t of h2.tees) if (Number(t.pos) > 0 && t.time && !byPos.has(Number(t.pos))) { byPos.set(Number(t.pos), t); rec += 1; }
                     h = { ...h, tees: [...byPos.values()].sort((a, z) => a.pos - z.pos) };
                     gridMax = h.tees.reduce((mx, t) => Math.max(mx, Number(t.pos) || 0), 0);
-                    const now = new Set(h.tees.map((t) => Number(t.pos)));
-                    const still = []; for (let p = 1; p <= cut; p += 1) if (!now.has(p)) still.push(p);
+                    const still = teeGaps(h.tees, cut);
                     console.log(`[boardreader] 집중 재판독: ${rec}개 복구, 잔여 티없음 ${still.join(',') || '없음'}(원본이 진짜 빈 자리)`);
                   }
                 } catch (e) { console.error('[boardreader] 집중 재판독 오류:', e.message); }
@@ -602,9 +601,12 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
               parts[String(b.part)] = { roster: snapRoster(names), tee: h.tees, cut, x0: b.x0, x1: b.x1 };
               console.log(`[boardreader] 3부 홀리스틱 채택: 명단${filled}·티${(h.tees || []).length}·컷${cut}(스페어첫 ${Number.isFinite(firstSpare) ? firstSpare : '-'})`);
               // ★재판독 후에도 티오프가 컷보다 짧으면 이상 기록 — 감시 클로드·모니터가 잡아 사람이 정정하도록(무음 통과 금지).
-              if (cut > 0 && gridMax < cut) {
-                appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'grid_short', part: 3, teeMax: gridMax, cut, articleHint: '3부 홀리스틱', note: '티오프 하단 누락 — 꼬리 재판독 후에도 컷 미달(사람 확인 필요)' });
-                issues.push({ kind: 'grid_short', part: 3, teeMax: gridMax, cut });
+              //  ★'가장 큰 순번'이 아니라 '실제로 찬 칸'을 본다. 꼬리가 닿아도 가운데가 비면 그 사람은 티오프가 없다
+              //   (gridMax만 보면 1~9번과 14번만 읽어도 14≥14라 그냥 통과했다).
+              const _adoptGaps = teeGaps(h.tees || [], cut);
+              if (_adoptGaps.length) {
+                appendJSONL('dayboard-anomaly.jsonl', { at: Date.now(), kind: 'grid_short', part: 3, teeMax: gridMax, cut, miss: _adoptGaps.slice(0, 20), articleHint: '3부 홀리스틱', note: '티오프 누락 — 꼬리 재판독 후에도 컷 이내 빈 순번(사람 확인 필요)' });
+                issues.push({ kind: 'grid_short', part: 3, teeMax: gridMax, cut, miss: _adoptGaps.slice(0, 20) });
               }
               continue;
             }
@@ -961,10 +963,14 @@ export function rosterSanity(parts) {
 // 커트 안인데 티오프가 없는 순번 — '표가 잘렸다'의 유일하게 확실한 신호.
 //  ★3부는 grid_short로 오래전부터 잡아왔는데 1·2부는 아무 검사도 없었다. 그래서 2부 IN 열이
 //    통째로 빠진 날들이 기록 한 줄 없이 지나갔다(8/20 실측: 컷 16에 티오프 10칸 — 알림도 로그도 없음).
+//  ★'칸이 있다'와 '시각을 읽었다'는 다른 말이다. 순번만 세면, 시각이 빈 채로 들어온 칸도
+//    '있다'로 세어 구멍이 없는 것처럼 보인다. 정작 그 칸은 회원에게 티오프를 못 준다.
 export function teeGaps(tee, cut) {
   const n = Number(cut) || 0;
   if (!(n > 0)) return [];
-  const have = new Set((tee || []).map((t) => Number(t.pos)).filter((x) => x > 0));
+  const have = new Set((tee || [])
+    .filter((t) => /^\d{1,2}:\d{2}$/.test(String(t && t.time || '')))
+    .map((t) => Number(t.pos)).filter((x) => x > 0));
   const miss = [];
   for (let i = 1; i <= n; i++) if (!have.has(i)) miss.push(i);
   return miss;

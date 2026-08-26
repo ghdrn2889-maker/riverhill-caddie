@@ -33,11 +33,20 @@ console.log('\n[교정 소급이 같은 글에만 갇혀 있지 않은가]');
 console.log('\n[소급해도 지켜야 하는 것]');
 {
   const i = noC.indexOf('_sameArticle || _weakerThanCorrected');
-  const blk = noC.slice(i, i + 700);
+  ok(i > 0, '소급 게이트를 찾았다', '앵커를 못 찾으면 아래 검사는 전부 헛것을 본다');
+  const blk = noC.slice(i, i + 3000);
   ok(/pd && nd && pd !== nd/.test(blk), '날짜가 다르면 소급하지 않는다 — 새 날 배치표는 그대로',
     '어제 교정이 오늘 명단을 덮으면 더 큰 사고다');
   ok(/part3Roster/.test(blk) && /teeGrid/.test(blk) && /crewDuty/.test(blk),
     '명단·티오프·근태를 함께 얹는다', '명단만 바꾸면 티오프가 옛 사람에게 붙는다');
+  // ★2026-08-26 — 소급은 '덜 읽은 판독'을 구제하는 장치다. 더 많이 읽은 판독까지 덮으면 그건 되돌리기다.
+  //  그날 어제 컷9 교정본이 오늘 컷14 판독을 덮어 10~14번이 빈칸이 됐고, 그 빈칸이 알림으로 나갔다.
+  ok(/_corrTees\.length >= _newTees\.length/.test(blk),
+    '★교정본이 새 판독보다 짧으면 티오프를 안 덮는다', '짧다는 건 그 교정이 옛 배치표의 것이라는 뜻이다');
+  ok(/_corrRoster\.length >= _newRoster\.length/.test(blk),
+    '명단도 같은 규칙', '길이가 같을 때는 그대로 덮는다 — 대바 보호는 살아 있어야 한다');
+  ok(/teeGaps\(out\.rawVerdict\.teeGrid \|\| \[\], _cutNow\)/.test(blk),
+    '덮은 뒤에 티오프 구멍을 다시 센다', '판독 직후 검산은 소급보다 앞에서 끝난다 — 소급 뒤엔 아무도 안 셌다');
 }
 
 console.log('\n[정본 판정 자체는 그대로인가]');
@@ -66,7 +75,8 @@ console.log('\n[★명단까지 바뀌는가 — 순번만 바뀌면 카드 안�
 console.log('\n[★내 자리도 교정 명단에서 다시 뽑는가 — 1번 회원은 명단만 바꾸면 안 따라온다]');
 {
   const i = noC.indexOf('_sameArticle || _weakerThanCorrected');
-  const blk = noC.slice(i, i + 1800);
+  ok(i > 0, '소급 게이트를 찾았다');
+  const blk = noC.slice(i, i + 4000);
   ok(/relocateOnRoster\(out\.rawVerdict, primary, loadToday\(1\)\)/.test(blk),
     '★교정 명단을 얻은 뒤 본인 순번을 그 명단으로 재설정한다',
     '1번 회원은 out.rawVerdict가 곳 자기 판정 — 명단만 갈면 명단은 27번이 김홍구인데 myPosition은 옛 30으로 남는다');

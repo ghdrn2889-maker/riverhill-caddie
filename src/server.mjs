@@ -49,7 +49,7 @@ import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
 import { resolvePrimary, buildMemberRounds, minorPartActive } from './rounds.mjs';
 import { dayPlanFor, planCommute } from './dayplan.mjs';
 import { collectPartRosters, buildCrossPartSwaps, swapBare } from './crossparts.mjs';
-import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount, claudeBoardParts } from './boardreader.mjs';
+import { useClaudeReader, claudeMonitorParts, claudeDutyList, claudeHeadcount, claudeBoardParts, teeGaps } from './boardreader.mjs';
 import { ingestVerdict as dayboardIngest, summarize as dayboardSummary, overlayDayboardOnVerdict } from './dayboard.mjs';
 import { extractChangeSet, changeSetHasContent } from './changeset.mjs';
 
@@ -2034,11 +2034,35 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     if (_cv && _cv._adminCorrected && (_sameArticle || _weakerThanCorrected) && out.rawVerdict) {
       const pd = String(_cv.dateLabel || '').trim(), nd = String(out.rawVerdict.dateLabel || '').trim();
       if (!(pd && nd && pd !== nd)) {   // 같은 날만
-        if (Array.isArray(_cv.part3Roster) && _cv.part3Roster.length) out.rawVerdict.part3Roster = _cv.part3Roster.slice();
+        // ★교정은 '덜 읽은 판독'만 구제한다 — 이번 판독이 더 많이 읽었으면 그건 오독이 아니라 새 사실이다.
+        //  실측 2026-08-26: 3부 수정배치표를 판독기가 14칸·컷14로 정확히 읽었는데, 어제 본배치표(컷 9)를
+        //  검수에서 고쳐둔 티오프 9칸이 통째로 덮어써 10~14번이 빈칸이 됐다. 그 빈칸이 그대로
+        //  "근무 예정이에요. 티오프가 매칭되면 확정 알림 드릴게요"로 도대영·홍준표에게 세 번 나갔고,
+        //  사람이 손으로 채울 때까지 시스템은 스스로 회복하지 못했다.
+        //  ★교정본이 새 판독보다 짧다는 건 '그 교정은 다른(옛) 배치표의 것'이라는 뜻이다.
+        //   대바 보호(같은 사진 재판독이 교정을 되돌리는 문제)는 길이가 같을 때 그대로 살아 있다.
+        const _newRoster = Array.isArray(out.rawVerdict.part3Roster) ? out.rawVerdict.part3Roster : [];
+        const _corrRoster = Array.isArray(_cv.part3Roster) ? _cv.part3Roster : [];
+        if (_corrRoster.length && _corrRoster.length >= _newRoster.length) out.rawVerdict.part3Roster = _corrRoster.slice();
+        else if (_corrRoster.length) console.log(`·  [교정소급] 명단은 안 덮음 — 이번 판독이 더 길다(교정 ${_corrRoster.length}명 < 판독 ${_newRoster.length}명)`);
         if (_cv.crewDuty) out.rawVerdict.crewDuty = { ..._cv.crewDuty };
-        if (Array.isArray(_cv.teeGrid) && _cv.teeGrid.length) out.rawVerdict.teeGrid = _cv.teeGrid.slice();
+        const _newTees = Array.isArray(out.rawVerdict.teeGrid) ? out.rawVerdict.teeGrid : [];
+        const _corrTees = Array.isArray(_cv.teeGrid) ? _cv.teeGrid : [];
+        if (_corrTees.length && _corrTees.length >= _newTees.length) out.rawVerdict.teeGrid = _corrTees.slice();
+        else if (_corrTees.length) console.log(`·  [교정소급] 티오프는 안 덮음 — 이번 판독이 더 많다(교정 ${_corrTees.length}칸 < 판독 ${_newTees.length}칸)`);
         out.rawVerdict._adminCorrected = _cv._adminCorrected;
         console.log(`·  [교정소급] #${full.id} 검수 교정 명단/티오프를 회원 처리에 적용(검수·대시보드·알림 일치)`);
+        // ★덮은 뒤에 다시 센다 — 근무선 안인데 티오프가 빈 순번이 남으면 조용히 넘기지 않는다.
+        //  판독 직후의 검산(auditTeeGrid)은 여기보다 앞에서 끝난다. 소급이 표를 바꿔놓고도
+        //  아무도 다시 안 세던 자리가 이 자리였다.
+        const _cutNow = Number(out.rawVerdict.cutLine) || Number(out.rawVerdict.cutoffPosition) || 0;
+        const _gapNow = teeGaps(out.rawVerdict.teeGrid || [], _cutNow);
+        if (_gapNow.length) {
+          console.warn(`⚠️ [교정소급] 근무선 ${_cutNow}번까지인데 티오프가 없는 순번 ${_gapNow.slice(0, 8).join('·')}${_gapNow.length > 8 ? ` 외 ${_gapNow.length - 8}개` : ''} — 검수에서 확인이 필요합니다.`);
+          raiseBoardIssue({ kind: 'grid_short', part: Number(String(out.rawVerdict.part || '3').replace(/\D/g, '')) || 3,
+            teeMax: (out.rawVerdict.teeGrid || []).reduce((m, t) => Math.max(m, Number(t.pos) || 0), 0),
+            cut: _cutNow, miss: _gapNow.slice(0, 20), articleId: full.id });
+        }
         // ★명단을 갈았으면 '내 자리'도 그 명단에서 다시 뽑는다.
         //  1번 회원은 이 out.rawVerdict가 곳 자기 판정이라, 명단만 바꾸면 순번은 판독 당시(교정 전) 값에 멈췄다.
         //  실측 2026-08-21 #27498: 명단 27번은 김홍구인데 myPosition은 옛 30 → 순번표는 근무,

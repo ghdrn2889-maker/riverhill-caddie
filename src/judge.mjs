@@ -1620,11 +1620,15 @@ export function auditTeeGrid(verdict) {
   // ① 구멍 — 근무선 안인데 티오프가 없는 순번.
   //  ★표가 근무선 언저리까지 닿았을 때만 본다. 부분 크롭(앞 절반만 읽힘)은 구멍이 무더기로 나오는데
   //   그건 '표가 어긋난' 게 아니라 '표를 못 읽은' 것이라 여기서 다룰 문제가 아니다.
+  //  ★구멍 개수 상한(≤3)은 없앴다. 큰 구멍은 작은 구멍보다 덜 위험한 게 아니라 더 위험하다.
+  //   2026-08-26 실측: 근무선 14에 티오프 9칸 — 구멍 5개라 이 검사를 그냥 통과했고,
+  //   그 침묵이 도대영·홍준표에게 "티오프가 매칭되면 확정 알림 드릴게요"로 나갔다.
+  //   '못 읽은 것'과 '어긋난 것'을 여기서 가르려던 게 화근이었다 — 둘 다 사람이 봐야 하는 건 같다.
   if (cut > 0 && maxPos >= cut - 2) {
     const have = new Set(grid.map((g) => g.pos));
     const holes = [];
     for (let p = 1; p <= cut; p++) if (!have.has(p)) holes.push(p);
-    if (holes.length && holes.length <= 3) flaw.holes = holes;
+    if (holes.length) flaw.holes = holes;
   }
   // ② 역행 — 순번은 뒤인데 시각이 앞선다.
   const back = [];
@@ -1647,7 +1651,7 @@ export function auditTeeGrid(verdict) {
   if (dup.length) flaw.dups = dup;
   if (!flaw.holes && !flaw.backsteps && !flaw.dups) return null;
   const say = [];
-  if (flaw.holes) say.push(`근무선이 ${cut}번까지인데 ${flaw.holes.join('·')}번에 티오프가 없습니다`);
+  if (flaw.holes) say.push(`근무선이 ${cut}번까지인데 ${flaw.holes.slice(0, 8).join('·')}번${flaw.holes.length > 8 ? ` 외 ${flaw.holes.length - 8}자리` : ''}에 티오프가 없습니다`);
   if (flaw.backsteps) say.push(`순번은 뒤인데 시각이 앞섭니다(${flaw.backsteps.slice(0, 3).join(', ')})`);
   if (flaw.dups) say.push(`한 티오프 칸에 순번이 둘입니다(${flaw.dups.slice(0, 3).join(', ')})`);
   flaw.text = say.join(' · ');
