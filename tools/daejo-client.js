@@ -1617,6 +1617,7 @@
     if (!confirm(msg)) return;
     applyBtn.disabled = true;
     state.textContent = '반영 중…';
+    state.classList.remove('bad');
     resetNotify();
     AUTO.length = 0;
     const done = [];
@@ -1630,7 +1631,10 @@
         });
         const j = await r.json();
         // ★그 사이 배치표가 바뀌었다 — 덮어쓰면 앞선 수정이 사라진다. 여기서 멈추고 다시 불러오게 한다.
-        if (j.stale) throw new Error(part + '부 — 그 사이 배치표가 바뀌었습니다. 새로고침해서 최신본을 보고 다시 고쳐주세요.');
+        if (j.stale) {
+          const e = new Error(part + '부 — 그 사이 배치표가 바뀌었습니다. 화면을 새로고침해 최신본을 보고 다시 고쳐주세요.');
+          e.stale = true; throw e;
+        }
         if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));   // 서버도 배치가 성립하는지 센다
         done.push(`${part}부 ${j.updated || 0}명`);
         if (j.auto) AUTO.push({ part: part, ...j.auto });
@@ -1665,7 +1669,21 @@
       state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'}`
         + (auto ? ` · 자동알림 ${auto}` : '')
         + (n ? ` · 남은 ${n}명은 ‘정정 알림 보내기’로 보낼 수 있습니다` : '');
-    } catch (err) { state.textContent = '반영 실패: ' + err.message; }
+    } catch (err) {
+      // ★거절을 성공과 같은 크기로 말하면 안 된다.
+      //  2026-08-26 실측: 인턴 반영이 판본 검사에 걸려 두 번 거절됐는데, 그 사실이 방금까지
+      //  '반영 중…'이 떠 있던 같은 자리에 같은 크기로만 쓰여 아무도 못 봤다. 검증 오류는
+      //  alert로 크게 띄우면서 정작 실제로 걸리는 거절만 조용했다 — 그래서 '저장은 됐는데
+      //  왜 앱에 안 뜨지'가 됐다. 거절은 막아준 것이니 부끄러워할 게 아니라 크게 말해야 한다.
+      state.textContent = '반영 실패: ' + err.message;
+      state.classList.add('bad');
+      if (err.stale) {
+        // 낡은 판을 들고 있는 것이니 할 일은 하나뿐이다 — 새로고침. 바로 그 길을 준다.
+        if (confirm(err.message + String.fromCharCode(10, 10) + '지금 새로고침할까요?' + String.fromCharCode(10) + '(테스트판에 저장한 내용은 그대로 있습니다)')) { location.reload(); return; }
+      } else {
+        alert('반영하지 못했습니다.' + String.fromCharCode(10, 10) + err.message);
+      }
+    }
     finally { applyBtn.disabled = false; stack.length = 0; paintNotify(); PARTS.forEach(paint); }
   });
 

@@ -404,6 +404,8 @@ body.editing .pk{touch-action:none}
 .tools button.notify{background:var(--miss);color:var(--panel);border-color:var(--miss);font-weight:700}
 .tools button:disabled{opacity:.5;cursor:default}
 .tools .hint{font-size:12px;color:var(--dim)}
+/* 반영이 거절됐을 때 — 성공과 같은 색이면 아무도 안 본다(2026-08-26 실측). */
+.tools .hint.bad{color:var(--warn);font-weight:700}
 body.editing td.c{cursor:pointer}
 body.editing td.c:hover{outline:2px solid var(--warn);outline-offset:-2px}
 td.c.picked{outline:2px solid var(--ok);outline-offset:-2px}
