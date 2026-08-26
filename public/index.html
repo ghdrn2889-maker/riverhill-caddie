@@ -1543,7 +1543,10 @@
       --fbnm:#22303c; --fbbig2:#b7701d; --fbinbg:#e2edfb; --fbinc:#2f74c9; --fboutbg:#fbe9d6; --fboutc:#b7701d;
       --fbmebg:rgba(18,191,148,.16); --fbmeline:rgba(18,191,148,.6); --fbmenm:#0a5f47; --fbmebig:#0a9e77; --fbmenbbg:#12bf94; --fbmenbc:#fff;
       --fbwaitnm:#8a94a2; --fbwaitbig:#aeb6c2; --fbcut:#c07a1b; --fbcutg:#e6b877; --fbtv:#16222e; --fbtk:#3a4a58; --fbtsub:#5a6875; --fbrail:rgba(120,140,170,.3);
-      --fbvw:#1d2b39; --fbvwtx:#fff; }        /* 옆 부 선택칩 — 내 부(민트)와 다른 색 언어 */
+      --fbvw:#1d2b39; --fbvwtx:#fff;        /* 옆 부 선택칩 — 내 부(민트)와 다른 색 언어 */
+      /* ★인턴 = 밝은 노랑. 리버힐 배치표에서 인턴 칸이 노란 칸이다 — 종이에서 쓰는 색을 화면에서도 그대로 쓴다.
+         캐디가 종이와 앱을 번갈아 볼 때 '같은 것'이라고 바로 알아보게 하는 게 이 색의 일이다. */
+      --fbintnb:#ffcf1f; --fbintnbc:#3a2a00; }
     body.sky-night #view-board {
       --fbtxt:#fff; --fbtxt2:#cdd9ea; --fbglass:rgba(16,25,44,.5); --fbgline:rgba(150,175,210,.2);
       --fbchdline:rgba(150,175,210,.18); --fbchd:#dfe8f5; --fbcut2:#8ce0ac;
@@ -1552,7 +1555,9 @@
       --fbnm:#eaf2fb; --fbbig2:#f2cf8d; --fbinbg:rgba(120,170,230,.24); --fbinc:#bcd6f5; --fboutbg:rgba(230,180,120,.22); --fboutc:#f2cf8d;
       --fbmebg:rgba(18,191,148,.2); --fbmeline:#33d6a6; --fbmenm:#eafff6; --fbmebig:#4defb0; --fbmenbbg:#12bf94; --fbmenbc:#04241a;
       --fbwaitnm:rgba(200,215,235,.5); --fbwaitbig:#5b6b82; --fbcut:#e6b877; --fbcutg:rgba(230,184,119,.5); --fbtv:#fff; --fbtk:#cdd9ea; --fbtsub:#aab8cc; --fbrail:rgba(150,175,210,.26);
-      --fbvw:#e6eefb; --fbvwtx:#16222e; }
+      --fbvw:#e6eefb; --fbvwtx:#16222e;
+      /* 밤에는 노랑이 더 튄다 — 배경만 낮추고 글자는 밝게(대비 유지). */
+      --fbintnb:#ffd233; --fbintnbc:#2a1e00; }
     .fb-empty { padding:64px 26px; text-align:center; font-size:13px; color:var(--fbtxt2); line-height:1.7; }
     body.sky-night .fb-empty { text-shadow:0 1px 3px rgba(0,0,0,.4); }
 
@@ -1628,6 +1633,12 @@
     .fb-cut { display:flex; align-items:center; gap:8px; color:var(--fbcut); margin:8px 0; }
     .fb-cut::before, .fb-cut::after { content:''; flex:1; height:1px; background:repeating-linear-gradient(90deg,var(--fbcutg) 0 6px,transparent 6px 11px); }
     .fb-cut span { font:850 10px sans-serif; white-space:nowrap; }
+    /* ★인턴 칸 — 줄을 통째로 칠하지 않는다. 다른 줄과 똑같은 줄인데, 번호가 올 자리에
+       번호 대신 '인턴' 한 단어가 들어갈 뿐이다. 동그라미도 번호와 같은 동그라미(26px) 그대로 —
+       두 글자가 들어가게 글자 크기만 줄인다(앱이 이미 쓰는 9px 라벨 크기).
+       색만 노랑 — 배치표에서 인턴이 노란 칸으로 인쇄되니, 종이와 앱이 같은 색을 쓴다. */
+    .fb-nb.it { background:var(--fbintnb); color:var(--fbintnbc); border:0;
+      font:850 9px sans-serif; letter-spacing:-.02em; white-space:nowrap; }
     /* 시간순 = 타임라인 레일(좌 시각+점 · 순번 뱃지 행) */
     .fb-band { display:grid; grid-template-columns:50px 1fr; gap:11px; position:relative; }
     .fb-bt { position:relative; padding-top:8px; text-align:right; }

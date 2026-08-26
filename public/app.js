@@ -1408,6 +1408,12 @@ function boardStatusNorm(st) {
   return st || 'none';
 }
 function boardStatusKo(s) { return s === 'work' ? '근무' : s === 'spare' ? '스페어' : s === 'off' ? '휴무' : '미배치'; }
+// ★인턴 칸은 언제나 /api/boards에서 가져온다 — 내 부든 옆 부든 한 출처.
+//  화면 셋(앱·검수·대조)이 다른 걸 보면 "대조표엔 있는데 앱엔 없다"가 그대로 생긴다.
+function internsOfPart(part) {
+  const b = (otherBoards || []).find((x) => String(x.part) === String(part));
+  return b && Array.isArray(b.interns) ? b.interns : [];
+}
 function boardRounds() {
   const t = lastToday;
   // ★내 배치표가 없어도(휴무·미확보) 옆 부는 볼 수 있어야 한다 — 구경용만 그려서 돌려준다.
@@ -1435,6 +1441,7 @@ function boardRounds() {
     const myPos = myPosOf(roster, b.s.myPosition);
     const myTee = myPos && teeMap[myPos] ? teeMap[myPos] : null;
     return { part: b.part, status: b.status, roster, teeMap, cut: Number(b.s.cutLine) || 0,
+      interns: internsOfPart(b.part),
       myPos, tee: myTee && myTee.time ? myTee.time : '', course: myTee && myTee.course ? myTee.course : '',
       offType: b.s.offType || '', offReason: b.s.offReason || '' };   // 병가·휴가·순번제외 구분(홈 대시보드와 일치)
   });
@@ -1454,6 +1461,7 @@ function boardViewOnlyRounds(have, myISO, myName) {
     let myPos = 0;
     if (mn) { const i = roster.findIndex((nm) => norm(nm) === mn); myPos = i >= 0 ? i + 1 : 0; }
     return { part: String(b.part), status: 'view', viewOnly: true, roster, teeMap,
+      interns: Array.isArray(b.interns) ? b.interns : [],
       cut: Number(b.cut) || 0, cutoffName: b.cutoffName || '', teamCount: Number(b.teamCount) || 0,
       myPos, tee: '', course: '', offType: '', offReason: '',
       dateLabel: b.dateLabel || '', targetISO: b.targetISO || '',
@@ -1624,15 +1632,36 @@ function boardSegHTML(r) {
   const sp = r.status === 'spare' ? spareInfo(r) : null;
   const chip = r.viewOnly ? (r.cut ? `확정선 ${r.cut}번` : '집계 중')
     : sp ? (sp.ahead <= 0 ? '바로 다음 차례' : `내 앞 ${sp.ahead}명`) : (r.cut ? `확정선 ${r.cut}번` : '집계 중');
+  // ★인턴이 있으면 확정선 옆에 붙인다 — 순번을 안 쓰는 자리라 명단만 세면 팀 수가 안 맞는다.
+  const ic = (r.interns || []).length;
   return `<div class="fb-seg"><button data-o="seq" class="${boardOrder !== 'time' ? 'on' : ''}">순번순</button><button data-o="time" class="${boardOrder === 'time' ? 'on' : ''}">시간순</button></div>`
-    + `<span class="fb-cutchip">${chip}</span>`;
+    + `<span class="fb-cutchip">${chip}${ic ? ` · 인턴 ${ic}` : ''}</span>`;
+}
+//  ★인턴 칸 — 티오프는 차지하되 순번을 안 쓴다(배치표의 노란 칸). 순번이 없으니 명단에 없고,
+//   그래서 지금까지 앱에서는 통째로 안 보였다. 대조표엔 있는데 앱엔 없던 자리가 여기다.
+//   명단 줄이 아니므로 번호를 주지 않고, 시각 순서에 맞는 자리에 끼워 넣는다.
+const teeMin = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+function withInterns(list, interns) {
+  for (const it of (interns || [])) {
+    const time = (String(it && it.time || '').match(/\d{1,2}:\d{2}/) || [''])[0];
+    if (!time) continue;
+    const crs = /IN/i.test(String(it.course)) ? 'IN' : 'OUT';
+    const tm = teeMin(time);
+    let at = list.length;
+    for (let i = 0; i < list.length; i++) {
+      const om = teeMin(list[i].tee);
+      if (!Number.isFinite(om) || om > tm) { at = i; break; }   // 대기(시각 없음) 줄보다는 앞
+    }
+    list.splice(at, 0, { p: 0, nm: '인턴', tee: time, crs, intern: true, work: true, me: false });
+  }
+  return list;
 }
 function boardListHTML(r) {
   const { roster, teeMap, cut, myPos } = r;
-  const entries = roster.map((nm, i) => {
+  const entries = withInterns(roster.map((nm, i) => {
     const p = i + 1; const g = teeMap[p] || null;
     return { p, nm, tee: g && g.time ? g.time : '', crs: g && g.course ? g.course : '', work: cut ? p <= cut : !!(g && g.time), me: p === myPos };
-  });
+  }), r.interns);
   if (boardOrder === 'time') {
     // 타임라인 레일 — 티오프 시각별 그룹(스페어는 '대기' 밴드로 맨 뒤).
     const groups = []; const seen = {};
@@ -1640,11 +1669,16 @@ function boardListHTML(r) {
     groups.sort((a, b) => { const as = !a.t, bs = !b.t; if (as !== bs) return as ? 1 : -1; return a.t < b.t ? -1 : a.t > b.t ? 1 : 0; });
     return groups.map((g) => {
       const sp = !g.t;
-      const rows = g.items.map((e) => `<div class="fb-brow ${e.me ? 'me' : ''}"><span class="fb-nb">${e.p}</span><span class="fb-nm">${esc(e.nm || '—')}</span>${e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : 'out'}">${esc(e.crs)}</span>` : ''}</div>`).join('');
+      const rows = g.items.map((e) => `<div class="fb-brow ${e.me ? 'me' : ''}"><span class="fb-nb${e.intern ? ' it' : ''}">${e.intern ? '인턴' : e.p}</span><span class="fb-nm">${e.intern ? '' : esc(e.nm || '—')}</span>${e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : 'out'}">${esc(e.crs)}</span>` : ''}</div>`).join('');
       return `<div class="fb-band${sp ? ' spare' : ''}"><div class="fb-bt"><span class="fb-btime">${sp ? '대기' : esc(g.t)}</span></div><div class="fb-brows">${rows}</div></div>`;
     }).join('');
   }
   const rowHTML = (e) => {
+    if (e.intern) {
+      // 번호 자리에 번호 대신 '인턴' 한 단어. 이름 칸은 비운다 — 인턴은 명단에 없는 사람이다.
+      const ic = e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : 'out'}">${esc(e.crs)}</span>` : '';
+      return `<div class="fb-row"><span class="fb-nb it">인턴</span><span class="fb-nm"></span>${ic}<span class="fb-big">${esc(e.tee)}</span></div>`;
+    }
     const cls = e.me ? 'me' : e.work ? 'work' : 'wait';
     const crs = e.crs ? `<span class="fb-crs ${e.crs === 'IN' ? 'in' : e.crs === 'OUT' ? 'out' : ''}">${esc(e.crs)}</span>` : '';
     const big = e.tee ? `<span class="fb-big">${esc(e.tee)}</span>` : '<span class="fb-big dim">—</span>';

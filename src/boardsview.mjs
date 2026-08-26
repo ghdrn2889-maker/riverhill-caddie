@@ -5,6 +5,19 @@
 //   모순을 오래 못 봤다. 함수로 있으면 매번 기계가 확인한다(correctPart3와 같은 이유).
 import { loadJSON } from './store.mjs';
 import { loadBoardPartsStore } from './boardparts.mjs';
+import { internTeesFor } from './interns.mjs';
+
+// 인턴 칸 — 티오프는 차지하되 순번은 안 쓰는 자리(배치표의 노란 칸).
+//  ★모니터(검수)와 같은 함수로 뽑는다. 관리자가 손으로 지정한 게 있으면 그게 판독을 이긴다.
+//   화면 셋(앱·검수·대조)이 같은 값을 봐야 "대조표엔 있는데 앱엔 없다"가 안 생긴다.
+const internsFor = (boardInterns, iso, part) => {
+  const auto = (Array.isArray(boardInterns) ? boardInterns : [])
+    .map((x) => ({ time: (String(x && x.time).match(/\d{1,2}:\d{2}/) || [''])[0], course: /IN/i.test(String(x && x.course)) ? 'IN' : 'OUT' }))
+    .filter((x) => x.time);
+  const key = String(iso || '').replace(/\D/g, '').slice(0, 8);
+  if (!key) return auto;
+  return internTeesFor(key, auto, String(part)).map((t) => ({ time: t.time, course: /IN/i.test(t.course) ? 'IN' : 'OUT' }));
+};
 
 // ★팀 수는 '확정선'을 먼저 본다.
 //  teamCount는 처음 사진 헤더에서 읽은 숫자다. 당추가 들어오거나 관리자가 교정하면
@@ -39,15 +52,17 @@ export function markStaleParts(list) {
 
 export function buildBoardsView({ labelToISO = () => '' } = {}) {
   const out = [];
-  const push = (part, roster, teeGrid, cut, cutoffName, teamCount, dateLabel, at) => {
+  const push = (part, roster, teeGrid, cut, cutoffName, teamCount, dateLabel, at, boardInterns) => {
     const r = Array.isArray(roster) ? roster.filter((x) => x != null).map(String) : [];
     if (!r.length) return;
+    const targetISO = labelToISO(dateLabel || '') || '';
     out.push({
       part: String(part), roster: r,
       teeGrid: Array.isArray(teeGrid) ? teeGrid : [],
+      interns: internsFor(boardInterns, targetISO, part),
       cut: Number(cut) || 0, cutoffName: String(cutoffName || ''),
       teamCount: Number(teamCount) || 0,
-      dateLabel: String(dateLabel || ''), targetISO: labelToISO(dateLabel || '') || '',
+      dateLabel: String(dateLabel || ''), targetISO,
       at: Number(at) || 0,
     });
   };
@@ -58,13 +73,13 @@ export function buildBoardsView({ labelToISO = () => '' } = {}) {
       if (!d) continue;
       // 부별 도장(_targetISO)이 있으면 그 근무일을, 없으면(옛 저장본) 저장소 날짜라벨을 쓴다.
       const label = d._targetISO ? isoToLabel(d._targetISO) : (s.dateLabel || '');
-      push(p, d.roster, d.teeGrid, cutOf(d), d.cutoffName, teamsOf(d), label, d._at || s.at);
+      push(p, d.roster, d.teeGrid, cutOf(d), d.cutoffName, teamsOf(d), label, d._at || s.at, d.internTees);
     }
   } catch (e) { console.error('[boards 1·2부 오류]', e.message); }
   try {
     const lb = loadJSON('lastboard.json', null);
     const v = (lb && lb.rawVerdict) || null;
-    if (v) push('3', v.part3Roster, v.teeGrid, cutOf(v), v.cutoffName, teamsOf(v), lb.dateLabel || v.dateLabel || '', lb.at);
+    if (v) push('3', v.part3Roster, v.teeGrid, cutOf(v), v.cutoffName, teamsOf(v), lb.dateLabel || v.dateLabel || '', lb.at, v.internTees);
   } catch (e) { console.error('[boards 3부 오류]', e.message); }
   out.sort((a, b) => Number(a.part) - Number(b.part));
   markStaleParts(out);
