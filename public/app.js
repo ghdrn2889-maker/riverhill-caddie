@@ -29,7 +29,7 @@ function tickDate() {
   $('date').textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 ${WD[d.getDay()]}요일 · ${hhmm(d.getHours() * 60 + d.getMinutes())}`;
 }
 
-/* ── 하단 내비 / 뷰 전환 ── */
+/* ── 뷰 전환(홈이 허브 · 하단 탭바 없음) ── */
 const VIEWS = ['today', 'board', 'cart', 'worklog', 'settle'];
 let curView = 'today';
 const _boxFxDone = new Set();   // 박스 스태거는 뷰별 최초 1회만(이후엔 가벼운 방향 슬라이드)
@@ -49,7 +49,6 @@ function showView(name, opts = {}) {
     const vw = $('view-' + v);
     vw.hidden = v !== name;
     vw.classList.remove('slide-l', 'slide-r', 'boxfx');
-    $('tab-' + v).setAttribute('aria-selected', String(v === name));
   });
   if (name !== curView && from >= 0 && to >= 0) {
     const el = $('view-' + name);
@@ -91,27 +90,8 @@ function showView(name, opts = {}) {
   // 앱 셸: 스크롤 컨테이너는 body가 아니라 main → 탭 전환 시 main을 맨 위로.
   const _sc = document.querySelector('main');
   if (_sc) _sc.scrollTo(0, 0); else window.scrollTo(0, 0);
-  document.body.classList.remove('nav-hidden');   // 탭 전환 시 하단 탭바 다시 표시
-}
-// 하단 탭바 자동 숨김 — main을 아래로 스크롤하면 탭이 내려가 숨고, 위로 올리면 다시 올라온다.
-//  nav가 fixed라 콘텐츠 마지막 줄이 가리지 않게 main 하단 여백 = 탭 높이로 맞춘다.
-function initNavAutohide() {
-  const main = document.querySelector('main');
-  const nav = document.querySelector('nav.nav');
-  if (!main || !nav) return;
-  const setPad = () => { if (nav.offsetHeight) main.style.paddingBottom = nav.offsetHeight + 'px'; };
-  setPad();
-  window.addEventListener('resize', setPad);
-  let lastY = 0, ticking = false;
-  const onScroll = () => {
-    const y = main.scrollTop, dy = y - lastY;
-    if (y <= 4) { document.body.classList.remove('nav-hidden'); lastY = y; return; }   // 최상단 근처는 항상 표시
-    if (Math.abs(dy) > 6) { document.body.classList.toggle('nav-hidden', dy > 0); lastY = y; }   // 내리면 숨김·올리면 표시
-  };
-  main.addEventListener('scroll', () => {
-    if (ticking) return; ticking = true;
-    requestAnimationFrame(() => { onScroll(); ticking = false; });
-  }, { passive: true });
+  // 홈이 허브 — 홈에서는 되돌이 단추를 감춘다.
+  document.body.classList.toggle('has-vback', name !== 'today');
 }
 // 근무 기록·정산: 상단 카드 블록들이 순서대로(스태거) 부드럽게 올라오는 등장 모션(뷰별 최초 1회).
 //  잔류 클래스 제거는 showView가 매 전환마다 처리 → 여기선 부여만.
@@ -123,7 +103,7 @@ function boxFx(view) {
 /* ── 뷰 전환과 '뒤로가기' ──
    홈이 바닥이고, 그 위에 뷰를 한 칸만 쌓는다(탭끼리 이동은 갈아끼우기). 그래서 어느 탭에 있든
    뒤로가기 한 번이면 홈, 홈에서 한 번 더 누르면 앱이 닫힌다 — 탭을 여러 번 옮겨 다녀도 스택이 깊어지지 않는다.
-   ★뒤로가기 버튼이 없는 아이폰: 하단 홈 탭이 언제나 한 번이고, 팝업은 저마다 ‹ 버튼을 갖는다.
+   ★뒤로가기 버튼이 없는 아이폰: 왼쪽 위 '홈' 단추가 언제나 한 번이고, 팝업은 저마다 ‹ 버튼을 갖는다.
      홈 화면에 설치한 경우엔 왼쪽 가장자리에서 쓸어넘기는 동작이 이 뒤로가기를 그대로 탄다
      (예전엔 그게 '앱 종료'였는데, 이제 '홈으로'가 된다). */
 function syncViewHistory(name) {
@@ -150,11 +130,10 @@ function onViewPop(e) {
   if (v !== curView) showView(v, { noHist: true });
 }
 function initNav() {
-  document.querySelectorAll('nav.nav button').forEach((b) => { b.onclick = () => showView(b.dataset.view); });
+  { const vb = document.getElementById('vbackBtn'); if (vb) vb.onclick = () => showView('today'); }
   // 뒤로가기로 해시가 바뀐 경우엔 popstate가 이미 뷰를 맞춰놨다 — 그때는 다시 그리지 않는다.
   window.addEventListener('hashchange', () => { const h = location.hash.slice(1) || 'today'; if (h !== curView) showView(h); });
   window.addEventListener('popstate', onViewPop);
-  initNavAutohide();
   // ★히스토리의 바닥은 언제나 홈 — #board 링크로 열어도 뒤로가기 한 번이면 홈으로 온다.
   const start = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'today';
   history.replaceState({ v: 'today' }, '', '#today');
@@ -190,8 +169,8 @@ function initInstallPrompt() {
   const bar = $('installBar'), txt = $('installText'), cta = $('installCta'), x = $('installClose');
   if (!bar || isStandalone()) return;                           // 이미 설치돼 실행 중이면 안내 불필요
   if (sessionStorage.getItem('installDismissed')) return;       // 이번 세션에 닫았으면 조용히
-  const show = () => { bar.hidden = false; document.body.style.paddingTop = bar.offsetHeight + 'px'; };
-  x.onclick = () => { bar.hidden = true; document.body.style.paddingTop = ''; sessionStorage.setItem('installDismissed', '1'); };
+  const show = () => { bar.hidden = false; const px = bar.offsetHeight + 'px'; document.body.style.paddingTop = px; document.body.style.setProperty('--ibh', px); };
+  x.onclick = () => { bar.hidden = true; document.body.style.paddingTop = ''; document.body.style.removeProperty('--ibh'); sessionStorage.setItem('installDismissed', '1'); };
 
   const { isIOS, isSafari } = iosInfo();
   if (isIOS && !isSafari) {
@@ -212,9 +191,9 @@ function initInstallPrompt() {
     if (!deferredInstall) return;
     deferredInstall.prompt();
     try { await deferredInstall.userChoice; } catch {}
-    deferredInstall = null; bar.hidden = true; document.body.style.paddingTop = '';
+    deferredInstall = null; bar.hidden = true; document.body.style.paddingTop = ''; document.body.style.removeProperty('--ibh');
   };
-  window.addEventListener('appinstalled', () => { bar.hidden = true; document.body.style.paddingTop = ''; });
+  window.addEventListener('appinstalled', () => { bar.hidden = true; document.body.style.paddingTop = ''; document.body.style.removeProperty('--ibh'); });
 }
 
 /* ── 서비스워커 + 알림 구독(자가복구) ── */
@@ -2455,7 +2434,7 @@ function initHomeWidgets() {
   const c = $('hwCart'), p = $('hwPay');
   if (c) c.onclick = () => showView('cart');
   if (p) p.onclick = () => showView('settle');
-  // ★위젯 = 이동 버튼. 같은 곳으로 가는 길을 셋 둔다(메뉴·하단 탭·홈 위젯) —
+  // ★위젯 = 이동 버튼. 하단 탭바를 걷어낸 뒤로는 배치표·라운드 점검·근무 기록·정산으로 가는 길이 여기뿐이다 —
   //  약 80명이 쓰고 연령·성별이 다양해서, 한 사람에게 자연스러운 길이 다른 사람에겐 아니다(사용자 설계).
   const ins = $('hwIns'); if (ins) ins.onclick = () => openMenuPage('ins');
   const wk = $('hwWork'); if (wk) wk.onclick = () => showView('worklog');
@@ -4737,7 +4716,7 @@ async function main() {
 
 /* ══ 햄버거 메뉴(전체화면) ══
    맨 위 이름줄 = 프로필 수정(기존 계정 팝업 재사용), 오른쪽 두 아이콘 = 로그아웃·닫기.
-   그 아래는 바로가기 — 하단 탭만으로는 몇 단계 들어가야 닿는 곳(목표·정산서·지출)을 한 번에 연다.
+   그 아래는 바로가기 — 홈 위젯만으로는 몇 단계 들어가야 닿는 곳(목표·정산서·지출)을 한 번에 연다.
    ★아이콘은 타일 없이 글리프만(C안). 타일이 없으니 '눌리는 자리'는 누르는 순간 깔리는 민트 원이 대신한다. */
 const MENU_ICONS = {
   shield: '<path d="M12 2.6 20 6v5.6c0 4.9-3.3 8.5-8 9.8-4.7-1.3-8-4.9-8-9.8V6z"/><polyline points="9 12 11.2 14.2 15.4 10"/>',
@@ -4824,7 +4803,7 @@ const scrollToCard = (id, gap = 10) => {
 //  판정이 아직 여러 군데서 틀려서 잠갔다. 잠긴 동안엔 홈 타일·바로가기·축하 팝업이 전부 나오지 않는다.
 function trophyLocked() { return !(meState && meState.trophyOn); }
 
-// ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 하단 탭에서 이미 한두 번에
+// ★바로가기는 '다른 데선 닿기 어려운 것'만 둔다. 알림·카트·배치표·정산은 홈 위젯에서 이미 한두 번에
 //  닿으므로 여기 두면 메뉴가 탭의 복사본이 된다(사용자 정리).
 //  ★목표·정산서·지출은 이 목록의 원래 취지 그대로다 — 셋 다 정산 탭에 들어가 스크롤해야 나온다.
 //  ★업적(성장 공간)은 이제 열린다 — 홈 타일과 여기 둘 다에서 닿는다.

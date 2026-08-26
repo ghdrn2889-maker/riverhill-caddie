@@ -15,14 +15,14 @@
   <style>
     /* ===== 확정 시안(sandbox/hybrid-prototypes.html · HYBRID 02 행동 진행 보드) CSS 그대로 이식 ===== */
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-    /* ★앱 셸: 문서(body)는 스크롤하지 않고 flex 컬럼 — 상단 헤더 고정 / 가운데(main)만 스크롤 / 하단 탭바 고정.
-       iOS standalone에서 body 오버스크롤(고무줄 튕김)에 하단 탭바가 딸려 올라가던 문제를 원천 차단. */
+    /* ★앱 셸: 문서(body)는 스크롤하지 않고 flex 컬럼 — 상단 헤더 고정 / 가운데(main)만 스크롤.
+       iOS standalone에서 body 오버스크롤(고무줄 튕김)에 화면 전체가 딸려 올라가던 문제를 원천 차단. */
     html { height:100%; height:100dvh; }
     /* 모바일 키보드 높이 — visualViewport에서 JS가 실시간 갱신. 팝업/시트가 이 값만큼 키보드를 피함. */
     :root { --kbh:0px; }
     body { margin:0; background:#f3f4f8; color:#17231d;
            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
-           /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡혀 하단 탭이 바닥에 안 붙고 떠 보임 → 동적 뷰포트 높이로 고정. */
+           /* ★iOS 스탠드얼론: 100%가 실제 화면보다 짧게 잡힘 → 동적 뷰포트 높이로 고정. */
            height:100%; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
     .top { background:transparent; color:#17231d; padding:calc(10px + env(safe-area-inset-top,0)) 12px 4px; }
     .toprow { display:flex; justify-content:space-between; align-items:center; max-width:600px; margin:0 auto; }
@@ -34,7 +34,8 @@
     .tbdot { position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:#12bf94; border:2px solid #f3f4f8; }
     .date { font-size:10px; opacity:.85; font-weight:600; }
     main { flex:1 1 auto; width:100%; max-width:600px; margin:0 auto; overflow-x:hidden;
-           overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain; }
+           overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior-y:contain;
+           padding-bottom:calc(10px + env(safe-area-inset-bottom,0px)); }
     .body { padding:14px; }
     .view[hidden] { display:none; }
 
@@ -66,7 +67,7 @@
 
     /* ── ★홈 위젯 확장(ㄷ안) — 위젯 하나하나를 '이동 버튼'으로 ──────────────────
        사용자 설계: 약 80명이 쓰고 연령·성별이 다양하니 같은 곳으로 가는 길을 셋 둔다.
-       ①햄버거 메뉴 ②하단 탭 ③홈 위젯. 중복은 낭비가 아니라 이 앱에선 기능이다.
+       ①햄버거 메뉴 ②홈 위젯. 중복은 낭비가 아니라 이 앱에선 기능이다.
        큰 넷은 '숫자가 있는 것', 작은 셋은 '갈 곳만 있는 것'. */
     .hw-w { position:relative; }
     .hw-w.ins  { background:linear-gradient(160deg,#e6f1fa,#dbe8f4); }
@@ -867,9 +868,8 @@
     /* ── 분석 시트(A안 · 카드 결산): 정산 탭의 다음 장 — 앱 카드·초록·Pretendard 그대로 ── */
     /*  ★전부 .s2sheet.ana 아래로 가둔다 — .track/.arow 같은 이름은 홈 레일 등 다른 화면에도 있다. */
     /*  ★시트는 body로 옮겨 붙어(정산 탭 밖) 글꼴 상속이 끊긴다 — 목표 시트(.lgw-bg)처럼 스택을 다시 선언한다. */
-    /*  ★아래 여백은 하단 탭(z-index 300)만큼 비운다 — 안 그러면 '닫기'를 눌러도 탭이 눌린다(옛 시트는 아예 화면 밖으로 나갔다). */
     .s2sheet.ana{ background:#eef2ec; color:#17231d; display:flex; flex-direction:column; gap:11px;
-      padding-bottom:calc(72px + env(safe-area-inset-bottom));
+      padding-bottom:calc(18px + env(safe-area-inset-bottom));
       font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif; }
     /*  ★flex 자식은 기본이 '줄어들기'다 — 안 잠그면 긴 달에 카드가 찌그러지고 스크롤이 안 생긴다. */
     .s2sheet.ana>*{ flex:none; }
@@ -1825,16 +1825,6 @@
     .rc2-editbtn { padding:12px 22px; border:1.5px solid #c9d2cd; border-radius:14px; background:#fff; color:#2f4a3b; font-size:13.5px; font-weight:800; display:inline-flex; align-items:center; gap:7px; cursor:pointer; box-shadow:0 3px 12px rgba(23,40,30,.08); }
     .rc2-editbtn.ghost { background:transparent; box-shadow:none; color:#5a6660; }
     .rc2-editbtn svg { width:16px; height:16px; }
-    nav.nav { position:fixed; left:0; right:0; bottom:0; z-index:300;
-              transition:transform .32s cubic-bezier(.2,.7,.3,1); will-change:transform; }
-    /* ★스크롤 내리면 하단 탭바가 아래로 내려가 숨고, 올리면 다시 올라온다(자동 숨김/표시). */
-    body.nav-hidden nav.nav { transform:translateY(100%); }
-    /* ★하단 탭(nav)이 오버레이·시트·스플래시를 뚫고 보이던 버그 — 블로킹 화면이 떠 있으면 탭을 숨긴다.
-       (nav의 z-index가 높아 z<300 오버레이 위로 새던 문제를 상태 기반(:has)으로 원천 차단.) */
-    body:has(.ov:not([hidden])) nav.nav,
-    body:has(#loginOv:not([hidden])) nav.nav,
-    body:has(.ldg-screen:not(.hide)) nav.nav,
-    body:has(.lgw-bg.on) nav.nav { display:none; }
     /* ★분석 시트는 화면 끝까지 올라와 손잡이가 맨 위에 온다 — 설치 배너가 그 위를 덮으면 못 잡는다. */
     body:has(.s2sheet-bg.on) #installBar { display:none; }
     @media (prefers-reduced-motion:reduce) { .rc2-stampov.slam .rc2-stamp { animation:none; } }
@@ -1965,12 +1955,31 @@
     .cc-edit-foot { display:flex; gap:7px; margin-top:10px; align-items:center; }
     .cc-hint { font-size:9px; color:#79847d; margin-top:8px; line-height:1.5; }
 
-    /* 하단 내비 (확정 시안 .nav 그대로, 실제 탭으로만 전환) */
-    nav.nav { flex-shrink:0; width:100%; max-width:600px; margin:0 auto;
-              background:rgba(255,255,255,.96); border-top:1px solid #dce3de; display:flex; justify-content:space-around;
-              padding:11px 3px calc(15px + env(safe-area-inset-bottom,0)); font-size:9px; color:#6e7973; }
-    nav.nav button { background:transparent; border:0; color:#6e7973; font-size:12px; font-weight:750; padding:5px 12px; }  /* 비활성 탭 4.1→4.5:1, 11→12px */
-    nav.nav button[aria-selected="true"] { color:#0c8f6a; font-weight:850; }
+    /* ★하단 탭바를 걷어냈다 — 기기마다 바닥 여백(safe-area-inset-bottom)이 제각각이라 어떤 폰에선
+       탭이 시스템 바에 물리고 어떤 폰에선 떠 보였는데, 그 값을 앱이 통제할 수 없다.
+       대신 홈이 허브가 된다: 홈 타일로 들어가고, 이 단추 하나로 돌아온다(뒤로가기와 같은 자리). */
+    .vback { position:fixed; z-index:310; top:calc(7px + var(--ibh, env(safe-area-inset-top,0px))); left:9px;
+             display:none; align-items:center; gap:2px; height:34px; padding:0 14px 0 9px; border:0; cursor:pointer;
+             border-radius:99px; background:rgba(255,255,255,.84); color:#2b3a33; font:inherit; font-size:12.5px; font-weight:800;
+             box-shadow:0 2px 10px rgba(20,40,26,.14); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+             -webkit-tap-highlight-color:transparent; transition:transform .12s ease; }
+    .vback svg { width:17px; height:17px; stroke:currentColor; stroke-width:2.4; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+    .vback:active { transform:scale(.94); }
+    body.has-vback .vback { display:flex; }
+    /* 블로킹 화면(가입·로그인·스플래시·목표 시트)이 떠 있으면 이 단추도 숨는다. */
+    body:has(.ov:not([hidden])) .vback,
+    body:has(#loginOv:not([hidden])) .vback,
+    body:has(.ldg-screen:not(.hide)) .vback,
+    body:has(.lgw-bg.on) .vback { display:none; }
+    /* 상단바가 숨은 화면들은 이 단추가 앉을 띠만큼 위를 비운다. */
+    body.has-vback.no-top main, body.has-vback.on-board main { padding-top:calc(env(safe-area-inset-top,0px) + 48px); }
+    /* 배치표: 위 여백을 main이 이미 냈으니 히어로는 제 몫만(이중 여백 방지). */
+    body.has-vback.on-board .fb-hero { padding-top:10px; }
+    /* 어두운 밤하늘 위에서는 반대색으로. */
+    body.sky-night .vback { background:rgba(18,32,44,.62); color:#eaf3ff; box-shadow:0 2px 10px rgba(0,0,0,.3); }
+    /* 라운드 점검: 초록 히어로는 화면 맨 위까지 그대로 올라붙고, 단추가 그 위에 뜬다. */
+    body.has-vback #view-cart .rc-hero5 { margin-top:calc(-14px - 48px - env(safe-area-inset-top,0px));
+      padding-top:calc(22px + 48px + env(safe-area-inset-top,0px)); }
     :focus-visible { outline:2px solid #1a8f68; outline-offset:2px; border-radius:6px; }
     @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
 
@@ -2967,7 +2976,7 @@
     </div>
 
     <!-- 오늘 -->
-    <section class="view body" id="view-today" role="tabpanel" aria-labelledby="tab-today">
+    <section class="view body" id="view-today">
       <section class="hero" id="todayHero" role="button" tabindex="0" aria-label="오늘 내 상황 — 배치표로 이동">
         <div class="fx" id="wxFx" aria-hidden="true"></div>
         <span class="wxref" id="wxRef" hidden></span>
@@ -3062,12 +3071,12 @@
     </section>
 
     <!-- 배치표 — 우리 부 전체 순번표(날씨 하늘 배경 + 글래스). 소식 피드 제거(원문·작성자 유출 차단) -->
-    <section class="view" id="view-board" role="tabpanel" aria-labelledby="tab-board" hidden>
+    <section class="view" id="view-board" hidden>
       <div id="boardFull"><div class="fb-empty">배치표를 불러오는 중…</div></div>
     </section>
 
     <!-- 근무 기록 -->
-    <section class="view body" id="view-worklog" role="tabpanel" aria-labelledby="tab-worklog" hidden>
+    <section class="view body" id="view-worklog" hidden>
       <div class="sect"><span>일일 근무 일지</span></div>
       <section class="hero">
         <div class="jcal-nav">
@@ -3100,7 +3109,7 @@
     </section>
 
     <!-- 정산 (수익·팁·지출·수익계산서) -->
-    <section class="view body" id="view-settle" role="tabpanel" aria-labelledby="tab-settle" hidden>
+    <section class="view body" id="view-settle" hidden>
       <div class="s2" id="s2Root">
         <div class="hero t-day" id="lgHero">
           <div class="orb sun"></div>
@@ -3252,7 +3261,7 @@
     </section>
 
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
-    <section class="view body" id="view-cart" role="tabpanel" aria-labelledby="tab-cart" hidden>
+    <section class="view body" id="view-cart" hidden>
       <!-- s5 히어로: 오늘 카트 번호 + 디지털 표정 -->
       <section class="rc-hero5">
         <div class="lab">오늘 카트 번호</div>
@@ -3370,13 +3379,10 @@
     </section>
   </main>
 
-  <nav class="nav reveal" style="--i:5" role="tablist" aria-label="주요 화면">
-    <button role="tab" id="tab-today" aria-selected="true" aria-controls="view-today" data-view="today">홈</button>
-    <button role="tab" id="tab-board" aria-selected="false" aria-controls="view-board" data-view="board">배치표</button>
-    <button role="tab" id="tab-cart" aria-selected="false" aria-controls="view-cart" data-view="cart">라운드 점검</button>
-    <button role="tab" id="tab-worklog" aria-selected="false" aria-controls="view-worklog" data-view="worklog">근무 기록</button>
-    <button role="tab" id="tab-settle" aria-selected="false" aria-controls="view-settle" data-view="settle">정산</button>
-  </nav>
+  <!-- 홈으로 — 하단 탭바를 대신한다(뒤로가기와 같은 자리로 간다) -->
+  <button class="vback" id="vbackBtn" type="button" aria-label="홈으로">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>홈
+  </button>
 
   <!-- 사진 확대 보기(라이트박스) -->
   <div id="ccLightbox" class="cc-lb" hidden role="dialog" aria-modal="true" aria-label="사진 확대 보기">
