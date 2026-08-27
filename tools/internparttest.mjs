@@ -157,6 +157,9 @@ console.log('\n[★배치표 채택 자리에 실제로 걸려 있는가]');
     "★lastboard를 저장하기 '전에' 지운다",
     '순서가 곧 규칙이다 — 나중에 지우면 이번 회원 처리·검수가 옛 인턴으로 계산된다');
   ok(/kind: 'intern_reset'/.test(fn), '버렸다는 사실을 관리자에게 알린다');
+  ok(/if \(r\.cleared\.length\) \{[\s\S]{0,200}kind: 'intern_reset'/.test(fn),
+    "★버릴 게 있었을 때만 알린다",
+    "빈 지정('인턴 없음')을 지우는 건 관리자가 할 일이 안 생기는 일이다 — 0칸 알림을 보내면 다음부터 안 읽는다");
   ok(/case 'intern_reset':/.test(read('src/boardalert.mjs')), '그 알림에 제 문구가 있다',
     "문구가 없으면 default로 빠져 '판독 이상'이라고만 뜬다");
   ok(/boardId: String\(lb\.id \|\| ''\)/.test(read('src/boardcorrect.mjs')),

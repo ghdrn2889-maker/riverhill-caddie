@@ -1567,8 +1567,13 @@ async function rememberBoard(full, out) {
       const r = clearInternsOnNewBoard(keyFromLabel(v.dateLabel || '') || '', '3', String(full.id));
       if (r && r.cleared) {
         console.log(`·  [인턴] 새 본배치표 #${full.id} — 이전 배치표(#${r.fromBoard}) 기준 수동 지정 ${r.cleared.length}칸을 버렸습니다(자동 판독을 따릅니다).`);
-        raiseBoardIssue({ kind: 'intern_reset', part: 3, articleId: full.id,
-          from: r.fromBoard, tees: r.cleared.map((t) => `${t.time}${t.course}`) });
+        // ★알림은 '버릴 게 실제로 있었을 때'만. 빈 지정('인턴 없음'이라고 못박아둔 것)을 지우는 건
+        //  관리자가 할 일이 생기지 않는 일이다 — 그걸 폰으로 보내면 다음부터 이 알림을 안 읽는다.
+        //  (2026-08-27 #27618에서 0칸짜리 알림이 실제로 나갔다.)
+        if (r.cleared.length) {
+          raiseBoardIssue({ kind: 'intern_reset', part: 3, articleId: full.id,
+            from: r.fromBoard, tees: r.cleared.map((t) => `${t.time}${t.course}`) });
+        }
       }
     } catch (e) { console.error('인턴 지정 초기화 실패:', e.message); }
   }
