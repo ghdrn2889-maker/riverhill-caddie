@@ -1231,7 +1231,12 @@ app.post('/api/daejo-frame', gate, (req, res) => {
     const cadence = Number(J.sched?.cadence) || 7;
     if (req.body?.slot) {                       // 격자 밖 칸 넣고 빼기 — "17:30|OUT"
       const [t, c] = String(req.body.slot).split('|');
-      setPartSlot(date, part, t, c || 'OUT', req.body.on !== false, { by: '모니터', range: base });
+      // ★검사 기준은 기본틀이 아니라 '그날 선언된 범위'다(cur).
+      //  기본틀로 재면, 앞으로 늘린 칸(오늘 3부 16:25)에 '＋칸'을 못 찍는다 —
+      //  "3부 시간대(16:32~18:45) 밖입니다"로 거절당한다. 그런데 그 칸이야말로
+      //  엔진이 판정을 건너뛰는 칸이라, 사람이 '팀 있다'고 말해줘야 하는 자리다.
+      //  ★막으려던 것(3부 격자에 06:23을 끼우는 실수)은 cur로도 그대로 막힌다.
+      setPartSlot(date, part, t, c || 'OUT', req.body.on !== false, { by: '모니터', range: cur || base });
     } else if (req.body?.reset) clearPart(date, part, { by: '모니터' });
     else if (req.body?.oneway !== undefined) setPartOneway(date, part, req.body.oneway, { by: '모니터' });
     else setPartRange(date, part, { first: req.body?.first, last: req.body?.last, cur, base, cadence, by: '모니터' });

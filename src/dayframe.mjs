@@ -173,7 +173,14 @@ export function reframeSlots(slots, { cadence = 7, courses = COURSES, frame = {}
       const [t, c] = String(k).split('|');
       const m = toMin(t);
       if (m == null || !cs.includes(c)) continue;
-      if (out.some((s) => s.part === p && s.mins === m && s.course === c)) continue;
+      // ★이미 있는 칸이면 건너뛰지 않고 '팀 있다'는 표식만 얹는다.
+      //  전에는 continue였다. 그래서 범위를 늘려 생긴 칸(예: 3부 first를 16:25로)에 대고
+      //  "여기 팀 있다"고 말해도 그 말이 통째로 버려졌다 — inserted가 안 붙으니 엔진은
+      //  그 칸을 계속 '카카오가 판 적 없는 늘린 칸'으로 보고 판정을 건너뛴다(kakaogolf frameGrown).
+      //  실측 2026-08-27: 16:25 OUT에 본배치표가 팀을 배정했는데 두 엔진 모두 못 봤다.
+      //  ★'늘렸다'와 '거기 팀이 있다'는 다른 말이고, 사람은 둘 다 말할 수 있어야 한다.
+      const hit = out.find((s) => s.part === p && s.mins === m && s.course === c);
+      if (hit) { hit.inserted = true; continue; }
       const s = { part: p, mins: m, time: toHM(m), course: c, inserted: true };
       out.push(s); added.push(s);
     }
