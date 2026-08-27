@@ -109,6 +109,35 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
       catch (e) { console.error('인턴 수동 지정 저장 실패:', e.message); }
     }
   }
+  // ★★사라진 사람을 센다 — 이 파일 머리말이 이미 경고하고 있다("일부만 주면 나머지가 사라진다").
+  //  그런데 지금까지 그걸 세는 곳이 한 군데도 없었다. boardIntegrity는 겹친 칸·이름 없는 티오프·
+  //  명단보다 큰 커트만 본다. 그래서 반영할 때마다 명단에서 한둘이 조용히 없어지는 일이
+  //  반복됐는데, 로그에도 알림에도 아무 흔적이 없었다(사용자 보고 2026-08-27).
+  //  ★막지는 않는다 — 검수에는 '행 삭제'가 있고 대바로 나가는 사람도 있다. 지우는 건 정당할 수 있다.
+  //   정당하지 않은 건 '조용한 것'이다. 그래서 세고, 적고, 말한다.
+  const _lost = (() => {
+    const movedK = new Set((Array.isArray(movedOut) ? movedOut : []).map((x) => nkey(x && x.name)).filter(Boolean));
+    const after = new Set(roster.map(nkey).filter(Boolean));
+    const out = [];
+    origRoster.forEach((nm, i) => {
+      const k = nkey(nm);
+      if (!k || after.has(k) || movedK.has(k)) return;
+      out.push({ pos: i + 1, name: String(nm) });
+    });
+    return out;
+  })();
+  // ★구멍은 다르다 — 이건 정당할 수가 없다. 명단 중간의 순번이 rows에 아예 없으면
+  //  그 자리는 undefined가 되고, 뒤에서 걸러지며 그 아래 전원이 한 칸씩 올라간다.
+  //  '지웠다'가 아니라 '말하지 않았다'이므로, 이건 저장하지 않고 돌려보낸다.
+  const _holes = [];
+  for (let i = 0; i < roster.length; i++) if (roster[i] === undefined) _holes.push(i + 1);
+  if (_holes.length) {
+    throw new Error(`순번 ${_holes.slice(0, 6).join('·')}${_holes.length > 6 ? ` 외 ${_holes.length - 6}개` : ''}가 빠진 채로 왔습니다 — 명단 전체를 보내야 합니다(저장하지 않았습니다).`);
+  }
+  if (_lost.length) {
+    console.warn(`⚠️ [교정] 명단에서 ${_lost.length}명이 사라집니다 — ${_lost.map((x) => `${x.pos}번 ${x.name}`).join(' · ')}`
+      + ` (보낸 행 ${rows.length} · 이전 명단 ${origRoster.length})`);
+  }
   v.part3Roster = roster; v.teeGrid = grid; v.crewDuty = crew; v.internTees = iTees; v.internCount = iTees.length;
   // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다(1·2부 경로와 같은 이유).
   if (cutLine) { v.cutLine = cutLine; v.cutoffPosition = cutLine; v.teamCount = cutLine; v.cutoffName = roster[cutLine - 1] || v.cutoffName || ''; }
@@ -128,8 +157,11 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
   auditTeeGrid(v);
   lb.rawVerdict = v;
   try { fs.writeFileSync(path.join(DATA_DIR, 'lastboard.json'), JSON.stringify(lb)); } catch (e) { console.error('lastboard 저장 실패:', e.message); }
-  if (cellDiffs.length) {
-    const line = { at: Date.now(), type: 'board', boardArticleId: lb.id, date: v.dateLabel || '', cutLine, changes: cellDiffs };
+  // ★사라진 사람도 같이 적는다 — cellDiffs에는 안 잡힌다. 명단 뒤쪽이 통째로 안 오면
+  //  그 순번들은 루프를 돌지도 않아 '바뀐 칸'이 생기지 않는다. 그래서 지금까지 흔적이 없었다.
+  if (cellDiffs.length || _lost.length) {
+    const line = { at: Date.now(), type: 'board', boardArticleId: lb.id, date: v.dateLabel || '', cutLine, changes: cellDiffs,
+      ...(_lost.length ? { dropped: _lost, rowsSent: rows.length, rosterWas: origRoster.length } : {}) };
     try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
   }
   const rosterNk = new Set(roster.map(nkey).filter(Boolean));
@@ -198,6 +230,10 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
       if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });
     }
   }
-  console.log(`📋 [교정] 배치표 #${lb.id} 3부: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명` : ''}`);
-  return { cellChanges: cellDiffs.length, cellDiffs, interns: iTees.length, updated, pending, articleId: lb.id, dateLabel: v.dateLabel || '' };
+  console.log(`📋 [교정] 배치표 #${lb.id} 3부: 칸 ${cellDiffs.length}·인턴 ${iTees.length}·커트 ${cutLine} → 재계산 ${updated}명${pending.length ? ` · 정정대상 ${pending.length}명` : ''}`
+    + (_lost.length ? ` · ★사라진 사람 ${_lost.length}명` : ''));
+  // ★화면이 말해줄 수 있게 돌려준다. 관리자가 지운 게 맞으면 그냥 확인이고,
+  //  아니면 그 자리에서 안다 — 지금까지는 며칠 뒤에야 "누가 없어졌다"로 알았다.
+  return { cellChanges: cellDiffs.length, cellDiffs, interns: iTees.length, updated, pending, articleId: lb.id, dateLabel: v.dateLabel || '',
+    dropped: _lost };
 }

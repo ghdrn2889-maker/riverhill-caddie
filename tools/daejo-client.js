@@ -1251,7 +1251,8 @@
   //  ★대상은 서버가 고른다. '실제로 상태가 바뀐 회원'만이다(correctionMsg). 화면이 다시 세면
   //   두 곳이 갈라지고, 갈라지면 반드시 한쪽이 틀린다.
   const NOTIFY = { items: [], tokens: [], at: 0, noPush: false };
-  const AUTO = [];                                   // 이번 반영에서 서버가 자동으로 보낸 결과(부별)
+  const AUTO = [];
+  const DROPPED = [];   // 반영하면서 명단에서 빠진 사람                                   // 이번 반영에서 서버가 자동으로 보낸 결과(부별)
   const NOTIFY_TTL = 30 * 60 * 1000;                 // 서버 대기함(outbox) 수명과 같다 — 어긋나면 버튼만 먼저 사라진다
   const notifyLeft = () => (NOTIFY.at ? NOTIFY_TTL - (Date.now() - NOTIFY.at) : 0);
   function resetNotify() { NOTIFY.items = []; NOTIFY.tokens = []; NOTIFY.at = 0; NOTIFY.noPush = false; paintNotify(); }
@@ -1636,6 +1637,9 @@
           e.stale = true; throw e;
         }
         if (!j.ok) throw new Error(j.error || (part + '부 반영 실패'));   // 서버도 배치가 성립하는지 센다
+        // ★명단에서 사람이 사라졌으면 그 자리에서 말한다. 지우는 것 자체는 정당할 수 있지만(행 삭제·대바),
+        //  조용한 건 정당할 수 없다 — 반영할 때마다 한둘씩 없어지는데 아무도 몰랐다(2026-08-27).
+        if ((j.dropped || []).length) DROPPED.push({ part: part, who: j.dropped.map(function (x) { return x.pos + '번 ' + bare(x.name); }) });
         done.push(`${part}부 ${j.updated || 0}명`);
         if (j.auto) AUTO.push({ part: part, ...j.auto });
         if (j.notifyToken) NOTIFY.tokens.push(j.notifyToken);
@@ -1669,6 +1673,14 @@
       state.textContent = `앱에 반영했습니다 — ${done.join(' · ') || '변경 없음'}`
         + (auto ? ` · 자동알림 ${auto}` : '')
         + (n ? ` · 남은 ${n}명은 ‘정정 알림 보내기’로 보낼 수 있습니다` : '');
+      if (DROPPED.length) {
+        const lines = DROPPED.map(function (d) { return d.part + '부 ' + d.who.join(', '); });
+        const msg = lines.join(String.fromCharCode(10));
+        state.classList.add('bad');
+        state.textContent = state.textContent + ' · ★명단에서 빠짐: ' + lines.join(' / ');
+        alert('명단에서 다음 사람이 빠졌습니다.' + String.fromCharCode(10, 10) + msg + String.fromCharCode(10, 10)
+          + '일부러 지우셨으면 그대로 두셔도 됩니다. 아니라면 화면을 새로고침해 다시 확인해주세요.');
+      }
     } catch (err) {
       // ★거절을 성공과 같은 크기로 말하면 안 된다.
       //  2026-08-26 실측: 인턴 반영이 판본 검사에 걸려 두 번 거절됐는데, 그 사실이 방금까지

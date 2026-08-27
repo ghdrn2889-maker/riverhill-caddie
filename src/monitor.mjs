@@ -731,6 +731,21 @@ app.post('/api/board-correct', gate, async (req, res) => {
       if (/병가|휴무|휴가/.test(v2)) { if (crew[k] !== v2) cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k] || '', admin: v2 }); crew[k] = v2; }
       else if (/휴무|휴가|병가|격리|연차|반차|월차/.test(String(crew[k] || ''))) { cellDiffs.push({ pos: 0, field: 'duty', name: nm2, model: crew[k], admin: '' }); crew[k] = ''; }
     }
+    // ★사라진 사람을 센다 — 3부(boardcorrect.mjs)와 같은 규칙. 자세한 이유는 그쪽 주석에 있다.
+    //  구멍(rows에 아예 없는 중간 순번)은 저장하지 않고 돌려보낸다 — '지웠다'가 아니라 '말하지 않았다'다.
+    const _holes = [];
+    for (let i = 0; i < roster.length; i++) if (roster[i] === undefined) _holes.push(i + 1);
+    if (_holes.length) {
+      return res.status(400).json({ ok: false, error: `순번 ${_holes.slice(0, 6).join('·')}${_holes.length > 6 ? ` 외 ${_holes.length - 6}개` : ''}가 빠진 채로 왔습니다 — 명단 전체를 보내야 합니다(저장하지 않았습니다).`, holes: _holes });
+    }
+    const _lostP = (() => {
+      const movedK = new Set((Array.isArray(movedOut) ? movedOut : []).map((x) => nkey(x && x.name)).filter(Boolean));
+      const after = new Set(roster.map(nkey).filter(Boolean));
+      const out = [];
+      origRoster.forEach((nm, i) => { const k = nkey(nm); if (k && !after.has(k) && !movedK.has(k)) out.push({ pos: i + 1, name: String(nm) }); });
+      return out;
+    })();
+    if (_lostP.length) console.warn(`⚠️ [교정] ${part}부 명단에서 ${_lostP.length}명이 사라집니다 — ${_lostP.map((x) => `${x.pos}번 ${x.name}`).join(' · ')} (보낸 행 ${rows.length} · 이전 명단 ${origRoster.length})`);
     pd.roster = roster; pd.teeGrid = grid; pd.crewDuty = crew; pd.internTees = iTees; pd.internCount = iTees.length;
     // ★팀 수도 같이 옮긴다 — 근무선이 곧 팀 수다. 여기를 안 고치면 헤더 판독값(예: 30)이
     //  그대로 남아 앱이 '확정선 38번'과 '30팀 편성'을 한 화면에 같이 띄운다(실제로 그랬다).
@@ -742,8 +757,9 @@ app.post('/api/board-correct', gate, async (req, res) => {
     }
     pd.rosterReliable = true; delete pd.uncertain;
     saveBoardPartsStore(bp);
-    if (cellDiffs.length) {
-      const line = { at: Date.now(), type: 'board', part, boardArticleId: bp.articleId, date: pd.dateLabel || bp.dateLabel || '', cutLine, changes: cellDiffs };
+    if (cellDiffs.length || _lostP.length) {
+      const line = { at: Date.now(), type: 'board', part, boardArticleId: bp.articleId, date: pd.dateLabel || bp.dateLabel || '', cutLine, changes: cellDiffs,
+        ...(_lostP.length ? { dropped: _lostP, rowsSent: rows.length, rosterWas: origRoster.length } : {}) };
       try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
     }
     // 그 부 회원 today{part}.json 재계산(3부 경로와 동일 구조, 부 창·부 슬롯).
@@ -820,7 +836,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
     const auto = autoNotify ? await autoNotifyPart(part, { rows, cutLine, by: '대조판 반영' }) : null;
     // ★당겨온 사람이 원래 부에 남아 있으면 여기서 빠진다 — 관리자가 두 번 일하지 않게.
     const pulls = _skipRec ? [] : await reconcilePulls(part, _tok);
-    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pulls,
+    return res.json({ ok: true, cellChanges: cellDiffs.length, interns: iTees.length, updated, pulls, dropped: _lostP,
       pending: pendingFor(pending, auto), notifyToken: tokenFor(pending, auto, notify, part), auto: autoBrief(auto) });
   }
   // ★3부 교정 본체는 src/boardcorrect.mjs 한 곳에만 있다 — 복구 스크립트도 같은 함수를 쓴다.
@@ -829,7 +845,7 @@ app.post('/api/board-correct', gate, async (req, res) => {
   catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const auto = autoNotify ? await autoNotifyPart('3', { rows, cutLine, by: '대조판 반영' }) : null;
   const pulls3 = _skipRec ? [] : await reconcilePulls('3', _tok);
-  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pulls: pulls3,
+  res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pulls: pulls3, dropped: out.dropped || [],
     pending: pendingFor(out.pending, auto), notifyToken: tokenFor(out.pending, auto, notify, '3'), auto: autoBrief(auto) });
 });
 
