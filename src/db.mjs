@@ -90,6 +90,24 @@ function migrate(d) {
   addColumn(d, 'users', 'last_seen', 'INTEGER');   // 마지막 활동(하트비트) — 접속중/나감 판별용(운영 모니터)
   addColumn(d, 'users', 'left_at', 'INTEGER');     // 앱을 닫은/가린 시각 — '나감' 즉시 반영(last_seen보다 뒤면 오프라인)
   d.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_id);'); // NULL은 서로 중복 허용
+  // ── 바깥 앱에 내주는 읽기 전용 열쇠 ──────────────────────────────
+  //  ★세션 쿠키를 쓰지 않는 이유: 쿠키가 SameSite=Lax라 다른 출처(정적 웹앱)에서는 애초에 안 실린다.
+  //   실리게 하려면 SameSite=None으로 내려야 하는데, 그건 이 앱 전체의 CSRF 방어를 낮추는 일이다.
+  //   창구 하나 열자고 문 전체를 헐 수는 없다. 그래서 그 창구에만 쓰는 열쇠를 따로 판다.
+  //  ★열쇠는 회원 한 명 · 용도 하나에 묶인다(scope). 관리자 권한도, 쓰기 권한도 없다.
+  //   원문은 저장하지 않는다 — DB가 새도 남의 앱 열쇠가 그대로 나가지 않게 해시만 둔다.
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      token_hash  TEXT PRIMARY KEY,          -- sha256(원문). 원문은 발급 순간에만 존재한다
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      scope       TEXT NOT NULL,             -- 'work-income' 등 용도 하나
+      note        TEXT,                      -- 사람이 알아볼 이름(예: '회계 앱')
+      created_at  INTEGER NOT NULL,
+      last_used   INTEGER,
+      revoked_at  INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id, scope);
+  `);
 }
 
 // 컬럼이 없을 때만 추가(idempotent). SQLite ALTER는 DEFAULT로 기존 행을 채운다.

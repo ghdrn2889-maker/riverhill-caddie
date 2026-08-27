@@ -22,6 +22,7 @@ import * as cartcheck from './cartcheck.mjs';
 import * as weather from './weather.mjs';
 import * as journal from './journal.mjs';
 import * as ledger from './ledger.mjs';
+import * as workincome from './workincome.mjs';
 import * as trophy from './trophy.mjs';
 import * as dutyMod from './duty.mjs';
 import { analyzeReceiptLocal } from './ollama.mjs';
@@ -315,9 +316,16 @@ app.post('/api/telemetry', requireAuth, (req, res) => {
 //  ★솔로 모드에선 req.user 가 항상 1번 회원이라 게이트는 열려 있음 → 지금 동작 무변화.
 //  공개 엔드포인트(설정키·헬스·카톡 인그레스·인증 자체)는 통과.
 //  ★/duty — 자동 판독 전까지 관리자가 토큰으로 당번·벌당을 넣는 경로(핸들러 안에서 관리자/토큰을 직접 검사).
+// ★/work-income — 바깥 회계 앱이 부르는 창구. 세션 쿠키가 아니라 전용 열쇠로
+//  핸들러 안에서 스스로 인증한다(쿠키는 SameSite=Lax라 다른 출처에서 안 실린다).
+//  열쇠 발급/회수(/work-income/token)는 이 목록 밖이라 로그인이 있어야 한다 — 그게 맞다.
 const OPEN_API = ['/config', '/health', '/ingest', '/ingest-image', '/simulate', '/auth', '/me', '/logout', '/duty'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
+  // ★정확히 이 한 경로만 열린다 — OPEN_API에 넣으면 startsWith 때문에
+  //  /work-income/token(열쇠 발급)까지 같이 열린다. 발급은 로그인한 사람만 할 수 있어야 한다.
+  //  조회(GET /work-income)는 세션이 아니라 전용 열쇠로 핸들러 안에서 스스로 인증한다.
+  if (p === '/work-income') return next();
   if (OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
   if (!req.user) return res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
   // ★가입 승인 대기(pending)·차단(disabled) 회원은 데이터·기능 엔드포인트 전면 차단(외부인 배제).
@@ -1038,6 +1046,62 @@ app.get('/api/duty', (req, res) => {
   const uid = asked || req.user?.id;
   if (!uid) return res.status(401).json({ error: '로그인이 필요합니다' });
   res.json({ ok: true, duty: dutyMod.dutyForToday(uid, todayISOKST()) });
+});
+
+// ── 바깥 회계 앱 창구 ── { date, count, amount } 세 필드, 읽기 전용.
+//
+//  ★왜 세션 쿠키를 안 쓰나: 이 앱 쿠키는 SameSite=Lax다. 다른 출처(정적 웹앱)의 요청에는
+//   브라우저가 아예 안 실어 보낸다. 실리게 하려면 SameSite=None으로 내려야 하는데
+//   그건 이 앱 전체의 CSRF 방어를 낮추는 일이다 — 창구 하나 열자고 문 전체를 헐 수는 없다.
+//   그래서 이 창구에만 쓰는 열쇠를 따로 판다(회원 한 명 · 용도 하나 · 읽기만).
+//
+//  ★CORS도 이 경로에만 건다. 앱 전체에 열면 다음 사람이 그걸 기본값으로 알고 넓혀 간다.
+const _wiCors = (req, res) => {
+  const origin = String(req.headers.origin || '');
+  if (!workincome.allowedOrigins().includes(origin)) return false;
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Vary', 'Origin');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.set('Access-Control-Max-Age', '600');
+  // ★자격증명(쿠키)은 허용하지 않는다 — 열쇠로만 들어온다. 쿠키가 안 실리면 CSRF도 성립하지 않는다.
+  return true;
+};
+app.options('/api/work-income', (req, res) => { _wiCors(req, res); res.status(204).end(); });
+app.get('/api/work-income', (req, res) => {
+  _wiCors(req, res);
+  const bearer = String(req.headers.authorization || '').replace(/^Bearer[ \t]+/i, '').trim();
+  const uid = workincome.userForToken(bearer || String(req.query.k || ''));
+  // ★왜 401에 힌트를 안 주나 — 열쇠가 틀렸는지 없는지 말해주면 그게 곧 대조 도구가 된다.
+  if (!uid) return res.status(401).json({ error: '열쇠가 필요합니다' });
+  try {
+    const rows = workincome.incomeRows(uid, {
+      from: String(req.query.from || ''), to: String(req.query.to || ''),
+      tip: String(req.query.tip || '1') !== '0',
+    });
+    // ★계약대로 '객체의 배열' 그대로 — 감싸지 않는다. 바깥 앱이 res.ok로 성패를 가른다.
+    res.set('Cache-Control', 'no-store').json(rows);
+  } catch (e) {
+    console.error('[work-income] 조회 오류:', e.message);
+    res.status(500).json({ error: '조회 실패' });
+  }
+});
+// 열쇠 발급·조회·회수 — 로그인한 본인만. 원문은 발급 응답에 딱 한 번 나오고 어디에도 안 남는다.
+app.get('/api/work-income/token', (req, res) => {
+  const uid = req.user?.id || 1;
+  res.json({ ok: true, tokens: workincome.listTokens(uid), origins: workincome.allowedOrigins() });
+});
+app.post('/api/work-income/token', (req, res) => {
+  const uid = req.user?.id || 1;
+  const token = workincome.issueToken(uid, String(req.body?.note || '회계 앱'));
+  console.log(`[work-income] 회원 ${uid} 열쇠 발급 — 원문은 기록하지 않음`);
+  res.json({ ok: true, token, note: '이 값은 다시 볼 수 없습니다. 지금 회계 앱에 넣어주세요.' });
+});
+app.delete('/api/work-income/token', (req, res) => {
+  const uid = req.user?.id || 1;
+  const n = workincome.revokeAll(uid);
+  console.log(`[work-income] 회원 ${uid} 열쇠 ${n}개 회수`);
+  res.json({ ok: true, revoked: n });
 });
 
 // ── 정산(회계) — 수익 자동 산정 + 팁 + 지출/영수증 + 수익계산서(PDF/Word) ──
