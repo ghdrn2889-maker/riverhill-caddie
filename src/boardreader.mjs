@@ -14,6 +14,7 @@ import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 import { fixedSlots, flexSlots } from './kakaogolf.mjs';
 import { partExtras } from './dayframe.mjs';
+import { partWindow, inPartWindow } from './parts.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PY = process.env.PYTHON_BIN || 'python3';
@@ -979,8 +980,48 @@ export function teeGaps(tee, cut) {
 // ── 채택 확정본의 손상만 관리자에게 알린다 ──
 //  재시도 중간 판독이 아니라 '실제로 저장·표시될' 명단을 다시 세기 때문에, 재시도로 스스로 나은 손상은
 //  알리지 않고(오경보 0) 끝까지 남은 손상만 사람에게 간다. 8/16 2부 21~25번은 여기서 잡힌다.
+// ★남의 부 시간은 버린다 — 그건 '끔워진 칸'이 아니라 '없는 칸'이다.
+//
+//  2026-08-27 사고: 3부 표에 12:04·13:35·13:42가 들어있었다. 셀 모두 2부 열에서 번진 값이고
+//   (12:04는 도대영의 2부 티오프였다), 3부는 16:25부터 돈다 — 있을 수 없는 시각이다.
+//   그런데 그걸 그대로 저장했고, 두 화면이 각자 다르게 거짓말을 했다 — 대조판은 격자에 놀 자리가
+//   없어 그 사람을 통째로 안 그렸고(서동환이 '사라졌다'), 앱은 없는 시각을 그대로 보여줬다.
+//
+//  ★_offGridTees가 이미 이걸 보고 알림까지 보냈다. 보고도 저장한 게 문제다.
+//   보고만 하는 검사는 사람이 그 알림을 읽을 때까지 거짓값을 살려둔다.
+//
+//  ★'7분 격자 밖'과는 다른 것임을 구분한다. 격자를 벗어난 칸은 정당할 수 있다 — 예약팀이
+//   팀을 하나 더 받으려고 사이에 칸을 끼우는 날이 실제로 있다([[tee-offgrid-insert]]).
+//   그건 그대로 둔다. 버리는 건 '다른 부의 시간대'뿐이다 — 그건 끌어넣은 칸이 아니라 잘못 읽은 열이다.
+//
+//  ★사람은 안 버린다 — 시각만 무른다. 그 순번은 '근무인데 시각 미정'이 된다.
+//   없는 시각을 보여주는 것보다 '모른다'고 말하는 게 정직하다.
+export function dropForeignPartTees(parts) {
+  const out = [];
+  for (const p of Object.keys(parts || {})) {
+    const pd = parts[p] || {};
+    if (!Array.isArray(pd.tee) || !pd.tee.length) continue;
+    const keep = [], gone = [];
+    for (const t of pd.tee) {
+      const ok = inPartWindow(t && t.time, p);
+      if (ok === false) { gone.push(`${t.pos}번 ${t.time}${t.course || ''}`); continue; }
+      keep.push(t);                       // null(시각을 못 읽음)은 여기서 판단하지 않는다
+    }
+    if (!gone.length) continue;
+    pd.tee = keep;
+    const w = partWindow(p);
+    out.push({ part: String(p), dropped: gone, window: `${w.min}~${w.max}시` });
+  }
+  return out;
+}
+
 export function raiseAdoptedBoardIssues(parts, attemptIssues = []) {
   try {
+    // ★먼저 남의 부 시간을 버린다 — 세기 전에 버려야 그 뒤 검사가 진짜 구멍을 본다.
+    for (const f of dropForeignPartTees(parts)) {
+      console.warn(`⚠️ [판독] ${f.part}부 티오프에 남의 부 시간 ${f.dropped.length}칸 — 버림(${f.part}부는 ${f.window}): ${f.dropped.join(' · ')}`);
+      raiseBoardIssue({ kind: 'foreign_part_tee', part: Number(f.part), times: f.dropped, window: f.window });
+    }
     for (const p of Object.keys(parts || {})) {
       const pd = parts[p] || {};
       const holes = _rosterHoles(pd.roster || []);

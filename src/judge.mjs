@@ -12,6 +12,7 @@ import pathMod from 'node:path';
 import { readBoardLocalVerdict, useLocalVLM } from './localvlm.mjs';
 import { readBoardClaudeVerdict, useClaudeReader, claudeReadFault, claudeBoardParts } from './boardreader.mjs';
 import { looksLikeBoardPost } from './analyzer.mjs';
+import { partWindow } from './parts.mjs';
 
 // ★Gemini 판독 폴백 스위치 — 기본 OFF(더 이상 사용 안 함). Claude(주)+로컬VLM만 사용.
 //  Claude가 특정 부를 못 읽어도(부분 크롭에 그 부 없음) Gemini로 넘겨 429·과금을 일으키지 않는다.
@@ -52,14 +53,9 @@ export function dayWordFor(dateLabel) {
   return off <= 0 ? '오늘' : off === 1 ? '내일' : off === 2 ? '모레' : String(dateLabel);
 }
 
-// 부(部)별 티오프 시간대 창(window). 3부는 env(TEE_MIN_HOUR, 기본 16)~자정 = 기존 동작 유지.
-//  ★이 창으로 모든 '남의 부 시간' 가드를 매개변수화 → 2부(낮)도 같은 로직으로 판독 가능.
-export function partWindow(part) {
-  const p = String(part || '3').trim();
-  if (p === '1') return { min: 5, max: 10 };   // 1부: 오전 이른 시간
-  if (p === '2') return { min: 10, max: 16 };  // 2부: 낮(대략 10~15시대)
-  return { min: Number(process.env.TEE_MIN_HOUR ?? 16), max: 24 }; // 3부(기본): 16시 이후
-}
+// 부(部)별 티오프 시간대 창(window)은 src/parts.mjs에 산다 — 판독기도 써야 하는데
+//  boardreader를 import하는 이 파일에 두면 순환이 된다. 여기서 다시 내보내 기존 import는 그대로 둔다.
+export { partWindow };
 // 조 배치표 '근무표시'(duty) → 그 캐디가 오늘 뛰는 부(部) 집합.
 //  "3부"→{3}, "2,3"→{2,3}, "1,3"→{1,3}, "54/54h"→{1,2,3}(전 부), "조출"→{1}.
 //  ★부를 '명시적으로 특정'하는 표시만 해석. 애매(선발/정출/배치/당번/프리 등)하거나 비면 빈 집합

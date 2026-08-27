@@ -38,6 +38,13 @@ function describe(it) {
     case 'roster_shrink':
       return { title: `${p} 명단이 ${it.was}명 → ${it.now}명으로 줄어 보입니다`,
         body: String(it.note || '').slice(0, 200) };
+    // ★남의 부 시간대가 이 부 표에 섞여 들어왔다 — 끼워진 칸이 아니라 잘못 읽은 열이다.
+    //  버렸으므로 그 순번은 '근무인데 시각 미정'이 된다. 없는 시각을 보여주는 것보다 낫지만,
+    //  결국 사람이 원본을 보고 채워야 한다(2026-08-27: 3부에 12:04·13:35·13:42).
+    case 'foreign_part_tee':
+      return { title: `${p} 표에 다른 부 시각 ${(it.times || []).length}칸`,
+        body: `${(it.times || []).slice(0, 6).join(' · ')} — ${p}는 ${it.window || ''}라 있을 수 없는 시각입니다. `
+          + '옆 부 열을 잘못 읽었습니다. 버렸으니 그 순번은 티오프가 비어 있습니다 — 검수에서 채워주세요.' };
     case 'offgrid_tee':
       return { title: `${p} 격자 밖 티오프 ${(it.times || []).join(' ')}`,
         body: `7분 간격에서 벗어난 칸이 ${(it.times || []).length}개 있습니다 — 팀이 끼워진 것 같아요. `
