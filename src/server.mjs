@@ -325,7 +325,8 @@ app.use('/api', (req, res, next) => {
   // ★정확히 이 한 경로만 열린다 — OPEN_API에 넣으면 startsWith 때문에
   //  /work-income/token(열쇠 발급)까지 같이 열린다. 발급은 로그인한 사람만 할 수 있어야 한다.
   //  조회(GET /work-income)는 세션이 아니라 전용 열쇠로 핸들러 안에서 스스로 인증한다.
-  if (p === '/work-income') return next();
+  //  조회 두 곳(수입·지출)만 목록에 둔다 — 여기에 '/work-income/'을 넣으면 발급까지 열린다.
+  if (p === '/work-income' || p === '/work-income/expenses') return next();
   if (OPEN_API.some((o) => p === o || p.startsWith(o + '/'))) return next();
   if (!req.user) return res.status(401).json({ error: '로그인이 필요합니다', loginUrl: '/api/auth/google' });
   // ★가입 승인 대기(pending)·차단(disabled) 회원은 데이터·기능 엔드포인트 전면 차단(외부인 배제).
@@ -1067,11 +1068,16 @@ const _wiCors = (req, res) => {
   // ★자격증명(쿠키)은 허용하지 않는다 — 열쇠로만 들어온다. 쿠키가 안 실리면 CSRF도 성립하지 않는다.
   return true;
 };
+// 열쇠 → 회원. 헤더가 정석이고 ?k= 는 급할 때의 뒷문이다(URL은 로그·히스토리에 남는다).
+const _wiUser = (req) => {
+  const bearer = String(req.headers.authorization || '').replace(/^Bearer[ \t]+/i, '').trim();
+  return workincome.userForToken(bearer || String(req.query.k || ''));
+};
 app.options('/api/work-income', (req, res) => { _wiCors(req, res); res.status(204).end(); });
+app.options('/api/work-income/expenses', (req, res) => { _wiCors(req, res); res.status(204).end(); });
 app.get('/api/work-income', (req, res) => {
   _wiCors(req, res);
-  const bearer = String(req.headers.authorization || '').replace(/^Bearer[ \t]+/i, '').trim();
-  const uid = workincome.userForToken(bearer || String(req.query.k || ''));
+  const uid = _wiUser(req);
   // ★왜 401에 힌트를 안 주나 — 열쇠가 틀렸는지 없는지 말해주면 그게 곧 대조 도구가 된다.
   if (!uid) return res.status(401).json({ error: '열쇠가 필요합니다' });
   try {
@@ -1083,6 +1089,22 @@ app.get('/api/work-income', (req, res) => {
     res.set('Cache-Control', 'no-store').json(rows);
   } catch (e) {
     console.error('[work-income] 조회 오류:', e.message);
+    res.status(500).json({ error: '조회 실패' });
+  }
+});
+// 지출(영수증) — 건별. 하루에 여러 건이 있을 수 있어 합치지 않는다.
+//  ★사진은 안 내보낸다. 파일이고, 계약에 없고, 회계 앱이 쓸 데도 없다.
+app.get('/api/work-income/expenses', (req, res) => {
+  _wiCors(req, res);
+  const uid = _wiUser(req);
+  if (!uid) return res.status(401).json({ error: '열쇠가 필요합니다' });
+  try {
+    const rows = workincome.expenseRows(uid, {
+      from: String(req.query.from || ''), to: String(req.query.to || ''),
+    });
+    res.set('Cache-Control', 'no-store').json(rows);
+  } catch (e) {
+    console.error('[work-income] 지출 조회 오류:', e.message);
     res.status(500).json({ error: '조회 실패' });
   }
 });

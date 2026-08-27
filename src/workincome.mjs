@@ -1,11 +1,13 @@
-// 바깥 회계 앱에 내주는 창구 — { date, count, amount } 세 필드, 읽기 전용.
+// 바깥 회계 앱에 내주는 창구 — 본인의 정산 내역(수입·지출), 읽기 전용.
 //
-//  ★계약이 좁은 게 이 파일의 전부다. 이 세 필드만 지키면 캐디 앱 안쪽(일지 구조·정산 로직·
-//   캐디피 단가)은 마음대로 바꿔도 회계 앱은 그대로 돈다. 반대로 여기서 팀·코스·손님·팁 내역을
-//   흘리면, 바깥 앱이 그걸 쓰기 시작하는 순간 계약이 넓어지고 다시는 못 좁힌다.
+//  ★처음엔 { date, count, amount } 세 필드로 좁게 열었다. 2026-08-27, 회계 앱이 본인 개인용이라
+//   '김홍구 정산 내역은 다 달라'는 결정이 나와 정산 탭이 들고 있는 것까지 넓혔다.
+//   넓힌 건 '필드'지 '사람'이 아니다 — 열쇠는 여전히 회원 한 명에 묶이고, 남의 줄은 한 줄도 안 나간다.
 //
 //  ★숫자는 여기서 새로 세지 않는다. ledger.summary()가 정산 탭에 그리는 그 값을 그대로 쓴다.
 //   따로 세면 두 화면이 갈라진다 — 이 저장소가 반복해서 겪은 사고다(일지 30일 · 정산 29일).
+//
+//  ★그래도 안 나가는 게 있다: 다른 회원의 것, 영수증 사진 파일, 열쇠 원문. 그리고 쓰기.
 import crypto from 'node:crypto';
 import { run, get, all } from './db.mjs';
 import * as ledger from './ledger.mjs';
@@ -55,25 +57,63 @@ export function userForToken(raw) {
 }
 
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+const won = (n) => Math.round(Number(n) || 0);
 
-// ── 창구 본체 ──────────────────────────────────────────────────
-//  date  : 'YYYY-MM-DD' 근무일
-//  count : 그날 라운드(부) 수 — 1·2·3부 중 몇 부를 뛰었나. 54(세 부)면 3.
-//  amount: 그날 번 금액(원, 정수). 기본은 캐디피+팁. tip=false면 캐디피만.
+// 기간 자르개 — from·to 둘 다 선택, 양끝 포함.
+const inRange = (date, from, to) => {
+  if (!isDate(date)) return false;
+  if (isDate(from) && date < from) return false;
+  if (isDate(to) && date > to) return false;
+  return true;
+};
+
+// ── 수입: 하루 한 줄 ────────────────────────────────────────────
+//  date   : 'YYYY-MM-DD' 근무일
+//  count  : 그날 뛴 라운드 수(1·2·3부 중 몇 부). 세 부 다 뛰면 3
+//  amount : 그날 번 돈(원, 정수) = fee + tip
+//  fee    : 캐디피만(홀정산 감액 반영)
+//  tip    : 팁만
+//  parts  : 어느 부를 뛰었나 — ['2','3'] 처럼
+//  holed  : 그날 홀정산(감액)이 있었나
 //
 //  ★날짜별 합산이다 — 일지가 하루 한 줄이고 그 안에 부 조합이 들어 있다. 건별이 아니다.
-//  ★캐디피가 안 붙는 날(휴무·당번·벌당·미완료)은 애초에 rows에 없다. amount 0인 줄은 안 나간다.
+//  ★캐디피도 팁도 없는 날(휴무·당번·벌당·미완료)은 애초에 rows에 없다. 0원 줄은 안 나간다.
+//  ★date·count·amount는 자리를 지킨다 — 바깥 앱이 이미 그 셋으로 붙어 있다. 뒤는 덧붙인 것.
 export function incomeRows(userId, { from = '', to = '', tip = true } = {}) {
   const rows = (ledger.summary({}, Number(userId)).rows || []);
   const out = [];
   for (const r of rows) {
     const date = String(r.date || '');
-    if (!isDate(date)) continue;
-    if (isDate(from) && date < from) continue;
-    if (isDate(to) && date > to) continue;
-    const amount = Math.round(Number(r.revenue) || 0) + (tip ? Math.round(Number(r.tip) || 0) : 0);
-    if (!(amount > 0)) continue;                       // 계약대로 '번 금액'만 — 0원 줄은 뜻이 없다
-    out.push({ date, count: Array.isArray(r.parts) ? r.parts.length : 1, amount });
+    if (!inRange(date, from, to)) continue;
+    const fee = won(r.revenue);
+    const tp = won(r.tip);
+    const amount = fee + (tip ? tp : 0);
+    if (!(amount > 0)) continue;
+    const parts = (Array.isArray(r.parts) ? r.parts : []).map(String);
+    out.push({ date, count: parts.length || 1, amount, fee, tip: tp, parts, holed: !!r.holed });
+  }
+  out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return out;
+}
+
+// ── 지출: 건별 ─────────────────────────────────────────────────
+//  하루에 여러 건이 있을 수 있어 합치지 않는다(회계 앱이 영수증 단위로 다룬다).
+//  ★영수증 사진은 안 내보낸다 — 파일이고, 계약에 없고, 회계 앱이 쓸 데도 없다.
+export function expenseRows(userId, { from = '', to = '' } = {}) {
+  const exps = (ledger.summary({}, Number(userId)).expenses || []);
+  const out = [];
+  for (const e of exps) {
+    const date = String(e.date || '');
+    if (!inRange(date, from, to)) continue;
+    const amount = won(e.amount);
+    if (!(amount > 0)) continue;
+    out.push({
+      date, amount,
+      category: String(e.category || '기타'),
+      method: String(e.method || ''),
+      vendor: String(e.vendor || ''),
+      memo: String(e.memo || ''),
+    });
   }
   out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return out;
@@ -82,5 +122,7 @@ export function incomeRows(userId, { from = '', to = '', tip = true } = {}) {
 // 과거 데이터가 언제부터 있는가 — 바깥 앱이 첫 조회 범위를 정할 때 쓴다.
 export function earliestDate(userId) {
   const rows = incomeRows(userId, {});
-  return rows.length ? rows[0].date : '';
+  const exps = expenseRows(userId, {});
+  const first = [rows[0] && rows[0].date, exps[0] && exps[0].date].filter(Boolean).sort();
+  return first[0] || '';
 }
