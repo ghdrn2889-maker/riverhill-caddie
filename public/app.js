@@ -5021,10 +5021,28 @@ function menuClose() {                            // 사용자가 닫기 → 쌓
   menuCloseUI();
   if (menuPushed && history.state && history.state.mnu) { menuPushed = false; history.back(); }
 }
+// ★메뉴에서 다른 팝업으로 넘어갈 때는 메뉴가 쌓아둔 히스토리를 먼저 되감고, 그 popstate가
+//  도착한 뒤에 다음 팝업을 연다.
+//  (2026-08-29: 테스터가 회원을 한 번 고르면 다시는 못 바꾸던 원인이 여기였다.
+//   menuClose()의 history.back()은 '나중에 처리되는' 일이라, 그 전에 팝업이 pushState를 하면
+//   되감기가 한 칸 밀려 방금 연 팝업을 되감는다. 팝업은 열리자마자 자기 것도 아닌 popstate를
+//   맞고 그 자리에서 닫힌다 — 눌러도 아무 일이 안 일어나는 것처럼 보인다.
+//   테스터의 회원 선택기는 진입 직후 자동으로 한 번 열리므로, 그 한 번만 되고 그 뒤로 막혔다.)
+function menuThen(fn) {
+  if (!(menuPushed && history.state && history.state.mnu)) { menuClose(); fn(); return; }
+  menuPushed = false;
+  let done = false;
+  const go = () => { if (done) return; done = true; window.removeEventListener('popstate', once); fn(); };
+  const once = () => go();
+  window.addEventListener('popstate', once);
+  menuCloseUI();
+  history.back();
+  setTimeout(go, 250);   // 되감기가 안 오는 경우(되돌아갈 칸이 없음)에도 버튼이 죽지 않게
+}
 function initMenu() {
   const mb = $('menuBtn'); if (mb) mb.onclick = menuOpen;
   $('mnuClose').onclick = menuClose;
-  $('mnuWho').onclick = () => { menuClose(); openAccount(); };
+  $('mnuWho').onclick = () => menuThen(openAccount);
   $('mnuLogout').onclick = () => { menuClose(); doLogout(); };
   $('mnuGrid').onclick = (e) => {
     const b = e.target.closest('.mnu-q'); if (!b) return;
