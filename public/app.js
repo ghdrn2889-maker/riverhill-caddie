@@ -4882,10 +4882,51 @@ function lgOpenExpenseToday() {
   }, 80);
 }
 
+// ★테스터인가 — 이 판단은 한 곳에서만 한다. 여기저기 흩어놓으면 한 군데만 빠져도 실제 회원 화면에 샌다.
+function isTesterRole() { return !!(meState && meState.user && meState.user.role === 'tester'); }
+// 회원 목록 한 번 받아 캐시(선택기·전환 카드가 같이 쓴다).
+let _testerMembers = [];
+async function testerMembers() {
+  if (_testerMembers.length) return _testerMembers;
+  if (!isTesterRole()) return [];
+  try {
+    const j = await (await fetch('/api/tester/members')).json();
+    _testerMembers = (j && j.members) || [];
+  } catch { /* 무해 — 못 받으면 빈 목록 */ }
+  return _testerMembers;
+}
+// ★테스터 전용 — 메뉴의 '배치표로 보는 회원' 전환 카드.
+//  로그인한 사람(위 이름줄)과 보고 있는 회원을 나눠 보여준다. 시연에서 둘을 헷갈리지 않게.
+//  ★잠금 ② — 메뉴를 열 때마다 role을 다시 본다. 테스터가 아니면 즉시 숨기고 끝낸다.
+async function renderTesterSwap() {
+  const el = $('mnuSwap'); if (!el) return;
+  if (!isTesterRole()) { el.hidden = true; return; }   // 실제 회원·관리자에겐 여기서 끝
+  el.hidden = false;
+  $('mnuTag').textContent = '체험 계정 · 리버힐';
+  const who = $('mnuSwapWho'); if (!who) return;
+  if (!testerAsMember) {
+    who.innerHTML = '내 계정<em>고르면 그 회원 배치표로 보여요</em>';
+    return;
+  }
+  // 이름은 방금 읽은 배치표 주인이 가장 정확하다. 없으면 목록에서 찾는다.
+  const list = await testerMembers();
+  const m = list.find((x) => String(x.id) === String(testerAsMember));
+  const name = _boardOwnerName || (m && m.name) || '회원';
+  // 부·순번은 지금 화면이 보고 있는 그 근무에서 그대로 가져온다(따로 세지 않는다).
+  let sub = m ? (m.part + '부') : '';
+  const t = lastToday;
+  if (t && Array.isArray(t.rounds)) {
+    const work = t.rounds.filter((r) => r && r.kind === 'work');
+    const pr = work.find((r) => String(r.part) === String(t.primaryPart)) || work[0];
+    if (pr) sub = pr.part + '부' + (Number(pr.myPosition) > 0 ? ' · 순번 ' + pr.myPosition + '번' : '');
+  }
+  who.innerHTML = esc(name) + (sub ? '<em>' + esc(sub) + '</em>' : '');
+}
 function renderMenu() {
   const p = (meState && meState.profile) || {};
   $('mnuName').textContent = p.boardName || '회원';
   $('mnuTag').textContent = (caddieTypeOf(p) === 'house' ? '하우스 캐디' : '3부 캐디') + ' · 리버힐';
+  renderTesterSwap();                 // ★테스터일 때만 전환 카드가 뜬다(아니면 그 안에서 숨긴다)
   $('mnuGrid').innerHTML = MENU_ITEMS.map((x, i) => (x.k === 'trophy' && trophyLocked()) ? '' :
     `<button class="mnu-q${x.off ? ' off' : ''}" type="button" data-i="${i}"`
     + `${x.off ? ` aria-disabled="true" aria-label="${esc(x.t)} — ${esc(x.off)} 중"` : ''}>`
@@ -5043,6 +5084,8 @@ function initMenu() {
   const mb = $('menuBtn'); if (mb) mb.onclick = menuOpen;
   $('mnuClose').onclick = menuClose;
   $('mnuWho').onclick = () => menuThen(openAccount);
+  // ★잠금 ③ — 숨겨져 있어도 눌린 척할 수 있다. 테스터가 아니면 아무 일도 일어나지 않는다.
+  $('mnuSwap').onclick = () => { if (!isTesterRole()) return; menuThen(openTesterPicker); };
   $('mnuLogout').onclick = () => { menuClose(); doLogout(); };
   $('mnuGrid').onclick = (e) => {
     const b = e.target.closest('.mnu-q'); if (!b) return;
