@@ -140,6 +140,34 @@ export function seedPart(part, dateLabel, dateISO) {
   return String(part) === '3' ? seedPart3(dateLabel, dateISO) : seedPart12(part, dateLabel, dateISO);
 }
 
+// ── 지금 앱이 그 날 그 부에 대해 들고 있는 명단(없거나 딴 날 것이면 빈 것) ──
+export function currentRoster(part, dateISO) {
+  try {
+    if (String(part) === '3') {
+      const lb = loadJSON('lastboard.json', null);
+      if (!lb || !lb.rawVerdict) return [];
+      if (labelToISO(lb.rawVerdict.dateLabel || lb.dateLabel || '') !== dateISO) return [];
+      return (lb.rawVerdict.part3Roster || []).filter(Boolean);
+    }
+    const pd = getBoardPart(part);
+    if (!pd || String(pd._targetISO || '') !== dateISO) return [];
+    return (pd.roster || []).filter(Boolean);
+  } catch (e) { return []; }
+}
+
+// ★쪼그라들면 받지 않는다.
+//  실제로 있었던 일: 경기과가 프로그램을 연습하느라 1부에 한 사람만 세워 두었다.
+//  그 날 앱에는 사진으로 읽은 진짜 1부 43명이 서 있었다. 그대로 받았으면 마흔셋이 하나가 됐다.
+//  팀이 취소돼 사람이 빠지는 일은 있어도, 절반 밑으로 꺼지는 배치표는 없다 —
+//  그건 '줄었다'가 아니라 '아직 안 짰다'는 뜻이다. 그런 것은 정본을 못 덮는다.
+export function tooSmall(part, dateISO, rows) {
+  const now = currentRoster(part, dateISO).length;
+  const next = rows.filter((r) => r.name).length;
+  if (!now || next * 2 >= now) return null;
+  return `지금 앱에 선 ${now}명의 절반도 안 되는 ${next}명이라 받지 않았습니다`
+    + ` — 아직 다 안 짠 배치표로 보입니다(경기과 프로그램에는 그대로 저장돼 있습니다).`;
+}
+
 // ── 자국 — 경기과가 마지막으로 보낸 것이 무엇이고 언제였나(화면·점검용) ──
 const MARKF = 'ops-board-last.json';
 export function markOps(rec) { try { saveJSON(MARKF, rec); } catch (e) { /* 자국은 없어도 된다 */ } }

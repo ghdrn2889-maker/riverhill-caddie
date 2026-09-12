@@ -30,7 +30,7 @@ import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
 import { setPartRange, setPartOneway, setPartSlot, clearPart, dayFrameParts } from './dayframe.mjs';
 import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
-import { translateOps, seedPart, markOps, lastOps, logOps } from './opsboard.mjs';   // 경기과 배치표 프로그램에서 온 하루치
+import { translateOps, seedPart, tooSmall, markOps, lastOps, logOps } from './opsboard.mjs';   // 경기과 배치표 프로그램에서 온 하루치
 import { keyFromLabel } from './boardpending.mjs';   // 수동 인턴은 날짜에 붙는다 — 라벨을 키로 바꾼다
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { renderBooking } from '../tools/gen-booking.mjs';
@@ -879,6 +879,9 @@ app.post('/api/ops-board', gate, async (req, res) => {
     if (!pd) continue;
     // 아직 아무도 안 선 부는 건드리지 않는다 — '안 짰다'와 '비우라'는 다르다
     if (!pd.rows.some((r) => r.name)) { done.push({ part, skipped: '명단 없음' }); continue; }
+    // ★아직 다 안 짠 배치표가 정본을 덮지 못하게 — 자세한 까닭은 opsboard.mjs tooSmall 주석에 있다
+    const small = tooSmall(part, t.dateISO, pd.rows);
+    if (small) { console.warn(`🚫 [경기과] ${t.dateLabel} ${part}부 — ${small}`); done.push({ part, skipped: small }); continue; }
     let seeded = 'kept';
     try { seeded = seedPart(part, t.dateLabel, t.dateISO); }
     catch (e) { done.push({ part, error: `자리 세우기 실패 — ${e.message}` }); continue; }
