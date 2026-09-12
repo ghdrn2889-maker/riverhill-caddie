@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+// 경기과 프로그램이 실제로 만들어 낼 하루치를 한 장 찍어 낸다 — 옮기개 시험용 원본
+setTimeout(function(){
+  var o = [];
+  try{
+    localStorage.clear(); resetToBoard(); DATE = BOARD.date;
+    bootLoad();
+    // 순번을 세우고, 인턴을 하나 끼우고, 팀을 하나 더하고, 한 사람을 자리에서 뺀다
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    var p3 = part('3');
+    setIntern('3', 2, '오인턴', true);
+    addTeam('3', p3.tees[0].time, null);
+    var a = active(p3);
+    for (var i=0;i<a.length;i++) if (a[i].n && !a[i].itn) { TAG[a[i].n] = '휴무'; break; }
+    paint();
+    o.push('DUMP:' + state());
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 1400);
+</script>

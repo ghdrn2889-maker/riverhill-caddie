@@ -30,6 +30,7 @@ import { saveSandbox, clearSandbox } from './daejosandbox.mjs';
 import { setPartRange, setPartOneway, setPartSlot, clearPart, dayFrameParts } from './dayframe.mjs';
 import { autoNotifyPart, boardIntegrity, currentStateMsg, markNotified } from './boardpush.mjs';
 import { correctPart3, loadLastBoard, nkey, correctionMsg } from './boardcorrect.mjs';
+import { translateOps, seedPart, markOps, lastOps, logOps } from './opsboard.mjs';   // 경기과 배치표 프로그램에서 온 하루치
 import { keyFromLabel } from './boardpending.mjs';   // 수동 인턴은 날짜에 붙는다 — 라벨을 키로 바꾼다
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { renderBooking } from '../tools/gen-booking.mjs';
@@ -848,6 +849,65 @@ app.post('/api/board-correct', gate, async (req, res) => {
   res.json({ ok: true, cellChanges: out.cellChanges, interns: out.interns, updated: out.updated, pulls: pulls3, dropped: out.dropped || [],
     pending: pendingFor(out.pending, auto), notifyToken: tokenFor(out.pending, auto, notify, '3'), auto: autoBrief(auto) });
 });
+
+// ══ 경기과 배치표 프로그램에서 온 하루치 ═══════════════════════════════
+//  ★사진이 없는 배치표다. 경기과가 손으로 만든 것이고, 그게 곧 본배치표다.
+//   여기서 하는 일은 둘뿐이다 — 경기과 말을 앱 말로 옮기고, 받을 자리가 없으면 세운다.
+//   회원별 다시 계산은 board-correct 그 문을 그대로 탄다. 문은 하나다.
+//  ★알림은 울리지 않는다(notify·autoNotify 둘 다 끔).
+//   경기과는 한 번에 완성하지 않는다 — 짜다 저장하고, 고치고 또 저장한다.
+//   저장할 때마다 울리면 회원 폰이 하루에 수십 번 울린다. 화면만 따라 바뀐다.
+//  ★뒷정리(reconcilePulls)도 안 돌린다. 경기과가 세 부를 다 말해 주므로
+//   앱이 부 사이를 혼자 짐작해 사람을 뺄 까닭이 없다 — 짐작이 정답을 덮는다.
+app.post('/api/ops-board', gate, async (req, res) => {
+  const _tok = req.query.k || req.get('x-monitor-token') || '';
+  const by = String(req.body?.by || '경기과');
+  let t;
+  try { t = translateOps(req.body?.s); }
+  catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+
+  // ★지난 날은 받지 않는다 — 아무도 안 쓰는 자료로 오늘 것을 밀어낼 수 있다.
+  const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  if (t.dateISO < todayISO) {
+    return res.status(400).json({ ok: false, skipped: 'past',
+      error: `${t.dateLabel}은 지난 날이라 앱에 반영하지 않았습니다(경기과 프로그램에는 그대로 저장돼 있습니다).` });
+  }
+
+  const done = [];
+  for (const part of ['1', '2', '3']) {
+    const pd = t.parts[part];
+    if (!pd) continue;
+    // 아직 아무도 안 선 부는 건드리지 않는다 — '안 짰다'와 '비우라'는 다르다
+    if (!pd.rows.some((r) => r.name)) { done.push({ part, skipped: '명단 없음' }); continue; }
+    let seeded = 'kept';
+    try { seeded = seedPart(part, t.dateLabel, t.dateISO); }
+    catch (e) { done.push({ part, error: `자리 세우기 실패 — ${e.message}` }); continue; }
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/board-correct`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-monitor-token': _tok },
+        body: JSON.stringify({ part, rows: pd.rows, interns: pd.interns, allInterns: pd.allInterns,
+          cutLine: pd.cutLine, dutySet: pd.dutySet,
+          notify: false, autoNotify: false, _noReconcile: true }),
+      });
+      const j = await r.json();
+      if (!j.ok) { done.push({ part, seeded, error: j.error || '알 수 없음' }); continue; }
+      done.push({ part, seeded, updated: j.updated, cellChanges: j.cellChanges,
+        rows: pd.rows.length, cut: pd.cutLine, interns: pd.interns.length, dropped: (j.dropped || []).length });
+    } catch (e) { done.push({ part, seeded, error: e.message }); }
+  }
+
+  const okParts = done.filter((d) => d.updated !== undefined);
+  const bad = done.filter((d) => d.error);
+  markOps({ at: Date.now(), by, dateLabel: t.dateLabel, dateISO: t.dateISO, parts: done });
+  logOps({ at: Date.now(), by, dateLabel: t.dateLabel, parts: done });
+  console.log(`🏳 [경기과] ${t.dateLabel} 받음(${by}) — `
+    + (okParts.map((d) => `${d.part}부 ${d.rows}명·커트 ${d.cut}·회원 ${d.updated}명`).join(' / ') || '반영된 부 없음')
+    + (bad.length ? ` · 실패 ${bad.map((d) => `${d.part}부(${d.error})`).join(', ')}` : '') + ' · 알림 없음');
+  res.json({ ok: bad.length === 0, dateLabel: t.dateLabel, parts: done, notified: false });
+});
+
+// 경기과 프로그램이 마지막으로 보낸 것 — 잘 오고 있나 눈으로 볼 수 있게
+app.get('/api/ops-board', gate, (req, res) => res.json({ ok: true, last: lastOps() }));
 
 // ★교정 정정알림 확정 발송 — board-correct가 돌려준 notifyToken을 관리자가 미리보기 후 확인하면 실제 발송.
 app.post('/api/board-notify', gate, async (req, res) => {

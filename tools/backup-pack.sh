@@ -15,6 +15,7 @@ set -euo pipefail
 APP="${APP:-/home/ada/riverhill-caddie}"
 OUT="${OUT:-/home/ada/riverhill-backup}"
 PASS="${PASS:-/home/ada/.riverhill-backup-pass}"
+BOARDDATA="${BOARDDATA:-/home/ada/riverhill-board/data}"   # 배치표가 짜 놓은 것
 KEEP_CORE="${KEEP_CORE:-90}"
 KEEP_MEDIA="${KEEP_MEDIA:-8}"
 GPG=(gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$PASS")
@@ -86,6 +87,12 @@ pack_core(){
   rsync -a --exclude '.git/' --exclude 'data/' --exclude 'data.bak-*' \
            --exclude '*.log' --exclude 'node_modules/.cache/' \
            "$APP/" "$s/app/"
+  # ★배치표는 따로 도는 프로그램이지만 짐은 같이 싼다 —
+  #   경기과가 짜 놓은 그날 배치표도 잃으면 안 되는 것이다
+  if [ -d "$BOARDDATA" ]; then
+    mkdir -p "$s/board"
+    rsync -a "$BOARDDATA/" "$s/board/"
+  fi
   # 데이터 — 사진은 따로 싼다
   snapdb "$s/data/app.db" || die "회원 파일을 못 떴습니다"
   rsync -a --exclude 'users/' --exclude 'ingest-images/' \
@@ -97,7 +104,7 @@ pack_core(){
 싼 곳    : $(hostname)
 프로그램 : $(cd "$APP" && git rev-parse --short HEAD 2>/dev/null || echo 모름)
 노드     : $(node -v)
-생김새   : app/(프로그램·부품·.env) · data/(사진 뺀 데이터)
+생김새   : app/(프로그램·부품·.env) · data/(사진 뺀 데이터) · board/(배치표가 짜 놓은 것)
 세우는 법: tools/backup-restore.sh <목적지> 로 푼다
 INFO
   local f; f=$(seal core "$s")

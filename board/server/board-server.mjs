@@ -90,6 +90,69 @@ function body(req) {
   });
 }
 
+// ══ 앱에 알리기 ═══════════════════════════════════════════════
+// ★경기과가 저장을 누르면 캐디 총무 앱도 그대로 따라간다.
+//   여태 앱은 카톡에 올라온 배치표 '사진'을 읽어서 알았다. 이제는 만든 곳에서 바로 받는다.
+//
+//  ★여기서 지키는 세 가지.
+//   ① 저장을 막지 않는다 — 앱이 느리거나 꺼져 있어도 경기과 화면은 그대로 돈다.
+//   ② 모아서 한 번만 보낸다 — 경기과는 짜다 저장하고 고쳐 또 저장한다.
+//      누를 때마다 보내면 앱이 회원 여든 명을 그때마다 다시 계산한다.
+//      마지막으로 누른 뒤 조용해지면 그때 한 번 보낸다.
+//   ③ 실패하면 몇 번 더 해 본다 — 그러고도 안 되면 자국을 남긴다.
+//      자국은 /ok 에서 볼 수 있다. 조용히 안 가고 있는 것이 제일 나쁘다.
+const APPURL  = process.env.BOARD_APP_URL || '';                 // 비어 있으면 안 보낸다(지금까지와 똑같이 돈다)
+const APPKEY  = process.env.BOARD_APP_TOKEN || '';
+const APPWAIT = Math.max(1, Number(process.env.BOARD_APP_WAIT || 20)) * 1000;   // 조용해지길 기다리는 시간
+const APPTRY  = 3;                                               // 실패했을 때 더 해 보는 횟수
+const APPQ = new Map();                                          // 날짜 → 기다리는 중인 알림
+let APPLAST = null;                                              // 마지막 결과 — 눈으로 볼 자국
+
+const kstKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }).replace(/-/g, '');
+
+function tellApp(k) {
+  if (!APPURL) return;
+  if (k < kstKey()) return;                 // 지난 날은 안 보낸다 — 앱에서 쓸 일이 없다
+  const t = APPQ.get(k);
+  if (t) clearTimeout(t.timer);
+  APPQ.set(k, { timer: setTimeout(() => { APPQ.delete(k); sendApp(k, 1); }, APPWAIT) });
+}
+
+async function sendApp(k, n) {
+  const rec = readDay(k);
+  if (!rec || !rec.s) return;
+  // ★자국은 늘 '지금 어떤가'를 말해야 한다. 옛 성공을 붙들고 있으면
+  //   안 가고 있는 동안에도 잘 가는 것처럼 보인다 — 조용히 안 가는 것이 제일 나쁘다.
+  const mark = (ok, note, again) => {
+    APPLAST = { at: new Date().toISOString(), day: k, ok, note, tries: n, ...(again ? { again: true } : {}) };
+    log(ok ? '앱에 보냄' : (again ? '앱에 다시 해 봅니다' : '★앱에 못 보냄'), k, note);
+  };
+  try {
+    const r = await fetch(APPURL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-monitor-token': APPKEY },
+      body: JSON.stringify({ s: rec.s, by: rec.by || '', label: rec.label || '' }),
+      signal: AbortSignal.timeout(60000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok) {
+      const brief = (j.parts || []).filter((x) => x.updated !== undefined)
+        .map((x) => `${x.part}부 ${x.rows}명(회원 ${x.updated})`).join(' / ') || '반영된 부 없음';
+      return mark(true, `${j.dateLabel || ''} ${brief}`);
+    }
+    // 날짜가 지났다는 식의 '되돌려보냄'은 다시 시도해도 같다 — 그냥 적어 둔다
+    if (r.status === 400) return mark(false, j.error || '앱이 받지 않았습니다');
+    throw new Error(`앱이 ${r.status}`);
+  } catch (e) {
+    if (n < APPTRY) {
+      mark(false, `${n}/${APPTRY} — ${e.message}`, true);
+      setTimeout(() => sendApp(k, n + 1), 30000 * n);
+      return;
+    }
+    mark(false, e.message);
+  }
+}
+
 // ══ 문 — 리버힐 전용 입장 코드 ═══════════════════════════════
 // ★배치표는 제 문을 가진다. 앱 로그인을 안 빌린다 — 앱과 이 프로그램은 따로다.
 //   경기과 분들은 캐디가 아니다. 캐디 앱 회원으로 만들 까닭이 없다.
@@ -370,7 +433,7 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, html, 'text/html; charset=utf-8');
     }
-    if (req.method === 'GET' && p === '/ok') return sendJSON(res, 200, { ok: true, days: listDays().length });
+    if (req.method === 'GET' && p === '/ok') return sendJSON(res, 200, { ok: true, days: listDays().length, app: APPURL ? (APPLAST || { note: '아직 보낸 적 없음' }) : null });
 
     // ── 저장된 날 목록
     if (req.method === 'GET' && p === '/api/days') return sendJSON(res, 200, { ok: true, days: listDays() });
@@ -406,6 +469,7 @@ const server = http.createServer(async (req, res) => {
       };
       if (old && old.s !== rec.s) keepPrev(d, old);   // ★덮는 순간 옛 판을 남긴다
       writeDay(d, rec);
+      tellApp(d);              // ★앱에도 알린다 — 저장을 막지 않는다
       log('저장', d, (inb.s.length / 1024).toFixed(0) + 'KB', who);
       return sendJSON(res, 200, { ok: true, at: rec.at, sig: sig(rec.s) });
     }
