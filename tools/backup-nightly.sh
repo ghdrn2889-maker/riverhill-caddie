@@ -32,12 +32,13 @@ if [ -s "$OFFCONF" ] && [ -x "$RCLONE" ]; then
   TARGET=$(head -1 "$OFFCONF" | tr -d '\r\n')
   if [ -n "$TARGET" ]; then
     # ★보내기만 하고 지우지는 않는다 — 여기 것이 통째로 날아가도 저쪽은 남는다
-    if "$RCLONE" copy "$OUT" "$TARGET" --include 'riverhill-*.tar.zst.gpg' \
+    # ★보낼 때는 앱 열쇠 꾸러미(riverhill-appkeys-*)까지 챙긴다
+    if "$RCLONE" copy "$OUT" "$TARGET" --include 'riverhill-*.gpg' \
          --transfers 2 --retries 3 --stats-one-line --stats 0 2>&1; then
       # 저쪽에서 아주 오래된 것만 걷는다
       "$RCLONE" delete "$TARGET" --include 'riverhill-*.tar.zst.gpg' \
          --min-age "${KEEP_OFFSITE_DAYS}d" 2>&1 || true
-      n=$("$RCLONE" lsf "$TARGET" --include 'riverhill-*.tar.zst.gpg' 2>/dev/null | wc -l)
+      n=$("$RCLONE" lsf "$TARGET" --include 'riverhill-*.gpg' 2>/dev/null | wc -l)
       offline="됨 — $TARGET 에 $n 개"
       say "집 밖으로 보냄: $offline"
     else
