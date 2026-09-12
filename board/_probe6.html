@@ -1,0 +1,10 @@
+<script>
+(function(){
+  openDuty('\ubc8c\ub2f9');
+  for (var i=0;i<3;i++){ document.querySelectorAll('#dutySug button')[0].click(); openDuty('\ubc8c\ub2f9'); }
+  var r=document.getElementById('sheet').getBoundingClientRect();
+  var t=document.createElement('div'); t.id='PROBE';
+  t.textContent=[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join(',');
+  document.body.appendChild(t);
+})();
+</script>

@@ -1,0 +1,111 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function chip(t){ return qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')===t; })[0]; }
+function type(v){ var i=q('#wkQ'); i.focus(); i.value=v; i.dispatchEvent(new Event('input',{bubbles:true})); }
+function rows(){ return qa('.wrow[data-who]'); }
+function names(){ return rows().map(function(b){ return b.querySelector('.n').textContent; }); }
+function rowOf(n){ return rows().filter(function(b){ return b.querySelector('.n').textContent===n; })[0]; }
+function fils(){ return qa('[data-wfil]').map(function(b){ return b.textContent.trim(); }); }
+function filBtn(v){ return qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')===v; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // ── ① 찾는 칸은 이제 하나뿐
+    L('','★갑. 찾는 칸 세기');
+    ok(qa('input#wkQ').length===1, '  근무표 찾기 칸', qa('input#wkQ').length+'개');
+    ok(qa('#bkQ').length===0, '  옛 한꺼번에-지정 찾기 칸', qa('#bkQ').length+'개 (0이어야)');
+    ok(typeof openBulkFind==='undefined', '  옛 찾기 창 함수',
+       typeof openBulkFind==='undefined'?'없어짐 ◎':'★아직 있음');
+    var f0 = fils();
+    L('  거르개(끈 상태)', f0.join(' | '));
+    ok(!q('.bulk .bsr'), '  끈 상태의 가짜 검색칸',
+       q('.bulk .bsr') ? '★아직 있음: "'+q('.bulk .bsr').textContent.trim()+'"' : '줄 자체가 없음 ◎');
+    ok(qa('.bulk input').length===0, '  한꺼번에-지정 띠 안의 치는 칸',
+       qa('.bulk input').length+'개 (0이어야 — 찾는 칸은 근무표 맨 위 하나뿐)');
+
+    // ── ② 한꺼번에 지정을 켜면 칩이 하나 는다
+    L('','★을. 휴무 켜기');
+    tap(chip('휴무'));
+    ok(bulkOn() && bulkTag()==='휴무','  켜짐', bulkTag());
+    var f1 = fils();
+    L('  거르개', f1.join(' | '));
+    ok(f1.length===f0.length+1, '  칩이 하나 늘었나', f0.length+'→'+f1.length);
+    ok(!!filBtn('*now'), '  지금-칩', filBtn('*now')?'"'+filBtn('*now').textContent.trim()+'" ◎':'★없음');
+    ok(f1[0].indexOf('휴무')>=0, '  맨 앞인가', '"'+f1[0]+'"');
+    L('  띠 안내', q('.bulk .bsr') ? q('.bulk .bsr').textContent.trim() : '(없음)');
+    ok(!q('.bulk .bsrb'), '  옛 찾기 단추', q('.bulk .bsrb')?'★아직 상자':'글줄로 바뀜 ◎');
+
+    // ── ③ 근무표 찾기 칸으로 좁히고 그 자리에서 누른다
+    L('','★병. 근무표에서 바로 찾아 누르기');
+    var all0 = rows().length;
+    type('김');
+    var got = names();
+    ok(got.length < all0 && got.length>0, '  "김" 침', all0+'명 → '+got.length+'명 ('+got.slice(0,5).join(' ')+' …)');
+    ok(!q('#sheet').classList.contains('on'), '  창', q('#sheet').classList.contains('on')?'★열림':'안 열림 ◎');
+    var nm = got[0];
+    tap(rowOf(nm));
+    ok(tagOf(nm)==='휴무', '  '+nm+' 누름', '"'+(tagOf(nm)||'근무')+'"');
+    ok(!q('#sheet').classList.contains('on'), '  창', q('#sheet').classList.contains('on')?'★열림':'안 열림 ◎');
+    ok(q('#wkQ').value==='김', '  친 말', '"'+q('#wkQ').value+'"');
+    ok(names().join()===got.join(), '  줄 차례', names().join()===got.join()?'안 움직임 ◎':'★움직임');
+    ok(rowOf(nm).className.indexOf('bsel')>=0, '  그 줄 표', rowOf(nm).className.indexOf('bsel')>=0?'파랗게 ◎':'★없음');
+    tap(rowOf(nm));
+    ok(tagOf(nm)!=='휴무', '  또 누름', '"'+(tagOf(nm)||'근무')+'" 빠짐');
+
+    // ── ④ 여러 명 지정한 뒤 '지금 휴무' 칩
+    L('','★정. 지금 휴무인 사람만 보기');
+    ['김','이','박'].forEach(function(g){
+      type(g);
+      names().slice(0,2).forEach(function(n){ tap(rowOf(n)); });
+    });
+    type('');
+    var real = JONAMES.filter(function(n){ return tagOf(n)==='휴무'; });
+    tap(filBtn('*now'));
+    var shown = names();
+    L('  칩 누름', '"'+filBtn('*now').textContent.trim()+'"');
+    L('  보이는 줄', shown.length+'명 — '+shown.slice(0,8).join(' '));
+    ok(shown.length>=real.length, '  실제 휴무', real.length+'명 — 다 보이나 '+
+       (real.every(function(n){ return shown.indexOf(n)>=0; })?'◎':'★빠짐'));
+    ok(shown.length===rows().length, '  거르개가 걸렸나', '전체 '+all0+'명 중 '+shown.length+'명만');
+
+    // ── ⑤ 칩을 켜 둔 채 배지를 떼도 줄이 안 달아난다
+    L('','★무. 켠 채로 배지 떼기');
+    var one = shown[0], before = names().length;
+    tap(rowOf(one));
+    ok(tagOf(one)!=='휴무', '  '+one+' 뗌', '"'+(tagOf(one)||'근무')+'"');
+    ok(!!rowOf(one), '  그 줄', rowOf(one)?'자리에 남음 ◎ (달아나면 다음 누름이 엉뚱한 데 간다)':'★사라짐');
+    ok(names().length===before, '  줄 수', before+'→'+names().length);
+
+    // ── ⑥ 찾기 + 칩을 같이 걸 수 있다
+    L('','★기. 찾기와 칩 같이');
+    type('김');
+    var both = names();
+    ok(both.every(function(n){ return n.indexOf('김')>=0 && (tagOf(n)==='휴무'||bulkTouched().indexOf(n)>=0); }),
+       '  둘 다 걸리나', both.join(' ')||'(없음)');
+    type('');
+
+    // ── ⑦ 끄면 칩도 같이 걷힌다
+    L('','★경. 끄기');
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    ok(!bulkOn(), '  켠 것', bulkOn()?'★아직':'꺼짐 ◎');
+    ok(!filBtn('*now'), '  지금-칩', filBtn('*now')?'★남음':'같이 걷힘 ◎');
+    ok(rows().length===all0, '  근무표', rows().length+'명 / 처음 '+all0+'명 '+
+       (rows().length===all0?'◎ 다 돌아옴':'★아무도 안 남는 거르개가 켜진 채'));
+    var fv = qa('[data-wfil]').map(function(b){ return b.getAttribute('data-wfil'); });
+    ok(fv.indexOf('*now')<0 && fv[0]==='', '  거르개 칩', fv.join(' | ')
+       + '  (PC는 "그 밖"이 없다 — 화면마다 다르고 그건 여기서 볼 것이 아니다)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

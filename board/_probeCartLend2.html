@@ -1,0 +1,122 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function act(a){ return qa('#sheet [data-act="'+a+'"]')[0]; }
+function row(n){ return qa('.wrow').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work');
+
+    // ── ① 오타 고쳐진 주인표
+    L('주인표 오타', ['김주희','허웅진','장소희'].map(function(n){
+        return n + ' ' + (ownCart(n) || '없음') + '번'; }).join(' · ')
+      + ' ' + (ownCart('김주희')===1 && ownCart('허웅진')===2 && ownCart('장소희')===17 ? '◎':'✗'));
+    L('  카트 없는 사람', JONAMES.filter(function(n){ return !cartOf(n); }).length + '명 (전 18명)');
+
+    // ── ② 빌린 카트는 주인표를 안 덮는다
+    var me = active(part('3'))[0].n;                 // 3부에서 일하는 사람
+    var lender = active(part('1'))[0].n;             // 1부 사람 — 3부엔 안 탄다
+    var lc = ownCart(lender);
+    L('빌리는 사람', me + ' 제 카트 ' + (ownCart(me)||'없음') + ' · 일하는 부 '
+      + workParts(me).map(function(k){ return part(k).name; }).join('·'));
+    L('빌려줄 카트', lc + '번 (주인 ' + lender + ' · ' + workParts(lender).map(function(k){
+        return part(k).name; }).join('·') + ')');
+    setCartToday(me, lc);
+    L('빌린 뒤', me + ' 오늘 ' + cartOf(me) + '번 · 빌림 ' + (isLent(me)?'◎':'✗')
+      + ' · ★주인 카트 ' + (ownCart(me) || '없음')
+      + ' ' + (ownCart(me) !== lc ? '◎ 안 덮였다':'✗ 덮였다'));
+    L('  주인은 그대로', lender + ' 주인 ' + ownCart(lender) + '번 · 오늘 ' + cartOf(lender) + '번 '
+      + (ownCart(lender)===lc && cartOf(lender)===lc ? '◎':'✗'));
+
+    // ── ③ 날을 넘기면 빌림만 풀린다
+    var d0 = DATE;
+    carryToNextDay();
+    L('★날을 넘기면', me + ' 오늘 ' + (cartOf(me)||'없음') + ' · 빌림 '
+      + (isLent(me)?'남음 ✗':'풀림 ◎')
+      + ' · 주인표 ' + lender + ' ' + ownCart(lender) + '번 '
+      + (ownCart(lender)===lc ? '그대로 ◎':'✗'));
+    for (var i=0;i<8 && DATE!==d0;i++) undo();
+    L('  되돌림', DATE + ' · ' + me + ' ' + (cartOf(me)||'없음') + '번 빌림 '
+      + (isLent(me)?'◎':'✗'));
+
+    // ── ④ 사용중은 못 빌린다
+    setView('work'); tap(row(me)); tap(act('cartpick'));
+    L('고르기 창', q('#sheet').classList.contains('on') ? '열림 ◎':'✗');
+    var hd = qa('#sheet .bhd').map(function(x){ return x.textContent.split(' ·')[0]; });
+    L('  갈래', hd.join(' | '));
+    var rows = qa('#sheet .brow');
+    L('  줄', rows.length + '개 · 누를 수 있는 것 '
+      + rows.filter(function(b){ return !b.disabled; }).length + '개');
+    var busy = qa('#sheet .brow.ctbusy');
+    L('  ★사용중', busy.length + '대 · 전부 잠겼나 '
+      + (busy.every(function(b){ return b.disabled; }) ? '◎':'✗'));
+    if (busy.length){
+      var bn = Number(busy[0].getAttribute('data-cartno'));
+      L('    보기', bn + '번 — ' + busy[0].querySelector('.bg').textContent
+        + ' · 3부에서 ' + cartState(bn, '3'));
+    }
+    var freeRows = qa('#sheet .brow.ctfree');
+    L('  빔', freeRows.length + '대 · 전부 누를 수 있나 '
+      + (freeRows.every(function(b){ return !b.disabled; }) ? '◎':'✗'));
+    L('  ★고른 카트가 3부에서 진짜 비었나', freeRows.slice(0,20).every(function(b){
+        return cartState(Number(b.getAttribute('data-cartno')), '3') === 'free'; }) ? '◎':'✗');
+
+    // ── ⑤ 창에서 골라 빌린다
+    var pickNo = Number(freeRows[0].getAttribute('data-cartno'));
+    tap(freeRows[0]);
+    L('창에서 고름', me + ' 오늘 ' + cartOf(me) + '번 ' + (cartOf(me)===pickNo ? '◎':'✗')
+      + ' · 빌림 ' + (isLent(me)?'◎':'✗')
+      + ' · 창 ' + (sheetKind === 'person' ? '사람 창으로 돌아옴 ◎':'?'));
+    setView('work');
+    L('  근무표 칸', row(me).querySelector('.ct').textContent.trim()
+      + ' · 빌림 표시 ' + (row(me).querySelector('.ct').className.indexOf('lent')>=0 ? '◎':'✗'));
+
+    // ── ⑥ 제 카트로 되돌리기
+    tap(row(me)); tap(act('cartmine'));
+    L('제 카트로', me + ' 오늘 ' + (cartOf(me)||'없음') + ' · 빌림 ' + (isLent(me)?'✗':'풀림 ◎'));
+
+    // ── ⑥.5 ★주인이 타고 있는 시간대에는 잠긴다 (1부 사람으로 다시 본다)
+    var w1 = active(part('1')).slice(0, part('1').tees.length)
+      .map(function(r){ return r.n; }).filter(function(n){ return !cartOf(n); })[0]
+      || active(part('1'))[2].n;
+    setView('work'); tap(row(w1)); tap(act('cartpick'));
+    var busy2 = qa('#sheet .brow.ctbusy'), free2 = qa('#sheet .brow.ctfree');
+    L('★1부 사람 ' + w1 + ' 이 고를 때', '사용중 ' + busy2.length + '대 · 빔 ' + free2.length + '대');
+    L('  사용중은 다 잠겼나', busy2.length && busy2.every(function(b){ return b.disabled; })
+      ? '◎':(busy2.length ? '✗':'사용중이 0대라 못 가림'));
+    L('  사용중이 진짜 1부에서 쓰이나', busy2.slice(0,20).every(function(b){
+        return cartState(Number(b.getAttribute('data-cartno')), '1') === 'busy'; }) ? '◎':'✗');
+    L('  빈 것이 진짜 1부에서 비었나', free2.slice(0,20).every(function(b){
+        return cartState(Number(b.getAttribute('data-cartno')), '1') === 'free'; }) ? '◎':'✗');
+    var someBusy = busy2.length ? Number(busy2[0].getAttribute('data-cartno')) : 0;
+    if (someBusy){
+      setCartToday(w1, someBusy);
+      L('  ★잠긴 것을 억지로 넣으면', w1 + ' → ' + cartOf(w1) + '번 · 겹침 '
+        + cartClashes().length + '건 ' + (cartClashes().length ? '◎ 경고가 뜬다':'✗'));
+      undo();
+    }
+    closeSheet();
+
+    // ── ⑦ 겹침 경고
+    var a1 = active(part('1'))[0].n, a2 = active(part('1'))[1].n;
+    setCartToday(a2, cartOf(a1));
+    setView('work');
+    var cl = cartClashes();
+    L('★같은 부 한 카트 둘', cl.length + '건 ' + (cl.length ? '◎ 잡음':'✗')
+      + (cl.length ? ' — ' + part(cl[0].pk).name + ' ' + cl[0].cart + '번 ' + cl[0].who.join('·') : ''));
+    L('  화면에 뜨나', q('.drift') && q('.drift').textContent.indexOf('한 카트를 둘이')>=0
+      ? '◎ 근무표에 뜸':'✗');
+    undo();
+    L('  되돌리면', cartClashes().length + '건');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

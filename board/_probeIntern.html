@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nums(pk, k){ var p=part(pk); var out=[];
+    for (var i=0;i<k;i++) out.push(seatNoTx(p,i)+':'+((active(p)[i]||{}).n||'-'));
+    return out.join(' '); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    var T0 = workTally();
+    L('전', nums('1', 6));
+    L('  총원·가용', T0.total + ' / ' + T0.avail + ' · 1부 인원 ' + active(part('1')).length);
+    var who3 = active(part('1'))[2].n;
+
+    // ── 3번 칸을 인턴으로
+    setIntern('1', 2, '박인턴', true);
+    var T1 = workTally();
+    L('', '');
+    L('★3번을 인턴으로', nums('1', 6));
+    L('  ★뒤 번호가 당겨졌나', seatNo(part('1'), 3) === 3 ? '4번째 칸이 3번 ◎' : '✗ ' + seatNo(part('1'),3));
+    L('  ★총원·가용', T0.total + '→' + T1.total + ' / ' + T0.avail + '→' + T1.avail
+      + (T1.total === T0.total ? ' ◎ 인턴은 안 든다' : ' ✗'));
+    L('  쫓겨난 ' + who3, workRows().filter(function(r){ return r.n===who3; }).map(function(r){ return r.st; })[0] || '안 보임');
+    L('  인턴이 근무표에', workRows().some(function(r){ return r.n==='박인턴'; }) ? '보인다 ✗' : '안 보인다 ◎');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  칸 색', (function(){ var c=document.querySelector('.cell.itnc'); return c? '노란 칸 ◎ · 번호칸 "'
+        + c.querySelector('.p').textContent + '"' : '✗'; })());
+
+    // ── 순번 세우기가 안 건드리나
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('', '');
+    L('★순번 세우기가 인턴 칸을', pl && pl.slots.some(function(s){ return s.pk==='1' && s.i===2; })
+      ? '건드린다 ✗' : '안 건드린다 ◎');
+    applyLineup(seonbal(), ['1','2']);
+    L('  세운 뒤', nums('1', 6));
+    L('  인턴 그대로', active(part('1'))[2].n === '박인턴' && isItn(active(part('1'))[2]) ? '◎' : '✗');
+
+    // ── 티오프는 차지하나
+    var t = part('1').tees[2];
+    L('  인턴 칸 티오프', t ? t.time + ' ' + t.course + ' ◎ 차지한다' : '✗ 없다');
+
+    // ── 되돌리기 · 풀기
+    L('', '');
+    setIntern('1', 2, '', false);
+    L('인턴 풀기', nums('1', 6));
+    L('  번호가 다시 밀렸나', seatNo(part('1'), 3) === 4 ? '◎' : '✗ ' + seatNo(part('1'),3));
+    undo(); undo();
+    L('되돌리기 두 번', nums('1', 6) + ' · 총원 ' + workTally().total);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

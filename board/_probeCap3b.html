@@ -1,0 +1,52 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+  DAY.forEach(function(p){ p.roster=[]; });
+  PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+}
+function seatsOf(pk){ return active(part(pk)).map(function(r){ return r.n||'(빈)'; }); }
+function dups(list){ var c={},o=[]; list.forEach(function(n){ if(n==='(빈)')return;
+  c[n]=(c[n]||0)+1; if(c[n]===2) o.push(n); }); return o; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ★자리를 사람보다 많이 깔면 어떻게 되나 — 1·2부는 '한 바퀴 더'가 정상이다
+    L('','★갑. 3부 — 사람(19)보다 많은 자리를 깐다: 한도 30 → 33칸');
+    reset(); SMAX['3']=30;
+    var pool3 = lineupPool('bu3').length, t3 = part('3').tees.length;
+    applyLineup(bu3Start(), ['3']);
+    var s3 = seatsOf('3'), d3 = dups(s3);
+    L('  설 사람 / 깐 자리', pool3+'명 / '+(t3+30)+'칸');
+    L('  실제 자리', s3.length+'칸');
+    L('  같은 사람이 두 번', d3.length+'명 — '+d3.slice(0,6).join(' '));
+    ok(d3.length===0, '  ★한 부 안 중복이 없나', d3.length? '★'+d3.length+'명 겹침':'없음 ◎');
+    L('  3부 줄 앞 24', s3.slice(0,24).join(' · '));
+
+    // ── 을. 같은 조건을 1·2부에 — 여기서는 '두 부 뛰기'라 말이 된다
+    L('','★을. 1·2부 — 자리를 사람보다 많이 (한도 20/20)');
+    reset(); SMAX['1']=20; SMAX['2']=20;
+    var pool12 = lineupPool('house').length;
+    applyLineup(seonbal(), ['1','2']);
+    var a1=seatsOf('1'), a2=seatsOf('2');
+    L('  설 사람 / 깐 자리', pool12+'명 / '+(part('1').tees.length+20+part('2').tees.length+20)+'칸');
+    L('  한 부 안 중복', '1부 '+dups(a1).length+' · 2부 '+dups(a2).length);
+    L('  두 부 겹친 사람', dups(a1.concat(a2)).length+'명');
+    ok(dups(a1).length===0 && dups(a2).length===0, '  한 부 안에서는 안 겹치나', '◎');
+
+    // ── 병. 3부에 두 부가 있었다면? — 묶음이 길면 저절로 풀리는지
+    L('','★병. 묶음 길이가 문제인가 — ["2","3"] 으로 세워 본다');
+    reset(); SMAX['3']=30;
+    applyLineup(bu3Start(), ['2','3']);
+    var b2=seatsOf('2'), b3=seatsOf('3');
+    L('  2부/3부 자리', b2.length+' / '+b3.length);
+    L('  한 부 안 중복', '2부 '+dups(b2).length+' · 3부 '+dups(b3).length);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

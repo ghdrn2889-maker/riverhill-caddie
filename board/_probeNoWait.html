@@ -1,0 +1,92 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function pills(n){ var r=rowOf(n); if(!r) return null;
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return e.textContent.trim(); }); }
+function R(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    // ── 갑. 대기 칩
+    L('','★갑. 대기 칩');
+    var waits = JONAMES.filter(function(n){ var r=R(n); return r && r.cls==='d'; });
+    L('  대기인 사람', waits.length+'명 — '+waits.slice(0,4).join(' · '));
+    ok(waits.length>0, '  그런 사람이 있나', waits.length+'명');
+    waits.slice(0,4).forEach(function(n){
+      L('  '+n, '칩 "'+R(n).chip+'" · 상태(속) "'+R(n).st+'" · 화면 ['+(pills(n)||[]).join('] [')+']');
+    });
+    var left = waits.filter(function(n){ return (pills(n)||[]).indexOf('대기') >= 0; });
+    ok(left.length===0, '  ★화면에 대기 칩', left.length? '★'+left.length+'명 남음':'전부 걷힘 ◎');
+    ok(waits.every(function(n){ return R(n).chip===''; }), '  기계 쪽 칩',
+       waits.map(function(n){ return '"'+R(n).chip+'"'; }).slice(0,3).join(' '));
+    // 속으로는 여전히 대기다 — 셈과 거르개가 그걸 쓴다
+    ok(waits.every(function(n){ return R(n).cls==='d' && R(n).st.indexOf('대기')===0; }),
+       '  속으로는 그대로 대기인가', '상태 "'+R(waits[0]).st+'"('+R(waits[0]).cls+')');
+
+    // ── 을. 거르개로는 여전히 골라지나 — 대기를 볼 길은 남아야 한다
+    L('','★을. 거르개로 대기 보기');
+    var T = workTally();
+    var dbtn = qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')==='d'; })[0];
+    L('  거르개 칸', dbtn? '"'+dbtn.textContent.trim()+'"' : '★없음');
+    ok(!!dbtn, '  대기 거르개', dbtn? '있음 ◎':'★없음');
+    if (dbtn){
+      dbtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+      var shown = qa('.wrow[data-who]').map(function(b){ return b.getAttribute('data-who'); });
+      ok(shown.length===T.cd, '  눌렀을 때', shown.length+'명 / 대기 '+T.cd+'명');
+      ok(shown.every(function(n){ return R(n).cls==='d'; }), '  다 대기인가', '◎');
+      qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')===''; })[0]
+        .dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+    }
+
+    // ── 병. 3부반 왼쪽 세로 띠
+    L('','★병. 3부반 왼쪽 띠');
+    var b3 = JONAMES.filter(function(n){ return isBu3(n) && rowOf(n); })[0];
+    var r3 = rowOf(b3), cs = getComputedStyle(r3);
+    L('  '+b3+' 줄', 'class "'+r3.className+'"');
+    L('  box-shadow', cs.boxShadow);
+    ok(cs.boxShadow === 'none' || cs.boxShadow === '', '  ★세로 띠', '"'+cs.boxShadow+'"');
+    ok(r3.className.indexOf('b3')>=0, '  손잡이(class b3)', '남아 있음 ◎ (색만 뺐다)');
+    // 3부반인 줄 알 길은 오른쪽 배지가 맡는다
+    ok((pills(b3)||[]).indexOf('3부반')>=0, '  3부반인 줄 아는 길',
+       '['+(pills(b3)||[]).join('] [')+']  맨 오른쪽 배지가 맡는다');
+    // 3부반 아닌 줄과 정말 같은가
+    var no3 = JONAMES.filter(function(n){ return !isBu3(n) && rowOf(n); })[0];
+    ok(getComputedStyle(rowOf(no3)).boxShadow === cs.boxShadow, '  딴 줄과 같은가',
+       '3부반 "'+cs.boxShadow+'" / 보통 "'+getComputedStyle(rowOf(no3)).boxShadow+'"');
+
+    // ── 정. 남아야 할 칩은 그대로
+    L('','★정. 남아야 할 칩');
+    function see(lab, n){ if(!n){ L('  '+lab, '(없음)'); return; }
+      L('  '+lab+' '+n, '['+(pills(n)||[]).join('] [')+']');
+      ok((pills(n)||[]).length>0, '   남았나', '◎'); }
+    var rest = JONAMES.filter(function(n){ return !partsOf(n).length && !isBu3(n); })[0];
+    setAbsent(rest, '휴무'); paint(); see('휴무', rest);
+    var a23 = JONAMES.filter(function(n){ return partsOf(n).join()==='2' && !isBu3(n); })[0];
+    addRow('3', a23); paint(); see('2,3', a23);
+    var dk = DUTYKEYS.filter(function(k){ return /흡연/.test(k); })[0] || DUTYKEYS[0];
+    var don = JONAMES.filter(function(n){ return partsOf(n).join()==='1' && !isBu3(n); })[0];
+    partsOf(don).slice().forEach(function(k){ delFromPart(k, don); });
+    dutyToggle(dk, don); paint(); see('당번', don);
+
+    // ── 무. 셈은 그대로
+    L('','★무. 셈');
+    var T2 = workTally();
+    ok(T2.total===82, '  총원', T2.total+'명 · 근무 '+T2.cw+' · 대기 '+T2.cd+' · 미배치 '+T2.cu);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

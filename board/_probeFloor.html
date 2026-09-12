@@ -1,0 +1,25 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('board'); paint();
+    var Z = devicePixelRatio;
+    o.push('CSS창 '+innerWidth+'x'+innerHeight+' · 확대 '+Z+'배');
+    [0.72,0.85,0.92,1.00,1.10].forEach(function(f){
+      K_MIN = f; fit();
+      var k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'));
+      var e = document.querySelector('.cell .nm');
+      var css = parseFloat(getComputedStyle(e).fontSize);
+      var col = document.querySelector('.pscroll');
+      var ov = col ? Math.max(0, col.scrollHeight-col.clientHeight) : 0;
+      o.push('  바닥 '+f.toFixed(2)+' → k '+k.toFixed(3)
+        +' · CSS '+css.toFixed(1)+'px · 눈에 보이는 크기 '+(css*Z).toFixed(1)+'px'
+        +' · 부칸 '+(ov? ov+'px 굴림':'다 들어옴'));
+    });
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

@@ -1,0 +1,79 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(n){ return partsOf(n).map(function(k){return part(k).name;}).join('·')||'없음'; }
+  function msIdx(){ var r=[]; STAFF.forEach(function(x,i){ if(x.k==='마샬') r.push(i); }); return r; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+
+    // ★사람이 자리에 앉아 있어야 '배치가 자리를 비운다'를 볼 수 있다 — 먼저 순번을 세운다
+    applyLineup(seonbal(), ['1','2']);
+    STACK=[]; REDO=[]; LOG=[];
+
+    var mi=msIdx();
+    L('마샬 자리', mi.map(function(i){return i+'번 '+(STAFF[i].n||'빔');}).join(' · '));
+    L('지금 배치인 사람', JONAMES.filter(function(n){return tagOf(n)==='배치';}).join('·')||'없음');
+
+    // ── 1. 배지 없는 캐디를 마샬 자리에 넣는다
+    var free=JONAMES.filter(function(n){ return !tagOf(n) && partsOf(n).length; })[0];
+    L('  앉은 사람 수', JONAMES.filter(function(n){return partsOf(n).length;}).length+'명');
+    o.push(''); L('★1. 배지 없는 캐디를 마샬 자리에 넣는다', free+' (지금 '+seats(free)+')');
+    var wasSeat=seats(free);
+    setStaff(mi[0], free, STAFF[mi[0]].t);
+    ok(tagOf(free)==='배치','  근무표 배지', tagOf(free)||'없음');
+    ok(seats(free)==='없음','  배치표 자리', seats(free)+' (배치는 내려와야 한다 · 아까 '+wasSeat+')');
+    ok(absOf(free)==='배치','  근무표에 보이는 상태', absOf(free));
+    L('  고침 기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 2. 되돌리기 한 번이면 통째로 돌아온다
+    o.push(''); L('★2. 되돌리기 한 번','');
+    undo();
+    ok(tagOf(free)!=='배치','  배지', tagOf(free)||'없음');
+    ok(seats(free)===wasSeat,'  자리', seats(free));
+    ok(STAFF[mi[0]].n!==free,'  마샬 자리', STAFF[mi[0]].n||'빔');
+    redo();
+    ok(tagOf(free)==='배치'&&STAFF[mi[0]].n===free,'  다시(redo)', tagOf(free)+' · 자리 '+STAFF[mi[0]].n);
+
+    // ── 3. 자리에서 빼면 배치가 떨어진다
+    o.push(''); L('★3. 마샬 자리에서 뺀다','');
+    setStaff(mi[0], '', STAFF[mi[0]].t);
+    ok(tagOf(free)!=='배치','  배지', tagOf(free)||'없음 (떨어져야 한다)');
+    L('  고침 기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 4. 남의 배지는 안 덮는다
+    var hu=JONAMES.filter(function(n){ return tagOf(n)==='휴가'||tagOf(n)==='휴무'||tagOf(n)==='병가'; })[0];
+    o.push(''); L('★4. 근태 중인 사람을 마샬 자리에 넣으면', hu+' ('+tagOf(hu)+')');
+    if(hu){
+      setStaff(mi[0], hu, STAFF[mi[0]].t);
+      ok(tagOf(hu)!=='배치','  배지', tagOf(hu)+' (그대로 있어야 한다)');
+      ok(/안 붙였습니다/.test(LOG[0]?LOG[0].msg:''),'  말해 주나', LOG[0]?LOG[0].msg:'(없음)');
+      setStaff(mi[0], '', STAFF[mi[0]].t);
+    }
+
+    // ── 5. 캐디가 아닌 사람은 배지를 안 만든다
+    o.push(''); L('★5. 캐디가 아닌 사람(류동기)을 마샬 자리에','');
+    setStaff(mi[0], '류동기', STAFF[mi[0]].t);
+    ok(!tagOf('류동기'),'  류동기 배지', tagOf('류동기')||'없음 (명부에 없는 사람이다)');
+    ok(!hasCaddie('류동기'),'  명부에 있나', hasCaddie('류동기')?'있음':'없음');
+    setStaff(mi[0], '', STAFF[mi[0]].t);
+
+    // ── 6. 내일로 넘겨도 자리에 남은 마샬은 배치가 다시 붙는다
+    o.push(''); L('★6. 내일로 넘기기','');
+    var keep=STAFF[mi[1]].n;
+    L('  자리에 남는 마샬', keep+' · 오늘 배지 '+(tagOf(keep)||'없음'));
+    carryToNextDay();
+    L('  날짜', DATE);
+    ok(STAFF[mi[1]].n===keep,'  마샬 자리', STAFF[mi[1]].n||'빔');
+    ok(tagOf(keep)==='배치','  배지', tagOf(keep)||'★없음 — 자리와 갈라졌다');
+    ok(seats(keep)==='없음','  배치표 자리', seats(keep));
+    L('  넘김 기록', (LOG[LOG.length-1]||{}).msg||'(없음)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i); return 0; }
+  function SH(){ return document.getElementById('sheet'); }
+  function tot(){ var t=0; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) t++; }); }); return t; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    var p2 = active(part('2')).filter(function(r){ return r.n && !r.itn; }).map(function(r){ return r.n; });
+    // ㉮ 두 부에 앉아 있는데 도장 없음 (어제까지 지정해 둔 사람)
+    var A = p2.slice(0,4);
+    A.forEach(function(n){ part('3').roster.push({n:n,tag:'',off:false,role:''}); });
+    // ㉯ 배지만 있고 3부 자리 없음 (판독이 '2,3' 이라고 읽어 준 사람)
+    var B = p2.slice(4,7);
+    B.forEach(function(n){ TAG[n] = '2,3'; });
+    paint();
+    L('㉮ 두 부에 앉음·도장 없음', A.map(function(n){ return n+':'+partsOf(n).join(',')+'['+(tagOf(n)||'-')+']'; }).join(' '));
+    L('㉯ 배지만 있음·3부 자리 없음', B.map(function(n){ return n+':'+partsOf(n).join(',')+'['+(tagOf(n)||'-')+']'; }).join(' '));
+
+    openCell('3', 1);
+    var gb = [].slice.call(SH().querySelectorAll('[data-sg]'));
+    L('', '');
+    L('★3부 2번 칸 묶음', gb.map(function(b){ return b.textContent; }).join(' / ') || '없음');
+    L('  일곱 다 들어왔나', (function(){
+      var g = seatGroups('3'), all = [];
+      g.forEach(function(x){ if (x.key.indexOf(',')>0) all = all.concat(x.names); });
+      var miss = A.concat(B).filter(function(n){ return all.indexOf(n)<0; });
+      return miss.length ? '빠짐 ' + miss.join(' ') : '◎ 일곱 다'; })());
+
+    var tot0 = tot();
+    gb.filter(function(b){ return b.textContent.indexOf(',')>0; })[0].click();
+    L('', '');
+    L('★고르는 창', SH().querySelector('[data-act="sggo"]') ? '떴다 ◎' : '안 뜸');
+    L('  차례', [].slice.call(SH().querySelectorAll('[data-sgs]')).map(function(b){
+      return b.textContent.replace(/\s+/g,' ').trim(); }).join(' | '));
+    SH().querySelector('[data-act="sggo"]').click();
+
+    L('', '');
+    L('★앉힌 뒤 3부 번호', A.concat(B).map(function(n){ return n+':'+seatOf('3',n); }).join(' '));
+    L('  배치표 전체', tot0 + ' → ' + tot() + ' (배지만 있던 ' + B.length + '명이 3부에 새로 앉으니 +'
+      + B.length + '이면 맞다)');
+    L('  2부 자리 다 지켰나', A.concat(B).every(function(n){ return seatOf('2',n); }) ? '◎' : '잃음');
+    L('  도장', A.concat(B).map(function(n){ return n+'['+(tagOf(n)||'-')+']'; }).join(' '));
+    L('  기록', LOG[0]?LOG[0].msg:'없음');
+
+    var st = allPeople().filter(function(n){ return !dayMark(n) && !isBu3(n); })[0];
+    setSeonbal(st); applyLineup(st, ['1','2']); applyLineup(bu3Start(), ['3']);
+    L('  순번 세운 뒤', A.concat(B).map(function(n){ return n+':'+partsOf(n).join(','); }).join(' '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

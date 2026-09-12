@@ -1,0 +1,75 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen();
+}
+function seats(pk){ var p=part(pk), a=active(p);
+  return p.tees.map(function(t,i){ return t.time+'='+((a[i]&&a[i].n)||'(빈)'); }); }
+function waitN(pk){ var p=part(pk), a=active(p), c=0;
+  for (var i=p.tees.length;i<a.length;i++) if (a[i].n) c++; return c; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ── 갑. 맨 뒤에 티 시간을 넣는다
+    L('','★갑. 맨 뒤에 티 시간 넣기');
+    reset();
+    var p = part('2');
+    var s0 = seats('2'), w0 = waitN('2');
+    L('  전', p.tees.length+'팀 · 대기 '+w0+'명 · 끝 '+s0[s0.length-1]);
+    var tm = hm(mm(p.tees[p.tees.length-1].time) + GAP);
+    addTeam('2', tm, COURSES[0]);
+    var s1 = seats('2');
+    L('  후', part('2').tees.length+'팀 · 대기 '+waitN('2')+'명 · 끝 '+s1[s1.length-1]);
+    ok(s1[s1.length-1] === tm+'=(빈)', '  ★새 칸이 비었나', s1[s1.length-1]);
+    ok(waitN('2') === w0, '  ★대기가 안 딸려 올라왔나', w0+'명 → '+waitN('2')+'명');
+
+    // ── 을. 한가운데 끼워 넣는다 — 앞사람 시각이 안 흔들려야
+    L('','★을. 한가운데 끼우기');
+    reset();
+    p = part('2');
+    var before = seats('2').slice(0, 8);
+    L('  전 8칸', before.join(' '));
+    var mid = hm(mm(p.tees[3].time) + 3);       // 네째 칸 뒤 3분
+    addTeam('2', mid, COURSES[0]);
+    var after = seats('2').slice(0, 9);
+    L('  후 9칸', after.join(' '));
+    var newCell = after.filter(function(x){ return x.indexOf(mid+'=') === 0; })[0];
+    ok(newCell === mid+'=(빈)', '  ★끼운 칸이 비었나', newCell || '★못 찾음');
+    // 원래 사람들의 시각이 그대로인가
+    var kept = before.every(function(x){ return after.indexOf(x) >= 0; });
+    ok(kept, '  ★앞사람 시각이 그대로인가', kept? '8칸 그대로 ◎' : '★밀렸음');
+
+    // ── 병. 내일로 — 팀은 비우고 시간대만
+    L('','★병. 내일로 · 시간대만');
+    reset();
+    p = part('1');
+    addTeam('1', hm(mm(p.start) - GAP), COURSES[0]);   // 격자 밖 이른 칸도 하나
+    var g0 = gridTimes(part('1')).length, t0 = gridTimes(part('1'))[0];
+    L('  오늘 1부', part('1').tees.length+'팀 · 격자 '+g0+'칸 · 첫 '+t0);
+    CARRY.tees = false; CARRY.grid = true; CARRY.seats = false;
+    carryToNextDay();
+    var g1 = gridTimes(part('1'));
+    L('  내일 1부', part('1').tees.length+'팀 · 격자 '+g1.length+'칸 · 첫 '+g1[0]);
+    ok(part('1').tees.length === 0, '  팀은 비었나', part('1').tees.length+'팀');
+    ok(g1.length === g0 && g1[0] === t0, '  ★시간대가 그대로인가', g0+'칸/'+t0+' → '+g1.length+'칸/'+g1[0]);
+
+    // ── 정. 시간대까지 끄면 기본 격자로
+    L('','★정. 시간대도 끄면');
+    reset();
+    p = part('1');
+    addTeam('1', hm(mm(p.start) - GAP), COURSES[0]);
+    var g2 = gridTimes(part('1')).length;
+    CARRY.tees = false; CARRY.grid = false; CARRY.seats = false;
+    carryToNextDay();
+    var g3 = gridTimes(part('1'));
+    L('  내일 1부', g3.length+'칸 · 첫 '+g3[0]+' (오늘은 '+g2+'칸)');
+    ok(g3.length === ROWS, '  기본 격자로 돌아가나', ROWS+'칸 기대 · '+g3.length+'칸');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

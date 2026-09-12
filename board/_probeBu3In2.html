@@ -1,0 +1,36 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function bu3In(pk){ var p=part(pk), a=active(p), out=[];
+    a.forEach(function(r,i){ if (r.n && isBu3(r.n))
+      out.push(r.n+' '+(i+1)+'번'+(i<p.tees.length?'':'(대기)')); });
+    return out; }
+  try{
+    localStorage.clear(); resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    L('켠 뒤(빈 판)', DAY.map(function(p){ return p.name+' '+active(p).length; }).join(' · '));
+    L('  3부반이 1·2부에', (bu3In('1').concat(bu3In('2')).join(' ')||'없음'));
+
+    applyLineup(seonbal(), ['1','2']);
+    L('1·2부 세운 뒤', '1부 '+active(part('1')).length+' · 2부 '+active(part('2')).length);
+    L('  ★3부반이 1부에', bu3In('1').join(' ')||'없음 ◎');
+    L('  ★3부반이 2부에', bu3In('2').join(' ')||'없음 ◎');
+    L('  2부 대기 앞 6', active(part('2')).slice(part('2').tees.length, part('2').tees.length+6)
+        .map(function(r){ return r.n+(isBu3(r.n)?'[3부반]':''); }).join(' ') || '없음');
+    L('  후보에 3부반', lineupPool('house').filter(isBu3).length+'명 (0이어야 ◎)');
+
+    applyLineup(bu3Start(), ['3']);
+    L('3부 세운 뒤', '3부 '+active(part('3')).length
+      + ' · 하우스가 3부에 '+active(part('3')).filter(function(r){
+          return r.n && !isBu3(r.n); }).length+'명');
+    L('  ★3부반이 1·2부에', (bu3In('1').concat(bu3In('2')).join(' ')||'없음 ◎'));
+    var T=workTally();
+    L('셈', '근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu);
+  }catch(err){ o.push('터짐: '+err.message); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

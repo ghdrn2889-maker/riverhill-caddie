@@ -1,0 +1,50 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seat(n){ var s=[]; DAY.forEach(function(p){ var a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===n) s.push(p.name+' '+seatNo(p,i)+'번'
+      + (i<p.tees.length? ' '+p.tees[i].time+'(근무)':' 대기')); }); return s.join(' · ')||'자리 없음'; }
+  function row(n){ var r=workRows().filter(function(x){ return x.n===n; })[0];
+    return r? '['+r.bts.join(' ')+'] '+r.st+' (cls '+r.cls+')' : '(없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // 1부에 앉아 '근무' 중인 사람 둘
+    var W=workRows().filter(function(r){ return r.cls==='w' && !tagOf(r.n) && !isBu3(r.n); });
+    var A=W[0].n, B=W[1].n;
+    L('고른 사람', A+' / '+B);
+    L('  '+A+' 처음', seat(A)+' · '+row(A));
+
+    setDayTag(A,'배치'); setDayTag(B,'프리'); paint();
+    L('', '');
+    L('★배지 건 직후 (순번 세우기 누르기 전)', '');
+    L('  '+A+' 배치', seat(A)+' · '+row(A));
+    L('  '+B+' 프리', seat(B)+' · '+row(B));
+    L('  순번 후보에 드나', '배치 '+(lineupPool('house').indexOf(A)>=0?'★든다':'안 든다 ◎')
+      + ' · 프리 '+(lineupPool('house').indexOf(B)>=0?'★든다':'안 든다 ◎'));
+
+    // ★순번 세우기
+    var sb = seonbal() || lineupPool('house')[0];
+    applyLineup(sb, ['1','2']); paint();
+    L('', '');
+    L('★순번 세운 뒤', '선발 '+sb);
+    L('  '+A+' 배치', seat(A)+' · '+row(A));
+    L('  '+B+' 프리', seat(B)+' · '+row(B));
+    L('', '');
+    L('견줌 — 휴무는 어떻게 되나', (function(){
+      var C=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); })[0].n;
+      var was=seat(C); setDayTag(C,'휴무'); paint();
+      return C+' : '+was+'  →  '+seat(C)+' · '+row(C); })());
+    L('견줌 — 조출은', (function(){
+      var D=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); })[0].n;
+      var was=seat(D); setDayTag(D,'조출'); paint();
+      return D+' : '+was+'  →  '+seat(D)+' · '+row(D); })());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

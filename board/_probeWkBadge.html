@@ -1,0 +1,34 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(s){ o.push(s); }
+  try{
+    // '1,3' 도 하나 만들어 본다
+    var z=active(part('1'))[1].n; TAG[z]='1,3';
+    part('1').roster.filter(function(r){return r.n===z;})[0].tag='1,3';
+    setView('work');
+    var T=workTally();
+    L('이름      배지    색         상태    색');
+    L('────────────────────────────────────────────');
+    ['김동우',z,'이수련','김홍구','이은지','강아란','김수룡','정용호','김희용','고창민','성지현','차은경']
+      .forEach(function(n){
+        var r=T.rows.filter(function(x){return x.n===n;})[0];
+        if(!r) return;
+        L((n+'      ').slice(0,7)+' '+((r.bt||'—')+'    ').slice(0,6)
+          +' '+((r.bt?tagCls(r.bt):'—')+'      ').slice(0,9)
+          +' '+(r.st+'      ').slice(0,6)+' .bg.'+r.cls);
+      });
+    // 화면에 실제로 그려졌나
+    var got=Array.prototype.slice.call(document.querySelectorAll('.wrow')).slice(0,40)
+      .filter(function(w){ return w.querySelector('.bt'); })
+      .map(function(w){ return w.querySelector('.n').textContent+'['+w.querySelector('.bt').textContent
+        +'·'+w.querySelector('.bt').className.replace('bt ','')+']'; });
+    L('');
+    L('화면에 뜬 배지 앞 10개: '+got.slice(0,10).join(' '));
+    L('배지 단 줄 수: '+document.querySelectorAll('.wrow .bt').length+' / 전체 '+document.querySelectorAll('.wrow').length);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

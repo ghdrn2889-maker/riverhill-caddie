@@ -1,0 +1,34 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  function rows(){ var b=document.querySelector('.jobd'); if(!b) return '-';
+    var r=b.querySelector('.wrow'); if(!r) return '-';
+    return Math.floor(b.clientHeight/r.getBoundingClientRect().height)+'줄'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen();
+    function one(f){
+      K_MIN=f;
+      setView('board'); paint();
+      var kb=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'));
+      var nm=document.querySelector('.cell .nm');
+      var col=document.querySelector('.pscroll');
+      var ov=col?Math.max(0,col.scrollHeight-col.clientHeight):0;
+      setView('work'); paint();
+      var kw=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'));
+      var v=$('viewWork'); var wo=Math.max(0,v.scrollHeight-v.clientHeight);
+      var rr=rows();
+      setView('board'); paint();
+      return '바닥'+f.toFixed(2)+' → 배치표 k'+kb.toFixed(3)+' '+parseFloat(getComputedStyle(nm).fontSize).toFixed(1)+'px '
+        +(ov?'부칸 '+ov+'px 굴림':'다 들어옴')
+        +' | 근무표 k'+kw.toFixed(3)+' 조칸 '+rr+' '+(wo?wo+'px 굴림':'다 들어옴');
+    }
+    o.push('창 '+innerWidth+'x'+innerHeight);
+    o.push('  '+one(0.72));
+    o.push('  '+one(0.92));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

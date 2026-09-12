@@ -1,0 +1,51 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function txt(el){ return el ? el.textContent.replace(/\s+/g,' ').trim() : '(없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    var pb = document.querySelector('.bpickbtn');
+    L('★단추가 났나', pb ? '났다 ◎' : '없다 ✗');
+    L('  글', txt(pb));
+    var r = pb.getBoundingClientRect();
+    L('  크기', Math.round(r.width) + 'x' + Math.round(r.height) + 'px · 칩보다 큰가 '
+      + (r.height > 34 ? '◎' : '✗'));
+    var chips = Array.prototype.map.call(document.querySelectorAll('.bch'), txt);
+    L('★배지 칩 줄', chips.join(' / '));
+    L('  ★칩 안에 선택이 섞였나', chips.some(function(x){ return /선택|고르기/.test(x); })
+      ? '섞였다 ✗' : '안 섞였다 ◎');
+    L("  '고르기'라는 말이 남았나", /고르기/.test(txt(document.querySelector('.bulk')))
+      ? '남았다 ✗ — ' + txt(document.querySelector('.bulk')) : '없다 ◎');
+
+    pb.click();
+    L('', '');
+    L('★눌러서 켜기', bulkPicking() ? '선택 중 ◎' : '✗');
+    L('  단추 상태', document.querySelector('.bpickbtn').className);
+    L('  머리말', txt(document.querySelector('.bulk .bh')));
+    var rows = document.querySelectorAll('.wrow[data-who]');
+    for (var i=0;i<3;i++){ var rr=document.querySelectorAll('.wrow[data-who]'); rr[i].click(); }
+    L('  3명 선택', bulkPicked().length + '명 · 파랗게 '
+      + document.querySelectorAll('.wrow.bpick').length + '줄');
+    L('  아래 띠', txt(document.getElementById('bulkbar')));
+
+    var go = document.querySelector('#bulkbar [data-act="bkact"]');
+    go.click();
+    var sh = document.getElementById('sheet');
+    L('  창 제목', txt(sh.querySelector('.k')) + ' / ' + txt(sh.querySelector('.st')));
+    L("  창에 '고른' 이 남았나", /고른 것|골랐/.test(txt(sh)) ? '남았다 ✗' : '없다 ◎');
+
+    // 다시 눌러 끄면
+    document.querySelector('.close') && 0;
+    closeSheet();
+    var pb2 = document.querySelector('.bpickbtn'); pb2.click();
+    L('', '');
+    L('다시 눌러 끄기', bulkOn() ? '아직 켜짐 (확인 창이 뜬다)' : '꺼짐 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

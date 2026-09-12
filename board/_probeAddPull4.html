@@ -1,0 +1,69 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'(비어 있음)'; }); }
+  function when(p){ var a=active(p), m={};
+    a.forEach(function(r,i){ if (r.n && p.tees[i]) m[r.n]={i:i,t:p.tees[i].time+' '+p.tees[i].course}; });
+    return m; }
+  function seatAt(p, i){ var a=active(p); return (a[i] && a[i].n) || '(비어 있음)'; }
+  function line(p, a, b){ var s=seats(p), t=[];
+    for (var i=a;i<b;i++) t.push(i+' '+(p.tees[i]?p.tees[i].time:'—')+' '+(s[i]||'—'));
+    return t.join('  |  '); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var p = part('1');
+
+    // ── 갑. ★대기가 하나도 없는 판 — 사용자가 본 그 판
+    L('','★갑. 대기 없는 판에 앞 쪽 팀 추가');
+    L('  앞머리(전)', line(p, 0, 5));
+    var w0 = when(p), n0 = p.tees.length, s0 = seats(p);
+    L('  티오프 '+n0+'팀 · 앉은 줄 '+s0.length, '대기 '+(s0.length-n0)+'명');
+    var t1 = hm(mm(p.tees[0].time) - GAP);         // 맨 앞에 한 칸
+    addTeam('1', t1, ''); paint();
+    L('  앞머리(후)', line(p, 0, 5));
+    var s1 = seats(p), w1 = when(p);
+    ok(s1[0]===s0[0], '  ★첫 칸에 사람이 있나',
+       s1[0]==='(비어 있음)' ? '★비어 있음' : '"'+s1[0]+'" (전에 첫 칸이던 사람)');
+    var pulled = Object.keys(w0).filter(function(n){ return w1[n] && w1[n].i === w0[n].i; });
+    ok(pulled.length===s0.length, '  ★몇 명이 당겨졌나',
+       pulled.length+'명 / 앉은 '+s0.length+'명 — 칸 번호는 그대로, 그 칸의 시각이 한 칸 앞당겨졌다');
+    L('  보기', s0[0]+' '+w0[s0[0]].t+'→'+w1[s0[0]].t+' · '
+      + s0[10]+' '+w0[s0[10]].t+'→'+w1[s0[10]].t);
+    var nt1 = p.tees.length;
+    L('  끝머리', line(p, nt1-3, nt1));
+    ok(seatAt(p, nt1-1)==='(비어 있음)', '  ★빈 칸은 맨 끝으로 갔나',
+       '끝 칸 '+p.tees[nt1-1].time+' "'+seatAt(p, nt1-1)+'" (뒤에 설 사람이 없다)');
+    ok(seats(p).slice(0, nt1-1).every(function(n){ return n!=='(비어 있음)'; }),
+       '  ★중간에 빈 칸이 없나', '앞 '+(nt1-1)+'칸 다 찼음');
+    L('  적힌 말', (LOG[0]||{}).msg||'');
+
+    // ── 을. 대기가 서 있으면 끝 칸으로 들어온다
+    L('','★을. 대기가 서 있을 때');
+    var pool = addablePool('1').filter(function(n){ return !isBu3(n) && !isAbs(tagOf(n)); }).slice(0,2);
+    pool.forEach(function(n){ addRow('1', n); }); paint();
+    var s2 = seats(p), n2 = p.tees.length;
+    L('  대기', s2.slice(n2).join(' ') + ' (끝 칸 "'+s2[n2-1]+'")');
+    var w2 = when(p), t2 = hm(mm(p.tees[3].time) - 3);   // 한가운데 끼우기
+    addTeam('1', t2, ''); paint();
+    var s3 = seats(p), w3 = when(p), n3 = p.tees.length;
+    L('  새 칸', t2+' · '+s3[3]);
+    ok(s3[3]===s2[3], '  ★그 자리 사람이 당겨졌나', s2[3]+' '+w2[s2[3]]+' → '+w3[s2[3]]);
+    ok(seatAt(p, n3-1)===pool[0], '  ★대기 첫 사람이 끝 칸으로', '"'+seatAt(p, n3-1)+'" · 남은 대기 '+s3.slice(n3).join(' '));
+    L('  적힌 말', (LOG[0]||{}).msg||'');
+    var back = Object.keys(w2).filter(function(n){ return w3[n] && w3[n].i > w2[n].i; });
+    ok(back.length===0, '  ★뒤로 밀린 사람', back.length? '★'+back.join(' ') : '한 사람도 없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

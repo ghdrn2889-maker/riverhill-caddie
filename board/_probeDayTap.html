@@ -1,0 +1,20 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ daySave();
+    tap(document.getElementById('hDate'));
+    L('머리 날짜 누름', q('#sheet .st')? q('#sheet .st').textContent+' ◎':'(안 열림 ✗)');
+    L('  줄', Array.prototype.slice.call(document.querySelectorAll('#sheet [data-daygo]'))
+        .map(function(b){return b.textContent.replace(/\s+/g,' ').trim();}).join(' | '));
+    L('  내일 만들기 단추', document.querySelector('#sheet [data-act="nday"]')?
+        '"'+document.querySelector('#sheet [data-act="nday"]').textContent+'" ◎':'없음 ✗');
+  }catch(err){ o.push('터짐: '+err.message); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

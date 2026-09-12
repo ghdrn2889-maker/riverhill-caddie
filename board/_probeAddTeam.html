@@ -1,0 +1,58 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function at(pk,t){ return part(pk).tees.filter(function(x){ return x.time===t; })
+  .map(function(x){ return x.course; }).join(','); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); cur='1'; setView('board'); paint();
+    L('코스', COURSES.join(' · '));
+    // 한 코스만 찬 시각을 찾는다
+    var solo=null, both=null, none='05:30';
+    var by={}; part('1').tees.forEach(function(t){ (by[t.time]=by[t.time]||[]).push(t.course); });
+    Object.keys(by).forEach(function(t){
+      if (by[t].length===1 && !solo) solo=t;
+      if (by[t].length>1 && !both) both=t; });
+    L('바탕', '한 코스만 찬 시각 '+solo+'('+at('1',solo)+') · 둘 다 찬 시각 '
+      + both+'('+at('1',both)+')');
+
+    // ① 한 코스만 찬 시각 → 빈 코스로
+    var n0=part('1').tees.length;
+    addTeam('1', solo);
+    L('① '+solo+' 에 시각만 넣음', at('1',solo) + ' · 팀 '+n0+'→'+part('1').tees.length
+      + ' ' + (at('1',solo).split(',').length===2 ? '◎ 빈 코스로 들어감':'✗'));
+    L('   기록', LOG[0].msg);
+    undo();
+
+    // ② 아무것도 없는 시각 → 첫 코스
+    addTeam('1', none);
+    L('② 빈 시각 '+none, at('1',none) + ' ' + (at('1',none)===COURSES[0] ? '◎':'✗'));
+    undo();
+
+    // ③ 둘 다 찬 시각 → 팀 적은 코스
+    var cnt={}; COURSES.forEach(function(c){ cnt[c]=0; });
+    part('1').tees.forEach(function(t){ cnt[t.course]++; });
+    addTeam('1', both);
+    L('③ 둘 다 찬 '+both, at('1',both) + ' · 코스별 팀 수 '
+      + COURSES.map(function(c){ return c+' '+cnt[c]; }).join(' / ')
+      + ' → 적은 쪽 ' + COURSES.slice().sort(function(x,y){return cnt[x]-cnt[y];})[0]);
+    undo();
+
+    // ④ 창에 단추가 하나인가
+    openAddTeam('1');
+    var bs = qa('#sheet [data-act="addteam"]');
+    L('④ 팀 추가 창', '넣기 단추 '+bs.length+'개 ' + (bs.length===1 ? '◎ 하나':'✗')
+      + ' · "' + (bs[0]?bs[0].textContent:'') + '"');
+    var t0 = part('1').tees.length;
+    tap(bs[0]);
+    L('   눌렀더니', '팀 '+t0+'→'+part('1').tees.length+' '
+      + (part('1').tees.length===t0+1 ? '◎ 들어감':'✗') + ' · ' + LOG[0].msg);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

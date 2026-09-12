@@ -1,0 +1,39 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(s){ o.push(s); }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+  }
+  function names(){ return workRows().map(function(r){ return r.n; }); }
+  try{
+    reset();
+    applyLineup(seonbal(), ['1','2']);
+    var T0=workTally(), n0=names();
+    L('갑(한도 없음): 총원 '+T0.total+' 근무 '+T0.cw+' 대기 '+T0.cd+' 미배치 '+T0.cu+' 제외 '+T0.exc);
+    L('  JONAMES '+JONAMES.length+'명 · 근무표 줄 '+n0.length+'개');
+    var miss0=JONAMES.filter(function(n){ return n0.indexOf(n)<0; });
+    L('  근무표에 없는 사람: '+(miss0.join(',')||'없음'));
+
+    reset();
+    SMAX['2']=1;
+    applyLineup(seonbal(), ['1','2']);
+    var T1=workTally(), n1=names();
+    L('');
+    L('을(한도 1명): 총원 '+T1.total+' 근무 '+T1.cw+' 대기 '+T1.cd+' 미배치 '+T1.cu+' 제외 '+T1.exc);
+    L('  근무표 줄 '+n1.length+'개');
+    var miss=JONAMES.filter(function(n){ return n1.indexOf(n)<0; });
+    L('  근무표에 없는 사람: '+(miss.join(',')||'없음'));
+    miss.forEach(function(n){
+      L('   '+n+' : 배지='+(tagOf(n)||'없음')+' 자리='+(partsOf(n).join(',')||'없음')
+        +' OFFDUTY='+(OFFDUTY.indexOf(n)>=0?'있음':'없음')
+        +' allPeople='+(allPeople().indexOf(n)>=0?'있음':'없음'));
+    });
+    L('  제외로 센 사람: '+T1.rows.filter(function(r){ return ['r','v','s','a','o'].indexOf(r.cls)>=0; })
+        .map(function(r){ return r.n+'('+r.cls+'/'+r.st+')'; }).join(' '));
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

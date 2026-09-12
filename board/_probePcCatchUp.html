@@ -1,0 +1,26 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); paint(); setView('work');
+    L('켠 뒤', DATE+(DATE===todayLabel()? ' → 오늘 ◎':' ✗')+' · 머리 '+$('hDate').textContent);
+    L('  기록', LOG.length+'줄 · '+(LOG[0]?LOG[0].msg:''));
+    var nb=q('.lnbar.newd');
+    L('알림 띠', nb? '있음 ◎ · '+nb.textContent.replace(/\s+/g,' ').trim():'없음(문제)');
+    L('  저장된 날', dayList().map(function(d){return d.date;}).join(' / '));
+    tap(qa('.lnbar.newd button').filter(function(b){return b.getAttribute('data-act')==='cgtseen';})[0]);
+    L('알겠습니다', q('.lnbar.newd')? '남음(문제)':'사라짐 ◎');
+    savedSig=null; CAUGHT=null; bootLoad(); paint(); setView('work');
+    L('다시 켜도', (q('.lnbar.newd')? '또 뜸(문제)':'안 뜸 ◎')+' · '+DATE);
+    L('  어긋남 띠', q('.lnbar.dft')? '떠 있음(문제)':'없음 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,30 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function inWork(n){ return workRows().some(function(r){ return r.n===n; }); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+    setCarryOpt('seats', true);            // 프로브가 쓰던 설정
+    var abs0 = workRows().filter(function(r){ return isAbs(tagOf(r.n)); }).map(function(r){ return r.n; });
+    L('오늘 쉬는 사람', abs0.map(function(n){ return n+'('+tagOf(n)+')'; }).join(' '));
+    L('  근무표에 다 있나', abs0.every(inWork)?'◎':'✗');
+    L('  명부에 다 있나', abs0.every(hasCaddie)?'◎':'✗');
+
+    carryToNextDay(); paint();
+    L('', ''); L('★넘긴 뒤 '+DATE, '');
+    var miss = abs0.filter(function(n){ return !inWork(n); });
+    L('  근무표에서 사라진 사람', miss.length? '★'+miss.join(' ') : '없음 ◎');
+    miss.forEach(function(n){
+      o.push('     '+n+' : 배지 '+(tagOf(n)||'없음')
+        +' · 명부 '+(hasCaddie(n)?'있음':'★없음')
+        +' · OFFDUTY '+(OFFDUTY.indexOf(n)>=0?'있음':'★없음')
+        +' · 자리 '+(partsOf(n).join(',')||'없음'));
+    });
+    L('  전체 총원', workRows().length+'명 · 명부 '+JONAMES.length+'명 · OFFDUTY '+OFFDUTY.length+'명');
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

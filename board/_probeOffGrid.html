@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen();
+}
+function idxAt(p, tm){ var a=[]; p.tees.forEach(function(t,k){ if (t.time===tm) a.push(k); }); return a; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    reset();
+    var p = part('1');
+    L('  1부 시작(격자 기준)', p.start + ' · 격자 ' + gridTimes(p).length + '칸 · GAP ' + GAP);
+
+    // ── 갑. 시작보다 이른 시각에 팀을 끼운다 (사용자 판의 6:37 같은 칸)
+    L('','★갑. 시작보다 이른 칸 (6:37 자리)');
+    var early = hm(mm(p.start) - GAP);
+    addTeam('1', early, COURSES[0]);
+    var g0 = gridTimes(part('1'));
+    L('  ' + early + ' 팀 넣은 뒤', g0.length + '칸 · ' + g0[0] + ' ~ ' + g0[g0.length-1]);
+    L('  격자 밖인가', offGrid(part('1'), early) ? '★격자 밖' : '격자 안');
+    delTeams('1', idxAt(part('1'), early));
+    var g1 = gridTimes(part('1'));
+    L('  그 팀을 지운 뒤', g1.length + '칸 · ' + g1[0] + ' ~ ' + g1[g1.length-1]);
+    ok(g1.indexOf(early) >= 0, '  ★' + early + ' 칸이 남나',
+       g1.indexOf(early)>=0 ? '남음 ◎' : '★사라짐');
+
+    // ── 을. 7분 격자에 안 맞는 시각 (한가운데 끼워 넣은 칸)
+    L('','★을. 7분 격자에 안 맞는 칸');
+    reset(); p = part('1');
+    var odd = hm(mm(p.start) + 3);        // 3분 뒤 — 격자에 없는 시각
+    addTeam('1', odd, COURSES[0]);
+    var h0 = gridTimes(part('1'));
+    L('  ' + odd + ' 넣은 뒤', h0.length + '칸 · 격자 밖 ' + (offGrid(part('1'), odd)?'맞음':'아님'));
+    delTeams('1', idxAt(part('1'), odd));
+    var h1 = gridTimes(part('1'));
+    ok(h1.indexOf(odd) >= 0, '  ★' + odd + ' 칸이 남나',
+       h1.indexOf(odd)>=0 ? '남음 ◎' : '★사라짐 — ' + h0.length + '칸 → ' + h1.length + '칸');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

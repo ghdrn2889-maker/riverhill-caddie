@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen(); paint();
+    setCarryOpt('tees', false);            // 무엇이든 하나 바꿔 설정을 적게 한다
+    var k=null; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(/cfg/i.test(kk)) k=kk; }
+    var cfg=JSON.parse(localStorage.getItem(k));
+    L('설정 칸', k+' · carry '+JSON.stringify(cfg.carry));
+    delete cfg.carry.leave;                // 옛 판에는 이 값이 없다
+    localStorage.setItem(k, JSON.stringify(cfg));
+    CARRY.leave = false; CARRY.tees = true;
+    cfgLoad();
+    L('옛 설정을 읽으면', 'leave='+(CARRY.leave?'켜짐 ◎':'꺼짐 ✗')
+      + ' · tees='+(CARRY.tees?'켜짐':'꺼짐 ◎ (내가 끈 값 그대로)'));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

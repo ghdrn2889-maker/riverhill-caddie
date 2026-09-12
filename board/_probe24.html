@@ -1,0 +1,53 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+(function(){
+  var out=[]; function log(k,v){out.push(k+': '+v);}
+  function fire(el,v){el.value=v;el.dispatchEvent(new Event('change',{bubbles:true}));}
+  function act(n){var bs=document.querySelectorAll('#sheet button');
+    for(var i=0;i<bs.length;i++)if(bs[i].getAttribute('data-act')===n)return bs[i];return null;}
+  function slots(){var a=[],ks=document.querySelectorAll('#dutyBox .slot');
+    for(var i=0;i<ks.length;i++)a.push(ks[i].querySelector('.k').textContent+'='+ks[i].querySelector('.v').textContent);
+    return a.join(' , ');}
+  try{
+    log('시각칸 개수', document.querySelectorAll('input[type=time]').length+'개(0이어야 함)');
+    openDuty('\ubc8c\ub2f9');
+    log('기본칸', document.getElementById('dutyT').outerHTML.slice(0,120));
+    // 13 만 쳐도 13:00
+    fire(document.getElementById('dutyT'),'13');
+    log('13 →', document.getElementById('dutyT').value+' / DUTYDEF='+JSON.stringify(DUTYDEF['\ubc8c\ub2f9']));
+    // 1830
+    fire(document.getElementById('dutyT'),'1830');
+    log('1830 →', document.getElementById('dutyT').value+' / '+JSON.stringify(DUTYDEF['\ubc8c\ub2f9']));
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('넣음', slots());
+    // 사람 시각을 7로
+    fire(document.querySelectorAll('#sheet .dtm')[0],'7');
+    log('7 →', document.querySelectorAll('#sheet .dtm')[0].value+' || '+slots());
+    // 엉뚱한 값
+    fire(document.querySelectorAll('#sheet .dtm')[0],'abc');
+    log('abc →', '['+document.querySelectorAll('#sheet .dtm')[0].value+'] || '+slots());
+    closeSheet();
+    // 경기과 자리
+    openSlot('staff',3);
+    fire(document.getElementById('slotTime'),'530');
+    log('경기과 530 →', document.getElementById('slotTime').value);
+    act('slotsave').click();
+    log('경기과 저장', document.querySelectorAll('#staffBox .slot .tm2')[3].textContent);
+    // 티오프 시각 고치기
+    openCell('2',0);
+    var st=document.getElementById('shTime');
+    log('티오프칸', st? st.value : '없음');
+    fire(st,'1155'); act('time').click();
+    log('티오프 1155 →', document.querySelectorAll('#col2 .brow .tm')[0].textContent.trim().slice(0,6));
+    // 설정 부 시작
+    openCfg(); document.querySelector('[data-ctab="ct"]').click();
+    var ps=document.querySelectorAll('#cfg [data-pstart]');
+    log('부시작칸', ps.length+'개 / '+ps[0].value);
+    fire(ps[0],'645');
+    log('645 →', document.querySelectorAll('#cfg [data-pstart]')[0].value);
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){out.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]);}
+  document.getElementById('PROBE').textContent=out.join('  ;;  ');
+})();
+</script>

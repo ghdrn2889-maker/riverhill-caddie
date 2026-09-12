@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function inList(pk,nm){ openAddPerson(pk);
+  var r = qa('#sheet [data-pn]').map(function(b){ return b.getAttribute('data-pn'); });
+  var el = qa('#sheet [data-pn]').filter(function(b){ return b.getAttribute('data-pn')===nm; })[0];
+  closeSheet(); return { has: r.indexOf(nm)>=0, n: r.length, el: el }; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+
+    // ① '이 자리 비우기'로 뺀 사람
+    var a1 = active(part('1'))[9].n, i1 = 9;
+    clearSeat('1', i1);
+    var r1 = inList('2', a1);
+    L('자리 비우기로 뺀 사람', a1 + ' · 부 ' + (partsOf(a1).join(',')||'없음')
+      + ' · 2부 넣기 창에 ' + (r1.has ? '보임 ◎':'★안 보임 ✗') + ' (목록 ' + r1.n + '명)');
+    L('  넣어 보면', addRow('2', a1) ? '들어감 ◎ · 2부 '
+      + (active(part('2')).map(function(r){return r.n;}).indexOf(a1)+1) + '번' : '★막힘 ✗');
+    undo(); undo();
+
+    // ② 배지(조출) 붙어 자리가 빠진 사람
+    var a2 = active(part('1'))[11].n;
+    setDayTag(a2, '조출');
+    var r2 = inList('2', a2);
+    L('조출로 내려온 사람', a2 + ' · 부 ' + (partsOf(a2).join(',')||'없음')
+      + ' · 2부 넣기 창에 ' + (r2.has ? '보임 ◎':'★안 보임 ✗'));
+    L('  넣어 보면', addRow('2', a2) ? '들어감 ◎ · 배지 "' + (tagOf(a2)||'없음') + '"' : '★막힘 ✗');
+    undo(); undo();
+
+    // ③ 휴무인 사람
+    var a3 = active(part('1'))[13].n;
+    setAbsent(a3, '휴무');
+    var r3 = inList('2', a3);
+    L('휴무인 사람', a3 + ' · 2부 넣기 창에 ' + (r3.has ? '보임 ◎':'★안 보임 ✗'));
+    L('  넣어 보면', addRow('2', a3) ? '들어감 ◎ · 배지 "' + (tagOf(a3)||'없음') + '"' : '★막힘 ✗');
+    undo(); undo();
+
+    // ④ ★같은 부에 빈 이름 줄이 있을 때 — clearSeat 뒤 그 부에 다시 넣기
+    var a4 = active(part('1'))[15].n;
+    clearSeat('1', 15);
+    var r4 = inList('1', a4);
+    L('★비운 그 부에 도로 넣기', a4 + ' · 1부 넣기 창에 ' + (r4.has ? '보임 ◎':'★안 보임 ✗'));
+    L('  넣어 보면', addRow('1', a4) ? '들어감 ◎ · 1부 '
+      + (active(part('1')).map(function(r){return r.n;}).indexOf(a4)+1) + '번' : '★막힘 ✗');
+
+    // ⑤ 3부반을 1부에 넣기
+    var b3 = bu3List().filter(function(n){ return partsOf(n).indexOf('1')<0; })[0];
+    var r5 = inList('1', b3);
+    L('3부반을 1부 창에', b3 + ' ' + (r5.has ? '보임 ◎':'★안 보임 ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,53 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+='',k+': '+v); }
+  function st(n){ var r=workRows().filter(function(x){return x.n===n;})[0]; return r?r.st:'★없어짐'; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var T0=workTally();
+    L('처음', '총원 '+T0.total+' · 근무 '+T0.cw+' · 대기 '+T0.cd+' · 미배치 '+T0.cu);
+
+    // ① 근무 자리를 비운다
+    var w=active(part('1'))[5].n;
+    clearSeat('1',5);
+    var T1=workTally();
+    L('근무 자리 비움', w+' → "'+st(w)+'" '+(st(w)==='미배치'?'◎':'★사라짐 ✗')
+      + ' · 총원 '+T0.total+'→'+T1.total+' '+(T1.total===T0.total?'◎ 그대로':'✗ 줄었다'));
+    L('  그 칸', '1부 6번 "'+(active(part('1'))[5].n||'(빈칸)')+'" · 명단 '
+      + active(part('1')).length+'줄 '+(active(part('1')).length===35?'◎ 순번 그대로':'✗'));
+    L('  기록', LOG[0].msg);
+
+    // ② 대기(스페어) 자리를 비운다
+    var p2=part('3'), spi=-1;
+    for (var z=p2.tees.length; z<active(p2).length; z++)
+      if (active(p2)[z].n) { spi=z; break; }             // 이름 있는 첫 대기
+    var sp = spi>=0 ? active(p2)[spi] : null;
+    if (sp){
+      var spn = sp.n;                       // 줄 객체가 아니라 이름을 붙잡는다
+      var T2=workTally();
+      clearSeat('3', spi);
+      var T3=workTally();
+      L('대기 자리 비움', spn+' → "'+st(spn)+'" '+(st(spn)==='미배치'?'◎':'★사라짐 ✗')
+        + ' · 총원 '+T2.total+'→'+T3.total+' '+(T3.total===T2.total?'◎':'✗'));
+    }
+
+    // ③ 두 부에 있던 사람은 한쪽만 비워도 남는다
+    var dup=JONAMES.filter(function(n){ return partsOf(n).length>1; })[0];
+    if (dup){
+      var k=partsOf(dup)[0], ix=active(part(k)).map(function(r){return r.n;}).indexOf(dup);
+      clearSeat(k, ix);
+      L('두 부 중 한쪽 비움', dup+' → "'+st(dup)+'" · 남은 부 '+partsOf(dup).join(','));
+    } else L('두 부에 선 사람', '지금 없음');
+
+    // ④ 되돌리기
+    undo();
+    L('되돌리기', '총원 '+workTally().total);
+  }catch(err){ o.push('터짐: '+err.message); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

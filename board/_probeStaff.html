@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function click(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setView('work'); paint();
+
+    L('','★갑. 장부');
+    L('  STAFF', STAFF.map(function(x){ return x.k + (x.sub?'('+x.sub+')':'') + ' ' + x.n
+      + ' ' + (x.t||'') + (x.fixed? ' fixed='+x.fixed : ''); }).join(' | '));
+    ok(STAFF[0].k === '대리', '  첫 자리 이름', STAFF[0].k);
+    ok(!STAFF.some(function(x){ return x.k === '경기팀장'; }), '  경기팀장이 남았나', '없음 ◎');
+    ok(!STAFF[1].fixed, '  주임의 정출', STAFF[1].fixed || '없음 ◎');
+
+    L('','★을. 역할 딱지');
+    STAFF.forEach(function(x, i){
+      var r = staffRole(i);
+      L('  ' + x.k + ' ' + (x.n||'(빈)') + ' ' + (x.t||''), r ? r.t : '(없음)');
+    });
+    ok(!STAFF.some(function(x, i){ var r = staffRole(i); return r && r.t === '마감'; }),
+       '  ★마감이 남았나', '없음 ◎');
+    ok(!STAFF.some(function(x, i){ var r = staffRole(i); return r && r.t === '정출'; }),
+       '  ★정출이 남았나', '없음 ◎');
+    ok(staffRole(2) && staffRole(2).t === '조출', '  이른 마샬은 조출', staffRole(2)? staffRole(2).t : '없음');
+
+    L('','★병. 화면');
+    var slots = qa('#staffBox .slot');
+    L('  경기과 칸', slots.map(function(b){ return b.textContent.trim().replace(/\s+/g,' '); }).join(' / '));
+    ok(slots[0].textContent.indexOf('대리') >= 0, '  첫 칸에 대리', slots[0].textContent.trim().replace(/\s+/g,' '));
+
+    L('','★정. 서랍 — 시각 고치는 칸');
+    click(slots[0]);                       // 대리
+    var t1 = document.getElementById('slotTime');
+    L('  대리 서랍 제목', document.querySelector('.sheet .st').textContent.trim());
+    ok(!t1, '  ★시각 칸이 없나', t1 ? '★있음' : '없음 ◎');
+    ok(!!document.getElementById('slotName'), '  이름 칸은 있나', '있음');
+    click(document.querySelector('[data-act="close"]'));
+    click(slots[1]);                       // 주임
+    ok(!document.getElementById('slotTime'), '  주임 시각 칸', document.getElementById('slotTime')?'★있음':'없음 ◎');
+    click(document.querySelector('[data-act="close"]'));
+    click(slots[2]);                       // 마샬
+    ok(!!document.getElementById('slotTime'), '  마샬 시각 칸은 남나', document.getElementById('slotTime')?'있음 ◎':'★없음');
+    click(document.querySelector('[data-act="close"]'));
+
+    L('','★무. 옛 저장본을 열면');
+    STAFF = [{ k:'경기팀장', sub:'대리', n:'류동기', fix:true, t:'07:00' },
+             { k:'주임', sub:'', n:'박정미', fix:false, t:'07:00', fixed:'정출' },
+             { k:'마샬', sub:'', n:'우겸조', fix:false, t:'05:40' },
+             { k:'마샬', sub:'', n:'허웅진', fix:false, t:'12:30' }];
+    daySave(); bootLoad(); paint();
+    L('  다시 연 뒤', STAFF.map(function(x){ return x.k + (x.fixed? '('+x.fixed+')':''); }).join(' | '));
+    ok(STAFF[0].k === '대리' && !STAFF[1].fixed, '  ★옛 모습이 고쳐지나', STAFF[0].k);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

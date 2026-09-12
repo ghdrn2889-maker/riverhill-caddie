@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var rows=qa('.lineup .lrow'), gos=qa('.lineup .lgo');
+    L('카드 줄', rows.length+'개 / 단추 '+gos.length+'개');
+    rows.forEach(function(r,i){ L('  '+(i+1), r.textContent+'  ▸ "'+gos[i].textContent+'"'); });
+
+    // 3부 시작 고르기
+    tap(rows[1]);
+    L('3부 고르기 창', q('#sheet .st').textContent);
+    L('  안내', q('#sheet .sub').textContent);
+    L('  후보', qa('#sheet .lst .row').length+'명 · 지금 '+
+      (qa('#sheet .lst .row').filter(function(r){return r.querySelector('.p').textContent==='✓';})
+        .map(function(r){return r.querySelector('.nm').textContent;}).join(',')||'(없음)'));
+    L('  1·2부 사람 섞였나', qa('#sheet .lst .row').some(function(r){
+      return r.querySelector('.nm').textContent==='서동명';})?'예(문제)':'아니오 ◎');
+    var qe=q('#sbQ'); qe.value='임태희'; qe.dispatchEvent(new Event('input',{bubbles:true}));
+    tap(q('#sheet .lst .row'));
+    L('3부 시작 바꿈', bu3Start()+' · 선발(1·2부)은 '+seonbal()+' 그대로');
+    L('  카드', qa('.lineup .lrow')[1].textContent);
+
+    // 미리보기 → 세우기
+    var b1=active(part('1')).map(function(r){return r.n;}).join();
+    tap(qa('.lineup .lgo')[1]);
+    L('미리보기', q('#sheet .k').textContent+' / '+q('#sheet .st').textContent);
+    L('  머리말', q('#sheet .sub').textContent);
+    L('  바뀌는 줄', qa('#sheet .plan .pr').length+'개 · 첫 '+
+      (q('#sheet .plan .pr')?q('#sheet .plan .pr').textContent:'-'));
+    tap(act('lnyes'));
+    L('세움', LOG[0].msg);
+    L('  3부 앞 8', active(part('3')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    L('  1부 안 흔들림', active(part('1')).map(function(r){return r.n;}).join()===b1?'그대로 ◎':'흔들림 ✗');
+    var chk=lineupPlan(bu3Start(),['3']);
+    L('  ▶ 다시 대조', chk.moved===0?'그 차례대로 섰음 ◎':chk.moved+'자리 어긋남 ✗');
+
+    // 1·2부는 여전히 되나
+    tap(qa('.lineup .lgo')[0]);
+    L('1·2부 미리보기', q('#sheet .st').textContent+' · '+qa('#sheet .plan .pr').length+'줄');
+    tap(act('close'));
+    undo(); undo();
+    L('되돌림', '3부시작 '+bu3Start()+' · 3부 앞 6 '+active(part('3')).slice(0,6).map(function(r){return r.n;}).join(', '));
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setView('work'); paint();
+    [0,1,2,3].forEach(function(i){
+      openSlot('staff', i);
+      var t = document.getElementById('slotTime');
+      L('  ' + i + ' ' + STAFF[i].k, (t ? '시각 칸 있음' : '시각 칸 없음')
+        + ' · 제목 "' + document.querySelector('.sheet .st').textContent.trim() + '"');
+    });
+    L('','timeInput 은 무엇을 내나');
+    L('  raw', typeof timeInput === 'function'
+      ? timeInput('id="x"', '05:40', '').slice(0, 90) : '(함수 없음)');
+  }catch(e){ o.push('터짐: '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

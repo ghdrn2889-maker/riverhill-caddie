@@ -1,0 +1,51 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function n(){ var c=0; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) c++; }); }); return c; }
+  function tail(pk, k){ var p=part(pk), a=active(p);
+    return a.slice(-k).map(function(r,ix){ return (a.length-k+ix+1)+':'+(r.n||'-'); }).join(' '); }
+  function boot(seats){ localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setCarryOpt('seats', !!seats); }
+  try{
+    // 사람이 앉아 있는 판을 만든다 (자리 가져오기가 켜진 사용자의 상태)
+    boot(true);
+    applyLineup(seonbal(), ['1','2']);
+    var n0 = n();
+    L('사람이 앉은 판', n0 + '명 · 1부 꼬리 ' + tail('1', 3));
+
+    // ① 휴무를 붙였다 떼면
+    var w = active(part('1'))[3].n;
+    setAbsent(w, '휴무');
+    L('', '');
+    L('① ' + w + ' 휴무', n() + '명 · 기억 ' + JSON.stringify(ABSFROM[w] || null));
+    setAbsent(w, '');
+    L('  ★근무로 되돌리니', n() + '명 · 1부 꼬리 ' + tail('1', 3));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  ▶ ' + w + ' 자리', active(part('1')).map(function(r){ return r.n; }).indexOf(w) + 1 + '번');
+
+    // ② 조출을 붙였다 떼면
+    var w2 = active(part('1'))[6].n;
+    setDayTag(w2, '조출');
+    var n2 = n();
+    setDayTag(w2, '조출');
+    L('', '');
+    L('② ' + w2 + ' 조출 붙였다 떼기', n2 + ' → ' + n() + '명 · 꼬리 ' + tail('1', 3));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ③ 한꺼번에 근무로 — 여럿이 한꺼번에 돌아오나
+    var W = active(part('2')).slice(0, 6).map(function(r){ return r.n; });
+    W.forEach(function(x){ setAbsent(x, '휴무'); });
+    var n3 = n();
+    bulkStart(PICKTAG); W.forEach(bulkTap); bulkApplyTag('');
+    L('', '');
+    L('③ 6명 휴무 → 근무로', n3 + ' → ' + n() + '명 · 2부 꼬리 ' + tail('2', 7));
+    L('  ★한꺼번에 돌아왔나', n() - n3 === 6 ? '6명 그대로 돌아옴 — 순번은 안 정해지고 맨 뒤 대기' : (n()-n3) + '명');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

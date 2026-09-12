@@ -1,0 +1,47 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function line(pk,a,b){ var p=part(pk), ac=active(p); var s=[];
+    for (var i=a;i<b && i<ac.length;i++)
+      s.push((i+1)+'.'+(ac[i].n||'(빈칸)')+(p.tees[i]?' '+p.tees[i].time+(p.tees[i].cx?'취소':''):' 대기'));
+    return s.join(' '); }
+  function st(n){ var r=workRows().filter(function(x){return x.n===n;})[0]; return r?r.st:'★없어짐'; }
+  try{
+    localStorage.clear(); resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var T0=workTally(), n0=active(part('1')).length, t0=part('1').tees.length;
+    L('처음', '1부 '+n0+'명/'+t0+'팀 · 총원 '+T0.total+' · 근무 '+T0.cw+' · 대기 '+T0.cd);
+    L('  4~8번', line('1',3,8));
+    var who=active(part('1'))[4].n, tail=active(part('1'))[n0-1].n;
+    L('  5번 사람 '+who+' · 꼬리 '+tail);
+
+    // ① 취소 · 노쇼
+    cancelTee('1', 4);
+    L('★5번 팀 취소', line('1',3,8));
+    L('   '+who, '"'+st(who)+'" · 총원 '+workTally().total
+      + ' ' + (st(who)==='★없어짐' ? '★사라짐 ✗':'남아 있음 ◎'));
+    L('   셈', '근무 '+workTally().cw+' · 대기 '+workTally().cd);
+    cancelTee('1', 4);
+
+    // ② 팀 지움
+    delTeam('1', 4);
+    L('★5번 팀 지움', line('1',3,8));
+    L('   '+who, '"'+st(who)+'" ' + (st(who)==='★없어짐' ? '★사라짐 ✗':'◎'));
+    L('   꼬리 '+tail, '"'+st(tail)+'" ' + (st(tail)==='대기' ? '◎ 대기로 밀림':'"'+st(tail)+'"'));
+    L('   셈', '1부 '+active(part('1')).length+'명/'+part('1').tees.length+'팀 · 총원 '
+      + workTally().total + ' ' + (workTally().total===T0.total?'◎ 아무도 안 사라짐':'★줄었다 ✗')
+      + ' · 근무 '+workTally().cw+' · 대기 '+workTally().cd);
+    undo();
+
+    // ③ 마지막 팀을 지우면
+    delTeam('1', part('1').tees.length-1);
+    L('★마지막 팀 지움', '꼬리 '+tail+' "'+st(tail)+'" · 총원 '+workTally().total
+      + ' ' + (workTally().total===T0.total?'◎':'✗'));
+    undo();
+  }catch(err){ o.push('터짐: '+err.message); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

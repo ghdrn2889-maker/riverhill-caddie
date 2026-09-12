@@ -1,0 +1,41 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    L('3부 무리', lineupPool('bu3').length+'명 · 앞 6 '+lineupPool('bu3').slice(0,6).join(', '));
+    L('1·2부 무리', lineupPool('house').length+'명 · 겹치나 '
+      + (lineupPool('bu3').some(function(n){return lineupPool('house').indexOf(n)>=0;})?'예(문제)':'아니오 ◎'));
+    L('3부 시작(짐작)', bu3Start());
+
+    var pl=lineupPlan(bu3Start(),['3']);
+    L('3부 계획', '무리 '+pl.kind+' · 세울 자리 '+pl.slots.length+'개 · 바뀌는 '+pl.moved
+      +'개 · 안 건드리는 '+pl.fixed[0].n+'개');
+    L('  ▶ 지금 명단과', pl.moved===0?'한 자리도 안 다름 ◎':pl.moved+'자리 다름 ✗');
+    L('  세우는 차례 앞 8', pl.slots.slice(0,8).map(function(s){return (s.i+1)+'번 '+s.to;}).join(' · '));
+
+    // 1·2부는 3부를 안 건드려야
+    var b3=active(part('3')).map(function(r){return r.n;}).join();
+    applyLineup(seonbal(),['1','2']);
+    L('1·2부 세워도', active(part('3')).map(function(r){return r.n;}).join()===b3?'3부 그대로 ◎':'3부 흔들림 ✗');
+    undo();
+
+    // 3부 시작을 바꿔 세워 보기
+    var alt=lineupPool('bu3')[3];
+    setBu3Start(alt);
+    L('3부 시작 바꿈', bu3Start()+' · 기록 '+LOG[0].msg);
+    var b12=active(part('1')).map(function(r){return r.n;}).join();
+    applyLineup(bu3Start(),['3']);
+    L('3부 세움', LOG[0].msg);
+    L('  3부 앞 8', active(part('3')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    L('  1부 안 흔들렸나', active(part('1')).map(function(r){return r.n;}).join()===b12?'그대로 ◎':'흔들림 ✗');
+    var chk=lineupPlan(bu3Start(),['3']);
+    L('  ▶ 다시 대조', chk.moved===0?'그 차례대로 섰음 ◎':chk.moved+'자리 어긋남 ✗');
+    undo(); undo();
+    L('되돌림', bu3Start()+' · 3부 앞 6 '+active(part('3')).slice(0,6).map(function(r){return r.n;}).join(', '));
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

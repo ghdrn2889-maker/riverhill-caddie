@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen();
+}
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ★기본 줄(ROWS)보다 긴 부를 만든다 — 사용자의 1부는 6:37~8:50, 스무 칸이다
+    L('','★갑. 스무 칸짜리 부 (ROWS=' + ROWS + ')');
+    reset();
+    var p = part('1');
+    var lastNow = p.tees[p.tees.length-1].time;             // 8:50
+    var beyond = hm(mm(p.start) + ROWS * GAP);              // 스무째 칸
+    addTeam('1', beyond, COURSES[0]);
+    var t0 = gridTimes(p);
+    L('  시작 ' + p.start, '팀 ' + p.tees.length + ' · 격자 ' + t0.length + '칸 · ~' + t0[t0.length-1]);
+    L('  p.rows(자국)', p.rows || 0);
+    ok(t0.indexOf(beyond) >= 0, '  ' + beyond + ' 칸이 생겼나', t0.indexOf(beyond)>=0?'◎':'★없음');
+
+    // ── 을. 다시 연 뒤 (자국이 남는지)
+    L('','★을. 저장하고 다시 열기');
+    daySave(); bootLoad();
+    p = part('1');
+    L('  다시 연 뒤', '격자 ' + gridTimes(p).length + '칸 · p.rows ' + (p.rows||0));
+
+    // ── 병. 그 마지막 팀을 지운다
+    L('','★병. 마지막 팀 지우기');
+    var n0 = gridTimes(p).length;
+    var li = -1;
+    p.tees.forEach(function(t,k){ if (t.time === beyond) li = k; });
+    delTeam('1', li);
+    var t1 = gridTimes(p);
+    L('  격자', n0 + '칸 → ' + t1.length + '칸 · ~' + t1[t1.length-1]);
+    ok(t1.indexOf(beyond) >= 0, '  ★' + beyond + ' 칸이 남나',
+       t1.indexOf(beyond)>=0 ? '남음 ◎' : '★사라짐');
+
+    // ── 정. 자국(p.rows) 없이 실려 온 배치표라면
+    L('','★정. 자국이 없는 배치표 (진짜 쓰는 판)');
+    reset();
+    p = part('1');
+    p.start = '6:37';                       // 사용자의 1부
+    p.tees.push({ time:'8:50', course: COURSES[0], pax:4, cx:false });
+    sortTees(p);
+    delete p.rows;
+    var t2 = gridTimes(p);
+    L('  시작 6:37', '격자 ' + t2.length + '칸 · ' + t2[0] + ' ~ ' + t2[t2.length-1]);
+    L('  p.rows', p.rows === undefined ? '없음(실려 온 판)' : p.rows);
+    var li2 = -1; p.tees.forEach(function(t,k){ if (t.time === '8:50') li2 = k; });
+    delTeam('1', li2);
+    var t3 = gridTimes(part('1'));
+    L('  마지막 팀 지운 뒤', t2.length + '칸 → ' + t3.length + '칸 · ~' + t3[t3.length-1]);
+    ok(t3.length === t2.length, '  ★칸이 그대로인가',
+       t3.length === t2.length ? '◎' : '★' + (t2.length - t3.length) + '칸 사라짐');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

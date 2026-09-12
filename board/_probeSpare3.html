@@ -1,0 +1,51 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    var p3 = part('3');
+    L('3부', '티오프 ' + p3.tees.length + '개 · 줄 ' + active(p3).length + '개');
+    L('  대기(티오프 없는 줄)', (function(){
+      var a = active(p3), out = [];
+      for (var i = p3.tees.length; i < a.length; i++) out.push(seatNo(p3,i)+'.'+(a[i].n||'(빔)'));
+      return out.length ? out.join(' ') : '없음'; })());
+
+    // 2부 사람을 3부에 넣는다
+    var nm = active(part('2')).filter(function(r){ return r.n && !r.itn; })[0].n;
+    addRow('3', nm);
+    var a3 = active(part('3'));
+    var ix = a3.map(function(r){ return r.n; }).indexOf(nm);
+    L('', '');
+    L('★' + nm + ' 을 3부에 넣으니', '3부 ' + seatNo(part('3'), ix) + '번 · '
+      + (ix < part('3').tees.length ? '티오프 ' + part('3').tees[ix].time + ' (근무)' : '대기'));
+    L('  자리', partsOf(nm).join(',') + ' / 배지 ' + (tagOf(nm)||'없음'));
+
+    // 화면에 뜨나
+    cur = '3'; paint();
+    var seen = document.body.textContent.indexOf(nm) >= 0;
+    L('  3부 화면에 이름이', seen ? '보임 ◎' : '안 보임');
+    var cell = document.querySelector('[data-pk="3"][data-i="' + ix + '"]');
+    L('  그 칸', cell ? cell.textContent.replace(/\s+/g,' ').trim() : '칸이 안 그려짐 ← 여기가 문제');
+
+    // 근무표에서는
+    var r = workRows().filter(function(x){ return x.n===nm; })[0];
+    L('  근무표', r ? (r.st + ' / 배지[' + (r.bts.join(' ')||'없음') + ']') : '-');
+
+    // ★도장 없이 두 부에 있는 사람은 묶음에 뜨나
+    var noStamp = active(part('2')).filter(function(x){ return x.n && !x.itn; })[3].n;
+    var q = part('3'); q.roster.push({ n: noStamp, tag:'', off:false, role:'' });   // 도장 없이 직접
+    L('', '');
+    L('★도장 없이 두 부에 있는 ' + noStamp, partsOf(noStamp).join(',') + ' / 배지 ' + (tagOf(noStamp)||'없음'));
+    var g = seatGroups('3');
+    L('  3부 칸 묶음', g.map(function(x){ return x.label+' '+x.names.length+'명'; }).join(' / ') || '없음');
+    L('  그 안에 ' + noStamp + ' 이', g.some(function(x){ return x.names.indexOf(noStamp)>=0; }) ? '있음' : '없음 ← 이가 빠지는 이유');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

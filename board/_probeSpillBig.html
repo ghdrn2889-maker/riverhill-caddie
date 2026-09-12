@@ -1,0 +1,36 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nm(el){ return el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+
+    (el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\s+/).slice(0,3).join('.'):''); }
+  // ★넘치는데 안 가두는 칸 = 남의 자리에 그리는 칸
+  function spills(tag){
+    var bad=[], all=document.querySelectorAll('.stage, .stage *');
+    for(var i=0;i<all.length;i++){
+      var el=all[i], s=getComputedStyle(el);
+      if(s.display==='none'||s.visibility==='hidden') continue;
+      if(el.clientHeight<=0) continue;
+      var over = el.scrollHeight - el.clientHeight;
+      if(over<=3) continue;
+      if(/auto|scroll/.test(s.overflowY)) continue;          // 굴릴 수 있으면 괜찮다
+      if(s.overflowY==='hidden'||s.overflowY==='clip'){       // 가두긴 하나 잘린다
+        bad.push('잘림 '+nm(el)+'(+'+over+')'); continue; }
+      bad.push('★샘 '+nm(el)+'(+'+over+')');                  // visible — 그대로 남의 자리에 그린다
+    }
+    L('['+tag+']', bad.length? bad.length+'개\n     '+bad.slice(0,10).join('\n     ') : '없음 ◎');
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); paint();
+    setKsz(1); setKsz(1);
+    L('창', innerWidth+'x'+innerHeight+' · 글씨 '+$('kszNow').textContent);
+    setView('board'); if(typeof fit==='function') fit(); paint(); spills('배치표');
+    setView('work'); paint(); spills('근무표');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

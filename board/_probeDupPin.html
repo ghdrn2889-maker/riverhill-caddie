@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ps(who){ return who.map(function(n){ return n+':'+(partsOf(n).join(',')||'없음')
+    +'['+(tagOf(n)||'표시없음')+']'; }).join(' '); }
+  function dups(){ var out=[]; allPeople().forEach(function(n){
+    if (partsOf(n).length>=2) out.push(n+':'+partsOf(n).join(',')+'['+(tagOf(n)||'-')+']'); }); return out; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    // ★손으로 만든 중복 — 2부 사람을 3부에도 넣는다
+    var who = active(part('2')).filter(function(r){ return r.n && !r.itn; })
+      .slice(0,4).map(function(r){ return r.n; });
+    who.forEach(function(n){ if (partsOf(n).indexOf('3')<0) addRow('3', n); });
+    L('① 손으로 3부에 넣으니', ps(who));
+    L('  기록', LOG[0]?LOG[0].msg:'없음');
+
+    var keep = JSON.stringify(state());
+
+    // ★순번 세우기가 안 건드려야 한다
+    var st = allPeople().filter(function(n){ return !dayMark(n) && !isBu3(n); })[0];
+    setSeonbal(st); applyLineup(st, ['1','2']);
+    L('', '');
+    L('② 1·2부 순번 세운 뒤', ps(who));
+    L('  지켰나', who.every(function(n){ var q=partsOf(n); return q.indexOf('2')>=0 && q.indexOf('3')>=0; })
+      ? '◎ 넷 다 2·3 그대로' : '어긋남');
+
+    // ★기계가 만든 중복에는 도장이 없어야 한다
+    var made = dups().filter(function(x){ return who.indexOf(x.split(':')[0])<0; });
+    L('  기계가 만든 중복', made.length ? made.join(' ') : '없음');
+    L('  거기 도장 찍혔나', made.filter(function(x){ return x.indexOf('[-]')<0; }).length
+      ? '찍힘(문제) ' + made.filter(function(x){ return x.indexOf('[-]')<0; }).join(' ') : '안 찍힘 ◎');
+
+    // ★두 번 눌러도 같아야 한다
+    var snap1 = DAY.map(function(p){ return active(p).map(function(r){ return r.n; }).join('|'); }).join('//');
+    applyLineup(st, ['1','2']);
+    var snap2 = DAY.map(function(p){ return active(p).map(function(r){ return r.n; }).join('|'); }).join('//');
+    L('', '');
+    L('③ 순번 세우기 두 번', snap1===snap2 ? '◎ 같은 결과' : '달라짐 — 셈이 흔들린다');
+
+    // ★3부 순번 세우기도
+    restore(JSON.parse(keep)); paint();
+    applyLineup(bu3Start(), ['3']);
+    L('④ 3부 순번 세운 뒤', ps(who));
+
+    // ★한쪽에서 빼면 표시도 따라간다
+    restore(JSON.parse(keep)); paint();
+    delFromPart('3', who[0]);
+    L('', '');
+    L('⑤ 3부에서 ' + who[0] + ' 빼니', ps([who[0]]));
+    function wk(n){ var r = workRows().filter(function(x){ return x.n===n; })[0];
+      return r ? (r.st + ' / 배지[' + (r.bts.join(' ')||'없음') + ']') : '-'; }
+    L('   근무표에서', wk(who[0]));
+    L('   두 부에 남은 ' + who[1], wk(who[1]));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

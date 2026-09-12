@@ -1,0 +1,14 @@
+<div id="PROBE"></div>
+<script>
+var SNAP0 = JSON.stringify(STAFF);      // 화면이 부팅한 직후 그대로
+setTimeout(function(){
+  var o=[];
+  o.push('부팅 직후 STAFF: '+SNAP0);
+  o.push('todayLabel(): '+todayLabel()+' · DATE: '+DATE+' · BOARD.date: '+BOARD.date);
+  o.push('dateNum 견줌: '+dateNum(DATE)+' vs '+dateNum(todayLabel()));
+  o.push('CAUGHT: '+JSON.stringify(CAUGHT));
+  o.push('LOG 맨 아래: '+((LOG[LOG.length-1]||{}).msg||'(없음)'));
+  o.push('지금 STAFF: '+JSON.stringify(STAFF.map(function(x){return x.k+'='+(x.n||'');})));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

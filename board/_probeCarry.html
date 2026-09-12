@@ -1,0 +1,39 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    L('오늘', DATE);
+    L('날짜 셈', nextDateLabel('2026년 08월 30일')+' / '+nextDateLabel('2026년 08월 31일')
+      +' / '+nextDateLabel('2026년 12월 31일'));
+    var c=carryPlan();
+    L('내일', c.date);
+    L('3부 마지막 근무자', c.last3||'(아무도 3부 근무를 안 했음)');
+    L('3부 시작(내일)', c.sb3);
+    L('근태 요약', '휴무 '+c.abs['휴무']+' · 휴가 '+c.abs['휴가']+' · 병가 '+c.abs['병가']
+      +' · 중복 '+c.dup+' · 3부 '+c.b3+' · 결근 '+c.off);
+    L('팀 수', c.teams.map(function(t){return t.name+' '+t.n;}).join(' · '));
+
+    // 3부에서 몇 명 일하게 만들어 놓고 넘겨 본다
+    var p3=part('3');
+    ['1','2','3','4','5'].forEach(function(){ addTeam('3', hm(mm(p3.tees[p3.tees.length-1].time)+GAP), COURSES[0]); });
+    L('3부 팀 늘림', p3.tees.length+'팀 · 근무 '+active(p3).slice(0,p3.tees.length).map(function(r){return r.n;}).join(', '));
+    var c2=carryPlan();
+    L('  그럼 마지막 3부 근무자', c2.last3+' → 내일 시작 '+c2.sb3);
+
+    var d0=DATE, n0=LOG.length;
+    carryToNextDay();
+    L('넘김', DATE+' · 3부시작 '+SB3+' · 고침기록 '+LOG.length+'건');
+    L('  결근 남았나', DAY.some(function(p){return p.roster.some(function(r){return r.off;});})?'남음(문제)':'없음 ◎');
+    L('  3부 앞 8', active(part('3')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    L('  ▶ 3부 대조', lineupPlan(SB3,['3']).moved===0?'그 차례대로 섰음 ◎':'어긋남 ✗');
+    L('  기록', LOG.map(function(x){return x.msg;}).join(' / '));
+    undo(); undo();
+    L('되돌림', DATE+' · 3부시작 '+SB3+' · 3부 앞 6 '
+      + active(part('3')).slice(0,6).map(function(r){return r.n;}).join(', '));
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

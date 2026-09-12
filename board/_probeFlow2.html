@@ -1,0 +1,60 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function where(nm){ return partsOf(nm).map(function(k){
+  var p=part(k), a=active(p).map(function(r){return r.n;}), i=a.indexOf(nm);
+  return p.name+' '+(i+1)+'번'+(p.tees[i]?' '+p.tees[i].time:' 대기');
+}).join(' + ') || '자리 없음'; }
+function put(pk,i,nm){ var r=active(part(pk))[i];
+  if (r && r.n) clearSeat(pk,i);          // 남이 앉아 있으면 먼저 비운다
+  return seatPerson(pk,i,nm); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    L('바탕', '어제 것을 이어받아 한 번 세워 둔 판');
+
+    var jo=['정용만','배문숙','김태리'], dup='장미화';
+    // ① 배지 → 자리에서 내려온다
+    jo.forEach(function(n){ if (tagOf(n)!=='조출') setDayTag(n,'조출'); });
+    L('① 조출 배지', jo.map(function(n){ return n+' '+where(n); }).join(' / '));
+
+    // ② 관리자가 원하는 자리에 놓는다 (남이 앉아 있으면 비우고 넣는다)
+    put('1',0,jo[0]); put('1',1,jo[1]); put('1',4,jo[2]);
+    L('② 조출 자리 지정', jo.map(function(n){ return n+' '+where(n); }).join(' / '));
+
+    // ③ 중복 근무 — 두 자리에 앉힌 '뒤에' 배지를 붙인다
+    put('1',9,dup); put('2',0,dup);
+    L('③ 중복 근무 두 자리', dup+' '+where(dup));
+    L('   못 박힘', dup+' 배지['+(tagOf(dup)||'없음')+'] '
+      + (dupPinned(dup) ? '◎ 못 박힘 (1·2부는 배지가 없다 — 종류가 아니라 차례가 돈 자국)'
+                        : '★못이 안 박혔다'));
+
+    var want={}; jo.concat([dup]).forEach(function(n){ want[n]=where(n); });
+
+    // ④ 순번 세우기
+    applyLineup(seonbal(), ['1','2']);
+    L('④ 순번 세우기 뒤', '');
+    L('   ★조출 셋', jo.map(function(n){
+        return n+' '+where(n)+(where(n)===want[n]?' ◎':' ✗'); }).join(' / '));
+    L('   ★중복 근무', dup+' '+where(dup)+(where(dup)===want[dup]?' ◎ 두 자리 다 그대로':' ✗'));
+    L('   빈 칸', (function(){ var n=0;
+        DAY.forEach(function(p){ active(p).forEach(function(r){ if(!r.n) n++; }); });
+        return n+'칸 '+(n?'✗ 남았다':'◎ 다 찼다'); })());
+    var T=workTally();
+    L('   셈', '근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu);
+    L('   1부 앞 8칸', [0,1,2,3,4,5,6,7].map(function(i){
+        var r=active(part('1'))[i]; return (i+1)+'.'+(r?(r.n||'(빈칸)'):'-'); }).join(' '));
+
+    // ⑤ 한 번 더
+    var b4=jo.concat([dup]).map(function(n){ return where(n); }).join('|');
+    applyLineup(seonbal(), ['1','2']);
+    L('⑤ 한 번 더 눌러도', jo.concat([dup]).map(function(n){ return where(n); }).join('|')===b4
+      ? '똑같음 ◎':'달라짐 ✗');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

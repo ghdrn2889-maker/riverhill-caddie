@@ -1,0 +1,45 @@
+<div id="PROBE"></div>
+<script>
+var E=[];window.addEventListener('error',function(e){E.push(e.message)});
+setTimeout(function(){
+ var o=[];function L(k,v){o.push(k+': '+v)}
+ function rows(pk){
+   var a=[],rs=document.querySelectorAll('#col'+pk+' .brow.spare');
+   for(var i=0;i<rs.length;i++){
+     var cs=rs[i].querySelectorAll('.cell'),line=[];
+     for(var j=0;j<cs.length;j++){
+       var num=cs[j].querySelector('.p'),nm=cs[j].querySelector('.nm');
+       line.push(num?(num.textContent+' '+nm.textContent):'·');
+     }
+     a.push(line.join('  |  '));
+   }
+   return a;
+ }
+ function seq(pk){
+   var rs=document.querySelectorAll('#col'+pk+' .brow.spare'),cols=[];
+   for(var i=0;i<rs.length;i++){var cs=rs[i].querySelectorAll('.cell');
+     for(var j=0;j<cs.length;j++){var n=cs[j].querySelector('.p');
+       if(!cols[j])cols[j]=[];if(n)cols[j].push(Number(n.textContent));}}
+   return cols;
+ }
+ try{
+  var r=rows('2');
+  L('2부 대기 줄수', r.length);
+  L('첫 줄', r[0]); L('둘째 줄', r[1]); L('셋째 줄', r[2]); L('끝 줄', r[r.length-1]);
+  var c=seq('2');
+  L('세로 이어짐', c.map(function(col,i){
+    var ok=col.every(function(v,k){return k===0||v===col[k-1]+1;});
+    return (i+1)+'열 '+col[0]+'→'+col[col.length-1]+(ok?' 연속':' 끊김(문제)');
+  }).join(' / '));
+  L('열 넘어감', c.length>1 ? (c[0][c[0].length-1]+1===c[1][0]?'1열 끝 다음이 2열 첫 칸(정상)':'안 이어짐(문제)') : '한 열');
+  var all=[];c.forEach(function(col){col.forEach(function(v){all.push(v)})});
+  all.sort(function(x,y){return x-y});
+  var p2=part('2'),act=p2.roster.filter(function(x){return !x.off}).length;
+  L('빠짐·겹침', all.length+'명 · '+all[0]+'~'+all[all.length-1]+' · 근무 '+p2.tees.length+' 출근 '+act
+    +' · '+(all.length===act-p2.tees.length?'수 맞음':'안 맞음(문제)'));
+  L('3부 첫 줄', rows('3')[0]);
+  L('errs', E.join(' | ')||'none');
+ }catch(e){o.push('ERROR: '+e.message)}
+ document.getElementById('PROBE').textContent=o.join('  ;;  ');
+},400);
+</script>

@@ -1,0 +1,60 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seats(pk){ var p=part(pk); return active(p).map(function(r,i){
+    return (r.itn?'인턴':seatNo(p,i))+' '+(r.n||'(빔)')+(r.tag?' '+r.tag:''); }); }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i); return 0; }
+  function tot(){ var t=0; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) t++; }); }); return t; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    var totAll = tot();
+    var pool = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); });
+    var jo = pool.slice(0,3), du = pool.slice(3,5);
+    jo.forEach(function(n){ setDayTag(n,'조출'); });
+    du.forEach(function(n){ setDayTag(n,'후출'); });
+    var pick = jo.concat(du);
+    var tot0 = tot();
+    L('고른 사람 5명', pick.join(' · '));
+    L('배지를 붙이니', totAll + ' → ' + tot0 + '명 (배지가 자리에서 내린다)');
+
+    bulkStart(PICKTAG); pick.forEach(function(n){ bulkPickTap(n); });
+    seatMany('1', 5, bulkPicked());
+    var tot1 = tot();
+    L('', '');
+    L('★1부 5번부터 앉히니', seats('1').slice(3,11).join(' | '));
+    var got = pick.map(function(n){ return seatOf('1',n); }).sort(function(a,b){return a-b;});
+    L('  앉은 번호', got.join(',') + (got.join(',')==='5,6,7,8,9' ? ' ◎ 5~9 연달아' : ' 어긋남'));
+    L('  배치표 전체', tot0 + ' → ' + tot1
+      + (tot1===tot0+5 ? ' ◎ 고른 5명만 늘었다' : ' 어긋남'));
+    var lost = JONAMES.filter(function(n){
+      return !dayMark(n) && !isBu3(n) && !isAbs(tagOf(n)) && !partsOf(n).length; });
+    L('  배지 없는데 자리 잃은 사람', lost.length ? '있음 ' + lost.join(' ') : '없음 ◎');
+    L('  기록', LOG[0]?LOG[0].msg:'없음');
+
+    var st = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); })[0];
+    setSeonbal(st); applyLineup(st, ['1','2']);
+    var got2 = pick.map(function(n){ return seatOf('1',n); }).sort(function(a,b){return a-b;});
+    L('', '');
+    L('★순번 세운 뒤 그 5명', got2.join(',')
+      + (got2.join(',')===got.join(',') ? ' ◎ 그대로' : ' 쓸려 나감'));
+    L('  5~9번 칸', seats('1').slice(4,9).join(' | '));
+
+    L('', '');
+    var steps = 0;
+    for (var u = 0; u < 6; u++){
+      undo(); steps++;
+      if (pick.filter(function(n){ return seatOf('1',n); }).length === 0) break;
+    }
+    L('되돌리기', steps + '번 (순번 세우기 1 + 선발 고르기 1 + 앉히기 1 = 3이면 ◎ 묶음)');
+    L('  지금', pick.map(function(n){ return n+':'+(seatOf('1',n)||'-'); }).join(' '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

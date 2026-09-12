@@ -1,0 +1,78 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function cell(pk,i){ return q('.cell[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+function nm(pk,i){ var c=cell(pk,i); return c?c.querySelector('.nm').textContent:'?'; }
+function seats(pk,n){ var o=[]; for(var i=0;i<n;i++) o.push(nm(pk,i)); return o; }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    var b0=seats('2',6);
+    log('처음 2부', b0.join(', '));
+
+    // ① 1번 칸을 열면 상대 목록에 같은 부 근무자가 있나
+    tap(cell('2',0));
+    log('창', q('#sheet .st').textContent);
+    log('  묶음머리', qa('#sheet .lst .hd2').map(function(e){return e.textContent;}).join(' | '));
+    var rows=qa('#sheet .lst .row');
+    log('  줄 수', rows.length+'명');
+    log('  앞 5', rows.slice(0,5).map(function(r){return r.textContent;}).join(' / '));
+    var names=rows.map(function(r){return r.querySelector('.nm').textContent;});
+    log('  ▶ 같은 부 근무자 있나', names.indexOf('조하빈')>=0 ? '있음 ◎ (조하빈)' : '없음 ✗');
+    log('  ▶ 같은 부 대기 있나', names.indexOf('권미영')>=0 ? '있음 ◎ (권미영)' : '없음 ✗');
+    log('  ▶ 다른 부 있나', names.indexOf('김태리')>=0 ? '있음 ◎ (김태리)' : '(이름이 달라 확인 못함)');
+    log('  ▶ 자기 자신', names.indexOf(b0[0])>=0 ? '있음 ✗ (빠져야)' : '없음 ◎');
+    log('  목록 높이', Math.round(q('#sheet .lst.inswap').getBoundingClientRect().height)
+      +'px · 창 '+Math.round(q('#sheet').getBoundingClientRect().height)+'px / 화면 '+window.innerHeight);
+
+    // ② 이름으로 좁히기
+    var qe=q('#swQ'); qe.value='오동'; qe.dispatchEvent(new Event('input',{bubbles:true}));
+    log('찾기', qa('#sheet .lst .row').map(function(r){return r.textContent;}).join(' | '));
+
+    // ③ 같은 부 근무자와 바로 맞바꾸기
+    tap(q('#sheet .lst .row'));
+    var b1=seats('2',6);
+    var sw=(LOG[0].msg.match(/^(\S+) ↔ (\S+)/)||[]);
+    // 고른 칸에 찾은 사람이 들어오고, 있던 사람이 나갔으면 맞바꿈이 된 것이다
+    // (다른 부 사람과도 바꿀 수 있으므로 2부 목록 안에서만 따지면 안 된다)
+    var ok=sw[1]&&sw[2]&&b0[0]===sw[1]&&b1[0]===sw[2];
+    log('맞바꿈', b1.join(', ')+(ok?' ◎ '+sw[1]+'↔'+sw[2]:' ✗'));
+    log('  창', q('#sheet').classList.contains('on')?'열림(문제)':'닫힘 ◎');
+    log('  기록', LOG[0].msg);
+    undo();
+
+    // ④ 다시 열면 찾던 글자가 비워져 목록이 다 나와야
+    tap(cell('2',1));
+    log('다시 열기', q('#sheet .st').textContent+' · 줄 '+qa('#sheet .lst .row').length+'명 · 찾기칸 "'+q('#swQ').value+'"');
+    tap(qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='close';})[0]);
+
+    // ⑤ 끌기 — 시각 기둥(가운데)에 놓아도 가까운 칸을 찾나
+    var A=cell('2',0), rA=A.getBoundingClientRect();
+    var tm=q('.trow .tm'), rT=tm.getBoundingClientRect();
+    function pe(t,el,x,y){ el.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,
+      pointerId:1,pointerType:'touch',isPrimary:true,clientX:x,clientY:y,button:0,
+      buttons:t==='pointerup'?0:1})); }
+    pe('pointerdown',A,rA.left+rA.width/2,rA.top+rA.height/2);
+    setTimeout(function(){
+      var rows2=qa('.trow'), r2=rows2[1].getBoundingClientRect();
+      // 두 번째 줄의 '시각 기둥' 한가운데 — 칸이 아닌 곳
+      pe('pointermove',document,rT.left+rT.width/2,r2.top+r2.height/2);
+      setTimeout(function(){
+        log('시각 기둥 위', qa('.cell.over').length? '가까운 칸 잡음 ◎ · '
+          + q('.cell.over .nm').textContent : '못 잡음 ✗');
+        pe('pointerup',document,rT.left+rT.width/2,r2.top+r2.height/2);
+        setTimeout(function(){
+          log('놓음', seats('2',6).join(', '));
+          log('errs', ERRS.join(' | ')||'none');
+          document.getElementById('PROBE').textContent=o.join('\n');
+        },40);
+      },30);
+    },340);
+    return;
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

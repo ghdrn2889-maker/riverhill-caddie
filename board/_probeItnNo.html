@@ -1,0 +1,69 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  // 화면에 실제로 찍힌 번호를 읽는다 — 셈이 아니라 눈에 보이는 것
+  function shown(pk, n){
+    var out=[];
+    [].slice.call(document.querySelectorAll('#col'+pk+' .cell[data-i]')).forEach(function(c){
+      var i=Number(c.getAttribute('data-i'));
+      if(i<n){ var pp=c.querySelector('.p'); out[i]=pp?pp.textContent.trim():'?'; }
+    });
+    return out.join(',');
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board');
+  }
+  try{
+    // ★사용자 화면 그대로 — 배치표가 텅 빈 부(줄보다 티오프가 훨씬 많다)
+    reset();
+    var P='2';
+    part(P).roster = [];                       // 사람 하나 없는 부
+    paint();
+    L('바탕', part(P).name+' 티오프 '+part(P).tees.length+'팀 · 줄 0개 (다 "비어 있음")');
+    L('  처음 번호', shown(P,14));
+    ok(shown(P,14)==='1,2,3,4,5,6,7,8,9,10,11,12,13,14','  차례대로', shown(P,14));
+
+    o.push(''); L('★11·12번 자리를 인턴으로','');
+    setIntern(P, 10, '', true); paint();
+    setIntern(P, 11, '', true); paint();
+    L('  번호', shown(P,16));
+    ok(shown(P,16)==='1,2,3,4,5,6,7,8,9,10,인턴,인턴,11,12,13,14',
+       '  인턴 뒤가 11로 이어지나', shown(P,16)+'   (…10,인턴,인턴,11,12… 여야)');
+
+    o.push(''); L('★맨 앞을 인턴으로','');
+    reset(); part(P).roster=[]; paint();
+    setIntern(P, 0, '', true); paint();
+    L('  번호', shown(P,6));
+    ok(shown(P,6)==='인턴,1,2,3,4,5','  1번부터 다시', shown(P,6));
+
+    o.push(''); L('★사람이 앉아 있는 부에서도','');
+    reset();
+    var Q='1';
+    L('  바탕', part(Q).name+' 티오프 '+part(Q).tees.length+'팀 · 줄 '+active(part(Q)).length+'개');
+    setIntern(Q, 1, '', true); paint();
+    setIntern(Q, 2, '', true); paint();
+    L('  번호', shown(Q,8));
+    ok(shown(Q,8)==='1,인턴,인턴,2,3,4,5,6','  끊김 없이', shown(Q,8));
+
+    o.push(''); L('★대기 쪽 번호도 이어지나','');
+    var p1=part(Q), a1=active(p1);
+    var wait=[];
+    for(var i=p1.tees.length;i<a1.length && wait.length<3;i++) wait.push(seatNoTx(p1,i));
+    L('  대기 첫 셋', wait.join(',')+'   (티오프 '+p1.tees.length+'팀 · 줄 '+a1.length+'개)');
+    var lastTee = seatNo(p1, p1.tees.length-1);
+    ok(wait.length===0 || Number(wait[0])===lastTee+1,'  마지막 근무 다음 번호',
+       lastTee+' → '+(wait[0]||'(대기 없음)'));
+
+    o.push(''); L('★다음 대기 자리 번호(+ 대기 칸)','');
+    ok(nextSeatNo(p1)===active(p1).filter(function(r){return !r.itn;}).length+1,
+       '  nextSeatNo', nextSeatNo(p1)+'번');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

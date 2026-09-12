@@ -1,0 +1,16 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+    o.push('후보수 '+lineupPool('house').length);
+    o.push('후보 ' + lineupPool('house').join(','));
+    o.push('배지있는사람 ' + JONAMES.filter(function(n){ return dayMark(n); })
+      .map(function(n){ return n+'='+dayMark(n); }).join(','));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

@@ -1,0 +1,36 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work');
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+    L('★근무표 줄이 뭐라고 적히나','');
+    var want={};
+    JONAMES.forEach(function(n){ var t=tagOf(n); if(t&&!want[t]) want[t]=n; });
+    Object.keys(want).forEach(function(t){
+      var n=want[t], row=document.querySelector('#workTable [data-who="'+n+'"]');
+      if(!row) return;
+      var nm=row.querySelector('.n'), bg=[].slice.call(row.querySelectorAll('.bg'));
+      var st=row.querySelector('.stt')||row.querySelector('.st');
+      L('  '+t, n+'  →  배지 ['+bg.map(function(b){return b.textContent.trim();}).join('][')
+        +']  상태 "'+(row.textContent.replace(nm?nm.textContent:'','')
+            .replace(/\s+/g,' ').trim())+'"');
+    });
+    o.push('');
+    L('★absOf / absCls','');
+    ['배치','프리','당번','조출','휴가'].forEach(function(t){
+      var n=Object.keys(TAG).filter(function(x){return TAG[x]===t;})[0];
+      if(!n){ L('  '+t,'(그런 사람 없음)'); return; }
+      L('  '+t, n+' → absOf "'+absOf(n)+'" · absCls "'+absCls(absOf(n))+'"'
+        +' ('+({u:'가용·미배치',o:'그 밖',r:'근태',a:'결근'}[absCls(absOf(n))]||'?')+')');
+    });
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

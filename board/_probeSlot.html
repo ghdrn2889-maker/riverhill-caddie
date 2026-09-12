@@ -1,0 +1,22 @@
+<script>
+(function(){
+  // 1명 · 2명 · 공백 세 경우를 한 화면에
+  openDuty('\ubc8c\ub2f9');
+  document.querySelectorAll('#dutySug button')[0].click();
+  document.querySelectorAll('#dutySug button')[0].click();
+  var t=document.querySelectorAll('#sheet .dtm')[1];
+  t.value='18:00'; t.dispatchEvent(new Event('change',{bubbles:true}));
+  closeSheet();
+  openDuty('\ud761\uc5f0\uc2e4 \ub2f9\ubc88');
+  document.getElementById('dutyT').value='09:00';
+  document.getElementById('dutyT').dispatchEvent(new Event('change',{bubbles:true}));
+  document.getElementById('dutyH').value='4';
+  document.getElementById('dutyH').dispatchEvent(new Event('change',{bubbles:true}));
+  document.querySelectorAll('#dutySug button')[0].click();
+  closeSheet();
+  var r=document.getElementById('dutyBox').getBoundingClientRect();
+  var d=document.createElement('div'); d.id='PROBE';
+  d.textContent=[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join(',');
+  document.body.appendChild(d);
+})();
+</script>

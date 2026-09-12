@@ -1,0 +1,37 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(s){ o.push(s); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var T=workTally();
+    var dup=T.rows.filter(function(r){ return r.st.indexOf(',')>0; });
+    L('오늘 날짜: '+DATE);
+    L('구분 비운 상태 · TAG 에 중복표시 남은 사람: '
+      + JONAMES.filter(function(n){ return (tagOf(n)||'').indexOf(',')>0; }).length+'명');
+    L('');
+    L('그런데 근무표에 "2,3" 처럼 뜨는 줄: '+dup.length+'명');
+    dup.slice(0,6).forEach(function(r){
+      L('  '+r.n+'  배지['+r.bts.join('+')+']  상태"'+r.st+'"  실제 부 '
+        + partsOf(r.n).map(function(k){return part(k).name;}).join('+'));
+    });
+    L('');
+    L('★즉 배지가 아니라 상태다 — 그 사람이 정말 두 부 명단에 들어 있다.');
+    L('   부별 명단 수: '+DAY.map(function(p){return p.name+' '+p.roster.length;}).join(' · '));
+    L('   두 부 이상에 든 사람: '+JONAMES.filter(function(n){return partsOf(n).length>1;}).length+'명');
+    L('');
+    L('순번 세우기를 돌리면 —');
+    applyLineup(seonbal(), ['1','2']);
+    L('   부별 명단 수: '+DAY.map(function(p){return p.name+' '+p.roster.length;}).join(' · '));
+    var d2=JONAMES.filter(function(n){return partsOf(n).length>1;});
+    L('   두 부 뛰는 사람: '+d2.length+'명 (한 바퀴 더 돌아 저절로 생김) '+d2.slice(0,5).join(','));
+    var T2=workTally();
+    L('   근무 '+T2.cw+' · 대기 '+T2.cd+' · 미배치 '+T2.cu+' · 가용 '+T2.avail);
+    L('   3부반이 1·2부에: '+(function(){ var b=[];
+        ['1','2'].forEach(function(k){ active(part(k)).forEach(function(r){ if(isBu3(r.n)) b.push(r.n); }); });
+        return b.length? b.join(',')+' ✗':'없음 ◎'; })());
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

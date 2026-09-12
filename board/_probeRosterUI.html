@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function SH(){ return document.getElementById('sheet'); }
+  function tap(el){ if(!el) return false; el.click(); return true; }
+  function inCol(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    if(!b) return '(없음)';
+    return b.closest('.jocol').querySelector('.johd b').textContent
+      +' — '+b.textContent.replace(/\s+/g,' ').trim();
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('work'); paint();
+
+    var pl = document.querySelectorAll('.johd .joadd');
+    L('조 칸의 + 단추', pl.length+'개 · '+[].slice.call(pl).map(function(b){
+        return b.getAttribute('data-joadd'); }).join(','));
+
+    // ★3조의 + 를 누른다
+    tap(pl[2]);
+    L('', ''); L('창이 떴나', SH().classList.contains('on') ? '떴다 ◎' : '✗');
+    L('  제목', (SH().querySelector('.st')||{}).textContent);
+    L('  고른 조', [].slice.call(SH().querySelectorAll('[data-acjo]')).filter(function(b){
+        return b.className.indexOf('on')>=0; }).map(function(b){ return b.textContent; }).join()
+        + ' (누른 칸이 미리 골라져 있어야)');
+    L('  조 고르개', [].slice.call(SH().querySelectorAll('[data-acjo]')).map(function(b){
+        return b.textContent; }).join(' / '));
+
+    // 이름 없이 넣기
+    tap(SH().querySelector('[data-act="acgo"]'));
+    L('', ''); L('이름 없이 넣기', SH().classList.contains('on') ? '창 그대로 ◎ (안 닫힘)' : '✗ 닫혀버림');
+
+    // 이름 넣고 2조로 바꿔서 넣기
+    SH().querySelector('#acName').value = '홍길동';
+    tap([].slice.call(SH().querySelectorAll('[data-acjo]')).filter(function(b){
+        return b.getAttribute('data-acjo')==='1'; })[0]);
+    L('  2조로 바꾼 뒤 이름', (SH().querySelector('#acName')||{}).value + ' (다시 그려도 안 날아가야)');
+    tap(SH().querySelector('[data-act="acgo"]'));
+    paint();
+    L('', ''); L('★넣은 뒤', inCol('홍길동'));
+    L('  기록', LOG[0]?LOG[0].msg:'-');
+
+    // ★사람 창에서 지우기
+    openPerson('홍길동');
+    L('', ''); L('사람 창에 지우기 단추', SH().querySelector('[data-act="delcad"]') ? '있다 ◎' : '✗');
+    tap(SH().querySelector('[data-act="delcad"]'));
+    L('  확인 창', (SH().querySelector('.st')||{}).textContent
+      + ' / ' + ((SH().querySelector('.warnbox')||{}).textContent||'').slice(0,40));
+    tap(SH().querySelector('[data-act="delcadyes"]'));
+    paint();
+    L('★지운 뒤', inCol('홍길동') + ' · 명부에 ' + (JONAMES.indexOf('홍길동')>=0?'남음 ✗':'없음 ◎'));
+    L('  기록', LOG[0]?LOG[0].msg:'-');
+    undo(); paint();
+    L('  되돌리기', inCol('홍길동'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

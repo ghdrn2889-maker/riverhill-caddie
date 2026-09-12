@@ -1,0 +1,41 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function dtg(v){ return qa('#sheet button[data-dtag]').filter(function(b){return b.getAttribute('data-dtag')===v;})[0]; }
+function btns(){ return qa('#sheet button[data-dtag]').map(function(b){
+  return b.textContent+(b.className.indexOf('on')>=0?'✓':''); }).join(' '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); paint(); setView('work');
+    var nm=active(part('1'))[8].n;
+    openPerson(nm);
+    L('사람 창 칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    L('  구분 단추', btns());
+    tap(dtg('조출'));
+    L('조출 붙임', nm+' "'+tagOf(nm)+'" · '+btns()+' · 창 '+($('sheet').className.indexOf('on')>=0?'열림 ◎':'닫힘 ✗'));
+    L('  배치표 꼬리표', partsOf(nm).map(function(k){
+        var rr=part(k).roster.filter(function(x){return x.n===nm;})[0];
+        return part(k).name+'="'+(rr.tag||'없음')+'"'; }).join(' · '));
+    L('  순번 셈', inLineup(nm,'house')? '든다 ✗':'안 든다 ◎');
+    tap(dtg('조출'));
+    L('또 누름', '"'+(tagOf(nm)||'없음')+'" '+(tagOf(nm)?'✗':'떼짐 ◎'));
+    // 배치표 칸에서도
+    tap(q('#sheet button[data-act="close"]'));
+    cur='1'; setView('board'); paint();
+    var i=active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    openCell('1', i);
+    L('배치표 칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    tap(dtg('후출'));
+    L('  후출 붙임', nm+' "'+tagOf(nm)+'" · 창 '+($('sheet').className.indexOf('on')>=0?'열림 ◎':'닫힘 ✗'));
+    undo();
+    L('되돌리기', nm+' "'+(tagOf(nm)||'없음')+'"');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

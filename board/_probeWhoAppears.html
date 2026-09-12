@@ -1,0 +1,57 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function names(){ var out=[]; DAY.forEach(function(p){
+    active(p).forEach(function(r){ if (r.n) out.push(p.name+':'+r.n); }); }); return out; }
+  function n(){ return names().length; }
+  function boot(){ localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); }
+  try{
+    boot();
+    L('켤 때', '배치표 이름 ' + n() + '명 · 날짜 ' + DATE + ' (달력 따라가기가 이미 돌았다)');
+    L('  이어받기 설정', ['tees','seats','abs','role','ln3'].map(function(k){
+      return k+'='+(carryOpt(k)?'O':'X'); }).join(' '));
+
+    // ① 아무것도 안 하고 저장·새로고침
+    daySave(); boot();
+    L('', '');
+    L('① 저장하고 새로고침', '이름 ' + n() + '명 ' + (n()===0?'◎ 빈 판':'✗'));
+
+    // ② 근무표에서 배지만 뗐을 때 — 되돌아오는 길이 있나
+    boot();
+    var w = JONAMES[0];
+    setAbsent(w, '휴무');
+    L('', '');
+    L('② ' + w + '에게 휴무', '이름 ' + n() + '명 · ABSFROM ' + JSON.stringify(ABSFROM[w] || null));
+    setAbsent(w, '');
+    L('  ★근무로 되돌리니', '이름 ' + n() + '명 — ' + (names().join(' ')||'없음'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ③ 한꺼번에 '근무로' 를 여러 명에게
+    boot();
+    var W = JONAMES.slice(0, 5);
+    W.forEach(function(x){ setAbsent(x, '휴무'); });
+    var n0 = n();
+    bulkStart(PICKTAG); W.forEach(bulkTap); bulkApplyTag('');
+    L('', '');
+    L('③ 휴무 5명 → 근무로', '이름 ' + n0 + ' → ' + n() + '명');
+    L('  ★누가 올라왔나', names().join(' ') || '없음');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ④ 날 넘기기 — 근태를 안 가져오는 설정이면?
+    boot();
+    JONAMES.slice(0,5).forEach(function(x){ setAbsent(x, '휴무'); });
+    daySave();
+    carryToNextDay();
+    L('', '');
+    L('④ 휴무 5명인 채로 날 넘김', '이름 ' + n() + '명 (근태 안 가져옴 = 전원 근무로)');
+    L('  ★누가 올라왔나', names().slice(0,10).join(' ') || '없음');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

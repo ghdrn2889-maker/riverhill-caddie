@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shot(){ return DAY.map(function(p){
+    return p.name + ' 이름 ' + active(p).filter(function(r){ return r.n; }).length
+      + '/팀 ' + p.tees.length; }).join(' | '); }
+  function boot(){ localStorage.clear(); resetToBoard(); DATE = BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); }
+  try{
+    boot();
+    L('기본 설정', ['tees','seats','abs','role','ln3'].map(function(k){
+      return k + '=' + (carryOpt(k)?'O':'X'); }).join(' '));
+    L('오늘', shot());
+
+    // ① 지금 기본 — 팀은 들고 간다
+    carryToNextDay();
+    L('', '');
+    L('① 기본으로 넘김', shot());
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ② 팀도 끄면 — 정말 빈 판
+    boot();
+    setCarryOpt('tees', false);
+    carryToNextDay();
+    L('', '');
+    L('★② 팀도 끄고 넘김', shot());
+    L('  ★정말 빈 판인가', DAY.every(function(p){ return !p.tees.length
+        && !active(p).some(function(r){ return r.n; }); }) ? '팀 0 · 이름 0 ◎' : '✗');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  격자는 아직 있나', gridTimes(part('1')).length + '줄 (팀 넣기 칸으로 남는다) ◎');
+    undo();
+    L('  되돌리기', shot() + ' ◎');
+
+    // ③ 자리를 켜면 3부가 저절로 찬다는 것
+    boot();
+    setCarryOpt('seats', true);
+    carryToNextDay();
+    L('', '');
+    L('③ 자리를 켜고 넘김', shot());
+    L('  ★3부에 이름이', active(part('3')).filter(function(r){ return r.n; }).length
+      + '명 — 순번 세우기를 안 눌렀는데도');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ④ 창에 줄이 났나
+    boot();
+    setView('board');
+    if (typeof openCarry === 'function'){
+      openCarry();
+      var rows = Array.prototype.map.call(document.querySelectorAll('#sheet [data-copt]'), function(b){
+        return b.getAttribute('data-copt'); });
+      L('', '');
+      L('★이어받기 창 줄', rows.join(' / ') + (rows.indexOf('tees')>=0 ? ' ◎ 팀 줄 있음' : ' ✗'));
+      var t0 = document.querySelector('#sheet [data-copt="tees"]');
+      L('  팀 줄 글', t0 ? t0.textContent.replace(/\s+/g,' ').trim() : '(없음)');
+    }
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    setView('board'); paint();
+    for (var i=0;i<document.styleSheets.length;i++){
+      var rs; try{ rs=document.styleSheets[i].cssRules; }catch(e){ continue; }
+      for (var j=0;j<rs.length;j++){
+        if (rs[j].selectorText === '.body') o.push('top   ['+rs[j].style.cssText+']');
+        if (rs[j].cssRules) for (var m=0;m<rs[j].cssRules.length;m++)
+          if (rs[j].cssRules[m].selectorText === '.body')
+            o.push('media '+rs[j].conditionText+' ['+rs[j].cssRules[m].style.cssText+']');
+      }
+    }
+    var b=document.querySelector('.body');
+    o.push('matched: '+ (b.matches('.body')) + ' · class "'+b.className+'"');
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

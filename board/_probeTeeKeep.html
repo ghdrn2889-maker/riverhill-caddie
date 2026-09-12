@@ -1,0 +1,68 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen();
+}
+function times(pk){ return gridTimes(part(pk)); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    reset();
+    var p = part('1');
+    L('','★갑. 처음 모습');
+    var t0 = times('1');
+    L('  1부 시작', p.start + ' · 팀 ' + p.tees.length + '개 · p.rows ' + (p.rows||0));
+    L('  격자', t0.length + '칸 · ' + t0[0] + ' ~ ' + t0[t0.length-1]);
+    L('  마지막 팀', p.tees[p.tees.length-1].time);
+
+    // ── 을. 마지막 팀을 지운다
+    L('','★을. 마지막 팀 지우기');
+    var lastT = p.tees[p.tees.length-1].time;
+    delTeam('1', p.tees.length-1);
+    var t1 = times('1');
+    L('  격자', t1.length + '칸 · ' + t1[0] + ' ~ ' + t1[t1.length-1]);
+    ok(t1.indexOf(lastT) >= 0, '  ★' + lastT + ' 칸이 남나',
+       t1.indexOf(lastT)>=0 ? '남음 ◎' : '★사라짐 — ' + t0.length + '칸 → ' + t1.length + '칸');
+
+    // ── 병. 첫 팀을 지운다
+    L('','★병. 첫 팀 지우기');
+    reset(); p = part('1');
+    var firstT = p.tees[0].time;
+    delTeam('1', 0);
+    var t2 = times('1');
+    L('  1부 시작', part('1').start);
+    L('  격자', t2.length + '칸 · ' + t2[0] + ' ~ ' + t2[t2.length-1]);
+    ok(t2.indexOf(firstT) >= 0, '  ★' + firstT + ' 칸이 남나',
+       t2.indexOf(firstT)>=0 ? '남음 ◎' : '★사라짐');
+
+    // ── 정. 3부처럼 팀이 적은 부 (ROWS 19 보다 적다)
+    L('','★정. 3부 — 팀 3개');
+    reset();
+    var q = part('3');
+    L('  시작 ' + q.start, '팀 ' + q.tees.length + '개 · 격자 ' + times('3').length + '칸');
+    var q0 = times('3');
+    delTeam('3', q.tees.length-1);
+    L('  마지막 지운 뒤', times('3').length + '칸');
+    ok(times('3').length === q0.length, '  3부는 그대로인가', q0.length+' → '+times('3').length);
+
+    // ── 무. 저장하고 다시 열면
+    L('','★무. 저장 · 다시 열기');
+    reset(); p = part('1');
+    var was = times('1').length, wasStart = p.start;
+    delTeam('1', 0); delTeam('1', part('1').tees.length-1);
+    daySave();
+    var mid = times('1').length;
+    bootLoad();
+    var t3 = times('1');
+    L('  전 ' + was + '칸(' + wasStart + ')', '지운 뒤 ' + mid + '칸 · 다시 연 뒤 ' + t3.length + '칸('
+      + part('1').start + ')');
+    ok(t3.length === was, '  칸 수가 그대로인가', was + ' → ' + t3.length);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

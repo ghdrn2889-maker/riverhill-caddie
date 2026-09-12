@@ -1,0 +1,69 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function cellEl(pk,i){ return qa('.cell[data-pk="'+pk+'"]').filter(function(c){
+  return Number(c.getAttribute('data-i'))===i; })[0]; }
+function pos(pk,nm){ var a=active(part(pk)).map(function(r){return r.n;});
+  var i=a.indexOf(nm), p=part(pk);
+  return i<0?'자리 없음':(i+1)+'번'+(p.tees[i]?' '+p.tees[i].time+' '+p.tees[i].course:' 대기'); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    var nm='정용만';
+    // 사용자 상황: 정용만은 1부에 있고, 명단은 짧다(조출 여럿이 내려와서)
+    active(part('1')).map(function(r){return r.n;}).slice(0,25).forEach(function(n){
+      if (n!==nm && !tagOf(n) && n!==seonbal()) setDayTag(n,'조출'); });
+    L('상황', '1부 명단 '+active(part('1')).length+'줄 · 티오프 '+part('1').tees.length
+      + ' · '+nm+' '+pos('1',nm));
+    cur='1'; setView('board'); paint();
+
+    // ── 끌어서 39번 칸에 놓는다
+    var target=34;                                   // 35번 (그려져 있는 마지막 칸)
+    L('놓을 칸', '1부 '+(target+1)+'번 · 지금 "'
+      + ((active(part('1'))[target]||{}).n || '(줄 없음)')+'"');
+    var se=cellEl('1', active(part('1')).map(function(r){return r.n;}).indexOf(nm));
+    var te=cellEl('1', target);
+    L('  칸이 그려져 있나', te ? '◎' : '✗ 그 번호 칸이 없다');
+    if (se && te){
+      document.getElementById('main').scrollTop = te.offsetTop - 200;  // 칸을 화면 안으로
+      te = cellEl('1', target);
+      se = cellEl('1', active(part('1')).map(function(r){return r.n;}).indexOf(nm));
+      var tr=te.getBoundingClientRect();
+      if (!se) { L('  끌 사람 칸', '화면 밖 — 끌기는 못 봄'); }
+      if (se) dgLift(se, 10, 10); else dgLift(cellEl('1',0), 10, 10);
+      dgEnd({ clientX: tr.left+tr.width/2, clientY: tr.top+tr.height/2 });
+      L('★끌어 놓은 뒤', nm+' '+pos('1',nm)
+        + ' ' + (pos('1',nm).indexOf((target+1)+'번')===0 ? '◎ 39번':'★엉뚱 ✗'));
+      L('  알림', LOG[0].msg);
+      L('  명단', active(part('1')).length+'줄 · 빈 줄 '
+        + active(part('1')).filter(function(r){return !r.n;}).length+'개');
+      L('  총원', workTally().total);
+      L('  '+nm+' 배지', '"'+(tagOf(nm)||'없음')+'"');
+      applyLineup(seonbal(), ['1','2']);
+      L('★순번 세우기 뒤(배지 없음)', nm+' '+pos('1',nm)
+        + ' ' + (pos('1',nm).indexOf((target+1)+'번')===0 ? '그대로':'움직임 — 배지가 없으면 기계가 옮긴다'));
+      undo();
+      if (tagOf(nm)!=='조출') setDayTag(nm,'조출');
+      var back = active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+      if (back < 0) seatPerson('1', target, nm);
+      L('★배지를 붙이고 다시', nm+' '+pos('1',nm)+' 배지 "'+(tagOf(nm)||'없음')+'"');
+      applyLineup(seonbal(), ['1','2']);
+      L('   순번 세우기 뒤', nm+' '+pos('1',nm)
+        + ' ' + (pos('1',nm).indexOf((target+1)+'번')===0 ? '◎ 그대로':'✗ 움직임'));
+      L('  빈 줄', active(part('1')).filter(function(r){return !r.n;}).length+'개');
+    }
+
+    // ── 집어서 놓기도 같은가
+    undo(); undo();
+    var i0=active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    pickStart('1', i0); pickTap('1', 38);
+    L('집어서 39번에', nm+' '+pos('1',nm)
+      + ' ' + (pos('1',nm).indexOf('39번')===0 ? '◎':'✗') + ' · ' + LOG[0].msg);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

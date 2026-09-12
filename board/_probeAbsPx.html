@@ -1,0 +1,18 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    var s=document.querySelector('.wrow .bg.s');
+    var r=s.closest('.wrow');
+    L('칩 바탕/글씨', getComputedStyle(s).backgroundColor+' / '+getComputedStyle(s).color);
+    L('줄 opacity', getComputedStyle(r).opacity+' · filter '+getComputedStyle(r).filter);
+    L('줄 class', r.className);
+    var p=r.parentNode;
+    L('부모 opacity', getComputedStyle(p).opacity);
+    var root=getComputedStyle(document.documentElement);
+    L('--cbg', root.getPropertyValue('--cbg')+' / '+root.getPropertyValue('--cbgi'));
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

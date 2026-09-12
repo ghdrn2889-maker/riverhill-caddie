@@ -1,0 +1,29 @@
+<div id="PROBE"></div>
+<script>
+var E=[];window.addEventListener('error',function(e){E.push(e.message)});
+setTimeout(function(){
+ var o=[];function L(k,v){o.push(k+': '+v)}
+ function dtabs(){var a=[];document.querySelectorAll('#drwTabs button').forEach(function(b){a.push(b.textContent)});return a.join(' ')||'(없음)'}
+ try{
+  openDrawer(); L('서랍 처음', dtabs()+' · 보는 부 '+drwPart);
+  openCfg(); cfgTab='ct'; drawCfg();
+  document.querySelector('#cfg button[data-padd]').click();
+  openDrawer(); L('부 추가 뒤', dtabs());
+  openCfg(); cfgTab='ct'; drawCfg();
+  document.querySelector('#cfg button[data-pdel="3"]').click();
+  openDrawer(); L('3부 지운 뒤', dtabs()+' · 보는 부 '+drwPart);
+  openCfg(); cfgTab='ct'; drawCfg();
+  document.querySelector('#cfg button[data-pdel="4"]').click();
+  document.querySelector('#cfg button[data-pdel="2"]').click();
+  openDrawer(); L('1부만', dtabs()+' · 보는 부 '+drwPart+' · 줄 '+document.querySelectorAll('#drwBody .rrow').length);
+  openCfg(); cfgTab='ct'; drawCfg();
+  document.querySelector('#cfg button[data-pdel="1"]').click();
+  L('마지막 부 지움', DAY.length+'개 남음 · '+document.getElementById('toast').textContent);
+  openAddTeam('1');
+  var t=[];document.querySelectorAll('#sheet [data-act="addteam"]').forEach(function(b){t.push(b.textContent)});
+  L('팀 추가 문구', t.join(' / '));
+  L('errs', E.join(' | ')||'none');
+ }catch(e){o.push('ERROR: '+e.message)}
+ document.getElementById('PROBE').textContent=o.join('  ;;  ');
+},400);
+</script>

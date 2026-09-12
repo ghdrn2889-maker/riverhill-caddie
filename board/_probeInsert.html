@@ -1,0 +1,74 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function a1(){ return active(part('1')).map(function(r){ return r.n; }); }
+  function at(n){ return a1().indexOf(n)+1; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    // 실제 상황을 만든다 — 어떤 사람에게 조출을 붙이면 자리가 비워진다
+    var who = a1()[10];
+    setDayTag(who, '조출');
+    L('조출을 붙임', who + ' · 배지 "' + tagOf(who) + '" · 자리 ' + (partsOf(who).join('')||'없음 (비워짐)'));
+    var wr = workRows().filter(function(r){ return r.n===who; })[0];
+    L('  근무표에서', wr ? '"'+wr.st+'"' : '안 보임');
+
+    var i = 19;                                   // 20번에 못 박는다
+    var before = a1(), N0 = before.length;
+    L('넣기 전', '1부 ' + N0 + '명 · 20번 ' + before[19] + ' · 21번 ' + before[20]);
+
+    openCell('1', i);
+    var btn = document.querySelector('#sheet button[data-act="ins"]');
+    L('★칸 창에 단추', btn ? '"' + btn.textContent + '" ◎' : '없음 ✗');
+
+    openInsert('1', i);
+    var has = !!document.querySelector('#insOut button[data-insn="' + who + '"]');
+    var heads = Array.prototype.map.call(document.querySelectorAll('#insOut .hd2'), function(x){ return x.textContent; });
+    L('★고르개에 ' + who, has ? '나온다 ◎' : '안 나온다 ✗');
+    L('  묶음', heads.join(' / '));
+    var box0 = document.getElementById('insQ');
+    insQ = '이'; drawInsList();
+    L('  찾기 칸이 살아 있나', document.getElementById('insQ') === box0 ? '그대로 ◎ (한글 됨)' : '새로 만들어짐 ✗');
+    L('  "이"로 찾은 수', document.querySelectorAll('#insOut button[data-insn]').length + '명');
+    insQ = ''; drawInsList();
+
+    insertAt('1', i, who);
+    var A = a1();
+    L('★' + who + ' 자리', at(who) + '번 ' + (at(who)===20?'◎':'✗'));
+    L('  뒤가 밀렸나', '20번 ' + A[19] + ' · 21번 ' + A[20] + ' · 22번 ' + A[21]
+      + (A[20]===before[19] && A[21]===before[20] ? '  ◎ 한 칸씩 밀림' : '  ✗'));
+    L('  1부 인원', N0 + ' → ' + A.length + (A.length===N0+1 ? ' ◎ 아무도 안 사라짐':' ✗'));
+    L('  칸에 배지', (active(part('1'))[19].tag || '없음') + (active(part('1'))[19].tag==='조출'?' ◎':' ✗'));
+    L('  미배치에서 빠졌나', OFFDUTY.indexOf(who)<0 ? '빠짐 ◎':'남음 ✗');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  티오프', (function(){ var t=part('1').tees[19]; return t? t.time+' '+t.course : '대기'; })());
+
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('★순번 세우기가 그 자리를', pl && pl.slots.some(function(s){ return s.pk==='1' && s.i===19; })
+      ? '건드린다 ✗' : '안 건드린다 ◎');
+    applyLineup(seonbal(), ['1','2']);
+    L('  세운 뒤 ' + who, at(who) + '번 ' + (at(who)===20?'◎ 그대로':'✗ 밀려남'));
+    L('  세운 뒤 인원', a1().length + '명');
+
+    var n1 = a1().length;
+    undo();
+    L('되돌리기 한 번', '1부 ' + a1().length + '명 · ' + who + ' ' + (at(who)||'자리 없음'));
+    undo();
+    L('  한 번 더', '1부 ' + a1().length + '명 · ' + who + ' ' + (at(who)||'자리 없음')
+      + (at(who)===0 ? ' ◎ 넣기 전으로':' ✗'));
+
+    // 이미 이 부에 있는 사람을 중간으로 옮기기 — 늘지도 줄지도 않아야 한다
+    var N1 = a1().length, mv = a1()[29];
+    insertAt('1', 4, mv);
+    L('★' + mv + '(30번)을 5번으로', at(mv) + '번 ' + (at(mv)===5?'◎':'✗')
+      + ' · 인원 ' + N1 + '→' + a1().length + (a1().length===N1?' 그대로 ◎':' ✗'));
+    L('  같은 이름 두 번', a1().filter(function(n){ return n===mv; }).length===1 ? '아니오 ◎':'예 ✗');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

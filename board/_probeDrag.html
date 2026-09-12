@@ -1,0 +1,114 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function cell(pk,i){ return q('.cell[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+function nm(pk,i){ var c=cell(pk,i); return c?c.querySelector('.nm').textContent:'?'; }
+function seats(pk,n){ var o=[]; for(var i=0;i<n;i++) o.push(nm(pk,i)); return o; }
+function mid(el){ var r=el.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2]; }
+function pe(type, el, x, y, extra){
+  var o={bubbles:true,cancelable:true,pointerId:1,pointerType:'touch',isPrimary:true,
+    clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1};
+  for(var k in (extra||{})) o[k]=extra[k];
+  el.dispatchEvent(new PointerEvent(type,o));
+}
+function tap(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+var out=[]; function log(k,v){ out.push(k+': '+v); }
+function done(){ document.getElementById('PROBE').textContent=out.join('\n'); }
+
+setTimeout(function(){
+ (async function(){
+  try{
+    var b0=seats('2',6);
+    log('처음 2부', b0.join(', '));
+
+    // ① 짧게 누르면 창이 열려야 한다 (끌기로 안 넘어감)
+    var A=cell('2',0), pA=mid(A);
+    pe('pointerdown',A,pA[0],pA[1]); await wait(60); pe('pointerup',A,pA[0],pA[1]);
+    tap(A);
+    log('짧게 누름', q('#sheet').classList.contains('on') ? '창 열림 ◎ · '+q('#sheet .st').textContent : '안 열림(문제)');
+    closeSheet();
+
+    // ② 꾹 누르기 전에 움직이면 = 굴리려는 손 → 안 들려야
+    A=cell('2',0); pA=mid(A);
+    pe('pointerdown',A,pA[0],pA[1]);
+    await wait(80);
+    pe('pointermove',document,pA[0],pA[1]-40);
+    await wait(300);
+    log('움직이며 누름', dg?'들림(문제)':'안 들림 ◎ · 유령 '+(q('.dghost')?'있음(문제)':'없음 ◎'));
+    pe('pointerup',document,pA[0],pA[1]-40);
+
+    // ③ 가만히 꾹 → 들려야
+    A=cell('2',0); pA=mid(A);
+    pe('pointerdown',A,pA[0],pA[1]);
+    await wait(360);
+    log('꾹 누름', dg?'들림 ◎':'안 들림(문제)');
+    log('  유령', q('.dghost')?'"'+q('.dghost').textContent+'"':'없음(문제)');
+    log('  들린 칸', qa('.cell.lift').length+'개 · '+(A.classList.contains('lift')?'그 칸 ◎':'다른 칸(문제)'));
+
+    // ④ 끌어서 다른 칸 위로
+    var B=cell('2',3), pB=mid(B);
+    pe('pointermove',document,pB[0],pB[1]);
+    await wait(30);
+    log('끌어 옮김', '놓을 자리 표시 '+qa('.cell.over').length+'개 · '
+      + (B.classList.contains('over')?'"'+B.querySelector('.nm').textContent+'" ◎':'엉뚱한 칸(문제)'));
+    log('  유령 따라옴', q('.dghost').style.left+' / '+q('.dghost').style.top);
+
+    // ⑤ 놓기
+    pe('pointerup',document,pB[0],pB[1]);
+    await wait(40);
+    var b1=seats('2',6);
+    log('놓음', b1.join(', ')+((b1[0]===b0[3]&&b1[3]===b0[0])?' ◎맞바뀜':' ✗'));
+    log('  뒤처리', '유령 '+(q('.dghost')?'남음(문제)':'없음 ◎')
+      +' · 들린칸 '+qa('.cell.lift').length+' · 표시 '+qa('.cell.over').length
+      +' · 창 '+(q('#sheet').classList.contains('on')?'열림(문제)':'안 열림 ◎'));
+    log('  기록', LOG[0].msg);
+    undo();
+
+    // ⑥ 엉뚱한 데 놓으면
+    A=cell('2',0); pA=mid(A);
+    pe('pointerdown',A,pA[0],pA[1]); await wait(360);
+    pe('pointermove',document,5,5);
+    pe('pointerup',document,5,5);
+    await wait(30);
+    log('헛놓기', q('#toast').textContent+' · 자리 '+seats('2',2).join(',')
+      +(seats('2',2).join()===b0.slice(0,2).join()?' 그대로 ◎':' 바뀜(문제)'));
+
+    // ⑦ 자기 자리에 놓으면 아무 일 없어야
+    A=cell('2',0); pA=mid(A);
+    document.getElementById('toast').classList.remove('on');
+    pe('pointerdown',A,pA[0],pA[1]); await wait(360);
+    pe('pointerup',document,pA[0],pA[1]);
+    await wait(30);
+    log('제자리', '알림 '+(q('#toast').classList.contains('on')?'뜸("'+q('#toast').textContent+'") 문제':'안 뜸 ◎')
+      +' · 기록 '+LOG.length+'건 · 자리 '+seats('2',2).join(','));
+
+    // ⑧ 집어서 고르는 중에는 안 들려야 (한 번에 한 가지)
+    await wait(140);            // 끌고 난 뒤 삼키는 시간이 풀리길 기다린다
+    tap(cell('2',0));
+    var pk=qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='pick';})[0];
+    tap(pk);
+    A=cell('2',1); pA=mid(A);
+    pe('pointerdown',A,pA[0],pA[1]); await wait(360);
+    log('집는 중 끌기', '집힌 '+pickList.length+'개 · '+(dg?'들림(문제)':'안 들림 ◎'));
+    pe('pointerup',document,pA[0],pA[1]);
+    pickOff();
+
+    // ⑨ 대기 칸도 끌리나
+    var m=q('#main'); m.scrollTop=m.scrollHeight;
+    await wait(60);
+    var S=q('.spares .cell');
+    if (S){ var pS=mid(S), sn=S.querySelector('.nm').textContent;
+      pe('pointerdown',S,pS[0],pS[1]); await wait(360);
+      log('대기 칸', dg?'들림 ◎ · '+sn:'안 들림(문제)');
+      pe('pointerup',document,pS[0],pS[1]);
+    } else log('대기 칸','(없음)');
+
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ out.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  done();
+ })();
+},500);
+</script>

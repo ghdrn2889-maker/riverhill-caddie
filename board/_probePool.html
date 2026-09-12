@@ -1,0 +1,75 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seatOf(n){ return partsOf(n).join(''); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // ── ① 자리 없던 가용 인원이 이제 후보에 든다
+    var on = {};
+    DAY.forEach(function(p){ active(p).forEach(function(r){ on[r.n] = 1; }); });
+    var free = JONAMES.filter(function(n){ return !on[n] && !tagOf(n) && !isBu3(n); });
+    L('명단 밖 · 배지 없음(가용)', free.length + '명 — ' + free.slice(0,6).join(' ') + (free.length>6?' …':''));
+    L('  후보에 드나', free.filter(function(n){ return lineupPool('house').indexOf(n)>=0; }).length
+      + '/' + free.length + '명 ' + (free.every(function(n){
+          return lineupPool('house').indexOf(n)>=0; }) ? '◎':'✗'));
+
+    var T0 = workTally();
+    applyLineup(seonbal(), ['1','2']);
+    var seated = free.filter(function(n){ return partsOf(n).length; });
+    var T1 = workTally();
+    L('순번 세운 뒤', seated.length + '/' + free.length + '명 자리 받음 '
+      + (seated.length ? '◎':'✗') + ' · 미배치 ' + T0.cu + '→' + T1.cu
+      + ' · 근무 ' + T0.cw + '→' + T1.cw);
+
+    // ── ② 배지 붙은 사람은 여전히 안 선다 (이게 안 지켜지면 규칙이 깨진 것이다)
+    var bad = [];
+    ['1','2'].forEach(function(k){
+      active(part(k)).forEach(function(r, i){
+        var t = dayMark(r.n);
+        if (t && !isAbs(t)) return;             // 손으로 놓은 자리는 그대로 둔 것
+        if (isAbs(tagOf(r.n))) bad.push(part(k).name + ' ' + (i+1) + '번 ' + r.n + '[' + tagOf(r.n) + ']');
+      });
+    });
+    L('★쉬는 사람이 앉았나', bad.length ? bad.join(' / ') + ' ✗' : '없음 ◎');
+    L('★3부반이 1·2부에', (function(){
+        var b = [];
+        ['1','2'].forEach(function(k){ active(part(k)).forEach(function(r,i){
+          if (isBu3(r.n) && !dayMark(r.n)) b.push(part(k).name+' '+(i+1)+'번 '+r.n); }); });
+        return b.length ? b.join(' / ') + ' ✗' : '없음 ◎'; })());
+
+    // ── ③ 배지를 붙이면 확실히 빠진다 — 그것이 빼는 문이다
+    var who = active(part('1'))[3].n;
+    setDayTag(who, '프리');
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('프리 배지를 붙이면', who + ' 후보에 '
+      + (lineupPool('house').indexOf(who) < 0 ? '안 듦 ◎':'듦 ✗')
+      + ' · 세울 자리에 ' + (pl.slots.filter(function(s){ return s.to===who; }).length ? '앉음 ✗':'안 앉음 ◎'));
+    setDayTag(who, '프리');   // 도로 뗀다
+
+    // ── ④ 부에서 빼는 것으로는 못 막는다 — 바뀐 점이라 못 박아 둔다
+    var w2 = active(part('1'))[5].n;
+    partsOf(w2).slice().forEach(function(k){ delFromPart(k, w2); });
+    L('★부에서 빼기만 하면', w2 + ' 자리 ' + (partsOf(w2).length || 0)
+      + ' · 후보에 ' + (lineupPool('house').indexOf(w2)>=0 ? '든다 ◎ (다시 세우면 돌아온다)':'안 든다'));
+    applyLineup(seonbal(), ['1','2']);
+    L('  다시 세우면', w2 + ' → ' + (partsOf(w2).length ? seatOf(w2) + '부 ◎ 돌아옴':'그대로 밖 ✗'));
+
+    // ── ⑤ 모두 앉아 있으면 예전과 같은 판이 나온다 (평소 배치표에서 안 달라진다)
+    var out2 = JONAMES.filter(function(n){ return inLineup(n,'house'); })
+      .filter(function(n){ return !partsOf(n).length; });
+    L('아직 자리 없는 후보', out2.length + '명 (자리보다 사람이 많으면 남는다)');
+    var pl2 = lineupPlan(seonbal(), ['1','2']);
+    L('한 번 더 세우면', pl2.moved + '자리 바뀜 ' + (pl2.moved === 0 ? '◎ 이미 그 차례다':'(' + pl2.moved + ')'));
+    var dbl = {}; pl2.slots.forEach(function(s){ dbl[s.to]=(dbl[s.to]||0)+1; });
+    L('  두 부 뛰는 사람', Object.keys(dbl).filter(function(n){ return dbl[n]>1; }).length
+      + '명 · 후보 ' + pl2.pool.length + '명 · 자리 ' + pl2.slots.length
+      + ' (사람이 자리보다 많으면 0이 맞다)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

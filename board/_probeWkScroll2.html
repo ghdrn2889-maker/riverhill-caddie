@@ -1,0 +1,57 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function cols(){ return [].slice.call(document.querySelectorAll('#viewWork .jobd')); }
+  function tops(){ return cols().map(function(c){ return Math.round(c.scrollTop); }).join(','); }
+  function first(){ return Number(tops().split(',')[0]); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('work'); paint();
+
+    var c = cols();
+    L('조 칸', c.length + '개 · 굴릴 수 있는 높이 '
+      + c.map(function(x){ return Math.max(0, x.scrollHeight - x.clientHeight); }).join(','));
+
+    c[0].scrollTop = Math.max(0, c[0].scrollHeight - c[0].clientHeight);
+    if (c[2]) c[2].scrollTop = Math.round(Math.max(0, c[2].scrollHeight - c[2].clientHeight) / 2);
+    var before = tops();
+    L('', ''); L('내려 놓은 자리', before);
+
+    var rs = c[0].querySelectorAll('.wrow');
+    var who = rs[rs.length - 1].getAttribute('data-who');
+    L('  1조 맨 아래 사람', who);
+
+    setDayTag(who, '휴무'); paint();
+    L('', '');
+    L('★상태 준 뒤', tops() + (tops() === before ? ' ◎ 자리 지킴' : ' ✗ 튀었다(전 ' + before + ')'));
+    setDayTag(who, '휴무'); paint();
+    L('  배지 뗀 뒤', tops() + (tops() === before ? ' ◎' : ' ✗'));
+    drawWkList();
+    L('  목록만 다시', tops() + (tops() === before ? ' ◎' : ' ✗'));
+    dutyToggle('당번', who); paint();
+    L('  당번 준 뒤', tops() + (tops() === before ? ' ◎' : ' ✗'));
+    dutyToggle('당번', who); paint();
+
+    // 카트 번호 고치기 — 실제로 자주 하는 일
+    setCart(who, 77); paint();
+    L('  카트 고친 뒤', tops() + (tops() === before ? ' ◎' : ' ✗'));
+
+    L('', '');
+    L('★보는 것을 바꾸면 위에서 본다', '');
+    wkFilter = 'w'; paint();
+    L('  거르개 근무로', tops() + (first() === 0 ? ' ◎ 위에서' : ' ✗ 옛 자리에 남음'));
+    wkFilter = ''; paint();
+    var c3 = cols(); c3[0].scrollTop = 150; paint();
+    L('  다시 내려 놓고 그냥 다시 그리면', tops() + (first() === 150 ? ' ◎ 자리 지킴' : ' ✗'));
+    wkQ = '김'; paint();
+    L('  이름 찾기 치면', tops() + (first() === 0 ? ' ◎ 위에서' : ' ✗'));
+    wkQ = ''; paint();
+    L('  찾기 지우면', tops() + (first() === 0 ? ' ◎ 위에서' : ' ✗'));
+  }catch(err){ o.push('터짐: ' + err.message + ' @' + (err.stack||'').split('\n')[1]); }
+  o.push('errs: ' + (E.length ? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+},1400);
+</script>

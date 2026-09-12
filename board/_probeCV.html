@@ -1,0 +1,12 @@
+<script>
+(function(){
+  // 고장 두 개 만들어 보기
+  CARTBAD[47]=1; CARTBAD[46]=1;
+  delete CART['\uc548\uc815\ud76c'];
+  paint();
+  var r=document.getElementById('workTable').getBoundingClientRect();
+  var d=document.createElement('div'); d.id='PROBE';
+  d.textContent=[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join(',');
+  document.body.appendChild(d);
+})();
+</script>

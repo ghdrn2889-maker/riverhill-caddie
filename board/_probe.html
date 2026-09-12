@@ -1,0 +1,40 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out = [];
+  function log(k, v){ out.push(k + ': ' + v); }
+  function names(){ var a = []; var ns = document.querySelectorAll('#dutyBox .slot .v');
+    for (var i = 0; i < ns.length; i++) a.push(ns[i].textContent); return a.join(' | '); }
+  function act(n){ var bs = document.querySelectorAll('#sheet button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  try {
+    log('chips', (function(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot .k');
+      for (var i = 0; i < ks.length; i++) a.push(ks[i].className + '=' + ks[i].textContent); return a.join(' , '); })());
+    openDuty('벌당');
+    log('sheet', document.querySelector('#sheet .st').textContent);
+    log('cands', document.querySelectorAll('#dutySug button').length);
+    var first = document.querySelector('#dutySug button'), nm = first.textContent;
+    first.click();
+    log('added', nm + ' -> ' + names());
+    log('inchips', document.querySelectorAll('#sheet .dchips button').length);
+    log('savebtn', document.getElementById('btnSave').textContent
+      + ' / disabled=' + document.getElementById('btnSave').disabled
+      + ' / ' + document.getElementById('sbW').textContent);
+    document.querySelector('#sheet .dchips button').click();
+    log('removed', names());
+    document.getElementById('dutyQ').value = '김홍구';
+    act('dutyadd').click();
+    log('typed', names());
+    log('tag김홍구', TAG['김홍구']);
+    daySave();
+    log('saved', document.getElementById('btnSave').textContent + ' / ' + document.getElementById('sbW').textContent);
+    log('store', (localStorage.getItem('board.day.v2') || '').length + 'B');
+    log('unsaved', unsaved());
+    // 당번을 다른 사람으로
+    openDuty('당번');
+    document.querySelector('#sheet .dchips button').click();
+    log('dutyoff', names() + ' / TAG정용호=' + (TAG['정용호'] || '없음'));
+  } catch (e) { out.push('ERROR: ' + e.message); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

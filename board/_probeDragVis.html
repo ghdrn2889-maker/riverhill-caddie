@@ -1,0 +1,14 @@
+<script>
+(function(){
+  function pe(t,el,x,y){el.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+    pointerType:'mouse',clientX:x,clientY:y,button:0,buttons:t==='pointerup'?0:1}));}
+  function mid(el){var r=el.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2];}
+  function cellOf(pk,i){var cs=document.querySelectorAll('#col'+pk+' [data-pk][data-i]');
+    for(var j=0;j<cs.length;j++)if(Number(cs[j].getAttribute('data-i'))===i)return cs[j];return null;}
+  var a=cellOf('1',0), b=cellOf('1',5);
+  var pa=mid(a), pb=mid(b);
+  pe('pointerdown',a,pa[0],pa[1]);
+  pe('pointermove',a,pa[0]+10,pa[1]+10);
+  pe('pointermove',a,pb[0],pb[1]-4);   // 놓지 않고 그대로 둔다
+})();
+</script>

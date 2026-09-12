@@ -1,0 +1,107 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+// 줄 안의 알약들을 왼쪽부터 차례대로 — 이름과 카트는 뺀다
+function pills(n){
+  var r=rowOf(n); if(!r) return null;
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return e.textContent.trim(); });
+}
+function pillX(n){
+  var r=rowOf(n); if(!r) return null;
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return e.textContent.trim()+'@'+Math.round(e.getBoundingClientRect().left); });
+}
+function R(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    var b3s = JONAMES.filter(function(n){ return isBu3(n) && rowOf(n); });
+    L('3부반', b3s.length+'명');
+
+    // ── 갑. 3부반이 늘 맨 오른쪽인가
+    L('','★갑. 3부반 자리 — 이름 바로 오른쪽');
+    var wrong = [];
+    b3s.forEach(function(n){
+      var p = pills(n);
+      if (!p || !p.length) { wrong.push(n+'(알약 없음)'); return; }
+      if (p[0] !== '3부반') wrong.push(n+'['+p.join('][')+']');
+    });
+    ok(wrong.length===0, '  맨 앞이 3부반인가',
+       wrong.length ? '★'+wrong.slice(0,4).join(' ') : b3s.length+'명 전부 ◎');
+    ok(b3s.every(function(n){ var p=pills(n)||[];
+        return p.filter(function(x){ return x==='3부반'; }).length===1; }),
+       '  한 번만 적히나', '중복 없음');
+
+    // ── 을. 여러 알약이 붙은 줄들 — 실제로 어떻게 서나
+    L('','★을. 실제 줄 (왼쪽 → 오른쪽)');
+    var many = b3s.filter(function(n){ return (pills(n)||[]).length >= 2; }).slice(0, 6);
+    if (!many.length){
+      // 없으면 만들어 본다: 3부반 하나를 대기로, 하나에 당번을
+      var w = b3s[0];
+      var dk = DUTYKEYS.filter(function(k){ return /흡연/.test(k); })[0] || DUTYKEYS[0];
+      dutyToggle(dk, b3s[1]); paint();
+      many = b3s.filter(function(n){ return (pills(n)||[]).length >= 2; }).slice(0, 6);
+    }
+    many.forEach(function(n){ L('  '+n, '['+(pills(n)||[]).join('] [')+']'); });
+    ok(many.length>0 && many.every(function(n){ var p=pills(n); return p[0]==='3부반'; }),
+       '  전부 앞에 3부반', many.length+'줄 확인');
+
+    // ── 병. 자리(픽셀)로도 맨 오른쪽인가
+    L('','★병. 진짜 오른쪽인가 (픽셀)');
+    var chk = many[0] || b3s[0];
+    L('  '+chk, (pillX(chk)||[]).join('  '));
+    var xs = (pillX(chk)||[]).map(function(s){ return Number(s.split('@')[1]); });
+    ok(xs.length<2 || xs[0]===Math.min.apply(null, xs), '  가장 왼쪽 좌표',
+       xs.length<2 ? '알약이 하나뿐' : '맨 앞 '+xs[0]+' / 최소 '+Math.min.apply(null, xs));
+    // ★이름에 정말 붙어 있나 — 이름 오른쪽 끝과의 틈
+    var rw=rowOf(chk), ne=rw.querySelector('.n'),
+        b3e=qa('.bt').filter(function(e){ return rw.contains(e) && e.textContent.trim()==='3부반'; })[0];
+    var gap = b3e ? Math.round(b3e.getBoundingClientRect().left - ne.getBoundingClientRect().right) : -1;
+    ok(b3e && gap >= 0 && gap <= 12, '  ★이름에 붙었나', '틈 '+gap+'px');
+    // 그날치 배지는 그보다 오른쪽에 모여 선다
+    var day=qa('.bt, .bg').filter(function(e){ return rw.contains(e)
+      && e.textContent.trim()!=='3부반'; });
+    ok(!day.length || day.every(function(e){
+        return e.getBoundingClientRect().left > b3e.getBoundingClientRect().left; }),
+       '  그날치는 그보다 오른쪽', day.map(function(e){ return e.textContent.trim(); }).join(' ') || '(없음)');
+    // 카트 번호는 그보다 더 오른쪽에 있어야 한다
+    var rr = rowOf(chk), ct = rr ? rr.querySelector('.ct') : null;
+    var lastPill = qa('.bt, .bg').filter(function(e){ return rr.contains(e); }).pop();
+    ok(ct && lastPill && ct.getBoundingClientRect().left > lastPill.getBoundingClientRect().left,
+       '  카트는 그보다 오른쪽', ct? '카트 '+Math.round(ct.getBoundingClientRect().left)
+         +' > 3부반 '+Math.round(lastPill.getBoundingClientRect().left) : '—');
+
+    // ── 정. 3부반이 아닌 사람은 그대로
+    L('','★정. 3부반 아닌 사람');
+    var no3 = JONAMES.filter(function(n){ return !isBu3(n) && rowOf(n) && (pills(n)||[]).length; })[0];
+    if (no3) L('  '+no3, '['+(pills(no3)||[]).join('] [')+']');
+    ok(!no3 || (pills(no3)||[]).indexOf('3부반')<0, '  3부반이 안 붙나',
+       no3 ? '안 붙음 ◎' : '(그런 줄 없음)');
+
+    // ── 무. 기계 쪽 목록(wkBadges)은 그대로인가 — 딴 데서 쓴다
+    L('','★무. 기계 쪽');
+    var one = b3s[0];
+    L('  wkBadges('+one+')', wkBadges(one).join(' / '));
+    ok(wkBadges(one).indexOf('3부반')>=0, '  목록엔 그대로 드나', wkBadges(one).join(' / '));
+    ok(dayBadges(wkBadges(one)).indexOf('3부반')<0, '  그날치에서는 빠지나',
+       '['+dayBadges(wkBadges(one)).join('] [')+']');
+    // 줄 배경(b3)은 그대로
+    ok(rowOf(one).className.indexOf('b3')>=0, '  줄 바탕색', '그대로 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

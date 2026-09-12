@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function pmBtns(){ return qa('#sheet .acts.pm button').map(function(b){
+  return b.textContent+(b.className.indexOf('warn')>=0?'(빨강)':''); }); }
+function pmXs(){ return qa('#sheet .acts.pm button').map(function(b){
+  return Math.round(b.getBoundingClientRect().left); }); }
+function open_(){ return q('#sheet') && q('#sheet').className.indexOf('on')>=0; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var nm=active(part('1'))[10].n;
+    openPerson(nm);
+    L('사람', nm);
+    L('처음 단추', pmBtns().join(' | '));
+    var x0=pmXs();
+    L('  가로 자리', x0.join(' / '));
+
+    // 1부에서 빼기 → 1부 칸은 그 자리에서 '넣기'로 바뀌어야
+    tap(qa('#sheet .acts.pm button')[0]);
+    L('1부 빼기 뒤', pmBtns().join(' | '));
+    var x1=pmXs();
+    L('  가로 자리', x1.join(' / ')+' → '+(x0.join()===x1.join()?'안 움직임 ◎':'움직임 ✗'));
+    L('  창', open_()?'그대로 열림 ◎':'닫힘(문제)');
+    L('  2부 단추가 1부 자리로 당겨졌나', pmBtns()[0].indexOf('1부')===0?'아니오 ◎':'예 ✗');
+
+    // 같은 자리를 또 누르면 이번엔 '1부에 넣기'
+    tap(qa('#sheet .acts.pm button')[0]);
+    L('같은 자리 또 누름', pmBtns().join(' | ')+' · '+(open_()?'창 열림 ◎':'닫힘(문제)'));
+    L('  되돌아왔나', partsOf(nm).indexOf('1')>=0?'예 ◎':'아니오 ✗');
+
+    // 3부에 넣기 → 창 살아 있어야
+    tap(qa('#sheet .acts.pm button')[2]);
+    L('3부 넣기 뒤', pmBtns().join(' | ')+' · '+(open_()?'창 열림 ◎':'닫힘(문제)'));
+    L('  어디 있나', partsOf(nm).map(function(k){return part(k).name;}).join('·'));
+
+    // 고르개 — 잇달아 넣을 수 있어야
+    tap(q('#sheet button[data-act="close"]')||q('#sheet .close'));
+    cur='2'; VIEW='board'; paint(); openRoster();
+    tap(q('#sheet button[data-act="padd"]'));
+    var n0=qa('#apOut button[data-pn]').length, r0=part('2').roster.length;
+    var a1=qa('#apOut button[data-pn]')[0].getAttribute('data-pn');
+    tap(qa('#apOut button[data-pn]')[0]);
+    L('고르개 한 명 넣고', a1+' · 창 '+(open_()?'열림 ◎':'닫힘(문제)')
+      + ' · 후보 '+n0+'→'+qa('#apOut button[data-pn]').length
+      + ' · 2부 '+r0+'→'+part('2').roster.length);
+    var a2=qa('#apOut button[data-pn]')[0].getAttribute('data-pn');
+    tap(qa('#apOut button[data-pn]')[0]);
+    L('  이어서 한 명 더', a2+' · 2부 '+part('2').roster.length+'명 · 창 '+(open_()?'열림 ◎':'닫힘(문제)'));
+    L('  알림', q('#toast').textContent);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

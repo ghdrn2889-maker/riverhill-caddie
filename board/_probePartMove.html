@@ -1,0 +1,83 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function btn(attr,v){ return qa('#sheet button').filter(function(b){return b.getAttribute(attr)===v;})[0]; }
+function where(n){ return partsOf(n).map(function(k){
+  var a=active(part(k)).map(function(r){return r.n;}); var i=a.indexOf(n);
+  return part(k).name+' '+(i>=0?(i+1)+'번':'결근'); }).join(' · ') || '(어느 부에도 없음)'; }
+function cnt(){ return DAY.map(function(p){return p.name+' '+p.roster.length;}).join('·')
+  + ' · 제외 '+OFFDUTY.length; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var nm=active(part('1'))[10].n;
+    L('시작', cnt());
+    openPerson(nm);
+    L('사람 창', q('#sheet .st').textContent+' · '+where(nm));
+    var grp=qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | ');
+    L('  칸', grp);
+    L('  단추', qa('#sheet .acts button[data-prm],#sheet .acts button[data-padd]')
+        .map(function(b){return '"'+b.textContent+'"';}).join(' '));
+
+    // ① 한 부에서만 빼기
+    tap(btn('data-prm','1'));
+    L('1부에서 빼기', where(nm)+' · '+cnt());
+    L('  제외인원 들어갔나', OFFDUTY.indexOf(nm)>=0?'예(문제 — 아직 2부에 있다)':'아니오 ◎');
+    L('  기록', LOG[0].msg);
+
+    // ② 마지막 부에서도 빼기 → 제외인원으로
+    tap(btn('data-prm','2'));
+    L('2부에서도 빼기', where(nm)+' · '+cnt());
+    L('  제외인원', OFFDUTY.indexOf(nm)>=0?'들어감 ◎':'안 들어감(문제)');
+    L('  단추', qa('#sheet .acts button[data-prm],#sheet .acts button[data-padd]')
+        .map(function(b){return '"'+b.textContent+'"';}).join(' '));
+
+    // ③ 없던 부(3부)에 넣기
+    var n3=part('3').roster.length;
+    tap(btn('data-padd','3'));
+    L('3부에 넣기', where(nm)+' · 3부 명단 '+n3+'→'+part('3').roster.length
+      + ' · 제외인원 '+(OFFDUTY.indexOf(nm)>=0?'남음(문제)':'빠짐 ◎'));
+    L('  기록', LOG[0].msg);
+
+    // ④ 이미 있는 부에 또 넣기 → 막히나
+    openPerson(nm);
+    var before=part('3').roster.length;
+    var dup=qa('#sheet button[data-padd="3"]')[0];
+    L('3부에 또 넣기 단추', dup? '아직 있음(문제)':'사라짐 ◎');
+    addRow('3', nm);
+    L('  기계에 직접 시켜도', part('3').roster.length===before? '막힘 ◎ · "'+q('#toast').textContent+'"':'들어감(문제)');
+
+    // ⑤ 쉬는 사람을 넣으면 근태가 근무로
+    var rest=JONAMES.filter(function(n){ return tagOf(n)==='휴무' && !partsOf(n).length; })[0];
+    openPerson(rest);
+    L('쉬는 사람', rest+' · 배지 '+tagOf(rest)+' · '+where(rest));
+    tap(btn('data-padd','1'));
+    L('  1부에 넣은 뒤', where(rest)+' · 배지 '+(tagOf(rest)||'없음 ◎')
+      + ' · 제외인원 '+(OFFDUTY.indexOf(rest)>=0?'남음(문제)':'빠짐 ◎'));
+    L('  기록', LOG[0].msg);
+
+    // ⑥ 명단 시트 → 이 부에 사람 넣기 → 고르개
+    cur='2'; VIEW='board'; paint();
+    openRoster();
+    L('명단 시트', q('#sheet .st').textContent+' · 넣기 단추 '
+      + (q('#sheet button[data-act="padd"]')? '"'+q('#sheet button[data-act="padd"]').textContent+'" ◎':'없음(문제)'));
+    tap(q('#sheet button[data-act="padd"]'));
+    L('고르개', q('#sheet .st').textContent+' · 조 머리 '+qa('#apOut .johd').length+'개 · 후보 '
+      + qa('#apOut button[data-pn]').length+'명');
+    var first=qa('#apOut button[data-pn]')[0];
+    var pick=first.getAttribute('data-pn'), n2=part('2').roster.length;
+    tap(first);
+    L('  고른 사람', pick+' → 2부 명단 '+n2+'→'+part('2').roster.length+' · '+where(pick));
+
+    // ⑦ 되돌리기
+    var steps=0; while(steps<8 && STACK.length){ undo(); steps++; }
+    L('되돌리기 '+steps+'번', cnt());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

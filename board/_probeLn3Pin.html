@@ -1,0 +1,94 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function line(pk, n){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<Math.min(n,a.length);i++)
+      out.push(seatNoTx(p,i)+' '+(a[i].n||'(빈)'));
+    return out.join(' | ');
+  }
+  function noOf(pk, nm){
+    var p=part(pk), a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNoTx(p,i)+'번';
+    return '없음';
+  }
+  function state(nm){
+    return nm+'['+(tagOf(nm)||'배지없음')+'] 자리'+(partsOf(nm).join('')||'-')
+      +' 지정'+(planOf(nm).join('')||'-')+(dupPinned(nm)?' 못◎':' ★못없음');
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    var p3=part('3');
+    while(p3.tees.length<12) addTeam('3', hm(mm(p3.tees[p3.tees.length-1].time)+GAP));
+  }
+  try{
+    // ══ 갑. 두 부에 진짜 자리가 있는 중복 근무자
+    reset();
+    var b3=JONAMES.filter(function(n){ return isBu3(n); });
+    var A=b3[0], B=b3[1], C=b3[2];
+    seatPerson('2', 0, A); seatPerson('2', 1, B); seatPerson('2', 2, C);
+    seatPerson('3', 3, A); seatPerson('3', 4, B); seatPerson('3', 5, C);
+    L('★갑. 2부 자리 + 3부 4·5·6번','');
+    L('  3부', line('3',9));
+    L('  '+A, state(A));
+    L('  순번 후보', [A,B,C].map(function(n){ return n+':'+(inLineup(n,'bu3')?'★후보':'빠짐'); }).join(' '));
+    var sb=bu3Start();
+    L('  3부 시작', sb);
+    applyLineup(sb, ['3']);
+    L('  세운 뒤', line('3',9));
+    ok(noOf('3',A)==='4번' && noOf('3',B)==='5번' && noOf('3',C)==='6번',
+       '  셋이 그대로', noOf('3',A)+' '+noOf('3',B)+' '+noOf('3',C)+'  (4·5·6번이어야)');
+
+    // ══ 을. 근무표에서 2부 근무로 '지정'만 하고 3부에 앉힌 경우
+    reset();
+    o.push(''); L('★을. 2부는 근무표 지정만 · 3부 4·5·6번에 앉힘','');
+    setPlan(A,'2',true); setPlan(B,'2',true); setPlan(C,'2',true);
+    seatPerson('3', 3, A); seatPerson('3', 4, B); seatPerson('3', 5, C);
+    L('  3부', line('3',9));
+    L('  '+A, state(A));
+    L('  순번 후보', [A,B,C].map(function(n){ return n+':'+(inLineup(n,'bu3')?'★후보':'빠짐'); }).join(' '));
+    applyLineup(bu3Start(), ['3']);
+    L('  세운 뒤', line('3',9));
+    ok(noOf('3',A)==='4번' && noOf('3',B)==='5번' && noOf('3',C)==='6번',
+       '  셋이 그대로', noOf('3',A)+' '+noOf('3',B)+' '+noOf('3',C)+'  (4·5·6번이어야)');
+
+    // ══ 병. '여기부터 한꺼번에 앉히기'로 넣은 경우
+    reset();
+    o.push(''); L('★병. 2,3 묶음을 4번부터 한꺼번에 앉히기','');
+    seatPerson('2', 0, A); seatPerson('2', 1, B); seatPerson('2', 2, C);
+    L('  묶음', seatGroups('3').map(function(g){ return g.label+' '+g.names.length+'명'; }).join(' / ')||'(없음)');
+    var gk=(seatGroups('3')[0]||{}).key;
+    L('  고른 묶음', gk||'(없음)');
+    seatGroup('3', 3, gk, A);
+    L('  3부', line('3',9));
+    L('  '+A, state(A));
+    applyLineup(bu3Start(), ['3']);
+    L('  세운 뒤', line('3',9));
+    ok(noOf('3',A)==='4번','  '+A, noOf('3',A)+'  (4번이어야)');
+    ok(dupPinned(A),'  못', dupPinned(A)?'박힘 ◎':'★없음');
+
+    // ══ 정. 하우스 캐디(3부반 아님)가 2·3부를 뛰는 경우
+    reset();
+    o.push(''); L('★정. 하우스 캐디가 2부+3부','');
+    var no=JONAMES.filter(function(n){ return !isBu3(n); });
+    var D=no[0], F=no[1];
+    seatPerson('2', 0, D); seatPerson('2', 1, F);
+    seatPerson('3', 3, D); seatPerson('3', 4, F);
+    L('  3부', line('3',9));
+    L('  '+D, state(D));
+    applyLineup(bu3Start(), ['3']);
+    L('  세운 뒤', line('3',9));
+    ok(noOf('3',D)==='4번' && noOf('3',F)==='5번','  둘이 그대로',
+       noOf('3',D)+' '+noOf('3',F)+'  (4·5번이어야)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

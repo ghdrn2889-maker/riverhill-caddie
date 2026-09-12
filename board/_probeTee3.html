@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function tees(pk){ return part(pk).tees.map(function(t){return t.time;}).join(' '); }
+  function grid(pk){ var g=gridTimes(part(pk)); return g.length+'줄: '+g.slice(0,6).join(' ')+' …'; }
+  function empties(pk){ var p=part(pk), has={};
+    p.tees.forEach(function(t){ has[t.time]=1; });
+    return gridTimes(p).filter(function(t){ return !has[t]; }).length; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    L('3부 처음', '시작 '+part('3').start+' · 티오프 '+tees('3'));
+    L('  격자', grid('3')+' · 빈 격자 줄 '+empties('3'));
+    var i0=0;
+    for (var k=0;k<part('3').tees.length;k++) if (part('3').tees[k].time==='16:32') i0=k;
+    setTeeTime('3', i0, '16:43', true);
+    L('★16:32 → 16:43 (뒤도 밀기)', '시작 '+part('3').start+' · 티오프 '+tees('3'));
+    L('  격자', grid('3')+' · 빈 격자 줄 '+empties('3')
+      + ' ' + (empties('3')<=1 ? '◎ 안 남음':'★남았다 ✗'));
+    L('  기록', LOG[0].msg);
+    undo();
+    L('되돌리기', '시작 '+part('3').start+' · 티오프 '+tees('3'));
+    // 가운데를 밀면
+    setTeeTime('3', 1, hm(mm(part('3').tees[1].time)+11), true);
+    L('가운데를 밀면', '시작 '+part('3').start+' · 티오프 '+tees('3')
+      + ' · 빈 격자 줄 '+empties('3')+' (앞은 격자에 남으니 생길 수 있다)');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

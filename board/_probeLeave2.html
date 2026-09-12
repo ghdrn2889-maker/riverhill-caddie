@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function run(absOn, leaveOn){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+    var P = workRows().filter(function(r){ return !tagOf(r.n) && !isBu3(r.n); }).map(function(r){ return r.n; });
+    var a=P[0], b=P[1], c=P[2];
+    setDayTag(a,'휴무'); setDayTag(b,'휴가'); setDayTag(c,'병가');
+    setCarryOpt('abs', absOn); setCarryOpt('leave', leaveOn);
+    carryToNextDay(); paint();
+    return '휴무 '+(tagOf(a)||'없음')+' · 휴가 '+(tagOf(b)||'없음')+' · 병가 '+(tagOf(c)||'없음')
+      + ' | 기록 ' + (LOG.filter(function(x){ return /넘김/.test(x.msg); })[0]||{msg:'-'}).msg.slice(-40);
+  }
+  try{
+    L('기본(휴무 끔 · 휴가 켬)', run(false, true));
+    L('둘 다 켜면        ', run(true, true));
+    L('둘 다 끄면        ', run(false, false));
+    L('휴무만 켜면       ', run(true, false));
+
+    // 화면에 스위치 둘이 뜨나
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen(); paint();
+    openCarry();
+    var rows=[].slice.call(document.querySelectorAll('#sheet [data-copt]'));
+    o.push('');
+    L('이어받기 창의 스위치', rows.map(function(b){
+      return b.getAttribute('data-copt')+'('+b.querySelector('.cn').childNodes[0].nodeValue.trim()+')'; }).join(' · '));
+    closeSheet();
+
+    // 옛 설정(leave 없음)을 읽으면
+    var k=null; for(var i=0;i<localStorage.length;i++){ var kk=localStorage.key(i); if(/cfg/i.test(kk)) k=kk; }
+    var cfg=JSON.parse(localStorage.getItem(k));
+    delete cfg.carry.leave;
+    localStorage.setItem(k, JSON.stringify(cfg));
+    CARRY.leave = false;                   // 일부러 딴 값으로 해 놓고
+    cfgLoad();
+    L('옛 설정에 leave 가 없으면', 'leave='+(CARRY.leave?'켜짐 ◎ (여러 날 가는 것이니 가져간다)':'꺼짐 ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

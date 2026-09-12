@@ -1,0 +1,53 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shot(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    if(!b) return '(줄 없음)';
+    return [].slice.call(b.querySelectorAll('.bt,.bg')).map(function(el){
+      var s=getComputedStyle(el);
+      return '"'+el.textContent.trim()+'"['+String(el.className).trim()+' 글자'+s.color+']';
+    }).join(' ');
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+  }
+  try{
+    var N='정진영';
+    // ── 가설 ㉠ : 배지(TAG)가 '2부'
+    reset();
+    DAY.forEach(function(p){ for(var i=p.roster.length-1;i>=0;i--) if(p.roster[i].n===N) p.roster.splice(i,1); });
+    TAG[N]='2부'; paint();
+    L('㉠ TAG 가 2부', shot(N));
+    L('   tagCls(2부)', tagCls('2부'));
+
+    // ── 가설 ㉡ : '2부 당번' 이라는 당번 종류를 만들고 거기 넣음
+    reset();
+    DAY.forEach(function(p){ for(var i=p.roster.length-1;i>=0;i--) if(p.roster[i].n===N) p.roster.splice(i,1); });
+    delete TAG[N];
+    if (DUTYKEYS.indexOf('2부 당번')<0){ DUTYKEYS.push('2부 당번'); DUTY['2부 당번']=[]; DUTYDEF['2부 당번']={t:'',h:0}; }
+    dutyToggle('2부 당번', N); paint();
+    L('', '');
+    L('㉡ 2부 당번 종류', shot(N));
+    L('   dutyChip', dutyChip('2부 당번')+' / tagCls → '+tagCls('2부'));
+    L('   DUTYKEYS', DUTYKEYS.join(' / '));
+
+    // ── 가설 ㉢ : 배치표 칸의 역할(role)이 '2부'
+    reset();
+    delete TAG[N];
+    (function(){ var f=false; DAY.forEach(function(p){ if(f) return;
+      active(p).forEach(function(r,i){ if(!f&&r.n===N){ r.role='2부'; f=true; } }); }); })();
+    paint();
+    L('', '');
+    L('㉢ 칸의 역할이 2부', shot(N));
+
+    o.push('');
+    L('★사진의 색', '"2부" 글자가 초록(rgb(15,107,71)) · "자리 없음" 도 초록');
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

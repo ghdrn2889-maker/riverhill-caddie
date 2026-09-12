@@ -1,0 +1,29 @@
+<div id="PROBE"></div>
+<script>
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function btns(){ return qa('#sheet button').map(function(b){
+  return (b.textContent||'').replace(/\s+/g,' ').trim(); }).filter(function(t){ return t && t.length<22; }); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; DATE=BOARD.date; bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']);
+    openCell('1', 3);
+    L('배치표 칸 창', qa('#sheet .grp h4').map(function(h){return h.textContent;}).join(' | '));
+    L('  단추', btns().join(' / '));
+    closeSheet();
+    openPerson(active(part('1'))[3].n);
+    L('근무표 사람 창', qa('#sheet .grp h4').map(function(h){return h.textContent;}).join(' | '));
+    L('  단추', btns().join(' / '));
+    closeSheet();
+    openAddPerson('1');
+    L('부 넣기 창', (document.querySelector('#sheet .st')||{}).textContent
+      + ' · 줄 ' + qa('#sheet [data-pn]').length + '개');
+    closeSheet();
+    openRoster();
+    L('순번·명단 창', (document.querySelector('#sheet .st')||{}).textContent
+      + ' · 단추 ' + btns().slice(0,6).join(' / '));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

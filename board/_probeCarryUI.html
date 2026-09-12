@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // 3부를 몇 팀 돌려 놓는다
+    var p3=part('3');
+    for(var i=0;i<5;i++) addTeam('3', hm(mm(p3.tees[p3.tees.length-1].time)+GAP), COURSES[0]);
+    setView('work');
+    var card=q('.nday');
+    L('카드', card? '있음 ◎ · "'+card.querySelector('.nh').textContent+'"':'없음(문제)');
+    L('  단추', q('.nday .ngo').textContent+' · 높이 '+Math.round(q('.nday .ngo').getBoundingClientRect().height)+'px');
+
+    tap(q('.nday .ngo'));
+    L('확인 창', q('#sheet .k').textContent+' / '+q('#sheet .st').textContent);
+    L('  머리말', q('#sheet .sub').textContent);
+    qa('#sheet .crl .cr').forEach(function(r){
+      L('  · '+r.querySelector('.ck').textContent, r.querySelector('.cv').textContent); });
+    L('  되돌림 안내', q('#sheet .calmbox')? q('#sheet .calmbox').textContent.slice(0,44)+'…':'없음(문제)');
+    L('  단추', qa('#sheet .acts.two button').map(function(b){return '"'+b.textContent+'"';}).join(' '));
+    L('  창 높이', Math.round(q('#sheet').getBoundingClientRect().height)+'px / '+window.innerHeight);
+
+    // 먼저 고치겠습니다 → 아무것도 안 바뀌어야
+    var d0=DATE, s0=SB3, n0=LOG.length;
+    tap(act('close'));
+    L('먼저 고치기', (DATE===d0 && SB3===s0 && LOG.length===n0)?'아무것도 안 바뀜 ◎':'바뀜(문제)');
+
+    // 진짜 넘기기
+    tap(q('.nday .ngo')); tap(act('ndayyes'));
+    L('넘김', DATE+' · 3부시작 '+SB3);
+    L('  알림', q('#toast').textContent);
+    L('  머리 날짜', q('#hDate').textContent);
+    L('  기록', LOG.map(function(x){return x.msg;}).join(' / '));
+    L('  ▶ 3부 대조', lineupPlan(SB3,['3']).moved===0?'그 차례대로 섰음 ◎':'어긋남 ✗');
+    L('  내일 준비 카드', q('.nday .nh span').textContent);
+
+    undo(); undo();
+    L('되돌림', DATE+' · 머리 '+q('#hDate').textContent+' · 3부시작 '+(SB3||'(없음)'));
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

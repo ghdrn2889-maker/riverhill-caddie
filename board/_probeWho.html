@@ -1,0 +1,35 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+
+    var wr = workRows().map(function(r){ return r.n; });
+    var jn = JONAMES.slice();
+    L('근무표가 보는 사람(workRows)', wr.length + '명');
+    L('seatGroups 가 보는 사람(JONAMES)', jn.length + '명');
+    L('근무표엔 있는데 JONAMES 에 없는 사람',
+      (function(){ var m={}; jn.forEach(function(n){m[n]=1;});
+        var d = wr.filter(function(n){ return !m[n]; }); return d.length+'명 '+d.join(' '); })());
+    L('JONAMES 엔 있는데 근무표에 없는 사람',
+      (function(){ var m={}; wr.forEach(function(n){m[n]=1;});
+        var d = jn.filter(function(n){ return !m[n]; }); return d.length+'명 '+d.slice(0,20).join(' '); })());
+
+    // ★사람을 하나 새로 만들어 본다 — 근무표엔 뜨는데 묶음이 볼까
+    var nm = '새캐디홍길동';
+    addRow('1', nm);
+    delFromPart('1', nm);
+    TAG[nm] = '조출';
+    var wr2 = workRows().map(function(r){ return r.n; });
+    L('', '');
+    L('새로 만든 ' + nm, '근무표에 ' + (wr2.indexOf(nm)>=0 ? '뜸' : '안 뜸')
+      + ' / JONAMES 에 ' + (JONAMES.indexOf(nm)>=0 ? '있음' : '없음'));
+    var g = seatGroups('1');
+    L('  1부 칸 묶음', g.map(function(x){ return x.label+' '+x.names.length+'명('+x.names.join(',')+')'; }).join(' / ') || '없음');
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,52 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function box(){ return qa('.sum > div').map(function(d){
+  return d.querySelector('.k').textContent+' '+d.querySelector('.v').textContent; }).join(' · '); }
+function rowOf(n){ var r=workTally().rows.filter(function(x){return x.n===n;})[0];
+  return r? r.st+'('+r.cls+')'+(r.tag?' 배지 '+r.tag:'') : '없음'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // 켤 때 그날의 구분이 지워지므로, 시험할 조출을 직접 붙인다
+    if (!JONAMES.filter(function(n){ return tagOf(n)==='조출'; }).length){
+      active(part('1')).map(function(r){return r.n;})
+        .filter(function(n){ return !tagOf(n); }).slice(0,3)
+        .forEach(function(n){ setDayTag(n, '조출'); });
+    }
+    setView('work');
+    L('처음', box());
+    var jc=JONAMES.filter(function(n){ return tagOf(n)==='조출'; })[0];
+    L('조출', jc+' · '+rowOf(jc)+' · 부 '+(partsOf(jc).join(',')||'없음'));
+
+    var T0=workTally();
+    delFromPart('1', jc);
+    setView('work');
+    L('1부에서 뺀 뒤', jc+' → '+rowOf(jc));
+    L('  ★가용에 드나', workTally().avail===T0.avail? '예 ◎ ('+T0.avail+' 그대로)':'아니오 ✗ ('+T0.avail+'→'+workTally().avail+')');
+    L('  집계', box());
+    L('  거르개', qa('[data-wfil]').map(function(b){return b.textContent;}).join(' | '));
+
+    // 순번 세우기에서는 빠져야
+    L('순번 셈에 드나', inLineup(jc,'house')? '든다 ✗':'안 든다 ◎');
+    L('  선발 후보에 있나', lineupPool('house').indexOf(jc)>=0? '있다 ✗':'없다 ◎');
+    var sb=seonbal(), pl=lineupPlan(sb,['1','2']);
+    L('  세우면 자리에 앉나', pl.slots.filter(function(x){return x.to===jc;}).length? '앉는다 ✗':'안 앉는다 ◎');
+    applyLineup(sb,['1','2']);
+    L('  세운 뒤', jc+' → '+rowOf(jc));
+
+    // 당번·프리는 그 밖 그대로
+    while(STACK.length) undo();
+    setView('work');
+    ['당번','배치','프리'].forEach(function(t){
+      var n=JONAMES.filter(function(x){ return tagOf(x)===t && !partsOf(x).length; })[0];
+      if(n) L(t, n+' → '+rowOf(n));
+    });
+    L('마지막 집계', box());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

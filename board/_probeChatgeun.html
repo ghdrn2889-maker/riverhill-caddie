@@ -1,0 +1,78 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  var CG='찾근';
+  function wk(n){
+    var r=document.querySelector('#workTable [data-who="'+n+'"]');
+    if(!r) return '(줄 없음)';
+    return [].slice.call(r.children).map(function(e){
+      var t=e.textContent.trim(); return t? e.className.replace(/\s+/g,'.')+'="'+t+'"':''; })
+      .filter(Boolean).join('  ');
+  }
+  function seats(n){
+    var out=[];
+    DAY.forEach(function(p){ active(p).forEach(function(r,i){
+      if(r.n===n) out.push(p.name+' '+seatNoTx(p,i)+'번'); }); });
+    return out.join(' · ')||'없음';
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    var A=active(part('1'))[6].n;
+    L('재는 사람', A+' · 지금 '+seats(A));
+
+    L('','★① 말 자체가 있나');
+    ok(DAYTAGS.indexOf(CG)>=0,'  그날의 구분 목록', DAYTAGS.join(' · '));
+    ok(seatTag(CG),'  자리에 붙는 말(SEATTAGS)', seatTag(CG)?'든다 ◎':'★안 든다');
+    ok(offBoardTag(CG),'  붙으면 자리에서 내려오나', offBoardTag(CG)?'◎':'★아니오');
+    ok(tagCls(CG)==='ccg','  색 이름', tagCls(CG)+(tagCls(CG)==='cet'?' ★그 밖(회색)':' — 전용 색 ◎'));
+    ok(absCls(CG)==='u','  셈에서', absCls(CG)==='u'?'가용 ◎':'★'+absCls(CG));
+
+    L('','★② 붙이면');
+    setDayTag(A,CG); paint();
+    ok(tagOf(A)===CG,'  배지', tagOf(A)||'★없음');
+    ok(seats(A)==='없음','  배치표 자리', seats(A)+' (내려와야)');
+    L('  근무표 줄', wk(A));
+    ok(/순번 고르는 중/.test(wk(A)),'  상태 글',
+       /순번 고르는 중/.test(wk(A))?'"순번 고르는 중" ◎':'★아직 "미배치"');
+    ok(!inLineup(A,'day'),'  순번 후보', inLineup(A,'day')?'★아직 후보':'빠졌다 ◎ (본인이 고른다)');
+    var T=workTally();
+    L('  셈', '총원 '+T.total+' · 가용 '+T.avail+' · 제외 '+T.exc);
+
+    L('','★③ 빈 칸을 열면 후보 맨 위에 뜨나');
+    setView('board'); paint();
+    var emp=[].slice.call(document.querySelectorAll('#col1 .cell[data-i]')).filter(function(c){
+      var nm=c.querySelector('.nm'); return nm && nm.textContent.trim()==='비어 있음'; })[0];
+    ok(!!emp,'  빈 칸', emp? emp.getAttribute('data-i')+'번째 칸':'★없다');
+    tap(emp);
+    var hd=[].slice.call(document.querySelectorAll('#seatOut .hd2')).map(function(h){return h.textContent.trim();});
+    L('  묶음', hd.join(' | ')||'(없음)');
+    ok(hd.length>0 && hd[0].indexOf(CG)===0,'  맨 위 묶음', hd[0]||'★없음');
+    var r0=document.querySelector('#seatOut [data-seatn]');
+    ok(!!r0 && r0.getAttribute('data-seatn')===A,'  첫 줄', r0? r0.textContent.trim():'★없음');
+    tap(r0); paint();
+    ok(seats(A)!=='없음','  고른 칸에 앉았나', seats(A));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    setView('work'); paint();
+    L('  앉은 뒤 줄', wk(A));
+    ok(/찾근/.test(wk(A)),'  배지는 그대로', /찾근/.test(wk(A))?'찾근 ◎':'★떨어졌다');
+
+    L('','★④ 한꺼번에 지정에 있나');
+    ok(BULKTAGS.indexOf(CG)>=0,'  BULKTAGS', BULKTAGS.filter(function(x){return x;}).join(' · '));
+
+    L('','★⑤ 떼면 돌아오나');
+    setDayTag(A,''); paint();
+    L('  자리', seats(A));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    ok(!tagOf(A),'  배지', tagOf(A)||'없음 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

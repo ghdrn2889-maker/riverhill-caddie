@@ -1,0 +1,77 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function offRow(nm){ return qa('#swOut [data-swapoff]').filter(function(b){
+  return b.getAttribute('data-swapoff')===nm; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var nm='정용만';
+    L('대상', nm + ' · 조 ' + (joOf(nm)>=0?(joOf(nm)+1)+'조':'없음')
+      + ' · 부 ' + (partsOf(nm).join(',')||'없음'));
+    setDayTag(nm, '조출');
+    L('조출 붙임', '배지 "' + (tagOf(nm)||'없음') + '" · 부 ' + (partsOf(nm).join(',')||'없음')
+      + ' · 근무표 "' + workRows().filter(function(r){return r.n===nm;})[0].st + '"');
+
+    var p1=part('1');
+    L('1부', '명단 ' + active(p1).length + '줄 · 티오프 ' + p1.tees.length
+      + ' · 칸은 ' + Math.max(active(p1).length, p1.tees.length) + '개까지');
+
+    // 37번 자리를 만든다 — 대기 줄을 늘린다
+    while (active(part('1')).length < 37) addRow('1', addablePool('1')[0]);
+    L('  늘린 뒤', '명단 ' + active(part('1')).length + '줄');
+    var i = 36;                                  // 37번
+    clearSeat('1', i);
+    L('37번을 비움', '"' + (active(part('1'))[i] ? (active(part('1'))[i].n||'(빈 이름)') : '(줄 없음)') + '"');
+
+    openCell('1', i);
+    swQ = nm; drawSwapList();
+    var row = offRow(nm);
+    L('★37번 칸에서 ' + nm + ' 찾기', row
+      ? '보임 ◎ — "' + row.textContent.replace(/\s+/g,' ').trim() + '"' : '안 보임 ✗');
+    if (row) L('  배지 칸', row.querySelector('.b') ? '"' + row.querySelector('.b').textContent + '" ◎'
+      : '★없음 ✗');
+    tap(row);
+    var at = active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    L('  ★눌렀더니', at>=0 ? '1부 ' + (at+1) + '번에 들어감 ◎' : '★아무 일도 안 일어남 ✗');
+    L('  기록', LOG[0].msg);
+
+    L('  ★배치표 칸 배지', (function(){
+        var r = active(part('1'))[at];
+        return r ? '"' + (r.tag || '없음') + '" '
+          + (r.tag === '조출' ? '◎ 따라 붙음' : '★안 붙음 ✗') : '?'; })());
+    undo();
+
+    // ★줄이 아예 없는 칸 — 명단은 짧고 티오프는 있는 자리
+    var nm2 = '정용만';
+    if (tagOf(nm2) !== '조출') setDayTag(nm2, '조출');   // 같은 것을 또 누르면 떼진다
+    L('  배지 확인', nm2 + ' "' + (tagOf(nm2)||'없음') + '"');
+    while (active(part('1')).length >= part('1').tees.length)
+      delRow('1', part('1').roster.length - 1);
+    var hole = active(part('1')).length;          // 줄이 없는 첫 칸
+    L('줄 없는 칸', '1부 ' + (hole+1) + '번 · 명단 ' + hole + '줄 · 티오프 '
+      + part('1').tees.length + ' · 그 칸 "'
+      + (active(part('1'))[hole] ? '줄 있음' : '줄 없음') + '"');
+    openCell('1', hole);
+    swQ = nm2; drawSwapList();
+    var row2 = offRow(nm2);
+    L('  거기서 ' + nm2 + ' 찾기', row2 ? '보임 ◎' : '안 보임 ✗');
+    tap(row2);
+    var at2 = active(part('1')).map(function(r){return r.n;}).indexOf(nm2);
+    L('  ★눌렀더니', at2 >= 0 ? '1부 ' + (at2+1) + '번에 들어감 ◎' : '★아무 일도 안 일어남 ✗');
+    if (at2 >= 0){
+      var r2 = active(part('1'))[at2];
+      L('    배지', '"' + (r2.tag || '없음') + '" ' + (r2.tag === '조출' ? '◎' : '✗'));
+      L('    근무표', workRows().filter(function(r){return r.n===nm2;})[0].st);
+    }
+    L('  기록', LOG[0].msg);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

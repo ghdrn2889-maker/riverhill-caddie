@@ -1,0 +1,92 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function ms(){ return STAFF.filter(function(x){return x.k==='마샬';})
+    .map(function(x){return x.n||'빔';}).join(' · '); }
+  function fixed(){ return STAFF.filter(function(x){return x.k!=='마샬';})
+    .map(function(x){return x.k+'='+(x.n||'빔');}).join(' · '); }
+  function baechi(){ return JONAMES.filter(function(n){return tagOf(n)==='배치';}).join('·')||'없음'; }
+  var mi=[];
+  // ★씨앗 배치표는 8월 30일이라 판을 열면 오늘로 저절로 넘어간다 —
+  //   그때 마샬이 이미 비워진다. 그러니 잴 때마다 손으로 앉혀 놓고 시작한다
+  function setup(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work');
+    mi=[]; STAFF.forEach(function(x,i){ if(x.k==='마샬') mi.push(i); });
+    setStaff(mi[0], '우겸조', '05:40');
+    setStaff(mi[1], '허웅진', '12:30');
+    STACK=[]; REDO=[]; LOG=[];
+  }
+  try{
+    setup();
+    L('기본값 CARRY.staff', String(CARRY.staff)+' (거짓이라야 비운다)');
+    L('세워 둔 마샬', ms());
+    L('배치인 사람', baechi());
+    L('그 밖 경기과', fixed());
+
+    // ── 갑. 기본값으로 내일로 넘긴다 → 마샬 칸이 빈다
+    o.push(''); L('★갑. 그대로 내일로 넘기기','');
+    carryToNextDay();
+    ok(ms()==='빔 · 빔','  마샬 칸', ms());
+    ok(baechi()==='없음','  배치인 사람', baechi());
+    ok(/류동기/.test(fixed())&&/박정미/.test(fixed()),'  경기팀장·주임은 그대로', fixed());
+    L('  넘김 기록', (LOG[LOG.length-1]||{}).msg||'(없음)');
+
+    // ── 을. 되돌리기 한 번이면 마샬이 돌아온다
+    o.push(''); L('★을. 되돌리기 한 번','');
+    undo();
+    ok(ms()==='우겸조 · 허웅진','  마샬 칸', ms());
+    ok(baechi()==='우겸조·허웅진','  배치', baechi());
+
+    // ── 병. 넘긴 뒤 새 마샬을 넣으면 그 사람이 배치가 된다
+    setup();
+    o.push(''); L('★병. 넘긴 뒤 새 마샬을 넣는다','');
+    carryToNextDay();
+    var neo=JONAMES.filter(function(n){ return !tagOf(n); })[0];
+    setStaff(mi[0], neo, '05:40');
+    ok(tagOf(neo)==='배치','  '+neo+' 배지', tagOf(neo)||'★없음');
+    ok(baechi()===neo,'  배치인 사람', baechi());
+
+    // ── 정. 스위치를 켜면 그대로 넘어간다
+    setup();
+    o.push(''); L('★정. 스위치를 켜고 넘기면','');
+    CARRY.staff = true;
+    carryToNextDay();
+    ok(ms()==='우겸조 · 허웅진','  마샬 칸', ms());
+    ok(baechi()==='우겸조·허웅진','  배치', baechi());
+    L('  넘김 기록', (LOG[LOG.length-1]||{}).msg||'(없음)');
+    CARRY.staff = false;
+
+    // ── 무. 확인 창에 칸이 있고 눌리나
+    setup();
+    o.push(''); L('★무. 내일로 넘기기 확인 창','');
+    openCarry();
+    var rows=[].slice.call($('sheet').querySelectorAll('[data-copt]'));
+    L('  들고 갈 것 칸', rows.map(function(b){
+      return b.getAttribute('data-copt')+'('+(b.classList.contains('on')?'가져감':'안 가져감')+')';
+    }).join(' · '));
+    var st=rows.filter(function(b){return b.getAttribute('data-copt')==='staff';})[0];
+    ok(!!st,'  경기과 마샬 칸', st? st.textContent.replace(/\s+/g,' ').trim() : '★없음');
+    if(st){ st.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+      ok(CARRY.staff===true,'  눌렀을 때', String(CARRY.staff)); CARRY.staff=false; }
+
+    // ── 기. 판을 열 때 날이 저절로 넘어가도 같은 규칙이 도나
+    o.push(''); L('★기. 날이 저절로 넘어갈 때(달력 따라가기)','');
+    L('  씨앗 배치표 날짜', BOARD.date+' · 오늘 '+todayLabel());
+    L('  판을 열자마자 마샬', '빔 · 빔 이어야 한다');
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    setStaff(mi[0],'우겸조','05:40'); setStaff(mi[1],'허웅진','12:30');
+    bootLoad();
+    ok(ms()==='빔 · 빔','  넘어간 뒤 마샬', ms());
+    ok(baechi()==='없음','  넘어간 뒤 배치', baechi());
+    L('  기록', (LOG[LOG.length-1]||{}).msg||'(없음)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

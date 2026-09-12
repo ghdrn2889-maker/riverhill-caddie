@@ -1,0 +1,76 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'\u25ce ':'\u2717 ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function spare(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) out.push(seatNoTx(p,i)+'\ubc88 '+(a[i].n||'\ube48'));
+    return out.join(' \u00b7 ')||'\uc5c6\uc74c';
+  }
+  function addCells(){ return [].slice.call(document.querySelectorAll('.cell.spadd')); }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+  }
+  try{
+    reset(); setView('board'); paint();
+
+    // ── \uac11. \ub300\uae30\uac00 \uc5c6\uc744 \ub54c\ub3c4 \ubb38\uc774 \uc788\ub098
+    L('\u2605\uac11. \ub300\uae30 0 \uba85\uc77c \ub54c','');
+    var t0=document.querySelector('[data-spadd="1"]');
+    ok(!!t0,'  \ubb38', t0? '"'+t0.textContent.trim()+'" \u25ce' : '\u2605\uc5c6\ub2e4');
+
+    // ── \uc744. \ub204\ub974\uba74 \ucc3d\uc774 \uc5f4\ub9ac\uace0 \uc774\ub984\uc744 \uce5c\ub2e4
+    L('','\u2605\uc744. \ub204\ub974\uba74');
+    tap(t0);
+    var st=document.querySelector('#sheet .st');
+    L('  \ucc3d', st? st.textContent.trim() : '\u2605\uc548 \uc5f4\ub9bc');
+    ok(!!document.getElementById('seatQ'),'  \uc774\ub984 \uce78', document.getElementById('seatQ')?'\uc788\uc74c \u25ce':'\u2605\uc5c6\uc74c');
+    var A=JONAMES[5];
+    document.getElementById('seatQ').value=A;
+    tap(document.querySelector('#sheet [data-act="seatgo"]'));
+    paint();
+    ok(spare('1').indexOf(A)>=0,'  1\ubd80 \ub300\uae30', spare('1'));
+    L('  \uae30\ub85d', LOG[0]?LOG[0].msg:'(\uc5c6\uc74c)');
+    ok(partsOf(A).indexOf('1')>=0,'  \uc790\ub9ac \uc0dd\uacbc\ub098', partsOf(A).join(',')||'\u2605\uc5c6\uc74c');
+
+    // ── \ubcd1. \uc774\uc81c \ub300\uae30 \uc904 \ub05d\uc5d0 \uce78\uc774 \ubcf4\uc774\ub098
+    L('','\u2605\ubcd1. \ub300\uae30\uac00 \uc0dd\uae34 \ub4a4');
+    var c=addCells().filter(function(x){ return x.getAttribute('data-spadd')==='1'; })[0];
+    ok(!!c,'  \'+ \ub300\uae30\' \uce78', c? '"'+c.textContent.trim()+'" \u25ce' : '\u2605\uc5c6\ub2e4');
+    ok(c && c.textContent.indexOf(String(nextSeatNo(part('1'))))>=0,
+       '  \uce78\uc5d0 \uc801\ud78c \ubc88\ud638', c? c.textContent.trim() : '', 0);
+    L('  \ub2e4\uc74c \uc21c\ubc88', nextSeatNo(part('1')));
+
+    // ── \uc815. \ubaa9\ub85d\uc5d0\uc11c \uace8\ub77c\ub3c4 \ub4e4\uc5b4\uac00\ub098
+    L('','\u2605\uc815. \uce78\uc744 \ub20c\ub7ec \ubaa9\ub85d\uc5d0\uc11c \uace0\ub974\uae30');
+    tap(c);
+    var rows=[].slice.call(document.querySelectorAll('#seatOut [data-seatn]'));
+    L('  \ud6c4\ubcf4', rows.length+'\uba85');
+    var hd=[].slice.call(document.querySelectorAll('#seatOut .hd2')).map(function(h){return h.textContent.trim();});
+    L('  \ubb36\uc74c', hd.join(' | '));
+    ok(hd.join('|').indexOf('1\ubd80 \ub300\uae30')<0,'  \'1\ubd80 \ub300\uae30\' \ubb36\uc74c', hd.join('|').indexOf('1\ubd80 \ub300\uae30')<0?'\uc548 \ub098\uc634 \u25ce (\uc774\ubbf8 \ub300\uae30\uc778 \uc0ac\ub78c)':'\u2605\ub098\uc628\ub2e4');
+    var B=rows[0]? rows[0].getAttribute('data-seatn') : '';
+    tap(rows[0]); paint();
+    ok(spare('1').indexOf(B)>=0,'  '+B+' \ub300\uae30', spare('1'));
+
+    // ── \ubb34. \uc790\ub9ac(\ud2f0\uc624\ud504)\ub294 \uc548 \uac74\ub4dc\ub838\ub098
+    L('','\u2605\ubb34. \ud2f0\uc624\ud504 \uce78\uc740 \uadf8\ub300\ub85c\uc778\uac00');
+    var seat0=active(part('1'))[0];
+    ok(!seat0.n,'  1\ubd80 1\ubc88', seat0.n||'\ube44\uc5b4 \uc788\uc74c \u25ce (\ub300\uae30\uc5d0 \ub123\uc5c8\ub294\ub370 \uc55e\uc774 \uc548 \ucc44\uc6cc\uc838\uc57c)');
+
+    // ── \uae30. \ub418\ub3cc\ub9ac\uae30
+    L('','\u2605\uae30. \ub418\ub3cc\ub9ac\uae30 \ud55c \ubc88');
+    undo(); paint();
+    ok(spare('1').indexOf(B)<0,'  '+B, spare('1'));
+  }catch(err){ o.push('\ud130\uc9d0: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function duties(){ return DUTYKEYS.map(function(k){
+    return k+'['+dutyNames(k).join('·')+']'; }).join(' '); }
+  function roles(){ var s=[]; DAY.forEach(function(p){ p.roster.forEach(function(r){
+    if(r.role) s.push(p.name+':'+r.n+'='+r.role); }); }); return s.join(' ')||'없음'; }
+  function badge(n){ var r=workRows().filter(function(x){ return x.n===n; })[0];
+    return r? '['+r.bts.join(' ')+'] '+r.st : '(없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // 당번 종류를 하나 더 만들고, 사람을 여럿 세운다
+    if (DUTYKEYS.indexOf('2부 당번')<0){ DUTYKEYS.push('2부 당번'); DUTY['2부 당번']=[]; DUTYDEF['2부 당번']={t:'13:00',h:5}; }
+    var W = workRows().filter(function(r){ return !tagOf(r.n) && r.cls==='w'; });
+    var A=W[0].n, B=W[1].n, C=W[2].n;
+    dutyToggle('당번', A); dutyToggle('벌당', B); dutyToggle('2부 당번', C);
+    // 배치표 칸의 역할도 하나
+    var D='';
+    DAY.forEach(function(p){ if(D) return; active(p).forEach(function(r,i){
+      if(!D && r.n && !r.itn && r.n!==A && r.n!==B && r.n!==C){ setRole(p.key,i,'벌당'); D=r.n; } }); });
+    // 선발과 근태도 하나씩 — 함께 어떻게 되는지 본다
+    var E2 = workRows().filter(function(r){ return !tagOf(r.n)&&r.cls==='w'; })[0].n;
+    setDayTag(E2, '휴무');
+    paint();
+
+    L('오늘 당번', duties());
+    L('  칸의 역할', roles());
+    L('  '+A, badge(A));
+    L('  '+C, badge(C));
+    L('  선발', seonbal() || '없음');
+    L('  당번 기본시각', DUTYKEYS.map(function(k){ var d=defOf(k);
+        return k+'('+(d.t||'-')+(d.h?'/'+d.h+'h':'')+')'; }).join(' '));
+
+    // ★내일로 넘긴다
+    var c = carryToNextDay();
+    paint();
+    o.push('');
+    L('★내일로 넘긴 뒤', DATE);
+    L('  당번', duties() + (DUTYKEYS.every(function(k){ return !dutyNames(k).length; }) ? '  ◎ 전부 비었다' : '  ✗ 남았다'));
+    L('  칸의 역할', roles() + (roles()==='없음' ? '  ◎' : '  ✗ 남았다'));
+    L('  당번 종류', DUTYKEYS.join(' / ') + (DUTYKEYS.indexOf('2부 당번')>=0 ? '  ◎ 종류는 남았다' : '  ✗ 종류가 사라졌다'));
+    L('  당번 기본시각', DUTYKEYS.map(function(k){ var d=defOf(k);
+        return k+'('+(d.t||'-')+(d.h?'/'+d.h+'h':'')+')'; }).join(' '));
+    L('  '+A+' 배지', badge(A) + (badge(A).indexOf('당번')<0 ? '  ◎ 깨끗' : '  ✗ 당번이 남았다'));
+    L('  '+C+' 배지', badge(C) + (badge(C).indexOf('당번')<0 ? '  ◎ 깨끗' : '  ✗ 남았다'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+
+    // ★되돌리기로 돌아오나
+    L('  기록 줄', LOG.slice(0,3).map(function(x){return x.msg.slice(0,28);}).join(' | '));
+    undo(); undo(); paint();   // 넘기기는 두 단계로 적힌다
+    o.push('');
+    L('★되돌리기', DATE);
+    L('  당번', duties() + (dutyNames('당번').length ? '  ◎ 돌아왔다' : '  ✗ 안 돌아왔다'));
+    L('  칸의 역할', roles());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function R(el){ return el? el.getBoundingClientRect() : null; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint(); fit();
+
+    var vw=$('viewWork'), rs=$('railSum'), wt=$('workTable');
+    L('창', innerWidth+'x'+innerHeight+' · dpr '+devicePixelRatio+' · k '+
+      getComputedStyle(document.documentElement).getPropertyValue('--k').trim());
+    L('viewWork', 'client '+vw.clientHeight+' · scroll '+vw.scrollHeight
+      +(vw.scrollHeight>vw.clientHeight+2?' ★판이 넘침 '+(vw.scrollHeight-vw.clientHeight):''));
+    L('railSum', 'client '+rs.clientHeight+' · scroll '+rs.scrollHeight
+      +(rs.scrollHeight>rs.clientHeight+2?' ★레일이 넘침 '+(rs.scrollHeight-rs.clientHeight):''));
+    L('workTable', 'client '+wt.clientHeight+' · scroll '+wt.scrollHeight);
+
+    // 레일 안 상자들이 어디에 있나
+    var rr=R(rs);
+    L('','');
+    L('★레일 안 상자','');
+    [['요약','#railSum .sumgrid'],['순번 세우기','#railSum .wsec'],
+     ['한꺼번에 지정','#railSum .bulk']].forEach(function(x){
+      var el=document.querySelector(x[1]);
+      if(!el){ L('  '+x[0],'없음'); return; }
+      var b=R(el);
+      var below = b.bottom - rr.bottom;
+      L('  '+x[0], '높이 '+Math.round(b.height)
+        +' · 레일 안 top '+Math.round(b.top-rr.top)
+        +(below>2 ? ' ★잘림 '+Math.round(below)+'px 가 레일 밖' : ' ◎ 다 보임'));
+    });
+
+    // 한꺼번에 지정 안에 무엇이 있나
+    L('','');
+    var bk=document.querySelector('#railSum .bulk');
+    if(bk){
+      var chs=bk.querySelectorAll('.bch');
+      L('  배지 단추', chs.length+'개'+(chs.length?' · 첫 단추 '+Math.round(R(chs[0]).height)+'px 높이':''));
+      var lastb=chs.length?R(chs[chs.length-1]):null;
+      if(lastb) L('  마지막 배지 단추', (lastb.bottom-rr.bottom>2)
+        ? '★레일 밖 '+Math.round(lastb.bottom-rr.bottom)+'px — 굴려야 보인다'
+        : '◎ 보임');
+    }
+
+    // 조 명단은 몇 줄 보이나
+    var bd=document.querySelector('#workTable .jobd');
+    var rw=bd&&bd.querySelector('.wrow');
+    if(bd&&rw) L('조 칸 한 칸', '높이 '+Math.round(R(bd).height)
+      +' · 한 줄 '+Math.round(R(rw).height)
+      +' → 보이는 줄 '+ (R(rw).height? (R(bd).height/R(rw).height).toFixed(1):'?'));
+
+    // 글씨 실제 크기
+    var nm=document.querySelector('#workTable .wrow .n');
+    if(nm) L('이름 글씨', getComputedStyle(nm).fontSize
+      +' → 눈에 보이는 크기 '+(parseFloat(getComputedStyle(nm).fontSize)*devicePixelRatio).toFixed(1)+'px');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

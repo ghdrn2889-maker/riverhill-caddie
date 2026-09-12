@@ -1,0 +1,43 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function heads(){ var e=$('seatOut'); return e? [].slice.call(e.querySelectorAll('.hd2'))
+    .map(function(b){return b.textContent.trim();}) : []; }
+  function first(){ var e=$('seatOut'); var b=e&&e.querySelector('[data-seatn]');
+    return b? b.getAttribute('data-seatn') : '(없음)'; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={};
+    setPlan('성지현','2',true); setPlan('안정희','2',true); setPlan('김상미','1',true);
+    setView('board'); paint();
+
+    L('★2부 빈 칸을 연다','');
+    openCell('2', 0);
+    L('  묶음 머리', heads().join(' / '));
+    ok(/2부 근무로 지정한 사람 · 2명/.test(heads()[0]||''),'  맨 위 묶음', heads()[0]||'★없음');
+    ok(first()==='성지현','  맨 위 사람', first());
+    tap($('seatOut').querySelector('[data-seatn="성지현"]'));
+    ok(partsOf('성지현').join(',')==='2','  앉힌 뒤 성지현', partsOf('성지현').join(',')||'★없음');
+
+    L('','★1부 빈 칸을 연다 — 1부로 지정한 사람이 먼저');
+    openCell('1', 0);
+    L('  묶음 머리', heads().join(' / '));
+    ok(/1부 근무로 지정한 사람 · 1명/.test(heads()[0]||''),'  맨 위 묶음', heads()[0]||'★없음');
+    ok(first()==='김상미','  맨 위 사람', first());
+
+    L('','★지정 안 한 부는 그 묶음이 안 뜬다');
+    openCell('3', 0);
+    L('  묶음 머리', heads().join(' / '));
+    ok(!heads().some(function(h){return /지정한 사람/.test(h);}),'  지정 묶음', heads().join(' / '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

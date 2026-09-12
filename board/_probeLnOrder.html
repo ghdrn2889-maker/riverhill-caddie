@@ -1,0 +1,69 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seats(pk){ var p=part(pk); return active(p).map(function(r){ return r.n; }); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    var on = {};
+    DAY.forEach(function(p){ active(p).forEach(function(r){ on[r.n] = 1; }); });
+    var out0 = JONAMES.filter(function(n){ return !on[n] && !tagOf(n) && !isBu3(n); });
+    L('세우기 전 미배치(배지 없는 하우스)', out0.length + '명 — ' + out0.join(' '));
+
+    var sb = seonbal();
+    var ring = joRing(sb);
+    L('선발', sb + ' · 조 고리 ' + ring.length + '명');
+    var pool = lineupPool('house');
+    L('후보', pool.length + '명 · 1·2부 티오프 ' + (part('1').tees.length + part('2').tees.length) + '칸');
+    var pl = lineupPlan(sb, ['1','2']);
+    L('세울 자리', pl.slots.length + '칸 · 후보(고리 차례) ' + pl.pool.length + '명');
+    L('  ★자리 < 후보?', pl.slots.length < pl.pool.length
+      ? '그렇다 — 뒤쪽 ' + (pl.pool.length - pl.slots.length) + '명은 자리를 못 받는다'
+      : '아니다 — 다 앉는다');
+    L('  고리 앞 12명', pl.pool.slice(0, 12).join(' '));
+    L('  ★고리 뒤 8명', pl.pool.slice(-8).join(' '));
+    L('  그 뒤 8명 중 미배치', pl.pool.slice(-8).filter(function(n){
+        return out0.indexOf(n) >= 0; }).join(' ') || '없음');
+
+    applyLineup(sb, ['1','2']);
+    var got = out0.filter(function(n){ return partsOf(n).length; });
+    L('세운 뒤 미배치가 앉았나', got.length + '/' + out0.length + '명'
+      + (got.length === out0.length ? ' ◎' : ' — 못 앉은 사람 '
+        + out0.filter(function(n){ return !partsOf(n).length; }).join(' ')));
+
+    // ★자리 차례가 조 고리 차례와 같은가
+    var s1 = seats('1'), s2 = seats('2');
+    var line = s1.slice(0, part('1').tees.length).concat(s2.slice(0, part('2').tees.length));
+    var want = [], i = 0;
+    while (want.length < line.length) { want.push(pl.pool[i % pl.pool.length]); i++; }
+    var miss = [];
+    for (i = 0; i < line.length; i++) if (line[i] !== want[i]) miss.push(
+      (i < part('1').tees.length ? '1부 ' + (i+1) : '2부 ' + (i - part('1').tees.length + 1))
+      + '번 ' + line[i] + '(고리는 ' + want[i] + ')');
+    L('★자리가 고리 차례와', miss.length ? miss.length + '칸 다름 — ' + miss.slice(0,6).join(' / ')
+      : '한 칸도 안 다름 ◎');
+    L('  1부 앞 10', s1.slice(0,10).join(' '));
+
+    // ── ② 조출은 배치표에서 빠지나
+    var who = s1[4];
+    L('', '');
+    L('조출 시험 대상', who + ' · 지금 1부 5번');
+    setDayTag(who, '조출');
+    L('조출 붙인 뒤', who + ' 자리 ' + (partsOf(who).join(',') || '없음')
+      + ' · 1부 5번은 ' + seats('1')[4]
+      + ' ' + (partsOf(who).length ? '✗ 아직 배치표에 앉아 있다' : '◎ 빠졌다'));
+    var pl2 = lineupPlan(seonbal(), ['1','2']);
+    L('  다시 세우면', '후보에 ' + (pl2.pool.indexOf(who) >= 0 ? '든다 ✗' : '안 든다 ◎')
+      + ' · 그 자리를 건드리나 '
+      + (pl2.slots.some(function(s){ return s.from === who; }) ? '건드린다 ✗' : '안 건드린다 ◎'));
+    applyLineup(seonbal(), ['1','2']);
+    L('  세운 뒤', who + ' 자리 ' + (partsOf(who).join(',') || '없음')
+      + ' · 1부 ' + (seats('1').indexOf(who) + 1) + '번');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

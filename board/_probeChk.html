@@ -1,0 +1,17 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); CARRY.seats = true;
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    o.push('CARRY: '+JSON.stringify(CARRY));
+    bootLoad();
+    o.push('boot 뒤 CARRY: '+JSON.stringify(CARRY));
+    o.push('DATE: '+DATE+' · 오늘 '+todayLabel());
+    o.push('CAUGHT: '+JSON.stringify(CAUGHT));
+    o.push('자리: '+DAY.map(function(p){ return p.name+' '+active(p).length; }).join(' · '));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,50 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */
+    setAbsent(active(part('1'))[5].n,'휴무'); daySave();
+    var d0=DATE, r0=part('1').roster.length;
+    carryToNextDay(); daySave();
+    L('두 날 저장', dayList().map(function(d){return d.date;}).join(' / '));
+    // ★셈으로 가리면 안 된다 — 넘기면서 쉬던 사람이 명단에 돌아와 수가 우연히 같아진다
+    var killed = active(part('1'))[0].n;
+    delFromPart('1', killed);
+    var rT=part('1').roster.length;
+    var tomHas = part('1').roster.some(function(r){ return r.n===killed; });
+
+    // 머리 날짜를 눌러 고르개
+    tap($('hDate'));
+    L('날짜 고르개', q('#sheet .st').textContent);
+    L('  줄', qa('#sheet [data-daygo]').map(function(b){return b.textContent.trim();}).join(' | '));
+    tap(qa('#sheet [data-daygo]').filter(function(b){return b.getAttribute('data-daygo')===d0;})[0]);
+    var todHas = part('1').roster.some(function(r){ return r.n===killed; });
+    L('건너간 뒤', DATE+' · 1부 명단 '+part('1').roster.length+'명 (저장할 때 '+r0+' · 내일 '+rT+')'
+      + ' · 지운 사람 '+killed
+      + ((todHas && !tomHas && part('1').roster.length===r0)
+          ? ' → 안 묻음 ◎ (오늘엔 남아 있다)':' → 묻음 ✗'));
+    L('  머리', $('hDate').textContent);
+    L('  되돌리기 더미', STACK.length+'개');
+
+    // 안 누른 고침 → 다시 열기
+    var mark=active(part('1'))[7].n;
+    setAbsent(mark,'병가');
+    savedSig=null; PENDING=null; bootLoad();
+    L('다시 켰을 때', DATE+' · 물어볼 초안 '+(PENDING? '있음 ◎ ('+PENDING.at+')':'없음 ✗')
+      + ' · 화면은 저장본('+mark+'='+(tagOf(mark)||'없음')+')');
+    openPending();
+    L('  물음 창', q('#sheet .st').textContent+' · '
+      + qa('#sheet .acts button').map(function(b){return '"'+b.textContent+'"';}).join(' '));
+    tap(qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='drfyes';})[0]);
+    L('  이어서 하기', mark+'='+(tagOf(mark)||'없음')
+      + (tagOf(mark)==='병가'? ' → 살아남 ◎':' → 잃음 ✗')+' · '+(unsaved()?'저장 안 함 ◎':'저장됨(문제)'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

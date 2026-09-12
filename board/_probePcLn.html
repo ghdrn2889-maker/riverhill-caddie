@@ -1,0 +1,47 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var bar=q('.lnbar');
+    L('띠', bar? '있음 ◎ · "'+bar.textContent.replace(/\s+/g,' ').trim()+'"' : '없음(문제)');
+    L('  단추', qa('.lnbar button').map(function(b){return '"'+b.textContent+'"'+(b.disabled?'(꺼짐)':'');}).join(' '));
+
+    tap(qa('.lnbar button')[0]);
+    L('고르기 창', q('#sheet .st').textContent);
+    L('  조 묶음', qa('#sheet .sbg h5').map(function(e){return e.textContent;}).join(' | '));
+    L('  후보', qa('#sheet .sug button').length+'명 · 지금 '+
+      (qa('#sheet .sug button.on')[0]?qa('#sheet .sug button.on')[0].textContent:'(없음)'));
+    var qe=q('#sbQ'); qe.value='서동명'; qe.dispatchEvent(new Event('input',{bubbles:true}));
+    L('  찾기', qa('#sheet .sug button').map(function(b){return b.textContent;}).join(','));
+    tap(q('#sheet .sug button'));
+    L('선발 바꿈', seonbal()+' · 창 '+(q('#sheet').classList.contains('on')?'열림(문제)':'닫힘 ◎')
+      +' · 띠 "'+q('.lnbar .lv').textContent+'"');
+    L('  기록', LOG[0].msg);
+
+    tap(qa('.lnbar button')[1]);
+    L('미리보기', q('#sheet .st').textContent+' · '+q('#sheet .sub').textContent);
+    L('  바뀌는 줄', qa('#sheet .plan .pr').length+'개 · 첫 "'+
+      q('#sheet .plan .pr').textContent.replace(/\s+/g,' ').trim()+'"');
+    var b0=active(part('1')).slice(0,8).map(function(r){return r.n;});
+    tap(act('close'));
+    L('그만두기', active(part('1')).slice(0,8).map(function(r){return r.n;}).join()===b0.join()?'그대로 ◎':'바뀜(문제)');
+
+    tap(qa('.lnbar button')[1]); tap(act('lnyes'));
+    L('세움', LOG[0].msg);
+    L('  1부 앞 8', active(part('1')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    var chk=lineupPlan(seonbal(),['1','2']);
+    L('  ▶ 다시 대조', chk.moved===0?'그 차례대로 섰음 ◎':chk.moved+'자리 어긋남 ✗');
+    undo(); undo();
+    L('되돌림', seonbal()+' · '+active(part('1')).slice(0,6).map(function(r){return r.n;}).join(', '));
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},600);
+</script>

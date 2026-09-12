@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function dtg(v){ return qa('#sheet button[data-dtag]').filter(function(b){return b.getAttribute('data-dtag')===v;})[0]; }
+function btns(){ return qa('#sheet button[data-dtag]').map(function(b){
+  return b.textContent+(b.className.indexOf('on')>=0?'✓':''); }).join(' '); }
+function xs(){ return qa('#sheet button[data-dtag]').map(function(b){
+  return Math.round(b.getBoundingClientRect().left); }).join('/'); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var nm=active(part('1'))[8].n;
+    openPerson(nm);
+    L('사람 창 칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    L('  구분 단추', btns());
+    var x0=xs();
+
+    tap(dtg('조출'));
+    L('조출 붙임', nm+' 배지 "'+tagOf(nm)+'" · '+btns());
+    L('  자리 안 움직임', xs()===x0? '◎':'✗ ('+x0+' → '+xs()+')');
+    L('  기록', LOG[0].msg);
+    L('  ★순번 셈에서 빠지나', inLineup(nm,'house')? '든다 ✗':'안 든다 ◎');
+    L('  근무표 줄', (function(){ var r=workTally().rows.filter(function(x){return x.n===nm;})[0];
+        return r.st+'('+r.cls+')'+(r.tag?' 배지 '+r.tag:' 배지 없음 ✗'); })());
+    L('  배치표 칸 꼬리표', partsOf(nm).map(function(k){
+        var rr=part(k).roster.filter(function(x){return x.n===nm;})[0];
+        return part(k).name+'="'+(rr.tag||'없음')+'"'; }).join(' · '));
+
+    tap(dtg('후출'));
+    L('후출로 바꿈', '"'+tagOf(nm)+'" · '+btns());
+    tap(dtg('후출'));
+    L('같은 것 또 누름', '"'+(tagOf(nm)||'없음')+'" → '+(tagOf(nm)?'안 떼짐 ✗':'떼짐 ◎')+' · '+btns());
+
+    // 쉬는 사람에게는 막혀야
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='휴무';})[0]);
+    var was=tagOf(nm);
+    tap(dtg('조출'));
+    L('휴무인 사람에게 조출', '"'+tagOf(nm)+'" '+(tagOf(nm)===was?'→ 막힘 ◎':'→ 붙음 ✗')
+      + ' · 알림 "'+q('#toast').textContent+'"');
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='';})[0]);
+    L('근무로 되돌린 뒤', '"'+(tagOf(nm)||'없음')+'" · 자리 '+(partsOf(nm).join(',')||'없음'));
+
+    // 배치표 칸에서도 되나
+    tap(q('#sheet button[data-act="close"]')||q('#sheet .close'));
+    cur='1'; VIEW='board'; paint();
+    var i=active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    openCell('1', i);
+    L('배치표 칸 창', q('#sheet .st').textContent+' · 칸 '
+      + qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    L('  구분 단추', btns());
+    tap(dtg('정출'));
+    L('  정출 붙임', nm+' "'+tagOf(nm)+'" · 창 '+(q('#sheet').className.indexOf('on')>=0?'열림 ◎':'닫힘(문제)'));
+    undo(); undo();
+    L('되돌리기 2번', nm+' "'+(tagOf(nm)||'없음')+'"');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

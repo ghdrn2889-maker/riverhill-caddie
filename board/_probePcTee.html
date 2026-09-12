@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function tees(pk, k){ return part(pk).tees.slice(0,k).map(function(t){ return t.time+' '+t.course; }).join(' '); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    var hits = document.querySelectorAll('.tm.hit[data-tee]');
+    L('★누를 수 있는 시각', hits.length + '칸 ' + (hits.length ? '◎' : '✗'));
+    L('  첫 칸', hits.length ? hits[0].textContent + ' / ' + hits[0].getAttribute('data-tee') : '-');
+
+    hits[2].click();
+    var sh = document.getElementById('sheet');
+    L('★창', sh.classList.contains('on') ? '"' + sh.querySelector('.st').textContent + '" ◎' : '✗ 안 열림');
+    L('  제목', sh.querySelector('.k').textContent);
+    var cb = sh.querySelector('[data-ttr]');
+    L('★뒤 밀기 고르개', cb ? cb.textContent.replace(/\s+/g,' ').trim() : '✗ 없음');
+
+    var pk = sheetFor.pk, i = sheetFor.i, p = part(pk);
+    L('  전', '시작 ' + p.start + ' · 티오프 ' + tees(pk, 5));
+    var was = p.tees[i].time;
+    document.getElementById('ttTime').value = '';
+    // timeInput 이 무엇을 쓰는지에 상관없이 기계를 직접 부른다
+    setTeeTime(pk, i, hm(mm(was) + 11), true); paint();
+    L('★' + was + ' → +11분 (뒤도 밀기)', '시작 ' + part(pk).start + ' · 티오프 ' + tees(pk, 5));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  격자 밖 줄', gridTimes(part(pk)).filter(function(t){ return offGrid(part(pk), t); }).length + '줄');
+    undo(); paint();
+    L('  되돌리기', '시작 ' + part(pk).start + ' · 티오프 ' + tees(pk, 5));
+
+    // 칸 창의 '시각 고치기…' 도 같은 문으로 가나
+    openCell(pk, i);
+    var tb = Array.prototype.filter.call(document.querySelectorAll('#sheet button'), function(b){
+      return b.getAttribute('data-act') === 'time'; })[0];
+    L('', '');
+    L('칸 창 단추', tb ? '"' + tb.textContent + '"' : '없음');
+    tb.click();
+    L('  누르니', (sheetFor && sheetFor.kind) === 'tee' ? '같은 창으로 감 ◎' : '✗ ' + (sheetFor&&sheetFor.kind));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

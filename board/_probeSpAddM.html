@@ -1,0 +1,41 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'\u25ce ':'\u2717 ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function spare(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) out.push(seatNoTx(p,i)+'\ubc88 '+(a[i].n||'\ube48'));
+    return out.join(' \u00b7 ')||'\uc5c6\uc74c';
+  }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+    setView('board'); cur='1'; paint();
+
+    var b=[].slice.call(document.querySelectorAll('.addrow')).filter(function(x){
+      return x.getAttribute('data-act')==='padd'; })[0];
+    ok(!!b,'\u2605\uac11. \'+ \ub300\uae30\' \ub2e8\ucd94', b? '"'+b.textContent.trim()+'" \u25ce' : '\u2605\uc5c6\ub2e4');
+    L('  \ub2e8\ucd94 \ub458', [].slice.call(document.querySelectorAll('.addrow')).map(function(x){
+        return x.textContent.trim(); }).join(' / '));
+    tap(b);
+    var st=document.querySelector('#sheet .st');
+    L('\u2605\uc744. \ucc3d', st? st.textContent.trim() : '\u2605\uc548 \uc5f4\ub9bc');
+    var rows=[].slice.call(document.querySelectorAll('#apOut [data-padd]'));
+    L('  \ud6c4\ubcf4', rows.length+'\uba85');
+    var A=rows[0]? rows[0].getAttribute('data-pn') : '';
+    tap(rows[0]); paint();
+    ok(spare('1').indexOf(A)>=0,'\u2605\ubcd1. '+A+' 1\ubd80 \ub300\uae30', spare('1'));
+    L('  \uae30\ub85d', LOG[0]?LOG[0].msg:'(\uc5c6\uc74c)');
+    ok(!active(part('1'))[0].n,'\u2605\uc815. 1\ubd80 1\ubc88 \ud2f0\uc624\ud504',
+       active(part('1'))[0].n||'\ube44\uc5b4 \uc788\uc74c \u25ce');
+  }catch(err){ o.push('\ud130\uc9d0: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

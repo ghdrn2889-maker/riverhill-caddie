@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setView('work'); paint();
+    var T = workTally();
+    L('셈', '총원 '+T.total+' · 근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu);
+    L('workRows cls=w', workRows().filter(function(r){ return r.cls==='w'; }).length+'명');
+    NOTICE.to='오늘 근무';
+    L('noticeWho(오늘 근무)', noticeWho());
+    NOTICE.to='3부반';  L('noticeWho(3부반)', noticeWho());
+    NOTICE.to='전체';   L('noticeWho(전체)', noticeWho());
+    L('cls 갈래', (function(){ var c={}; workRows().forEach(function(r){ c[r.cls]=(c[r.cls]||0)+1; });
+      return JSON.stringify(c); })());
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

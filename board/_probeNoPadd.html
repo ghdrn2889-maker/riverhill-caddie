@@ -1,0 +1,80 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function rosterOf(pk){ return part(pk).roster.length; }
+  function seatOf(n){
+    var out=[];
+    DAY.forEach(function(p){ active(p).forEach(function(r,i){
+      if(r.n!==n) return;
+      out.push(p.name+' '+(i+1)+'번'+(i<p.tees.length?' · 근무':' · 대기'));
+    });});
+    return out.join(' / ')||'없음';
+  }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work');
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={};
+    paint();
+
+    // ── 갑. 사람 창에 넣기 단추가 없다
+    L('★갑. 사람 창 · 부 넣고 빼기','');
+    openPerson('김홍구');
+    var padd=[].slice.call($('sheet').querySelectorAll('[data-padd]'));
+    var prm =[].slice.call($('sheet').querySelectorAll('[data-prm]'));
+    ok(padd.length===0,'  넣기 단추', padd.length? '★'+padd.length+'개 남음' : '없음 ◎');
+    L('  칸 모양', [].slice.call($('sheet').querySelectorAll('.pm button'))
+      .map(function(b){return b.textContent.trim()+(b.disabled?'(잠김)':'');}).join(' · '));
+    L('  빼기 단추', prm.length+'개 (지금 어느 부에도 없으니 0이 맞다)');
+
+    // ── 을. 1부에 앉힌 뒤에는 빼기가 뜬다
+    o.push(''); L('★을. 배치표에서 1부 1번에 앉힌 뒤 다시 연다','');
+    seatPerson('1', 0, '김홍구');
+    openPerson('김홍구');
+    prm=[].slice.call($('sheet').querySelectorAll('[data-prm]'));
+    padd=[].slice.call($('sheet').querySelectorAll('[data-padd]'));
+    ok(prm.length===1 && padd.length===0,'  단추', '빼기 '+prm.length+'개 · 넣기 '+padd.length+'개');
+    L('  칸 모양', [].slice.call($('sheet').querySelectorAll('.pm button'))
+      .map(function(b){return b.textContent.trim()+(b.disabled?'(잠김)':'');}).join(' · '));
+    tap(prm[0]);
+    ok(seatOf('김홍구')==='없음','  빼기를 누르니', seatOf('김홍구'));
+
+    // ── 병. 한꺼번에 지정에 '부에 넣기'가 없다
+    o.push(''); L('★병. 한꺼번에 지정 · 캐디 선택','');
+    bulkStart(PICKTAG); bulkTap('김상미'); bulkTap('전형준');
+    openBulkAct();
+    var add=[].slice.call($('sheet').querySelectorAll('[data-bkdo]'))
+      .filter(function(b){ return /^\+/.test(b.getAttribute('data-bkdo')); });
+    var del=[].slice.call($('sheet').querySelectorAll('[data-bkdo]'))
+      .filter(function(b){ return /^-/.test(b.getAttribute('data-bkdo')); });
+    ok(add.length===0,'  부에 넣기 단추', add.length? '★'+add.map(function(b){return b.textContent.trim();}).join(' / ') : '없음 ◎');
+    L('  부에서 빼기 단추', del.length+'개');
+    var seat=[].slice.call($('sheet').querySelectorAll('[data-bkdo]'))
+      .filter(function(b){ return /^s\|/.test(b.getAttribute('data-bkdo')); });
+    ok(seat.length>0,'  배치표에 한꺼번에 앉히기', seat.map(function(b){return b.textContent.trim();}).join(' / ')||'★없어졌다');
+
+    // ── 정. 어디를 눌러도 명단이 안 는다
+    o.push(''); L('★정. 근무표를 이리저리 눌러도 명단이 안 는다','');
+    var was=DAY.map(function(p){return p.roster.length;}).join('/');
+    setDayTag('김상미','조출'); setDayTag('전형준','후출'); setBu3('김수룡', true);
+    var now=DAY.map(function(p){return p.roster.length;}).join('/');
+    ok(was===now,'  부별 명단 길이', was+' → '+now);
+    bulkOff();
+
+    // ── 무. 배치표에서 앉히는 길은 그대로 산다
+    o.push(''); L('★무. 배치표 빈 칸에서 앉히기','');
+    setView('board'); paint();
+    openCell('2', 0);
+    ok(!!$('seatQ'),'  이름 치는 칸', $('seatQ')?'있음 ◎':'★없음');
+    tap($('seatOut') && $('seatOut').querySelector('[data-seatn="김상미"]'));
+    ok(/2부 1번 · 근무/.test(seatOf('김상미')),'  김상미', seatOf('김상미'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

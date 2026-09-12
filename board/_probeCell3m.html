@@ -1,0 +1,81 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'\u25ce ':'\u2717 ')+k+': '+v); }
+  function cellOf(pk,n){
+    var out=null;
+    [].slice.call(document.querySelectorAll('.cell[data-pk]')).forEach(function(c){
+      if(out) return;
+      if(c.getAttribute('data-pk')!==pk) return;
+      var nm=c.querySelector('.nm');
+      if(!nm || nm.textContent.trim()!==n) return;
+      out=c;
+    });
+    if(!out) return null;
+    return { cls: out.className.replace(/\s+/g,'.'),
+             tags: [].slice.call(out.querySelectorAll('.tag')).map(function(t){
+               return t.className.replace(/\s+/g,'.')+'="'+t.textContent.trim()+'"'; }).join(' ') };
+  }
+  function say(pk,n){ var c=cellOf(pk,n); return c? c.cls+'  ['+(c.tags||'\ubc30\uc9c0 \uc5c6\uc74c')+']' : '(\uce78 \uc5c6\uc74c)'; }
+  function wk(n){
+    var r=document.querySelector('.wrow[data-who="'+n+'"]');
+    if(!r) return '(\uc904 \uc5c6\uc74c)';
+    return r.className.replace(/\s+/g,'.')+' | '+r.textContent.trim().replace(/\s+/g,' ');
+  }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+  }
+  try{
+    reset();
+    var B3=JONAMES.filter(function(n){ return isBu3(n); })[0];
+    var N =JONAMES.filter(function(n){ return !isBu3(n); })[0];
+    L('3\ubd80\ubc18 \uc0ac\ub78c', B3); L('\uadf8\ub0e5 \uc0ac\ub78c', N);
+
+    o.push(''); L('\u2605\uac11. 3\ubd80\ubc18\uc744 2\ubd80\uc5d0','');
+    seatPerson('2',0,B3); setView('board'); cur='2'; paint();
+    var c=cellOf('2',B3);
+    L('  2\ubd80 \uce78', say('2',B3));
+    ok(c && c.cls.indexOf('c3b')<0, '  c3b \ubc14\ud0d5', c? (c.cls.indexOf('c3b')<0?'\uc5c6\uc74c \u25ce':'\u2605\uc788\ub2e4') : '\u2605\uce78 \uc5c6\uc74c');
+    ok(c && !/3\ubd80/.test(c.tags), '  3\ubd80 \ubc30\uc9c0', c? (/3\ubd80/.test(c.tags)?'\u2605\ubd99\ub294\ub2e4':'\uc5c6\uc74c \u25ce') : '\u2605\uce78 \uc5c6\uc74c');
+
+    setView('work'); paint();
+    o.push(''); L('\u2605\uc744. \uadfc\ubb34\ud45c \uc904','');
+    L('  '+B3, wk(B3));
+    ok(/3\ubd80\ubc18/.test(wk(B3)), '  3\ubd80\ubc18 \ubc30\uc9c0', /3\ubd80\ubc18/.test(wk(B3))?'\uadf8\ub300\ub85c \u25ce':'\u2605\uc0ac\ub77c\uc84c\ub2e4');
+
+    o.push(''); L('\u2605\ubcd1. 3\ubd80\uc5d0\ub3c4 \uc549\ud78c\ub2e4','');
+    seatPerson('3',0,B3); setView('board'); cur='2'; paint();
+    var c2=cellOf('2',B3);
+    L('  2\ubd80 \uce78', say('2',B3));
+    ok(c2 && c2.cls.indexOf('c23')>=0, '  2\ubd80 \uce78 \ubc14\ud0d5', c2? c2.cls : '\u2605\uc5c6\uc74c');
+    ok(c2 && /tag\.tc23="2,3"/.test(c2.tags), '  2\ubd80 \uce78 \ubc30\uc9c0', c2? c2.tags : '\u2605\uc5c6\uc74c');
+    cur='3'; paint();
+    var c3=cellOf('3',B3);
+    L('  3\ubd80 \uce78', say('3',B3));
+    ok(c3 && c3.cls.indexOf('c23')>=0, '  3\ubd80 \uce78 \ubc14\ud0d5', c3? c3.cls : '\u2605\uc5c6\uc74c');
+
+    reset();
+    o.push(''); L('\u2605\uc815. \uc138 \ubd80\uc5d0 \ub2e4 \uc549\ud788\uba74 54','');
+    seatPerson('1',0,N); seatPerson('2',0,N); seatPerson('3',0,N);
+    setView('board'); cur='1'; paint();
+    var c1=cellOf('1',N);
+    L('  1\ubd80 \uce78', say('1',N));
+    ok(c1 && /tag\.tc54="54"/.test(c1.tags), '  54 \ubc30\uc9c0 \uc0c9', c1? c1.tags : '\u2605\uc5c6\uc74c');
+
+    reset();
+    o.push(''); L('\u2605\ubb34. \uc870\ucd9c','');
+    setDayTag(N,'\uc870\ucd9c'); seatPerson('1',0,N);
+    setView('board'); cur='1'; paint();
+    var cj=cellOf('1',N);
+    L('  1\ubd80 \uce78', say('1',N));
+    ok(cj && /tag\.tcjo/.test(cj.tags) && cj.cls.indexOf('cjo')>=0, '  \uc870\ucd9c \ubc14\ud0d5+\ubc30\uc9c0', cj? cj.cls+' '+cj.tags : '\u2605\uc5c6\uc74c');
+  }catch(err){ o.push('\ud130\uc9d0: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

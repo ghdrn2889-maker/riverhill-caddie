@@ -1,0 +1,78 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'(빈)'; }); }
+  function boot(){ DAY.forEach(function(q){ q.roster=[]; }); resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; LIFTBAD=''; bootLoad(); paint(); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    L('','★갑. 판 이름을 바꿔도 저장본이 열리나');
+    var p = part('1');
+    addRow('1', addablePool('1').filter(function(n){ return !isBu3(n) && !isAbs(tagOf(n)); })[0]);
+    daySave();
+    var mine = seats(p).slice(0,6).join(' ');
+    L('  판 이름 / 모양', '"'+BUILD+'" / '+SCHEMA+'번');
+    L('  1부 앞머리', mine);
+    var rec = JSON.parse(lsGet(DAYPFX+DATE));
+    ok(rec.sv===SCHEMA, '  저장 글에 모양이 적히나', 'v "'+rec.v+'" · sv '+rec.sv);
+    BUILD = '2027-01-01-한참 뒤 판';
+    boot();
+    ok(seats(part('1')).slice(0,6).join(' ')===mine, '  ★새 판으로 켠 뒤',
+       seats(part('1')).slice(0,6).join(' '));
+    ok(!LIFTBAD, '  못 읽은 저장본', LIFTBAD||'없음');
+
+    L('','★을. sv 가 없던 옛 저장본(지금 본판에 깔린 것)');
+    var raw = lsGet(DAYPFX+DATE), old = JSON.parse(raw);
+    delete old.sv; old.v = '2026-08-30b';               // 옛 파일이 적어 둔 모양 그대로
+    lsPut(DAYPFX+DATE, JSON.stringify(old));
+    boot();
+    ok(seats(part('1')).slice(0,6).join(' ')===mine, '  ★그대로 열리나',
+       seats(part('1')).slice(0,6).join(' '));
+    ok(!LIFTBAD, '  못 읽은 저장본', LIFTBAD||'없음');
+
+    L('','★병. 모양을 바꾸는 날 — 옮기개가 도나');
+    lsPut(DAYPFX+DATE, JSON.stringify(old));            // 다시 옛 글로
+    MIGRATE[1] = function(str){ var x = JSON.parse(str); x.__옮김 = '1→2'; return JSON.stringify(x); };
+    SCHEMA = 2;
+    lsDel(BAKPFX+DATE);
+    boot();
+    ok(seats(part('1')).slice(0,6).join(' ')===mine, '  ★옮긴 뒤에도 배치가 그대로', 
+       seats(part('1')).slice(0,6).join(' '));
+    ok(!LIFTBAD, '  못 읽은 저장본', LIFTBAD||'없음');
+    ok(!!lsGet(BAKPFX+DATE), '  ★옮기기 전 원본을 밀어 뒀나',
+       lsGet(BAKPFX+DATE) ? bakList().join(' ')+' ('+lsGet(BAKPFX+DATE).length+'자)' : '★없음');
+    ok(JSON.parse(JSON.parse(lsGet(BAKPFX+DATE)).s).__옮김===undefined, '  원본은 손 안 댔나', '◎');
+    daySave();
+    ok(JSON.parse(lsGet(DAYPFX+DATE)).sv===2, '  다시 저장하면 새 모양', 'sv '+JSON.parse(lsGet(DAYPFX+DATE)).sv);
+    ok(!!lsGet(BAKPFX+DATE), '  덮어쓴 뒤에도 원본이 남나', '◎ 남아 있다');
+
+    L('','★정. 옮길 길이 없는 모양 — 안 읽고, 안 지운다');
+    SCHEMA = 5;                                          // MIGRATE[2] 가 없다
+    var before = lsGet(DAYPFX+DATE).length;
+    boot();
+    ok(LIFTBAD===DATE, '  ★못 읽었다고 말하나', LIFTBAD||'★아무 말 없음');
+    ok(lsGet(DAYPFX+DATE) && lsGet(DAYPFX+DATE).length===before, '  ★글은 그대로 있나',
+       lsGet(DAYPFX+DATE) ? before+'자 그대로' : '★지워짐');
+    ok(!!lsGet(BAKPFX+DATE), '  사본도 있나', '◎');
+    L('  화면은', '처음 상태로 열린다 — 덮어쓰기 전에 사람에게 말한다');
+
+    L('','★무. 새 판이 저장한 글을 옛 판이 열면');
+    SCHEMA = 1; MIGRATE = {};
+    lsPut(DAYPFX+DATE, JSON.stringify({ v:'미래', sv: 9, at:'09:00', s: state() }));
+    boot();
+    ok(LIFTBAD===DATE, '  ★안 읽고 말하나', LIFTBAD||'★아무 말 없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

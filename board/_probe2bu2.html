@@ -1,0 +1,46 @@
+<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shot(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    if(!b) return '(줄 없음)';
+    return [].slice.call(b.querySelectorAll('.bt,.bg')).map(function(el){
+      var s=getComputedStyle(el);
+      return '"'+el.textContent.trim()+'"['+String(el.className).trim()+' 바탕'+s.backgroundColor+' 글자'+s.color+']';
+    }).join('  ');
+  }
+  try{
+    var N='정진영';
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('처음', shot(N));
+
+    // 경기과가 '2부 당번' 이라는 당번 종류를 하나 만들었다고 하자
+
+    if (DUTYKEYS.indexOf('2부 당번') < 0){
+      DUTYKEYS.push('2부 당번'); DUTY['2부 당번'] = []; DUTYDEF['2부 당번'] = { t:'', h:0 };
+    }
+    L('당번 종류', DUTYKEYS.join(' / '));
+    L('  칩 이름', DUTYKEYS.map(function(k){ return k+'→'+dutyChip(k); }).join('  '));
+
+    // 그 당번에 정진영을 넣고, 배치표 자리는 비운다
+    dutyToggle('2부 당번', N);
+    vacateSeats(N);
+    // 3부반으로 두기
+    if (!isBu3(N)) setBu3(N, true);
+    paint();
+    o.push('');
+    L('★재현한 줄', shot(N));
+    L('  사진 속 줄  ', '"3부반"[bt c3b]  "2부"[초록]  "자리 없음"[초록]');
+    o.push('');
+    L('  tagCls(2부)', tagCls('2부') + '  ← 당번 종류가 있으면 cdu(초록), 없으면 cet(회색)');
+    L('  이 배지가 어디서 왔나', 'dutyMarks('+N+') = ' + dutyMarks(N).join(','));
+    L('  상태가 왜 자리 없음', 'absOf=' + absOf(N) + ' → absCls=' + absCls(absOf(N)));
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

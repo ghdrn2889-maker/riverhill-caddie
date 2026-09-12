@@ -1,0 +1,105 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function R(s){ var el=q(s); if(!el) return null; var b=el.getBoundingClientRect();
+  return {x:Math.round(b.left),y:Math.round(b.top),w:Math.round(b.width),h:Math.round(b.height),
+          r:Math.round(b.right),b:Math.round(b.bottom)}; }
+function box(s){ var r=R(s); return r? r.w+'×'+r.h+' @'+r.x+','+r.y : '(없음)'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var W=innerWidth, H=innerHeight;
+    L('창', W+'×'+H);
+
+    // ── 갑. 두 칸으로 섰나
+    L('','★갑. 두 칸');
+    L('  왼쪽(명단)', box('.wkleft'));
+    L('  오른쪽 줄',  box('.wkrail'));
+    var lf=R('.wkleft'), rl=R('.wkrail');
+    ok(lf && rl && Math.abs(lf.r-rl.x)<=2, '  맞붙었나',
+       lf&&rl? '왼쪽 끝 '+lf.r+' / 오른쪽 시작 '+rl.x : '★한쪽이 없다');
+    var K = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'))||1;
+    ok(rl && Math.abs(rl.w - 360*K) < 12, '  오른쪽 폭',
+       (rl? rl.w:0)+'px  (정한 값 360 × 글씨배율 '+K.toFixed(2)+' = '+Math.round(360*K)+')');
+    ok(lf && lf.w > rl.w*2.5, '  왼쪽이 훨씬 넓나', lf&&rl? lf.w+' vs '+rl.w : '—');
+
+    // ── 을. 조 명단이 세로로 길어졌나
+    L('','★을. 조 명단');
+    L('  조 칸 하나', box('.jocol'));
+    var jb = R('.jobd');
+    L('  명단 속(굴리는 칸)', box('.jobd'));
+    var rowH = R('.wrow') ? R('.wrow').h : 0;
+    var fit = rowH ? Math.floor(jb.h/rowH) : 0;
+    var cols = qa('.jocol').length, most = 0;
+    qa('.jocol').forEach(function(c){
+      var n = c.querySelectorAll('.wrow').length; if(n>most) most=n; });
+    L('  한 줄 높이', rowH+'px');
+    ok(fit >= 14, '  한 화면에 보이는 사람', fit+'명 (가장 많은 조는 '+most+'명)');
+    ok(jb && jb.b <= H+1, '  화면 밖으로 안 넘치나', jb? '명단 아래끝 '+jb.b+' / 창 '+H : '—');
+    L('  조 칸 수', cols+'칸 · 칸 폭 '+(R('.jocol')?R('.jocol').w:0)+'px');
+
+    // ── 병. 오른쪽 줄 안에 다 들어갔나
+    L('','★병. 오른쪽 줄 속');
+    ['#railSum','.sumgrid','.wkbR .bulk','.wkfoot','#staffBox','#dutyBox'].forEach(function(s){
+      L('  '+s, box(s));
+    });
+    var bad = [];
+    ['.sumgrid','.lnbar','#staffBox','#dutyBox','.wkbR .bulk'].forEach(function(s){
+      var r=R(s); if(r && rl && (r.x < rl.x-1 || r.r > rl.r+1)) bad.push(s+'('+r.x+'~'+r.r+')');
+    });
+    ok(!bad.length, '  줄 밖으로 새는 것', bad.length? '★'+bad.join(' '):'없음 ◎');
+    var sg = R('.sumgrid');
+    ok(sg && sg.h < 115*K, '  숫자 여섯 높이', sg? sg.h+'px (두 줄 세 칸)':'—');
+    ok(qa('.wkrail .slot').length>0, '  경기과·당번 줄', qa('.wkrail .slot').length+'줄이 오른쪽에');
+    var need = 0; qa('.wkrail > *').forEach(function(el){ need += el.getBoundingClientRect().height; });
+    L('  줄 속 내용 높이', Math.round(need)+'px / 줄 '+(rl?rl.h:0)+'px'
+      + (need > (rl?rl.h:0) ? '  → '+Math.round(need-(rl?rl.h:0))+'px 는 굴려서 본다' : '  → 다 보인다'));
+    var dz = R('#dutyBox');
+    L('  당번 아래끝', (dz?dz.b:0)+' / 창 '+H + (dz&&dz.b<=H ? '  (안 굴려도 보임)':'  (굴려야 보임)'));
+    // 어느 줄이 얼마를 먹나 — 그중 둘은 그날만 뜨는 줄이다
+    var bars = qa('.wkrail .lnbar');
+    L('  순번 줄 '+bars.length+'개', bars.map(function(b){
+      var k=b.querySelector('.lk'); return (k?k.textContent.trim():'?')+' '
+        + Math.round(b.getBoundingClientRect().height); }).join('px · ')+'px');
+    // ★보통 날: '새 날'·'어긋남'·'3부반' 같은 그날치 줄이 없다. 그때 당번이 보이나
+    var extra = 0;
+    bars.forEach(function(b){
+      var k=b.querySelector('.lk'), t=k?k.textContent.trim():'';
+      if (t==='새 날'||t==='어긋남') extra += b.getBoundingClientRect().height; });
+    qa('.wkrail .bu3bar, .wkrail .clashbar, .wkrail .strayrow').forEach(function(b){
+      extra += b.getBoundingClientRect().height; });
+    ok(dz && dz.b - extra <= H, '  보통 날 당번',
+       '그날치 줄 '+Math.round(extra)+'px 를 빼면 아래끝 '+Math.round(dz.b-extra)+' / 창 '+H
+       + (dz.b-extra<=H ? '  → 안 굴려도 보임 ◎':'  → 그래도 굴려야 함'));
+
+    // ── 정. 가로 낭비가 줄었나
+    L('','★정. 가로');
+    var sc = R('.sumc');
+    L('  숫자 칸 하나', sc? sc.w+'×'+sc.h : '—');
+    ok(sc && sc.w < 170*K, '  (전에는 300px 짜리였다)', sc? sc.w+'px':'—');
+    var sl = R('.slot');
+    L('  경기과 줄 하나', sl? sl.w+'×'+sl.h : '—');
+    ok(sl && rl && sl.w <= rl.w, '  (전에는 750px 칸에 있었다)',
+       sl? sl.w+'px — 오른쪽 줄('+rl.w+'px) 안':'—');
+
+    // ── 무. 글씨를 키워도 안 겹치나
+    L('','★무. 글씨 크게');
+    setKsz && setKsz(3);
+    ok(true,'  큰 글씨 조 명단', box('.jobd'));
+    var jb2=R('.jobd');
+    ok(jb2 && jb2.h>60, '  명단이 안 사라졌나', jb2? jb2.h+'px':'★없음');
+    var rl2=R('.wkrail');
+    ok(rl2 && R('.wkleft') && Math.abs(R('.wkleft').r-rl2.x)<=2, '  아직 맞붙었나',
+       rl2? '왼쪽 끝 '+R('.wkleft').r+' / 오른쪽 '+rl2.x : '—');
+    setKsz && setKsz(2);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

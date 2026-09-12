@@ -1,0 +1,25 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    setView('board'); paint();
+    var all = document.querySelectorAll('.cell').length;
+    var dt = document.querySelectorAll('.cell.dirty').length;
+    var named = Array.prototype.slice.call(document.querySelectorAll('.cell'))
+      .filter(function(c){ return c.querySelector('.nm'); }).length;
+    L('칸', all + '개 · 이름 있는 칸 ' + named + ' · 고친 표시 ' + dt);
+    var one = document.querySelector('.cell.dirty');
+    L('고친 칸 테두리', one ? getComputedStyle(one).boxShadow : '(없음)');
+    var plain = Array.prototype.slice.call(document.querySelectorAll('.cell'))
+      .filter(function(c){ return c.querySelector('.nm') && !c.classList.contains('dirty'); })[0];
+    L('안 고친 이름 칸', plain ? getComputedStyle(plain).boxShadow : '(그런 칸 없음)');
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

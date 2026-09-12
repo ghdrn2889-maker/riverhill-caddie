@@ -1,0 +1,82 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function row(n){ return qa('.wrow').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function chip(t){ return qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')===t; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    L('한꺼번에 지정 칸', q('.bulk') ? '있음 ◎ · 단추 '
+      + qa('.bulk .bch').map(function(b){return b.textContent;}).join(' ') : '없음 ✗');
+    L('  띠', q('#bulkbar') ? (q('#bulkbar').classList.contains('on') ? '켜져 있음 ✗':'꺼져 있음 ◎') : '없음 ✗');
+    var x0 = qa('.bulk .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+
+    tap(chip('휴무'));
+    var x1 = qa('.bulk .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    L('휴무 켜기', (bulkOn()? '켜짐 ◎':'✗') + ' · 띠 ' + (q('#bulkbar').classList.contains('on')?'켜짐 ◎':'✗')
+      + ' · 단추 자리 ' + (x0.join()===x1.join()? '안 밀림 ◎':'밀림 ✗'));
+    L('  저장하기', q('#bulkbar [data-act="bksave"]') ? '벌써 떴다 ✗':'아직 없음 ◎');
+
+    var pool = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !isAbs(tagOf(n)); }).slice(0, 6);
+    pool.forEach(function(n){ tap(row(n)); });
+    L('6명 누름', pool.join(', '));
+    L('  창', q('#sheet').classList.contains('on') ? '열렸다 ✗':'안 열림 ◎');
+    L('  다 휴무인가', pool.every(function(n){ return tagOf(n)==='휴무'; }) ? '6명 전부 ◎':'✗');
+    L('  자리 비움', pool.filter(function(n){ return partsOf(n).length; }).length ? '남음 ✗':'전부 ◎');
+    L('  띠', q('#bulkbar .tx b').textContent + ' · 저장하기 '
+      + (q('#bulkbar [data-act="bksave"]')? '떴다 ◎':'안 뜸 ✗'));
+    L('  줄 표시', qa('.wrow.bsel').length + '줄 (지정 ' + bulkDone().length + '명)');
+
+    tap(q('#bulkbar [data-act="bkundo"]'));
+    L('되돌리기', '지정 ' + bulkDone().length + '명 ' + (bulkDone().length===5?'◎ 한 사람만':'✗')
+      + ' · ' + pool[5] + '="' + (tagOf(pool[5])||'근무') + '"');
+    tap(row(pool[5]));
+
+    tap(q('#bulkbar [data-act="bksave"]'));
+    L('저장하기', (unsaved()? '저장 안 됨 ✗':'저장됨 ◎') + ' · 지정 셈 ' + bulkDone().length
+      + '명 ' + (bulkDone().length===0?'◎':'✗') + ' · 켠 것 ' + (bulkOn()?'그대로 ◎':'✗'));
+    var savedN = pool.filter(function(n){ return tagOf(n)==='휴무'; }).length;
+
+    var more = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !isAbs(tagOf(n)); }).slice(0, 2);
+    more.forEach(function(n){ tap(row(n)); });
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    L('끄기 누름', (q('#sheet').classList.contains('on')? '경고창 ◎':'안 열림 ✗')
+      + ' · 단추 ' + qa('#sheet .acts button').map(function(b){return b.textContent;}).join(' | '));
+    tap(qa('#sheet button[data-act="close"]')[0]);
+    L('  취소', (q('#sheet').classList.contains('on')? '열린 채 ✗':'닫힘 ◎')
+      + ' · 켠 것 ' + (bulkOn()?'그대로 ◎':'✗') + ' · 지정 ' + bulkDone().length + '명');
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    L('  확인(초기화)', '켠 것 ' + (bulkOn()?'그대로 ✗':'꺼짐 ◎')
+      + ' · 나중 두 명 ' + (more.every(function(n){ return tagOf(n)!=='휴무'; })?'되돌아옴 ◎':'✗')
+      + ' · ★저장한 ' + pool.filter(function(n){ return tagOf(n)==='휴무'; }).length + '/' + savedN
+      + '명 ' + (pool.filter(function(n){ return tagOf(n)==='휴무'; }).length===savedN?'그대로 ◎':'날아감 ✗'));
+    L('  띠', q('#bulkbar').classList.contains('on')? '아직 켜짐 ✗':'꺼짐 ◎');
+
+    tap(chip('조출'));
+    var p2 = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !tagOf(n); }).slice(0, 3);
+    p2.forEach(function(n){ tap(row(n)); });
+    L('조출 3명', (p2.every(function(n){ return tagOf(n)==='조출'; })?'◎':'✗')
+      + ' · 자리 ' + p2.filter(function(n){ return partsOf(n).length; }).length + '명 앉은 채 ◎');
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    L('  끄고 초기화', p2.every(function(n){ return !tagOf(n); })? '전부 되돌아옴 ◎':'✗');
+
+    tap(chip('휴무'));
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    L('빈손으로 끄기', (q('#sheet').classList.contains('on')? '괜히 물음 ✗':'그냥 꺼짐 ◎')
+      + ' · ' + (bulkOn()? '켜진 채 ✗':'꺼짐 ◎'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

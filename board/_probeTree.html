@@ -1,0 +1,27 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  function nm(el){ return el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+
+    (el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\s+/).join('.'):''); }
+  function walk(el,d){
+    if(d>5) return;
+    var s=getComputedStyle(el), r=el.getBoundingClientRect();
+    if(s.display==='none') return;
+    o.push('  '.repeat(d)+nm(el)
+      +' | '+Math.round(r.top)+'→'+Math.round(r.bottom)+' h'+Math.round(r.height)
+      +' | sc'+el.scrollHeight+'/cl'+el.clientHeight
+      +' | '+s.position+' '+s.display+' fl:'+s.flex+' ovY:'+s.overflowY+' mh:'+s.minHeight);
+    [].slice.call(el.children).forEach(function(c){ walk(c,d+1); });
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    if(typeof fit==='function') fit();
+    o.push('창 '+innerWidth+'x'+innerHeight);
+    walk(document.querySelector('.stage'),0);
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

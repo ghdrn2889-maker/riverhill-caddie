@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function times(pk,a,b){ return part(pk).tees.slice(a,b).map(function(t){ return t.time+t.course[0]; }).join(' '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); cur='1'; setView('board'); paint();
+    L('처음 티오프', times('1',0,8));
+
+    // 시각을 누를 수 있나
+    var hit = qa('.tm.hit');
+    L('누를 수 있는 시각', hit.length+'개 (팀 있는 시각만) ' + (hit.length? '◎':'✗'));
+    tap(hit[2]);
+    L('창', q('#sheet .st') ? q('#sheet .st').textContent : '안 열림 ✗');
+    L('  칸', qa('#sheet .grp h4').map(function(h){return h.textContent;}).join(' | '));
+    L('  체크', q('#sheet [data-ttr]') ? '"'+q('#sheet [data-ttr] .cn').textContent.replace(/\s+/g,' ')+'"' : '없음 ✗');
+
+    // ① 뒤도 같이 밀기 (기본 켬)
+    var t0 = times('1',0,8);
+    q('#ttTime').value = '07:05';
+    tap(qa('#sheet [data-act="ttsave"]')[0]);
+    L('★7:05로 (뒤도 밀기)', t0 + '  →  ' + times('1',0,8));
+    L('   기록', LOG[0].msg);
+    undo();
+
+    // ② 이 칸만
+    tap(qa('.tm.hit')[2]);
+    tap(q('#sheet [data-ttr]'));
+    L('체크 끔', q('#sheet [data-ttr]').className.indexOf('on')<0 ? '꺼짐 ◎':'✗');
+    q('#ttTime').value = '07:05';
+    tap(qa('#sheet [data-act="ttsave"]')[0]);
+    L('★7:05로 (이 칸만)', t0 + '  →  ' + times('1',0,8));
+    L('   기록', LOG[0].msg);
+    undo();
+    L('되돌리기', times('1',0,8) + ' ' + (times('1',0,8)===t0 ? '◎':'✗'));
+  }catch(err){ o.push('터짐: '+err.message); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,160 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function row(n){ return qa('.wrow').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function chip(t){ return qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')===t; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // ── ① 칸은 늘 있다. 켜기 전 높이와 단추 자리를 잰다
+    var card = q('.bulk'), h0 = card.getBoundingClientRect().height;
+    var x0 = qa('.bulk .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    L('한꺼번에 지정 칸', card ? '있음 ◎ · 단추 ' + qa('.bulk .bch').length + '개 ('
+      + qa('.bulk .bch').map(function(b){return b.textContent;}).join(' ') + ')' : '없음 ✗');
+    L('  띠', q('#bulkbar') ? (q('#bulkbar').classList.contains('on') ? '켜져 있음 ✗' : '꺼져 있음 ◎') : '없음 ✗');
+
+    // ★켜기 전에 딴 일을 하나 해 둔다 — 되돌리기가 여기까지 파고들면 안 된다
+    var pre = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })[40];
+    setCart(pre, 777);
+    L('켜기 전 딴 일', pre + ' 카트 ' + cartOf(pre) + '번');
+
+    // ── ② 켠다 — 휴무
+    tap(chip('휴무'));
+    L('휴무 켜기', (bulkOn()? '켜짐 ◎':'안 켜짐 ✗') + ' · tag="' + bulkTag() + '"'
+      + ' · 칩 ' + (chip('휴무').className.indexOf('on')>=0 ? '켜짐 ◎':'안 켜짐 ✗'));
+    var h1 = q('.bulk').getBoundingClientRect().height;
+    var x1 = qa('.bulk .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    L('  칸 높이', h0 + ' → ' + h1 + (Math.abs(h0-h1)<1 ? ' 그대로 ◎' : ' 달라짐(글이 바뀜)'));
+    L('  단추 자리', x0.join('/') + ' → ' + x1.join('/') + (x0.join()===x1.join() ? ' 안 밀림 ◎':' 밀림 ✗'));
+    L('  아래 띠', q('#bulkbar').classList.contains('on') ? '켜짐 ◎':'안 켜짐 ✗');
+    L('  탭 띠', getComputedStyle(q('#tabbar')).display !== 'none' ? '그대로 보임 ◎ (길이 안 막힘)':'가려짐 ✗');
+    L('  저장하기', q('#bulkbar [data-act="bksave"]') ? '벌써 떴다 ✗':'아직 없음 ◎ (한 명도 없으니)');
+
+    // ── ③ 이름만 눌러 여럿 지정 — 창이 안 열려야 한다
+    var pool = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !isAbs(tagOf(n)); }).slice(0, 7);
+    var seat0 = {};
+    pool.forEach(function(n){ seat0[n] = partsOf(n).join(','); });
+    pool.forEach(function(n){ tap(row(n)); });
+    L('7명 누름', pool.join(', '));
+    L('  창', q('#sheet').classList.contains('on') ? '열렸다 ✗ (한 명씩 묻는 그 짓)':'안 열림 ◎');
+    L('  다 휴무인가', pool.filter(function(n){ return tagOf(n)!=='휴무'; }).length
+      ? '아닌 사람 ' + pool.filter(function(n){ return tagOf(n)!=='휴무'; }).join(',') + ' ✗' : '7명 전부 휴무 ◎');
+    L('  자리도 비웠나', pool.filter(function(n){ return partsOf(n).length; }).length
+      ? '아직 앉은 사람 있음 ✗' : '전부 비움 ◎ (' + pool.filter(function(n){ return seat0[n]; }).length + '명은 자리가 있었다)');
+    L('  띠 셈', q('#bulkbar .tx b').textContent);
+    L('  저장하기', q('#bulkbar [data-act="bksave"]') ? '떴다 ◎':'안 뜸 ✗');
+    L('  줄 표시', qa('.wrow.bsel').length + '줄에 표 붙음 (지정 ' + bulkDone().length + '명)');
+
+    // ── ④ 또 누르면 그 사람만 빠진다
+    tap(row(pool[0]));
+    L('같은 사람 또 누름', pool[0] + ' → "' + (tagOf(pool[0])||'근무') + '"'
+      + ' · 지정 ' + bulkDone().length + '명 ' + (bulkDone().length===6?'◎':'✗'));
+    tap(row(pool[0]));   // 도로 넣어 둔다
+
+    // ── ⑤ 되돌리기는 바로 직전 한 사람만
+    // ★'바로 직전'은 마지막으로 누른 사람이지 목록 맨 끝 사람이 아니다
+    var before = bulkDone().slice();
+    tap(row(pool[3]));                       // 방금 이 사람을 눌러 뺐다 → 직전 = pool[3]
+    var mid = bulkDone().slice();
+    tap(q('#bulkbar [data-act="bkundo"]'));
+    var now = bulkDone().slice();
+    var gone = before.filter(function(n){ return now.indexOf(n)<0; })
+      .concat(now.filter(function(n){ return before.indexOf(n)<0; }));
+    L('되돌리기 한 번', '지정 ' + before.length + ' → ' + mid.length + ' → ' + now.length
+      + ' · 달라진 사람 ' + (gone.length? gone.join(','):'없음')
+      + ' ' + (now.length===before.length && !gone.length ? '◎ 직전 한 번만 되돌림':'✗'));
+    var steps0 = bulkSteps();
+    for (var z=0; z<20; z++) tap(q('#bulkbar [data-act="bkundo"]'));
+    L('  끝까지 눌러도', '지정 ' + bulkDone().length + '명 · 켠 것 ' + (bulkOn()?'그대로 ◎':'꺼짐 ✗')
+      + ' · 켜기 전 딴 일(' + pre + ' 카트) ' + (cartOf(pre)===777 ? '777번 그대로 ◎ 안 파고듦':'날아감 ✗'));
+    pool.forEach(function(n){ if (tagOf(n)!=='휴무') tap(row(n)); });
+    L('  다시 채움', bulkDone().length + '명');
+
+    // ── ⑥ 저장하기 — 저장되고, 그 뒤로 '초기화'가 못 건드린다
+    tap(q('#bulkbar [data-act="bksave"]'));
+    L('저장하기', (unsaved()? '저장 안 됨 ✗':'저장됨 ◎')
+      + ' · 저장 뒤 지정 셈 ' + bulkDone().length + '명 ' + (bulkDone().length===0?'◎ (여기부터 새로)':'✗')
+      + ' · 켠 것 ' + (bulkOn()? '그대로 ◎':'꺼짐 ✗'));
+    var savedNames = pool.filter(function(n){ return tagOf(n)==='휴무'; }).length;
+    L('  저장된 휴무', savedNames + '명');
+
+    // ── ⑦ 저장한 뒤 두 명 더 → 끄기 → 경고창 → 확인
+    var more = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !isAbs(tagOf(n)); }).slice(0, 2);
+    more.forEach(function(n){ tap(row(n)); });
+    L('두 명 더', more.join(', ') + ' · 지정 ' + bulkDone().length + '명');
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    var sh = q('#sheet');
+    L('  끄기 누름', sh.classList.contains('on') ? '경고창 열림 ◎':'안 열림 ✗');
+    L('  경고창 단추', qa('#sheet .acts button').map(function(b){return b.textContent;}).join(' | '));
+    tap(qa('#sheet button[data-act="close"]')[0]);
+    L('  취소', (sh.classList.contains('on')? '아직 열림 ✗':'닫힘 ◎')
+      + ' · 켠 것 ' + (bulkOn()? '그대로 ◎':'꺼짐 ✗')
+      + ' · 지정 ' + bulkDone().length + '명 ' + (bulkDone().length===2?'그대로 ◎':'✗'));
+
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    L('  확인(초기화)', '켠 것 ' + (bulkOn()? '그대로 ✗':'꺼짐 ◎')
+      + ' · 나중 두 명 ' + more.map(function(n){ return n+'="'+(tagOf(n)||'근무')+'"'; }).join(' ')
+      + ' ' + (more.every(function(n){ return tagOf(n)!=='휴무'; }) ? '◎ 되돌아옴':'✗'));
+    L('  ★저장한 것은', pool.filter(function(n){ return tagOf(n)==='휴무'; }).length
+      + '/' + savedNames + '명 휴무 그대로 '
+      + (pool.filter(function(n){ return tagOf(n)==='휴무'; }).length===savedNames ? '◎':'✗ 저장본까지 날렸다'));
+    L('  초기화도 되돌리기 되나', STACK.length ? '됩니다 ◎':'안 됨 ✗');
+
+    // ── ⑧ 조출도 되나 (근태 아닌 구분)
+    setView('work');
+    tap(chip('조출'));
+    var p2 = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !tagOf(n); }).slice(0, 3);
+    p2.forEach(function(n){ tap(row(n)); });
+    L('조출 3명', p2.map(function(n){ return n+'="'+tagOf(n)+'"'; }).join(' ')
+      + ' ' + (p2.every(function(n){ return tagOf(n)==='조출'; }) ? '◎':'✗'));
+    L('  자리는', p2.filter(function(n){ return partsOf(n).length; }).length
+      + '명 앉은 채 ◎ (구분은 자리를 안 건드린다)');
+    // 켠 채로 종류만 바꾸기
+    tap(chip('후출'));
+    L('  종류 바꾸기', 'tag="' + bulkTag() + '" ' + (bulkTag()==='후출'?'◎':'✗')
+      + ' · 조출 3명 그대로 ' + (p2.every(function(n){ return tagOf(n)==='조출'; })?'◎':'✗'));
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    L('  끄고 초기화', p2.filter(function(n){ return tagOf(n)==='조출'; }).length + '명 남음 '
+      + (p2.every(function(n){ return !tagOf(n); }) ? '◎ 전부 되돌아옴':'✗'));
+
+    // ── ⑨ 이미 그 배지인 사람을 눌러 빼면 '뗀 사람'으로 따로 센다
+    setView('work');
+    var already = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return tagOf(n)==='휴무'; })[0];
+    tap(chip('휴무'));
+    tap(row(already));
+    L('이미 휴무인 사람을 누름', already + ' → "' + (tagOf(already)||'근무') + '"'
+      + ' · 지정 ' + bulkSet().length + '명 · 손댐 ' + bulkDone().length + '명 '
+      + (bulkSet().length===0 && bulkDone().length===1 ? '◎ 갈라 셈':'✗'));
+    L('  띠 글', q('#bulkbar .tx b').textContent
+      + ' ' + (q('#bulkbar .tx b').textContent.indexOf('뗀 1명')>=0 ? '◎':'✗'));
+    L('  줄 표시', (row(already).className.indexOf('bund')>=0 ? '뗀 자국(bund) ◎':'✗')
+      + ' · 지정 표(bsel) ' + (row(already).className.indexOf('bsel')>=0 ? '붙음 ✗':'안 붙음 ◎'));
+    L('  저장하기', q('#bulkbar [data-act="bksave"]') ? '떴다 ◎ (손댔으니)':'안 뜸 ✗');
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    L('  끄기', q('#sheet').classList.contains('on') ? '경고창 ◎ (손댄 게 있으니)':'안 물음 ✗');
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    L('  초기화', already + ' → "' + (tagOf(already)||'근무') + '" '
+      + (tagOf(already)==='휴무' ? '◎ 도로 휴무':'✗'));
+
+    // ── ⑩ 끌 때 지정한 것이 없으면 안 묻는다
+    tap(chip('휴무'));
+    tap(q('#bulkbar [data-act="bkoff"]'));
+    L('빈손으로 끄기', (q('#sheet').classList.contains('on')? '괜히 물음 ✗':'그냥 꺼짐 ◎')
+      + ' · ' + (bulkOn()? '아직 켜짐 ✗':'꺼짐 ◎'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,39 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shape(){ return DAY.map(function(p){
+    var a=active(p), named=a.filter(function(r){return r.n;}).length, wait=0;
+    for(var i=p.tees.length;i<a.length;i++) if(a[i].n) wait++;
+    return p.name+' 팀'+p.tees.length+' 이름'+named+' 대기'+wait; }).join(' | '); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    L('이어받기 기본값', Object.keys(CARRY).map(function(k){
+      return k+'='+(CARRY[k]?'가져감':'안 가져감'); }).join(' · '));
+    L('오늘', shape());
+
+    // ★기본 설정 그대로 내일로 넘긴다
+    carryToNextDay(); paint();
+    L('', ''); L('★내일로 넘긴 직후 '+DATE, shape());
+    L('  기록', LOG[0]?LOG[0].msg.slice(0,90):'-');
+
+    applyLineup(seonbal(), ['1','2']); paint();
+    L('', ''); L('1·2부 순번 세운 뒤', shape());
+    applyLineup(bu3Start(), ['3']); paint();
+    L('3부까지 세운 뒤   ', shape());
+
+    // ★팀도 안 가져오게 하면
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    setCarryOpt('tees', false); setCarryOpt('seats', false);
+    carryToNextDay(); paint();
+    L('', ''); L('★팀도 안 가져오면 '+DATE, shape());
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']); paint();
+    L('  순번 세운 뒤', shape());
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

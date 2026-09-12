@@ -1,0 +1,89 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function sheetOn(){ return q('#sheet').classList.contains('on'); }
+function st(){ var e=q('#sheet .st'); return e?e.textContent:'(없음)'; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+function cell(pk,i){ return q('.cell[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+function ptab(n){ return qa('#ptabs button')[n]; }
+function L(e){ return Math.round(e.getBoundingClientRect().left); }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    var vw=window.innerWidth, vh=window.innerHeight;
+    log('창', vw+'x'+vh);
+
+    // ① 배치표 — 시각이 가운데, 왼쪽 OUT, 오른쪽 IN
+    log('탭줄', qa('#ptabs button').map(function(b){return b.textContent;}).join(' | '));
+    var ch=q('.chead.two');
+    log('머리글', ch? ch.textContent : '(two 없음 — 문제)');
+    var r0=q('.trow');
+    log('격자', getComputedStyle(r0).gridTemplateColumns);
+    var kids=Array.prototype.slice.call(r0.children);
+    log('한 줄 차례', kids.map(function(k){return k.className.split(' ')[0]+'('+L(k)+')';}).join(' → '));
+    var cL=q('.trow .cell.L'), cR=q('.trow .cell.R'), tm=q('.trow .tm');
+    log('가운데 시각', tm.textContent+' · 왼쪽끝 '+L(tm)+' · 폭 '+Math.round(tm.getBoundingClientRect().width));
+    log('좌우 확인', (L(cL)<L(tm)&&L(tm)<L(cR))?'OUT | 시각 | IN ◎':'어긋남 ✗');
+    log('첫 줄', cL.textContent+' ‖ '+tm.textContent+' ‖ '+cR.textContent);
+    log('코스칩', qa('.trow .cell .co').length+'개 (0이어야 — 자리가 코스다)');
+    var rows=qa('.trow'), rh=rows[0].getBoundingClientRect().height;
+    log('줄 높이', Math.round(rh)+'px · 한 화면에 보이는 시각 '+Math.floor((vh-84-59)/rh)+'개');
+    var nm=qa('.cell .nm'), clip=0, minw=999;
+    nm.forEach(function(e){ if(e.scrollWidth>e.clientWidth+1) clip++; minw=Math.min(minw,Math.round(e.getBoundingClientRect().width)); });
+    log('이름 잘림', clip+'건 · 가장 좁은 이름칸 '+minw+'px');
+    log('가로 넘침', (document.documentElement.scrollWidth-vw)+'px');
+    var cs=qa('.cell[data-pk]'), small=0;
+    cs.forEach(function(c){ if(c.getBoundingClientRect().height<44) small++; });
+    log('칸 높이', cs.length+'칸 · 44px 미만 '+small+'개');
+    log('대기', qa('.spares .cell').length+'명 · 앞 3 '
+      + qa('.spares .cell').slice(0,3).map(function(c){return c.querySelector('.p').textContent+c.querySelector('.nm').textContent;}).join(' → '));
+
+    // ② 대바 여전히 되나
+    var b0=[cell('2',0).querySelector('.nm').textContent, cell('2',3).querySelector('.nm').textContent];
+    tap(cell('2',0)); tap(act('pick')); tap(cell('2',3));
+    var b1=[cell('2',0).querySelector('.nm').textContent, cell('2',3).querySelector('.nm').textContent];
+    log('대바', b0.join('/')+' → '+b1.join('/')+(b0[0]===b1[1]&&b0[1]===b1[0]?' ◎':' ✗'));
+    tap(q('#tbUndo'));
+
+    // ③ 근무표
+    var wt=qa('#ptabs button').filter(function(b){return b.getAttribute('data-view')==='work';})[0];
+    log('근무표 탭', wt?'"'+wt.textContent+'"':'없음(문제)');
+    tap(wt);
+    log('근무표 켬', q('#ptabs button.on').textContent+' · 배치표 남았나 '+(q('.trow')?'예(문제)':'아니오'));
+    log('집계', qa('.sum > div').map(function(d){return d.querySelector('.k').textContent+' '+d.querySelector('.v').textContent;}).join(' · '));
+    log('거르개', qa('.wfil button').map(function(b){return b.textContent;}).join(' | '));
+    log('조', qa('.josec').map(function(s){return s.querySelector('.johd').textContent;}).join(' | '));
+    var wr=qa('.wrow');
+    log('사람 줄', wr.length+'명 · 첫 3 '+wr.slice(0,3).map(function(r){return r.textContent;}).join(' / '));
+    var wsm=0; wr.forEach(function(r){ if(r.getBoundingClientRect().height<44) wsm++; });
+    log('  높이 44px 미만', wsm+'개');
+    log('당번칸', qa('.duty .dr').map(function(d){return d.querySelector('.dk').textContent+'='+d.querySelector('.dv').textContent;}).join(' | '));
+    log('명단단추', q('#tbRoster').disabled?'꺼짐(근무표에선 맞음)':'켜짐(문제)');
+
+    // ④ 거르개
+    tap(qa('.wfil button')[2]);
+    log('대기만', qa('.wrow').length+'명 · '+qa('.wrow .bg').slice(0,3).map(function(b){return b.textContent;}).join(','));
+    tap(qa('.wfil button')[0]);
+
+    // ⑤ 사람 누르기 → 그 자리로
+    tap(qa('.wrow')[0]);
+    log('사람창', sheetOn()?st()+' · '+q('#sheet .sub').textContent:'안 열림(문제)');
+    var seat=q('#sheet [data-goseat]');
+    log('  자리', seat?seat.textContent:'(없음)');
+    if(seat){ tap(seat);
+      log('  자리로 감', '창 '+(sheetOn()?'열림(문제)':'닫힘')+' · 탭 '+q('#ptabs button.on').textContent
+        +' · 배치표 '+(q('.trow')?'보임':'안보임(문제)')); }
+
+    // ⑥ 3부(코스 2개 그대로) · 저장
+    tap(ptab(2));
+    log('3부', q('#ptabs button.on').textContent+' · 줄 '+qa('.trow').length+' · 대기 '+qa('.spares .cell').length);
+    tap(q('#tbSave'));
+    log('저장', q('#hSave').textContent);
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

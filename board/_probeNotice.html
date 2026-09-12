@@ -1,0 +1,73 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function click(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setView('work'); paint();
+
+    // ── 갑. 순번 세우기는 배치표로 갔나
+    L('','★갑. 자리 바꿈');
+    ok(!q('#railSum .lnbar'), '  근무표 레일에 순번 세우기', q('#railSum .lnbar')?'★남음':'없음 ◎');
+    ok(qa('#brail .lnbar').length >= 3, '  배치표 레일에', qa('#brail .lnbar').length+'줄');
+    ['lnpick','lnrun','ln3pick','ln3run','nday'].forEach(function(a){
+      ok(!!q('#brail [data-act="'+a+'"]'), '  '+a, q('#brail [data-act="'+a+'"]')?'있음':'★없음');
+    });
+
+    // ── 을. 공지 상자
+    L('','★을. 공지 상자');
+    var bx = q('#railSum .ntbox');
+    ok(!!bx, '  근무표 레일에 있나', bx?'있음 ◎':'★없음');
+    L('  종류 칸', qa('[data-ntkind]').map(function(b){ return b.textContent.trim()
+      + (b.className.indexOf('on')>=0?'(고름)':''); }).join(' '));
+    L('  대상 칸', qa('[data-ntto]').map(function(b){ return b.textContent.trim()
+      + (b.className.indexOf('on')>=0?'(고름)':''); }).join(' '));
+    L('  받는 사람', q('.ntn')?q('.ntn').textContent.trim():'★없음');
+    ok(!!q('#ntBody'), '  글 적는 칸', q('#ntBody')?'있음':'★없음');
+
+    // ── 병. 골라 보기 — 대상마다 사람 수가 달라야 한다
+    L('','★병. 대상 바꾸기');
+    var was = q('.ntn').textContent.trim();
+    click(qa('[data-ntto]')[2]); paint();
+    L('  3부반으로', q('.ntn').textContent.trim() + ' (전에는 ' + was + ')');
+    ok(q('.ntn').textContent.trim() !== was, '  수가 바뀌나', '◎');
+    ok(NOTICE.to === '3부반', '  기계 쪽', NOTICE.to);
+    click(qa('[data-ntto]')[1]); paint();
+    L('  오늘 근무로', q('.ntn').textContent.trim());
+    click(qa('[data-ntkind]')[2]); paint();
+    ok(NOTICE.kind === '긴급', '  종류 긴급', NOTICE.kind);
+
+    // ── 정. 글을 치면 — 다시 그려도 안 날아가나
+    L('','★정. 글 적기');
+    var ta = q('#ntBody');
+    ta.value = '오늘 3부 카트 점검 있습니다';
+    ta.dispatchEvent(new Event('input',{bubbles:true}));
+    ok(NOTICE.body === '오늘 3부 카트 점검 있습니다', '  기계에 담기나', '"'+NOTICE.body+'"');
+    paint();
+    ok(q('#ntBody').value === '오늘 3부 카트 점검 있습니다', '  다시 그려도 남나',
+       '"'+q('#ntBody').value+'"');
+
+    // ── 무. 보낼 꾸러미
+    L('','★무. 보낼 꾸러미');
+    var p = noticePayload();
+    L('  글머리', noticeHead());
+    L('  전문', JSON.stringify(noticeText()));
+    L('  꾸러미', 'kind '+p.kind+' · to '+p.to+' · '+p.count+'명 · '+p.body.length+'자 · 배치표 #'+p.board);
+    ok(p.text.indexOf('[긴급]')===0, '  종류가 앞에 붙나', p.text.slice(0,6));
+    // ★보낸 척 안 한다
+    var r = noticeSend();
+    ok(!!r, '  보내기를 눌러도 터지지 않나', r? '꾸러미를 돌려줌 ◎':'★null');
+    // 빈 글이면 안 보낸다
+    NOTICE.body = ''; paint();
+    ok(noticeSend() === null, '  빈 글은 막나', '막음 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

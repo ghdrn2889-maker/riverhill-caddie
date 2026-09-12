@@ -1,0 +1,76 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function log(s){ o.push(s); }
+  try{
+    // 부마다, 그 부 안의 모든 짝을 기계에 물어본다 — 어디서 막히는지 남김없이
+    DAY.forEach(function(p){
+      var a = active(p), n = a.length, bad = [], tried = 0;
+      for (var i = 0; i < n; i++){
+        for (var j = i + 1; j < n; j++){
+          var A = { pk: p.key, ri: p.roster.indexOf(a[i]) };
+          var B = { pk: p.key, ri: p.roster.indexOf(a[j]) };
+          tried++;
+          var why = rotateBlock([A, B]);
+          if (why) bad.push((i+1) + '번 ' + a[i].n + ' ↔ ' + (j+1) + '번 ' + a[j].n + ' : ' + why);
+        }
+      }
+      log(p.name + ' — 짝 ' + tried + '개 중 막힌 것 ' + bad.length + '개'
+        + (bad.length ? '' : '  ◎ 하나도 안 막힘'));
+      bad.slice(0, 12).forEach(function(x){ log('   ✗ ' + x); });
+      if (bad.length > 12) log('   … 그 밖 ' + (bad.length - 12) + '개');
+    });
+
+    log('');
+    log('── 부를 넘는 짝 (여기는 막히는 게 맞다) ──');
+    var cross = [], ok = 0;
+    var a2 = active(part('2')), a3 = active(part('3'));
+    for (var i = 0; i < a2.length; i++){
+      for (var j = 0; j < a3.length; j++){
+        var why = rotateBlock([{ pk:'2', ri: part('2').roster.indexOf(a2[i]) },
+                               { pk:'3', ri: part('3').roster.indexOf(a3[j]) }]);
+        if (why) cross.push(a2[i].n + ' ↔ ' + a3[j].n + ' : ' + why); else ok++;
+      }
+    }
+    log('2부↔3부 짝 ' + (a2.length * a3.length) + '개 중 막힌 것 ' + cross.length + '개 · 되는 것 ' + ok + '개');
+    cross.slice(0, 6).forEach(function(x){ log('   ✗ ' + x); });
+
+    log('');
+    log('── 실제로 바꿔 본다 (2부 1번 ↔ 4번) ──');
+    var p2 = part('2'), b0 = active(p2).slice(0, 5).map(function(r){ return r.n; });
+    log('   전 : ' + b0.join(', '));
+    var r1 = rotateSeats([{ pk:'2', ri: p2.roster.indexOf(active(p2)[0]) },
+                          { pk:'2', ri: p2.roster.indexOf(active(p2)[3]) }]);
+    log('   돌림 결과 : ' + r1 + ' · ' + active(p2).slice(0,5).map(function(r){return r.n;}).join(', '));
+    log('   알림 : ' + (document.getElementById('toast').textContent || '(없음)'));
+    undo();
+
+    log('');
+    log('── 대기끼리도 되나 (2부 대기 첫 둘) ──');
+    var nWork = p2.tees.length, aa = active(p2);
+    if (aa.length > nWork + 1){
+      var s1 = { pk:'2', ri: p2.roster.indexOf(aa[nWork]) };
+      var s2 = { pk:'2', ri: p2.roster.indexOf(aa[nWork+1]) };
+      log('   ' + aa[nWork].n + ' ↔ ' + aa[nWork+1].n + ' : ' + (rotateBlock([s1,s2]) || '안 막힘 ◎'));
+    } else log('   대기가 모자람');
+
+    log('');
+    log('── 근무 ↔ 대기 (2부 1번 ↔ 대기 첫 사람) ──');
+    if (aa.length > nWork){
+      log('   ' + aa[0].n + ' ↔ ' + aa[nWork].n + ' : '
+        + (rotateBlock([{ pk:'2', ri: p2.roster.indexOf(aa[0]) },
+                        { pk:'2', ri: p2.roster.indexOf(aa[nWork]) }]) || '안 막힘 ◎'));
+    }
+
+    log('');
+    log('── 옛 길(대기 칩)도 확인 — swapRef/dupReason ──');
+    log('   같은 부 1↔4 : ' + (dupReason({ pk:'2', ri: p2.roster.indexOf(active(p2)[0]) },
+                                          { pk:'2', ri: p2.roster.indexOf(active(p2)[3]) }) || '안 막힘 ◎'));
+
+    log('');
+    log('errs: ' + (ERRS.join(' | ') || 'none'));
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

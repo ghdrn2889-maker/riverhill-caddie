@@ -1,0 +1,98 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function work(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<p.tees.length;i++) out.push(seatNo(p,i)+' '+((a[i]&&a[i].n)||'(빈)'));
+    return out.join(' | ');
+  }
+  function spare(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) out.push(seatNo(p,i)+' '+(a[i].n||'(빈)'));
+    return out.join(' | ');
+  }
+  function spareNames(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) if(a[i].n) out.push(a[i].n);
+    return out;
+  }
+  function workNames(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<p.tees.length;i++) if(a[i]&&a[i].n) out.push(a[i].n);
+    return out;
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+  }
+  try{
+    // ══ 갑. 바탕 — 한도 없이 세우면 어디까지 가나
+    reset();
+    var p1=part('1'), p2=part('2');
+    var st=seonbal();
+    L('바탕','1부 '+p1.tees.length+'팀 · 2부 '+p2.tees.length+'팀 · 선발 '+st);
+    applyLineup(st, ['1','2']);
+    var base1w=workNames('1'), base1s=spareNames('1'), base2w=workNames('2'), base2s=spareNames('2');
+    L('','★갑. 한도 없음 (지금까지의 모습)');
+    L('  1부 근무', base1w.length+'명 · 마지막 '+base1w[base1w.length-1]);
+    L('  1부 대기', base1s.length+'명'+(base1s.length?' ('+base1s.join('·')+')':''));
+    L('  2부 근무', base2w.length+'명 · 처음 '+base2w[0]+' … 마지막 '+base2w[base2w.length-1]);
+    L('  2부 대기', base2s.length+'명'+(base2s.length?' ('+base2s.slice(0,6).join('·')+' …)':''));
+    var cut = base2w[0];                     // 원래라면 2부 첫 사람
+    L('  ★2부로 넘어가던 첫 사람', cut);
+
+    // ══ 을. 1부에 대기 자리를 깔면
+    reset();
+    var lastNo1 = workLastNo(part('1'));
+    var capNo = lastNo1 + 5;                 // 1부 대기 5칸
+    L('','★을. 1부 대기를 '+capNo+'번까지 깔고 세운다 (근무 마지막 '+lastNo1+'번 + 5칸)');
+    setCapNo('1', capNo);
+    applyLineup(seonbal(), ['1','2']);
+    var c1w=workNames('1'), c1s=spareNames('1'), c2w=workNames('2'), c2s=spareNames('2');
+    L('  1부 근무', c1w.length+'명 · 마지막 '+c1w[c1w.length-1]);
+    L('  1부 대기', spare('1'));
+    L('  2부 근무 앞', c2w.slice(0,6).join(' · ')+' …');
+    ok(c1w.join(',')===base1w.join(','), '  1부 근무는 그대로인가',
+       c1w.join(',')===base1w.join(',')?'그대로 ◎':'★달라짐');
+    ok(c1s.length===5, '  1부 대기 찼나', c1s.length+'명 / 5칸');
+    // ★핵심: 원래 2부로 가던 사람들이 1부 대기로 먼저 왔는가
+    var want = base2w.slice(0,5);
+    ok(c1s.join(',')===want.join(','), '  ★2부로 가던 5명이 1부 대기로',
+       '1부 대기 = '+c1s.join('·')+'  /  원래 2부 앞 5명 = '+want.join('·'));
+    // ★그다음 사람부터 2부인가
+    ok(c2w[0]===base2w[5], '  ★그다음 사람부터 2부', '2부 1번 = '+c2w[0]+'  /  기대 '+base2w[5]);
+    ok(c2w.length===base2w.length, '  2부 근무 자리', c2w.length+'팀 다 참 (한도 전 '+base2w.length+')');
+    var T=workTally();
+    ok(T.total===82,'  총원', T.total+'명');
+    L('  미배치', T.cu+'명');
+    L('  2부 대기', c2s.length+'명'+(c2s.length?' ('+c2s.join('·')+')':' — 1부로 당겨 올라옴'));
+    var poolN=joRing(seonbal()).filter(function(n){ return inLineup(n,'house'); }).length;
+    L('  셈', '설 사람 '+poolN+'명 · 자리 '+(c1w.length+5+c2w.length+c2s.length)+'개'
+      + ((c1w.length+5+c2w.length+c2s.length)>poolN ? ' → '+((c1w.length+5+c2w.length+c2s.length)-poolN)+'명은 차례가 한 바퀴 더 돌아 두 부' : ''));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ══ 병. 차례가 한 줄로 이어지나 — 1부근무→1부대기→2부근무
+    L('','★병. 차례가 한 줄인가');
+    var ring=joRing(seonbal()).filter(function(n){ return inLineup(n,'house'); });
+    var chain=c1w.concat(c1s).concat(c2w).concat(c2s);
+    var okchain=true, bad='';
+    for(var i=0;i<chain.length;i++)
+      if(chain[i]!==ring[i%ring.length]){ okchain=false; bad=(i+1)+'번째 '+chain[i]+' ≠ '+ring[i%ring.length]; break; }
+    ok(okchain,'  조 순환 그대로', okchain?chain.slice(0,8).join('·')+' …':'★어긋남 '+bad);
+
+    // ══ 정. 한 번 더 눌러도 같은가
+    L('','★정. 한 번 더');
+    var was=spare('1')+' // '+work('2');
+    applyLineup(seonbal(), ['1','2']);
+    ok((spare('1')+' // '+work('2'))===was,'  같은가', (spare('1')+' // '+work('2'))===was?'똑같음 ◎':'★달라짐');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

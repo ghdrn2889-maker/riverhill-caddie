@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // ★조출은 이제 자리를 비운다 — 자리에 앉은 사람으로 시험해야 한다
+    var n1=active(part('1')).map(function(r){return r.n;})
+      .filter(function(n){ return !tagOf(n) && partsOf(n).length; })[3];
+    var pk='1', i=active(part(pk)).map(function(r){return r.n;}).indexOf(n1);
+    cur=pk; setView('board'); paint();
+    openCell(pk, i);
+    L('배치표 칸 창', q('#sheet .st').textContent+' · '+n1);
+    L('  이 사람 단추', qa('#sheet .grp')[0].querySelectorAll('.acts button').length
+      + '개 · '+Array.prototype.slice.call(qa('#sheet .grp')[0].querySelectorAll('.acts button'))
+        .map(function(b){return b.textContent;}).join(' | '));
+    var rm=qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='prmhere';})[0];
+    L('  빼기 단추', rm? '"'+rm.textContent+'" ◎':'없음(문제)');
+    var n0=part(pk).roster.length, below=active(part(pk))[i+1].n;
+    tap(rm);
+    L('  누른 뒤', n1+' → 부 '+(partsOf(n1).join(',')||'없음')
+      + ' · 명단 '+n0+'→'+part(pk).roster.length
+      + ' · 그 칸 '+active(part(pk))[i].n+(active(part(pk))[i].n===below?' (당겨짐 ◎)':' ✗'));
+    L('  창', $('sheet').className.indexOf('on')>=0?'열림(문제)':'닫힘 ◎');
+    L('  기록', LOG[0].msg);
+    setView('work');
+    L('  집계', qa('#railSum .sumc').map(function(d){
+        return d.querySelector('.k').textContent+' '+d.querySelector('.v').textContent; }).join(' · '));
+    L('  근무표 줄', (function(){ var r=qa('#wkBody .wrow,#work .wrow,.wrow').filter(function(x){
+        return x.textContent.indexOf(n1)>=0; })[0];
+        return r? r.textContent.replace(/\s+/g,' ').trim().slice(0,40):'(못 찾음)'; })());
+    // ★부에서 빼는 것으로는 순번을 못 막는다 — 빼는 문은 배지다(2026-09-03 규칙 바뀜)
+    L('  순번 셈에 드나', inLineup(n1,'house')
+      ? '든다 ◎ (미배치=가용 · 다시 세우면 돌아온다)':'안 든다 ✗');
+    L('  배지를 붙이면', (function(){ setDayTag(n1, '프리');
+      var r = inLineup(n1,'house') ? '아직 든다 ✗':'빠진다 ◎'; undo(); return r; })());
+    undo();
+    L('  되돌리기', n1+' → 부 '+(partsOf(n1).join(',')||'없음')+' · 명단 '+part(pk).roster.length);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

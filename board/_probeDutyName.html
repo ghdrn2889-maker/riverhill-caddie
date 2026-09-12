@@ -1,0 +1,31 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('★당번 이름 → 어떻게 보이나', '');
+    o.push('     이름            근무표 배지        당번 상자     색');
+    ['당번','벌당','흡연실 당번','2부 당번','1부 당번','3부 당번','청소','카트 정리']
+      .forEach(function(k){
+        if (DUTYKEYS.indexOf(k)<0){ DUTYKEYS.push(k); DUTY[k]=[]; DUTYDEF[k]={t:'',h:0}; }
+        var b=dutyBadge(k), c=dutyChip(k);
+        o.push('     '+(k+'              ').slice(0,14)+' '+(b+'                ').slice(0,17)+' '
+          +(c+'            ').slice(0,12)+' '+tagCls(b));
+      });
+    // 실제로 걸어 본다
+    var W=workRows(), N=W.filter(function(r){ return !tagOf(r.n)&&r.cls==='w'; })[0].n;
+    dutyToggle('2부 당번', N); dutyToggle('청소', N); paint();
+    o.push('');
+    L('★'+N+' 에게 2부 당번 + 청소', '배지 ['+workRows().filter(function(r){return r.n===N;})[0].bts.join(' | ')+']');
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===N; })[0];
+    L('  화면', b? b.textContent.replace(/\s+/g,' ').trim() : '(없음)');
+    L('  색', b? [].slice.call(b.querySelectorAll('.bt')).map(function(x){
+        return x.textContent.trim()+'='+String(x.className).replace('bt','').trim(); }).join('  ') : '-');
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

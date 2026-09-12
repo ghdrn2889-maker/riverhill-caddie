@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    var T0 = workTally();
+    var abs0 = JONAMES.filter(function(n){ return isAbs(tagOf(n)); });
+    var mk0  = JONAMES.filter(function(n){ return dayMark(n); });
+    L('오늘', '총원 ' + T0.total + ' · 근무 ' + T0.cw + ' · 대기 ' + T0.cd
+      + ' · 미배치 ' + T0.cu + ' · 근태 ' + abs0.length + '명');
+    L('  근태 내역', abs0.map(function(n){ return n+'['+tagOf(n)+']'; }).join(' '));
+    L('  그날의 구분(중복·조출 …)', mk0.length + '명');
+
+    var seat0 = {};
+    DAY.forEach(function(p){ seat0[p.key] = active(p).map(function(r){ return r.n; }); });
+
+    carryToNextDay();
+
+    var T1 = workTally();
+    var abs1 = JONAMES.filter(function(n){ return isAbs(tagOf(n)); });
+    var mk1  = JONAMES.filter(function(n){ return dayMark(n); });
+    L('넘긴 뒤', '총원 ' + T1.total + ' · 근무 ' + T1.cw + ' · 대기 ' + T1.cd
+      + ' · 미배치 ' + T1.cu + ' · 근태 ' + abs1.length + '명');
+    L('  ★그대로 넘어온 근태', abs1.filter(function(n){ return abs0.indexOf(n)>=0; }).length
+      + '/' + abs0.length + '명 — 어제 쉰 사람이 오늘도 쉬는 것으로 시작한다');
+    L('  지워진 구분', mk0.length + ' → ' + mk1.length + '명');
+    L('  선발', seonbal() + ' (어제와 ' + (seonbal()===JONAMES.filter(function(n){return tagOf(n)==='선발';})[0] ? '같음':'?') + ')');
+    var duty = 0; DUTYKEYS.forEach(function(k){ duty += dutyList(k).length; });
+    L('  당번', duty + '명 그대로');
+
+    // 자리는 얼마나 그대로인가
+    var same = 0, tot = 0;
+    DAY.forEach(function(p){
+      var now = active(p).map(function(r){ return r.n; });
+      var was = seat0[p.key] || [];
+      var n = Math.max(now.length, was.length);
+      for (var i=0;i<n;i++){ tot++; if (now[i] && now[i]===was[i]) same++; }
+    });
+    L('  자리(순번)', same + '/' + tot + '칸 그대로 ('
+      + Math.round(same*100/tot) + '%)');
+
+    // 순번을 다시 세우면 얼마나 바뀌나 — '어차피 다시 세운다'면 이어받기 값이 얼마나 되나
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('  1·2부 다시 세우면', pl.slots.length + '칸 중 ' + pl.moved + '칸이 바뀐다');
+    var pl3 = lineupPlan(bu3Start(), ['3']);
+    L('  3부 다시 세우면', pl3.slots.length + '칸 중 ' + pl3.moved + '칸이 바뀐다');
+
+    // 어제 휴무를 다 풀고 새로 12명을 지정하려면 몇 번 눌러야 하나
+    L('  ★손품', '어제 근태 ' + abs1.length + '명을 풀고(=' + abs1.length + '번) '
+      + '오늘 것을 새로 지정(=n번) → 빈 판에서 시작하면 n번만');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

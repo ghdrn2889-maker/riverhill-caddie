@@ -1,0 +1,60 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
+  function seats(n){ return partsOf(n).map(function(k){return part(k).name;}).join('·')||'없음'; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // ── A. 화면에서 눌러서 넣는다 (자리 칸 → 시트 → 넣기)
+    L('★A. 화면에서 마샬 자리를 눌러 넣는다','');
+    var slots=[].slice.call(document.querySelectorAll('#staffBox [data-slot-staff]'));
+    L('  경기과 자리 칸', slots.length+'개');
+    var mi=-1; STAFF.forEach(function(x,i){ if(x.k==='마샬'&&mi<0) mi=i; });
+    tap(slots[mi]);
+    var sh=$('sheet');
+    ok(sh.classList.contains('on'),'  자리 창', sh.classList.contains('on')?'열림':'★안 열림');
+    ok(/배치/.test(sh.textContent),'  안내문에 배치 얘기', /배치가 되고/.test(sh.textContent)?'있음':'★없음');
+
+    // 이름을 쳐 넣고 '넣기'
+    var pick=JONAMES.filter(function(n){ return !tagOf(n) && n!==STAFF[mi].n; })[0];
+    $('slotName').value=pick;
+    tap([].slice.call(sh.querySelectorAll('button')).filter(function(b){
+      return b.getAttribute('data-act')==='slotsave'; })[0]);
+    ok(tagOf(pick)==='배치','  '+pick+' 배지', tagOf(pick)||'★없음');
+    ok(STAFF[mi].n===pick,'  마샬 자리', STAFF[mi].n);
+    L('  고침 기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── B. 근무표 화면에 '배치'로 보이나
+    paint();
+    var row=document.querySelector('#workTable [data-who="'+pick+'"]');
+    ok(!!row,'  근무표에 줄이 있나', row?'있음':'★없음');
+    if(row) ok(/배치/.test(row.textContent),'  줄에 적힌 것', row.textContent.replace(/\s+/g,' ').trim());
+
+    // ── C. 순번 세우기에 안 딸려 들어간다
+    o.push(''); L('★C. 순번 세우기','');
+    applyLineup(seonbal(), ['1','2']);
+    applyLineup(bu3Start(), ['3']);
+    ok(seats(pick)==='없음','  '+pick+' 자리', seats(pick)+' (배치는 안 서야 한다)');
+    var ms=STAFF.filter(function(x){return x.k==='마샬'&&x.n;}).map(function(x){return x.n;});
+    ms.forEach(function(n){
+      if(!hasCaddie(n)) return;
+      ok(seats(n)==='없음','  마샬 '+n+' 자리', seats(n)+' · 배지 '+(tagOf(n)||'없음'));
+    });
+
+    // ── D. 자리에서 빼면 순번에 다시 든다
+    o.push(''); L('★D. 자리에서 빼면','');
+    setStaff(mi, '', STAFF[mi].t);
+    ok(tagOf(pick)!=='배치','  '+pick+' 배지', tagOf(pick)||'없음');
+    ok(lineupPool('house').indexOf(pick)>=0,'  순번 후보에 드나',
+       lineupPool('house').indexOf(pick)>=0?'듦 ◎':'★안 듦');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

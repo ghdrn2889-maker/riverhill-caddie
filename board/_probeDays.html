@@ -1,0 +1,92 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function keys(){ var n=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i);
+  if(k.indexOf('board.')===0) n.push(k); } return n.sort().join('\n      '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */
+    L('처음 칸', keys()||'없음');
+    L('오늘', DATE+' · 1부 '+part('1').tees.length+'팀');
+
+    // ① 고치면 초안이 몰래 적힌다 (저장본은 안 건드림)
+    setAbsent(active(part('1'))[5].n, '휴무');
+    L('한 번 고친 뒤 칸', '\n      '+keys());
+    L('  저장 표시', unsaved()? '저장 안 함 ◎':'저장됨(문제)');
+
+    // ② 저장하면 그 날 칸으로
+    daySave();
+    L('저장 뒤 칸', '\n      '+keys());
+    L('  저장된 날 목록', dayList().map(function(d){return d.date+'('+d.at+')';}).join(' / '));
+    L('  초안', localStorage.getItem('board.draft.v3::'+DATE)? '남음(문제)':'지워짐 ◎');
+
+    // ③ 내일로 넘겨도 오늘이 살아 있나
+    var d0=DATE, t0=part('1').tees.length, r0=part('1').roster.length;
+    carryToNextDay();
+    daySave();
+    L('내일로 넘긴 뒤', d0+' → '+DATE);
+    L('  저장된 날 목록', dayList().map(function(d){return d.date;}).join(' / '));
+    L('  ★어제 것이 살아 있나', localStorage.getItem('board.day.v3::'+d0)? '예 ◎':'아니오 ✗');
+
+    // ④ 내일에서 오늘을 건드려도 충돌 안 나나
+    // ★셈으로 가리면 안 된다 — 넘기면서 쉬던 사람이 명단에 돌아와 수가 우연히 같아진다.
+    //   지운 '이름'이 오늘에 남아 있고 내일에 없으면 안 묻은 것이다
+    var killed = active(part('1'))[0].n;
+    delFromPart('1', killed);
+    var tomTeams=part('1').tees.length, tomRoster=part('1').roster.length;
+    var tomHas = part('1').roster.some(function(r){ return r.n===killed; });
+    daySwitch(d0);
+    var todHas = part('1').roster.some(function(r){ return r.n===killed; });
+    L('오늘로 건너감', DATE+' · 1부 명단 '+part('1').roster.length+'명'
+      + ' (저장할 때 '+r0+'명 · 내일은 '+tomRoster+'명) · 지운 사람 '+killed);
+    L('  ★내일 고친 것이 오늘에 묻었나',
+      (todHas && !tomHas && part('1').roster.length===r0)? '아니오 ◎ (오늘엔 남아 있다)':'예 ✗');
+    L('  되돌리기 더미', STACK.length+'개 (0이어야 — 어제 것으로 오늘을 헤집으면 안 된다)');
+    daySwitch(nextDateLabel(d0));
+    L('다시 내일로', DATE+' · 1부 명단 '+part('1').roster.length+'명 '
+      + (part('1').roster.length===tomRoster? '→ 그대로 ◎':'→ 어긋남 ✗'));
+
+    // ⑤ 안 누르고 닫았을 때 — 초안이 남고 다음에 물어본다
+    daySwitch(d0);
+    var mark=active(part('1'))[7].n;
+    setAbsent(mark, '병가');
+    L('안 누른 고침', mark+' 병가 · 초안 '+(localStorage.getItem('board.draft.v3::'+DATE)? '적힘 ◎':'없음 ✗'));
+    // 창을 닫았다 다시 여는 셈 — 저장본으로 되돌린 뒤 bootLoad
+    PENDING=null; savedSig=null;
+    dayLoadDate(DATE);
+    savedSig=state();
+    var draw=localStorage.getItem('board.draft.v3::'+DATE);
+    var dd=JSON.parse(draw);
+    PENDING = (dd.s!==savedSig)? dd : null;
+    L('다시 열었을 때', PENDING? '물어볼 초안 있음 ◎ ('+PENDING.at+')':'없음(문제)');
+    L('  이 순간 화면은', '저장본 — '+mark+' 배지 "'+(tagOf(mark)||'없음')+'"');
+    openPending();
+    L('  물음 창', q('#sheet .st')? q('#sheet .st').textContent:'(안 열림)');
+    L('  단추', qa('#sheet .acts button').map(function(b){return '"'+b.textContent+'"';}).join(' '));
+    tap(qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='drfyes';})[0]);
+    L('  이어서 하기', mark+' 배지 "'+(tagOf(mark)||'없음')+'" '
+      + (tagOf(mark)==='병가'? '→ 살아남 ◎':'→ 잃음 ✗')+' · '+(unsaved()?'저장 안 함 ◎':'저장됨(문제)'));
+
+    // ⑥ 다시 켜면 마지막으로 보던 날이 펼쳐지나
+    daySave();
+    var want=DATE;
+    DATE='(엉뚱한 날)'; DAY=JSON.parse(JSON.stringify(DAY));
+    savedSig=null; PENDING=null;
+    bootLoad();
+    L('다시 켰을 때', DATE+(DATE===want? ' → 보던 날 그대로 ◎':' → 딴 날 ✗')
+      + ' · 물어볼 초안 '+(PENDING? '있음(문제)':'없음 ◎'));
+
+    // ⑦ 날짜 고르개
+    openDayPick();
+    L('날짜 고르개', q('#sheet .st').textContent+' · 줄 '
+      + qa('#sheet [data-daygo]').map(function(b){return b.textContent.replace(/\s+/g,' ').trim();}).join(' | '));
+    L('  전체 칸', '\n      '+keys());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

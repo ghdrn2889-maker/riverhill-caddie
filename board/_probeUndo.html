@@ -1,0 +1,20 @@
+<div id="PROBE">시작 안 함</div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+(function(){
+  var P=document.getElementById('PROBE'), out=[];
+  function log(k,v){ out.push(k+': '+v); P.textContent=out.join('  ;;  '); }
+  try{
+    openDrawer();
+    log('열림', document.querySelectorAll('#drwBody .rrow').length+'줄');
+    moveRow(drwPart, 4, -1);
+    log('옮김', document.querySelectorAll('#logsec .li').length+'건');
+    log('undo 직전','ok');
+    undo();
+    log('undo 뒤', document.querySelectorAll('#logsec .li').length+'건');
+    undo();
+    log('undo 두번', document.querySelectorAll('#logsec .li').length+'건');
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ log('ERROR', e.message+' | '+(e.stack||'').split('\n')[1]); }
+})();
+</script>

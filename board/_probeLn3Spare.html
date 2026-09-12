@@ -1,0 +1,79 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function spare(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) out.push(seatNo(p,i)+' '+(a[i].n||'(빈)'));
+    return out.join(' | ');
+  }
+  function work(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<p.tees.length;i++) out.push(seatNoTx(p,i)+' '+((a[i]&&a[i].n)||'(빈)'));
+    return out.join(' | ');
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+  }
+  try{
+    // ══ 갑. 3부 팀이 적고 3부반이 많을 때 (실제 판)
+    reset();
+    var p3=part('3');
+    var b3=JONAMES.filter(function(n){ return isBu3(n); });
+    L('바탕', '3부 '+p3.tees.length+'팀 · 3부반 '+b3.length+'명 (팀보다 '+(b3.length-p3.tees.length)+'명 많다)');
+    applyLineup(bu3Start(), ['3']);
+    L('','★3부 순번 세우기');
+    L('  근무', work('3'));
+    L('  대기', spare('3'));
+    var a3=active(part('3')), w=0, e=0;
+    for(var i=p3.tees.length;i<a3.length;i++){ if(a3[i].n) w++; else e++; }
+    ok(w>0,'  대기로 내려갔나', w+'명');
+    ok(e===0,'  대기 빈 칸', e+'칸');
+    var seated=0;
+    for(i=0;i<p3.tees.length;i++) if(a3[i]&&a3[i].n) seated++;
+    ok(seated===p3.tees.length,'  근무 자리', seated+'/'+p3.tees.length+'팀 다 참');
+    ok(seated+w===b3.length,'  3부반 전원이 섰나', '근무 '+seated+' + 대기 '+w+' = '+(seated+w)+'명 / 3부반 '+b3.length+'명');
+    var T=workTally();
+    L('  셈', '총원 '+T.total+' · 미배치 '+T.cu);
+
+    // ══ 을. 차례가 맞나 — 3부 시작부터 이어지는가
+    L('','★을. 차례');
+    var sb=bu3Start();
+    L('  3부 시작', sb);
+    ok(a3[0] && a3[0].n===sb,'  1번', (a3[0]?a3[0].n:'없음')+(a3[0]&&a3[0].n===sb?' ◎':'  ★시작은 '+sb));
+    var ring=joRing(sb).filter(function(n){ return inLineup(n,'bu3'); });
+    var got=[]; for(i=0;i<a3.length;i++) if(a3[i].n) got.push(a3[i].n);
+    ok(got.join(',')===ring.slice(0,got.length).join(','),'  조 순환 차례대로',
+       got.slice(0,6).join('·')+' …');
+
+    // ══ 병. 대기 한도를 정해 두면 거기서 끊나
+    reset();
+    L('','★병. 3부 대기를 6번까지만');
+    setCapNo('3', 6);
+    applyLineup(bu3Start(), ['3']);
+    L('  대기', spare('3'));
+    a3=active(part('3')); w=0;
+    for(i=part('3').tees.length;i<a3.length;i++) if(a3[i].n) w++;
+    ok(spareLastNo(part('3'))===6,'  정한 값', spareLastNo(part('3'))+'번까지');
+    ok(w===6-part('3').tees.length,'  대기', w+'명');
+    T=workTally();
+    ok(T.total===82,'  총원', T.total+'명 (아무도 안 사라져야)');
+    L('  미배치', T.cu+'명');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ══ 정. 한 번 더 눌러도 같은가
+    L('','★정. 한 번 더');
+    var was=spare('3');
+    applyLineup(bu3Start(), ['3']);
+    ok(spare('3')===was,'  대기', spare('3')===was?'똑같음 ◎':'★달라짐');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

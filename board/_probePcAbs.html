@@ -1,0 +1,76 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function absBtn(t){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-abs')===t;})[0]; }
+function where(n){
+  var out=[];
+  DAY.forEach(function(p){ active(p).forEach(function(r,i){ if(r.n===n) out.push(p.name+' '+(i+1)+'번'); }); });
+  return out.length? out.join(' · ') : '(자리 없음)';
+}
+function seat(pk,i){ var a=active(part(pk)); return a[i]? a[i].n : '(빈칸)'; }
+function dft(){ return q('.lnbar.dft'); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var sb=seonbal();
+    applyLineup(sb, ['1','2']);
+    L('세운 뒤 어긋남 띠', dft()? '있음(문제)':'없음 ◎');
+
+    var victim=seat('1',5), below=seat('1',6), n1=part('1').roster.length;
+    L('과녁', victim+' = 1부 6번 · 아래 7번 = '+below);
+
+    openPerson(victim);
+    L('사람 창', q('#sheet .st').textContent
+      + ' · 근태 단추 [' + qa('#sheet button[data-abs]').map(function(b){return b.textContent;}).join(' ') + ']');
+    L('  안내', qa('#sheet .dnote').pop().textContent);
+    tap(absBtn('휴무'));
+    L('휴무 붙인 뒤', victim+' '+where(victim)
+      + ' · 1부 6번 '+seat('1',5)+' ('+(seat('1',5)===below?'당겨짐 ◎':'안 당겨짐 ✗')+')'
+      + ' · 명단 '+n1+'→'+part('1').roster.length);
+    L('  기록', LOG[0].msg);
+
+    tap(q('#sheet button[data-act="close"]')); setView('work');
+    var d=dft();
+    L('어긋남 띠', (d?'뜸':'안 뜸')+' · 순번은 '
+      + (lineupPlan(seonbal(),['1','2']).moved? '어긋남':'맞음')
+      + ' → 고칠 것이 없으면 아무 말도 안 한다 ◎');
+
+    // 돌려놓고 다시 세우기
+    openPerson(victim); tap(absBtn(''));
+    L('근무로 되돌림', where(victim)+' · 배지 '+(tagOf(victim)||'없음 ◎'));
+    tap(q('#sheet button[data-act="close"]')); setView('work');
+    L('돌아온 뒤 어긋남 띠', dft()? '있음 ◎':'없음(문제)');
+    // 띠가 떠 있는 그 순간에 '그대로 둡니다'를 눌러 본다
+    var kp=[0,1,2,3,4,5,6].map(function(i){return seat('1',i);}).join(',');
+    tap(qa('.lnbar.dft button')[0]); setView('work');
+    L('그대로 둡니다', (dft()?'띠 남음(문제)':'띠 사라짐 ◎')
+      + ' · 자리 '+(kp===[0,1,2,3,4,5,6].map(function(i){return seat('1',i);}).join(',')?'그대로 ◎':'움직임(문제)')
+      + ' · 순번은 아직 '+(lineupPlan(seonbal(),['1','2']).moved?'어긋난 채 ◎':'맞음'));
+    // 다시 어긋나게 해서 이번엔 '다시 세우기'
+    openPerson(seat('1',0)); tap(absBtn('휴가')); tap(absBtn('')); tap(q('#sheet button[data-act="close"]')); setView('work');
+    L('근태 한 번 더', dft()? '띠 돌아옴 ◎':'안 뜸(문제)');
+    var pre=[0,1,2,3,4,5,6].map(function(i){return seat('1',i);}).join(',');
+    tap(qa('.lnbar.dft button')[1]); setView('work');
+    L('다시 세우기', q('#toast').textContent);
+    L('  1부 앞 7자리', pre+'  →  '+[0,1,2,3,4,5,6].map(function(i){return seat('1',i);}).join(','));
+    L('  '+victim, where(victim));
+    L('  어긋남 띠', dft()? '남음(문제)':'사라짐 ◎');
+    L('  ▶ 대조', lineupPlan(seonbal(),['1','2']).moved===0?'그 차례대로 섰음 ◎':'어긋남 ✗');
+    L('  휴무·병가 근무칸 침범', (function(){
+        var bad=[];
+        DAY.forEach(function(p){ active(p).forEach(function(r,i){
+          if(i<p.tees.length && isAbs(tagOf(r.n))) bad.push(p.name+' '+(i+1)+'번 '+r.n); }); });
+        return bad.length? bad.join(' / ')+' ✗' : '없음 ◎';
+      })());
+
+    undo(); undo(); undo(); setView('work');
+    L('되돌리기 3번', '1부 6번 '+seat('1',5)+' · 명단 '+part('1').roster.length+'명 · '+victim+' '+where(victim));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,51 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function offRow(nm){ return qa('#swOut [data-swapoff]').filter(function(b){
+  return b.getAttribute('data-swapoff')===nm; })[0]; }
+function pos(pk,nm){ var a=active(part(pk)).map(function(r){return r.n;});
+  var i=a.indexOf(nm); var p=part(pk);
+  return i<0?'자리 없음':(i+1)+'번 '+(p.tees[i]?p.tees[i].time+' '+p.tees[i].course:'대기'); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    var nm='정용만';
+    if (tagOf(nm)!=='조출') setDayTag(nm,'조출');
+    // 사용자 상황 흉내 — 조출을 여럿 붙여 명단을 짧게 만든다
+    active(part('1')).map(function(r){return r.n;}).slice(0,30).forEach(function(n){
+      if (!tagOf(n) && n!==seonbal()) setDayTag(n,'조출'); });
+    L('상황', '1부 명단 '+active(part('1')).length+'줄 · 티오프 '+part('1').tees.length
+      + ' · '+nm+' '+pos('1',nm));
+
+    // 8:50 IN 칸을 고른다
+    var p1=part('1'), i=-1;
+    for (var k=0;k<p1.tees.length;k++)
+      if (p1.tees[k].time==='8:50' && p1.tees[k].course==='IN') i=k;
+    L('고른 칸', '1부 '+(i+1)+'번 8:50 IN');
+    openCell('1', i); swQ=nm; drawSwapList(); tap(offRow(nm));
+    L('★넣은 뒤', nm+' '+pos('1',nm)
+      + ' ' + (pos('1',nm).indexOf((i+1)+'번')===0 ? '◎ 고른 그 번호':'★엉뚱한 데 ✗'));
+    L('  명단', active(part('1')).length+'줄 · 빈 줄 '
+      + active(part('1')).filter(function(r){ return !r.n; }).length+'개');
+    L('  총원', workTally().total+' (빈 줄은 사람으로 안 셈)');
+
+    // 순번 세우기를 눌러도 그대로인가 + 빈 줄이 채워지나
+    applyLineup(seonbal(), ['1','2']);
+    L('★순번 세우기 뒤', nm+' '+pos('1',nm)
+      + ' ' + (pos('1',nm).indexOf((i+1)+'번')===0 ? '◎ 그대로':'✗ 움직임'));
+    L('  빈 줄', active(part('1')).filter(function(r){ return !r.n; }).length+'개 '
+      + (active(part('1')).filter(function(r){ return !r.n; }).length===0 ? '◎ 다 찼다':'남음'));
+    L('  1부 앞 6칸', [0,1,2,3,4,5].map(function(x){
+        var r=active(part('1'))[x]; return (x+1)+'.'+(r?(r.n||'(빈칸)'):'-'); }).join(' '));
+    var b4=pos('1',nm);
+    applyLineup(seonbal(), ['1','2']);
+    L('  한 번 더', pos('1',nm)===b4 ? '똑같음 ◎':'달라짐 ✗');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

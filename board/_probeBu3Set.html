@@ -1,0 +1,80 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    L('3부반 명부', bu3List().length+'명 · '+bu3List().slice(0,5).join(',')+'…');
+    L('  저장 표시', unsaved()? '저장 안 함(문제)':'저장됨 ◎');
+
+    // ① 3부반은 1·2부 순번 셈에 절대 안 든다 — 배지를 지워도
+    var b3=bu3List()[0];
+    delete TAG[b3];
+    L('배지를 지운 3부반', b3+' TAG="'+(tagOf(b3)||'없음')+'"'
+      + ' · 하우스 셈 '+(inLineup(b3,'house')? '든다 ✗':'안 든다 ◎')
+      + ' · 3부 셈 '+(inLineup(b3,'bu3')? '든다 ◎':'안 든다 ✗'));
+    L('  선발 후보', lineupPool('house').indexOf(b3)>=0? '있다 ✗':'없다 ◎');
+    var pl=lineupPlan(seonbal(),['1','2']);
+    L('  1·2부 세우면 앉나', pl.slots.filter(function(x){return x.to===b3;}).length? '앉는다 ✗':'안 앉는다 ◎');
+    applyLineup(seonbal(),['1','2']);
+    L('  세운 뒤 3부반이 1·2부에', (function(){
+        var bad=[];
+        ['1','2'].forEach(function(k){ active(part(k)).forEach(function(r,i){
+          if(isBu3(r.n)) bad.push(part(k).name+' '+(i+1)+'번 '+r.n); }); });
+        return bad.length? bad.join(' / ')+' ✗':'없음 ◎'; })());
+
+    // ② 3부 순번은 3부반끼리
+    // 기계가 채우는 자리에는 3부반만 들어가야 한다.
+    // (3부반 아닌 사람이 3부에 앉아 있는 것 자체는 정상 — 하우스가 3부를 뛸 수 있다)
+    var pl3=lineupPlan(bu3Start(),['3']);
+    L('3부 세울 자리', pl3.slots.length+'칸 · 채울 사람 '+pl3.pool.length+'명');
+    L('  그 자리에 하우스가 끼나', pl3.pool.filter(function(n){ return !isBu3(n); }).length
+      ? '낀다 ✗':'안 낀다 ◎');
+    applyLineup(bu3Start(),['3']);
+
+    // ③ 중복 근무·대바는 그대로 되나
+    var dup=JONAMES.filter(function(n){ return isBu3(n) && false; });
+    var d2=bu3List()[1];
+    setDayTag(d2,'조출');
+    L('3부반에게 조출', d2+' "'+tagOf(d2)+'" · 하우스 셈 '+(inLineup(d2,'house')?'든다 ✗':'안 든다 ◎')
+      + ' · 3부 셈 '+(inLineup(d2,'bu3')?'든다(문제 — 배지 붙은 사람은 안 건드린다)':'안 든다 ◎'));
+    addRow('1', d2);
+    L('  1부에 손으로 넣기', partsOf(d2).map(function(k){return part(k).name;}).join(',')
+      + ' → '+(partsOf(d2).indexOf('1')>=0? '들어감 ◎ (막지 않는다)':'막힘 ✗'));
+    L('  배치표에서 눈에 띄나', mix3('1',d2)? '1부 칸이 3부반으로 표시됨 ◎':'표시 없음 ✗');
+
+    // ④ 날이 바뀌어도 안 풀린다
+    var n0=bu3List().length;
+    carryToNextDay();
+    L('내일로 넘긴 뒤', DATE+' · 3부반 '+bu3List().length+'명 '+(bu3List().length===n0?'그대로 ◎':'풀림 ✗'));
+    savedSig=null; PENDING=null; bootLoad();
+    L('새로 켠 뒤', '3부반 '+bu3List().length+'명 '+(bu3List().length===n0?'그대로 ◎':'풀림 ✗'));
+
+    // ⑤ 소속 단추
+    var who=bu3List()[0];
+    openPerson(who);
+    L('사람 창 칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    L('  소속 단추', qa('#sheet button[data-bu3]').map(function(b){
+        return b.textContent+(b.className.indexOf('on')>=0?'✓':''); }).join(' '));
+    tap(qa('#sheet button[data-bu3]').filter(function(b){return b.getAttribute('data-bu3')==='0';})[0]);
+    L('  하우스로 풂', who+' 3부반 '+(isBu3(who)?'그대로 ✗':'풀림 ◎')
+      + ' · 명부 '+bu3List().length+'명 · 하우스 셈 '+(inLineup(who,'house')?'든다 ◎':'안 든다 ✗'));
+    L('  기록', LOG[0].msg);
+    undo();
+    L('  되돌리기', who+' 3부반 '+(isBu3(who)?'돌아옴 ◎':'안 돌아옴 ✗')+' · 명부 '+bu3List().length+'명');
+
+    // ⑥ 근무표 표시
+    setView('work');
+    L('근무표 3부반 줄', document.querySelectorAll('.wrow.b3').length+'줄 (명부 '+bu3List().length+'명)');
+    var w=qa('.wrow.b3')[0];
+    L('  첫 줄', w? w.textContent.replace(/\s+/g,' ').trim():'없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

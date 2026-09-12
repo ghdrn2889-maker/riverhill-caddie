@@ -1,0 +1,66 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'(빈)'; }); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    // ── 갑. 경기과가 하루치를 짜고 저장했다
+    L('','★갑. 저장해 둔 하루치');
+    var p = part('1');
+    addRow('1', addablePool('1').filter(function(n){ return !isBu3(n) && !isAbs(tagOf(n)); })[0]);
+    setAbsent(JONAMES.filter(function(n){ return !partsOf(n).length; })[0], '병가');
+    daySave();
+    var mine = seats(p).slice(0,6).join(' ');
+    L('  오늘', DATE + ' · 판 이름(BUILD) "'+BUILD+'"');
+    L('  1부 앞머리', mine);
+    L('  저장된 날', dayList().map(function(x){ return x.date+'('+x.at+')'; }).join(' · '));
+    ok(!!lsGet(DAYPFX+DATE), '  하루칸에 들어갔나', lsGet(DAYPFX+DATE).length+'자');
+    ok(!!lsGet(CFGKEY), '  설정칸', lsGet(CFGKEY).length+'자');
+    ok(dayLoadDate(DATE), '  지금 판으로 펼쳐지나', '◎');
+
+    // ── 을. ★우리가 새 판을 올린다 (업데이트)
+    L('','★을. 새 판을 올렸을 때 — BUILD 만 바뀐다');
+    var was = BUILD;
+    BUILD = '2026-09-12-새판';
+    L('  판 이름', '"'+was+'" → "'+BUILD+'"');
+    ok(!dayLoadDate(DATE), '  ★옛 저장본이 펼쳐지나',
+       dayLoadDate(DATE) ? '펼쳐짐' : '★안 펼쳐짐 — store6.js 의 o.v !== BUILD 에서 막힌다');
+    L('  칸은 남아 있나', lsGet(DAYPFX+DATE) ? '남아 있다('+lsGet(DAYPFX+DATE).length+'자) — 글은 있는데 안 읽는다' : '없다');
+
+    // 켤 때 실제로 어떻게 되나
+    DAY.forEach(function(q){ q.roster=[]; }); resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null;
+    bootLoad(); paint();
+    var after = seats(part('1')).slice(0,6).join(' ');
+    L('  새 판으로 켠 뒤 1부 앞머리', after || '(빈 판)');
+    ok(after !== mine, '  ★짜 놓은 배치가 사라지나', after===mine ? '그대로' : '★사라짐 — 처음 상태로 열린다');
+    // 설정은 어떤가 — v 검사가 없다
+    ok(JONAMES.length>0 && bu3List().length>0, '  설정(명부·3부반)은 살아남나',
+       '명부 '+JONAMES.length+'명 · 3부반 '+bu3List().length+'명 — 살아남는다');
+    L('  까닭', '설정칸(cfgLoad)에는 판 이름 검사가 없다 — 하루칸에만 있다');
+
+    // ── 병. 초안도 같이 막히나
+    L('','★병. 안 누른 고침(초안)');
+    BUILD = was;
+    addRow('1', addablePool('1')[0]); draftPut();
+    var draw = lsGet(DRFPFX+DATE);
+    ok(!!draw, '  초안이 적혔나', draw ? JSON.parse(draw).v : '없음');
+    BUILD = '2026-09-12-새판';
+    var dd = JSON.parse(lsGet(DRFPFX+DATE));
+    ok(dd.v !== BUILD, '  ★새 판에서 이어서 하기가 되나',
+       dd.v !== BUILD ? '★안 된다 — 버려진다(draftDrop)' : '된다');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

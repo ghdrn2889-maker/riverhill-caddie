@@ -1,0 +1,58 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function fire(el, v){ el.value = v; el.dispatchEvent(new Event('change', {bubbles:true})); }
+  function act(n){ var bs = document.querySelectorAll('#sheet button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push('[' + rs[i].querySelector('.dnm').value + ']@' + rs[i].querySelector('.dtm').value
+        + '/' + rs[i].querySelector('.dhr').value);
+    return a.join(' '); }
+  function cfgVals(){ openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var dt = document.querySelectorAll('#cfg [data-dtdef]'), dh = document.querySelectorAll('#cfg [data-dtdefh]');
+    var a = []; for (var i = 0; i < dt.length; i++)
+      a.push(dt[i].getAttribute('data-dtdef') + '=' + (dt[i].value || '-') + '/' + (dh[i].value || '-'));
+    return a.join(' , '); }
+  try {
+    log('처음 설정', cfgVals());
+    closeCfg();
+    // ① 팝업에서 기본값을 고친다 → 설정에 남아야 한다
+    openDuty('벌당');
+    log('팝업 처음', document.getElementById('dutyT').value + '/' + document.getElementById('dutyH').value);
+    fire(document.getElementById('dutyT'), '15:30');
+    fire(document.getElementById('dutyH'), '3');
+    log('팝업에서 고침 → DUTYDEF', JSON.stringify(DUTYDEF['벌당']));
+    log('→ 설정', cfgVals());
+    closeCfg();
+    // 팝업을 닫았다 다시 열어도 남아 있나
+    closeSheet(); openDuty('벌당');
+    log('다시 연 팝업', document.getElementById('dutyT').value + '/' + document.getElementById('dutyH').value);
+    // ② 설정에서 고친다 → 팝업에 반영
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    fire(document.querySelectorAll('#cfg [data-dtdef]')[1], '11:00');
+    fire(document.querySelectorAll('#cfg [data-dtdefh]')[1], '6');
+    closeCfg();
+    openDuty('벌당');
+    log('설정에서 고침 → 팝업', document.getElementById('dutyT').value + '/' + document.getElementById('dutyH').value);
+    // ③ 사람을 둘 넣으면 그 값이 붙는다
+    document.querySelectorAll('#dutySug button')[0].click();
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('넣은 둘', rows());
+    // ④ 한 사람만 따로 고친다 — 기본값은 안 흔들려야 한다
+    fire(document.querySelectorAll('#sheet .dtm')[1], '07:00');
+    log('한 명만 고침', rows() + ' || 기본=' + JSON.stringify(DUTYDEF['벌당']));
+    // ⑤ 모두 이 값으로
+    log('모두단추', act('dutyapply') ? act('dutyapply').textContent : '없음');
+    act('dutyapply').click();
+    log('모두 맞춤', rows());
+    // ⑥ 되돌리면 갈라졌던 값이 살아나야 한다
+    undo();
+    log('되돌림', rows());
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

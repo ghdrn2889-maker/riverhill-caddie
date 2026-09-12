@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function row(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+  function say(n){ var r=row(n);
+    return '배지['+(r?r.bts.join(' '):'?')+'] 상태['+(r?r.st:'?')+'] TAG['+(tagOf(n)||'-')+']'
+      +' DUTY['+DUTYKEYS.filter(function(k){return dutyAt(k,n)>=0;}).join(',')+']'
+      +' role['+(function(){var s=[];DAY.forEach(function(p){active(p).forEach(function(r){
+           if(r.n===n&&r.role) s.push(p.name+':'+r.role);});});return s.join(' ')||'-';})()+']'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // 경로 ㉠ 당번 상자(DUTY) — 꼬리표 없는 사람
+    var A = workRows().filter(function(r){ return !tagOf(r.n) && r.cls==='w'; })[0].n;
+    // 경로 ㉠ 당번 상자(DUTY) — 이미 조출을 단 사람
+    var B = workRows().filter(function(r){ return !tagOf(r.n) && r.cls==='w'; })[1].n;
+    setDayTag(B,'조출');
+    // 경로 ㉡ 배치표 칸의 역할 단추(role)
+    var C = workRows().filter(function(r){ return !tagOf(r.n) && r.cls==='w'; })[2].n;
+
+    L('㉠ 당번상자 · 꼬리표 없음  '+A, '');
+    dutyToggle('당번', A); paint(); L('   ', say(A));
+    L('㉠ 당번상자 · 조출 있음    '+B, '');
+    dutyToggle('벌당', B); paint(); L('   ', say(B));
+    L('㉡ 배치표 역할단추         '+C, '');
+    (function(){ var found=false;
+      DAY.forEach(function(p){ if(found) return; active(p).forEach(function(r,i){
+        if(!found && r.n===C){ setRole(p.key,i,'당번'); found=true; } }); }); })();
+    paint(); L('   ', say(C));
+
+    L('', '');
+    L('★근무표에 당번이 뜨나', '');
+    L('  ㉠ 꼬리표 없음', (row(A).bts.indexOf('당번')>=0) ? '뜬다 ◎' : '★안 뜬다');
+    L('  ㉠ 조출 있음  ', (row(B).bts.indexOf('벌당')>=0) ? '뜬다 ◎' : '★안 뜬다 — 조출에 밀렸다');
+    L('  ㉡ 역할단추   ', (row(C).bts.indexOf('당번')>=0) ? '뜬다 ◎' : '★안 뜬다 — 근무표가 role 을 안 본다');
+    L('', '');
+    L('아래 당번 상자에는', DUTYKEYS.map(function(k){ return k+'['+dutyNames(k).join('·')+']'; }).join(' '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

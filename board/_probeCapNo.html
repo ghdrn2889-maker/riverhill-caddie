@@ -1,0 +1,95 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function q(s){ return document.querySelector(s); }
+  function wait(pk){ return spareNow(part(pk)); }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0}; setView('board');
+  }
+  try{
+    reset(); paint();
+    var p2=part('2');
+    L('바탕', '2부 '+p2.tees.length+'팀 · 근무 마지막 순번 '+workLastNo(p2)+'번');
+
+    // ── 갑. 설정에서 빠졌나
+    L('','★갑. 설정에서는 빠졌나');
+    cfgTab='ct'; openCfg();
+    ok(document.querySelectorAll('[data-smax]').length===0,'  설정 칸',
+       document.querySelectorAll('[data-smax]').length+'개 (0이어야)');
+    closeCfg(); paint();
+
+    // ── 을. 부 머리 칩이 단추인가
+    L('','★을. 부 머리 칩');
+    var chip=q('#col2 [data-spcap]');
+    ok(!!chip,'  칩', chip? '"'+chip.textContent.trim()+'" ◎':'★없다');
+    tap(chip);
+    L('  창', q('#sheet .st')? q('#sheet .st').textContent.trim():'★안 열림');
+    L('  안내', q('#sheet .sub')? q('#sheet .sub').textContent.trim():'');
+    ok(!!q('#capNo'),'  번호 칸', q('#capNo')?'있음 ◎':'★없음');
+
+    // ── 병. 번호를 쳐서 정한다
+    L('','★병. 29번까지로 정한다');
+    q('#capNo').value='29';
+    tap(q('#sheet [data-act="capgo"]'));
+    paint();
+    ok(spareLastNo(part('2'))===29,'  마지막 대기 번호', spareLastNo(part('2'))+'번');
+    ok(spareCap('2')===5,'  속으로는 몇 칸', spareCap('2')+'칸 (24팀 + 5 = 29번)');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    var chip2=q('#col2 [data-spcap]');
+    L('  칩', chip2? chip2.textContent.trim():'★없음');
+    ok(/29번까지/.test(chip2?chip2.textContent:''),'  칩에 번호', chip2?chip2.textContent.trim():'');
+
+    // ── 정. 빠른 단추
+    L('','★정. 빠른 단추(+3 · +5 · +10)');
+    tap(q('#col2 [data-spcap]'));
+    var qb=[].slice.call(document.querySelectorAll('#sheet [data-capto]'))
+      .map(function(b){ return b.textContent.trim(); });
+    L('  단추', qb.join(' / '));
+    tap(document.querySelector('#sheet [data-capto="2|27"]')); paint();
+    ok(spareLastNo(part('2'))===27,'  27번까지', spareLastNo(part('2'))+'번');
+
+    // ── 무. 순번 세우기가 거기서 끊나
+    L('','★무. 순번 세우기');
+    applyLineup(seonbal(), ['1','2']); paint();
+    var last=0, a2=active(part('2'));
+    for(var i=part('2').tees.length;i<a2.length;i++) if(a2[i].n) last=seatNo(part('2'),i);
+    L('  2부 대기', wait('2')+'명 · 마지막 '+last+'번');
+    ok(last<=27,'  27번을 안 넘나', last+'번');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    var T=workTally();
+    ok(T.total===82,'  총원', T.total+'명 (아무도 안 사라져야)');
+
+    // ── 기. 대기 줄 안에 선이 그어졌나
+    L('','★기. 대기 줄 안의 선');
+    var cut=q('#col2 .cut.capcut');
+    ok(!!cut,'  선', cut? '"'+cut.textContent.trim()+'" ◎':'★없다');
+
+    // ── 경. 대기 칸을 눌러 '여기까지'
+    L('','★경. 대기 칸에서 바로');
+    var cells=[].slice.call(document.querySelectorAll('#col2 .brow.spare .cell[data-i]'));
+    L('  대기 칸', cells.length+'개');
+    tap(cells[0]);
+    var cb=q('#sheet [data-capto]');
+    ok(!!cb,'  단추', cb? '"'+cb.textContent.trim()+'" ◎':'★없다');
+    tap(cb); paint();
+    ok(spareLastNo(part('2'))===25,'  25번까지', spareLastNo(part('2'))+'번');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 신. 제한 없앰
+    L('','★신. 제한 없앰');
+    tap(q('#col2 [data-spcap]'));
+    tap(q('#sheet [data-capto="2|0"]')); paint();
+    ok(spareCap('2')===0,'  한도', spareCap('2')===0?'없음 ◎':'★'+spareCap('2'));
+    ok(!q('#col2 .cut.capcut'),'  선', q('#col2 .cut.capcut')?'★아직 있다':'없어짐 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

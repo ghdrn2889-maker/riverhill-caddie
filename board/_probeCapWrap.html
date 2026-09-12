@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function spare(pk){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=p.tees.length;i<a.length;i++) out.push(seatNo(p,i)+' '+(a[i].n||'(빈)'));
+    return out.join(' | ');
+  }
+  function where(nm){
+    var out=[];
+    DAY.forEach(function(p){ active(p).forEach(function(r,i){
+      if(r.n===nm) out.push(p.name+' '+seatNoTx(p,i)+'번'); }); });
+    return out.join(' · ')||'없음';
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0}; setView('board');
+  }
+  try{
+    reset();
+    setCapNo('2', 31);
+    var sb=seonbal();
+    L('선발', sb);
+    applyLineup(sb, ['1','2']); paint();
+    L('','★깔아 둔 27~31번이 찼나');
+    L('  2부 대기', spare('2'));
+    var a2=active(part('2')), filled=0, blanks=0;
+    for(var i=part('2').tees.length;i<a2.length;i++){ if(a2[i].n) filled++; else blanks++; }
+    ok(blanks===0,'  빈 칸', blanks+'칸 (0이어야)');
+    ok(filled===7,'  찬 칸', filled+'명 (25~31, 7명이어야)');
+
+    L('','★차례가 한 바퀴 더 도나 — 선발이 다시 붙나');
+    var first27 = a2[part('2').tees.length + 2].n;
+    L('  27번', first27+' — '+where(first27));
+    ok(first27===sb,'  27번이 선발인가', first27+(first27===sb?' ◎':'  ★선발은 '+sb));
+
+    L('','★아무도 안 사라졌나');
+    var T=workTally();
+    L('  셈', '총원 '+T.total+' · 근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu+' · 제외 '+T.exc);
+    ok(T.total===82,'  총원', T.total+'명');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    L('','★한 번 더 눌러도 같은가');
+    var was=spare('2');
+    applyLineup(sb, ['1','2']);
+    ok(spare('2')===was,'  2부 대기', spare('2')===was?'똑같음 ◎':'★달라짐: '+spare('2'));
+
+    L('','★한도를 안 정하면 여태처럼');
+    reset();
+    applyLineup(seonbal(), ['1','2']);
+    L('  2부 대기', spare('2'));
+    ok(workTally().total===82,'  총원', workTally().total+'명');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

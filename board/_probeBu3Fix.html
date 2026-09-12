@@ -1,0 +1,72 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var SEED=null, H=null;
+  function reload(){
+    resetToBoard(); BU3SET = SEED.slice(); SB3=''; DATE = BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+  }
+  function got(){ return H.filter(isBu3).length + '/' + H.length; }
+  try{
+    SEED = Object.keys(TAG).filter(function(n){ return TAG[n]==='3부'; });
+    H = JONAMES.filter(function(n){ return SEED.indexOf(n)<0; }).slice(0,3);
+
+    // ── ⓓ 설정 저장이 막혔을 때 말해 주나
+    localStorage.clear();
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen();
+    var real = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(k,v){ if (k===CFGKEY) throw new Error('quota'); return real(k,v); };
+    setBu3(H[0], true);
+    localStorage.setItem = real;
+    L('ⓓ 설정 저장이 막혔을 때', LOG[0] ? LOG[0].msg : '기록 없음');
+    L('  ★말해 주나', (LOG[0]&&/막고 있습니다/.test(LOG[0].msg)) ? '말해 준다 ◎' : '조용하다 ✗');
+
+    // ── ⓔ 배지가 있는데 명부가 비면 되살리나
+    localStorage.clear();
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen(); daySave();
+    var n0 = bu3List().length;
+    // 설정에서 3부반 명부만 통째로 지워 본다 — '초기화' 가 일어난 상태
+    var c = JSON.parse(localStorage.getItem(CFGKEY)); c.bu3set = []; localStorage.setItem(CFGKEY, JSON.stringify(c));
+    var d = JSON.parse(localStorage.getItem(DAYPFX + DATE)); var st = JSON.parse(d.s); st.bu3set = [];
+    localStorage.setItem(DAYPFX + DATE, JSON.stringify({v:d.v, at:d.at, s: JSON.stringify(st)}));
+    L('', '');
+    L('ⓔ 명부를 통째로 지움', '설정 0명 · 저장본 0명 (배지는 그대로)');
+    reload();
+    L('  ★새로고침 뒤', '3부반 ' + bu3List().length + '명 / 원래 ' + n0 + '명 '
+      + (bu3List().length === n0 ? '◎ 되살아남' : '✗'));
+    L('  설정에도 적혔나', (function(){ try{ return JSON.parse(localStorage.getItem(CFGKEY)).bu3set.length + '명 '
+        + (JSON.parse(localStorage.getItem(CFGKEY)).bu3set.length===n0?'◎':'✗'); }catch(e){ return '?'; } })());
+
+    // ── ⓕ 지난 날을 펼쳐도 소속은 안 되돌아가나
+    localStorage.clear();
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen();
+    daySave();                                   // 어제(=오늘 칸) — 아직 3부반 아님
+    var d0 = DATE;
+    carryToNextDay();
+    H.forEach(function(n){ setBu3(n, true); });  // 내일 칸에서 지정
+    daySave();
+    L('', '');
+    L('ⓕ 내일 칸에서 지정', '3부반 ' + got());
+    daySwitch(d0);
+    L('  어제를 펼침', '3부반 ' + got() + (H.every(isBu3) ? ' ◎ 그대로' : ' ✗ 하우스로 돌아감'));
+    daySave();
+    reload();
+    L('  거기서 저장 뒤 새로고침', '3부반 ' + got() + (H.every(isBu3) ? ' ◎' : ' ✗'));
+
+    // ── ⓖ 되돌리기는 여전히 되나
+    L('', '');
+    var b0 = got(); undo();
+    L('ⓖ 되돌리기', b0 + ' → ' + got() + (got()!==b0 ? ' ◎ 풀린다' : ' ✗ 안 풀린다'));
+    redo();
+    L('  다시 하기', got() + (H.every(isBu3)?' ◎':' ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

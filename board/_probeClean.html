@@ -1,0 +1,98 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+setTimeout(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function sh(){ return document.getElementById('sheet'); }
+  function shOn(){ return sh().classList.contains('on'); }
+  function st(){ var e = sh().querySelector('.st'); return e ? e.textContent : '(없음)'; }
+  function act(n){ var bs = sh().querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  function cbtn(attr, val){ var bs = document.querySelectorAll('#cfg button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute(attr) === val) return bs[i]; return null; }
+  function openCT(){ openCfg(); cfgTab = 'ct'; drawCfg(); }
+  function zi(id){ return Number(getComputedStyle(document.getElementById(id)).zIndex); }
+  try {
+    // ① 배치표가 깨끗해졌나
+    log('부 이름 단추', document.querySelectorAll('#cols .ph .pname').length + '개(0이어야)');
+    log('코스 머리 단추', document.querySelectorAll('#cols .ghd button').length + '개(0이어야)');
+    log('부 넣기 열', document.querySelectorAll('#cols .padd').length + '개(0이어야)');
+    log('머리글', Array.prototype.map.call(document.querySelectorAll('#col1 .ghd > *'),
+      function(d){ return d.textContent; }).join('|'));
+    log('부 열', getComputedStyle(document.querySelector('#viewBoard .body')).gridTemplateColumns);
+
+    // ② 배치표 눌러도 엉뚱한 창이 안 떠야
+    document.querySelector('#col1 .ph b').dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    log('부이름 누름', shOn() ? '창 뜸(문제) ' + st() : '아무 일 없음(정상)');
+    document.querySelector('#col1 .ghd .co').dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    log('머리글 누름', shOn() ? '창 뜸(문제) ' + st() : '아무 일 없음(정상)');
+
+    // ③ 창이 서랍보다 위에 뜨나
+    log('겹침 순서', '창 z=' + zi('sheet') + ' 서랍 z=' + zi('cfg') + ' → '
+      + (zi('sheet') > zi('cfg') ? '창이 위(정상)' : '서랍이 위(문제)'));
+
+    // ④ 설정에서 부 지움 → 경고창
+    openCT();
+    cbtn('data-pdel', '3').click();
+    log('부 경고창', shOn() ? st() : '안 뜸(문제)');
+    log('  붉은 상자', (sh().querySelector('.warnbox')||{textContent:'(없음)'}).textContent.trim().slice(0, 40));
+    log('  푸른 상자', (sh().querySelector('.calmbox')||{textContent:'(없음)'}).textContent.trim().slice(0, 34));
+    log('  서랍 살아있나', document.getElementById('cfg').classList.contains('on') ? '열림' : '닫힘(문제)');
+
+    // ⑤ 그만두기 → 안 지워지고 서랍은 그대로
+    act('close').click();
+    log('그만두기', DAY.length + '부 그대로 · 창 ' + (shOn() ? '열림(문제)' : '닫힘')
+      + ' · 서랍 ' + (document.getElementById('cfg').classList.contains('on') ? '열림' : '닫힘(문제)')
+      + ' · 어두운막 ' + (document.getElementById('scrim').classList.contains('on') ? '있음' : '없음(문제)'));
+
+    // ⑥ 진짜 지우기
+    cbtn('data-pdel', '3').click();
+    act('pdelyes').click();
+    log('부 지움', DAY.map(function(p){ return p.name; }).join(' ')
+      + ' · 설정 줄 ' + document.querySelectorAll('#cfg [data-pname]').length);
+    undo();
+    log('되돌림', DAY.map(function(p){ return p.name; }).join(' '));
+
+    // ⑦ 코스 — 쓰는 중이면 경고창도 안 뜨고 말로만
+    openCT();
+    cbtn('data-ctdel', 'OUT').click();
+    log('쓰는 코스', shOn() ? '창 뜸(문제)' : '막힘 · ' + document.getElementById('toast').textContent);
+
+    // ⑧ 빈 코스는 경고창 거쳐 지워진다
+    ctAdd('남코스');
+    openCT();
+    cbtn('data-ctdel', 'C3').click();
+    log('코스 경고창', shOn() ? st() : '안 뜸(문제)');
+    log('  붉은 상자', (sh().querySelector('.warnbox')||{textContent:'(없음)'}).textContent.trim().slice(0, 52));
+    act('close').click();
+    log('그만두기', COURSES.map(cname).join(','));
+    cbtn('data-ctdel', 'C3').click();
+    act('cdelyes').click();
+    log('코스 지움', COURSES.map(cname).join(',') + ' · 창 ' + (shOn() ? '열림(문제)' : '닫힘')
+      + ' · 머리글 ' + Array.prototype.map.call(document.querySelectorAll('#col1 .ghd .co'),
+          function(d){ return d.textContent; }).join('|'));
+    closeCfg();
+
+    // ⑨ 기존 기능
+    function nameAt(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j].getAttribute('data-nm'); return '?'; }
+    function cellOf(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j]; return null; }
+    function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+      pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+    function mid(el){ var r = el.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2]; }
+    var b0 = [nameAt(0), nameAt(3)], A = cellOf(0), B = cellOf(3), pA = mid(A), pB = mid(B);
+    pe('pointerdown', A, pA[0], pA[1]); pe('pointermove', A, pA[0]+10, pA[1]+10);
+    pe('pointermove', A, pB[0], pB[1]); pe('pointerup', A, pB[0], pB[1]);
+    log('대바', b0.join('/') + ' → ' + nameAt(0) + '/' + nameAt(3));
+    cellOf(0).dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    log('칸 누름', shOn() ? '창 열림 · ' + st() : '안 열림(문제)');
+    closeSheet();
+    var nm = document.querySelectorAll('#cols .cell .nm'), bad = 0;
+    for (var i = 0; i < nm.length; i++) if (nm[i].scrollWidth > nm[i].clientWidth + 1) bad++;
+    log('이름 잘림', bad + '건');
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+}, 400);
+</script>

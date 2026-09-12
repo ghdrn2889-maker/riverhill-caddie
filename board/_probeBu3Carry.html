@@ -1,0 +1,73 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var SEED = null;
+  function reload(){                     // 새로고침 흉내 — 켤 때의 값으로 되돌린 뒤 저장본을 읽는다
+    resetToBoard(); BU3SET = SEED.slice(); SB3=''; DATE = BOARD.date;
+    savedSig = null; PENDING = null; CAUGHT = null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+  }
+  try{
+    localStorage.clear();
+    SEED = Object.keys(TAG).filter(function(n){ return TAG[n]==='3부'; });
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null;
+    bootLoad(); caughtSeen();
+    L('오늘(진짜 달력)', todayLabel() + ' · 배치표 날짜 ' + DATE);
+    var n0 = bu3List().length;
+    L('처음 3부반', n0 + '명');
+
+    // 하우스 캐디 셋을 3부반으로 지정한다
+    var house = JONAMES.filter(function(n){ return !isBu3(n); }).slice(0, 3);
+    house.forEach(function(n){ setBu3(n, true); });
+    L('★새로 지정', house.join(' ') + ' → 3부반 ' + bu3List().length + '명');
+    L('  근무표에서', house.map(function(n){ return n+'='+(isBu3(n)?'3부반':'하우스'); }).join(' '));
+    daySave();
+    L('  저장 뒤 cfg에', (function(){ try{ var c=JSON.parse(localStorage.getItem(CFGKEY)); 
+        return (c.bu3set||[]).length + '명 · 새 셋 ' + house.filter(function(n){ return c.bu3set.indexOf(n)>=0; }).length + '/3'; }catch(e){ return '못 읽음'; } })());
+
+    // ① 그냥 새로고침
+    reload();
+    L('', '');
+    L('① 새로고침', '3부반 ' + bu3List().length + '명 · 새 셋 '
+      + house.filter(isBu3).length + '/3 ' + (house.every(isBu3)?'◎':'✗ 하우스로 돌아감'));
+
+    // ② 날을 넘긴다 (내일로 넘기기)
+    var d0 = DATE;
+    carryToNextDay();
+    L('② 날 넘기기', d0 + ' → ' + DATE + ' · 3부반 ' + bu3List().length + '명 · 새 셋 '
+      + house.filter(isBu3).length + '/3 ' + (house.every(isBu3)?'◎':'✗'));
+    daySave();
+    reload();
+    L('   넘긴 뒤 새로고침', '3부반 ' + bu3List().length + '명 · 새 셋 '
+      + house.filter(isBu3).length + '/3 ' + (house.every(isBu3)?'◎':'✗ 하우스로 돌아감'));
+
+    // ③ 달력이 저절로 넘어갈 때 (catchUpToday)
+    L('', '');
+    localStorage.clear();
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    bootLoad(); caughtSeen();
+    house.forEach(function(n){ setBu3(n, true); });
+    daySave();
+    var dSaved = DATE;
+    L('③ 저장해 둔 날', dSaved + ' · 새 셋 ' + house.filter(isBu3).length + '/3');
+    // 달력이 하루 더 간 것처럼 — 저장본 날짜를 어제로 바꿔 둔다
+    var raw = JSON.parse(localStorage.getItem(DAYPFX + dSaved));
+    var st = JSON.parse(raw.s); st.date = '2026년 08월 30일';
+    localStorage.setItem(DAYPFX + '2026년 08월 30일', JSON.stringify({ v: raw.v, at: raw.at, s: JSON.stringify(st) }));
+    localStorage.setItem(CURKEY, '2026년 08월 30일');
+    reload();
+    L('   저절로 넘어간 뒤', DATE + ' · 3부반 ' + bu3List().length + '명 · 새 셋 '
+      + house.filter(isBu3).length + '/3 ' + (house.every(isBu3)?'◎':'✗ 하우스로 돌아감'));
+
+    // ④ 지난 날을 펼쳐 보고 저장하면
+    L('', '');
+    var days = dayList().map(function(x){ return x.date; });
+    L('④ 저장된 날', days.join(' / '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

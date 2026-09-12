@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function cls(el){ return String(el.className||'').trim(); }
+  function bg(el){ return getComputedStyle(el).backgroundColor; }
+  // 초록인가 — 초록 성분이 빨강·파랑보다 뚜렷이 크면 초록으로 본다
+  function green(c){
+    var m=/rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c); if(!m) return false;
+    var r=+m[1],g=+m[2],b=+m[3];
+    return g > r + 8 && g > b + 8;
+  }
+  function scan(tag){
+    var seen={}, hit=[];
+    [].slice.call(document.querySelectorAll('.stage span, .stage button, .stage i, .stage b'))
+      .forEach(function(el){
+        if(el.children.length) return;
+        var t=(el.textContent||'').trim();
+        if(!t || t.length>6) return;
+        var c=bg(el);
+        var k=t+'|'+cls(el);
+        if(seen[k]) return; seen[k]=1;
+        if(green(c)) hit.push('"'+t+'" ['+cls(el)+'] '+c);
+      });
+    L(tag+' 안의 초록 표', hit.length? hit.join('  ') : '없음');
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen();
+    setView('board'); paint(); scan('배치표');
+    setView('work');  paint(); scan('근무표');
+
+    // 색표 전체 — 무엇이 초록인가
+    o.push('');
+    L('★색표', '');
+    var mk=['c54','c23','c13','cjo','chu','cpr','c3b','csb','cru','cdu','cet','cin'];
+    var probe=document.createElement('span'); probe.style.display='none';
+    document.body.appendChild(probe);
+    mk.forEach(function(c){
+      probe.className='bt '+c; probe.style.display='inline-block'; probe.textContent='가';
+      o.push('  '+c+'  '+bg(probe)+(green(bg(probe))?'   ← 초록':''));
+    });
+    probe.remove();
+
+    // 어떤 말이 어떤 색을 받나
+    o.push('');
+    L('★말 → 색', '');
+    ['54','54h','2,3','1,3','조출','후출','정출','찾근','배치','프리','당번','벌당','3부','3부반','선발']
+      .forEach(function(t){ o.push('  '+t+' → '+tagCls(t)); });
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

@@ -1,0 +1,67 @@
+<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function K(){ return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k')); }
+  function fs(sel){ var e=document.querySelector(sel); return e? Math.round(parseFloat(getComputedStyle(e).fontSize)*10)/10 : 0; }
+  function btn(d){ return [].slice.call(document.querySelectorAll('#ksz button'))
+      .filter(function(b){ return b.getAttribute('data-ksz')===String(d); })[0]; }
+  function tap(d){ var b=btn(d); if(b && !b.disabled){ b.click(); return true; } return false; }
+  // 넘치는데 안 가두는 칸 = 겹치는 칸
+  function spill(){
+    var bad=[],all=document.querySelectorAll('.stage, .stage *');
+    for(var i=0;i<all.length;i++){ var el=all[i],s=getComputedStyle(el);
+      if(s.display==='none'||s.visibility==='hidden'||el.clientHeight<=0) continue;
+      var ov=el.scrollHeight-el.clientHeight; if(ov<=3) continue;
+      if(/auto|scroll/.test(s.overflowY)) continue;
+      if(s.overflowY==='hidden'||s.overflowY==='clip') continue;   // 가두긴 한다
+      bad.push(el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+'(+'+ov+')'); }
+    return bad.length? '★겹침 '+bad.join(' ') : '없음 ◎';
+  }
+  function scrollable(){   // 안 들어오면 굴릴 수 있나
+    var v=$('viewWork'), b=document.querySelector('.pscroll');
+    return '근무표 '+(v.scrollHeight-v.clientHeight>2 ? (v.scrollHeight-v.clientHeight)+'px 굴림' : '다 들어옴')
+      + ' · 부칸 '+(b && b.scrollHeight-b.clientHeight>2 ? (b.scrollHeight-b.clientHeight)+'px 굴림' : '다 들어옴');
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('board'); paint();
+    L('창', innerWidth+'x'+innerHeight);
+    L('처음', '"'+$('kszNow').textContent+'" · --k '+K()+' · 이름 '+fs('.cell .nm')+'px'
+      + ' · 작게단추 '+(btn(-1).disabled?'꺼짐':'켜짐')+' · 크게단추 '+(btn(1).disabled?'꺼짐':'켜짐'));
+
+    var seen=[];
+    // 맨 아래까지 내렸다가
+    while(tap(-1)) seen.push($('kszNow').textContent+' k'+K()+' '+fs('.cell .nm')+'px');
+    L('', '');
+    L('★내리며', seen.join(' | '));
+    L('  맨 아래에서 작게단추', btn(-1).disabled ? '꺼짐 ◎' : '켜짐 ✗');
+    // 맨 위까지 올리며
+    seen=[];
+    while(tap(1)) seen.push($('kszNow').textContent+' k'+K()+' '+fs('.cell .nm')+'px');
+    L('★올리며', seen.join(' | '));
+    L('  맨 위에서 크게단추', btn(1).disabled ? '꺼짐 ◎' : '켜짐 ✗');
+
+    L('', '');
+    L('★아주 크게 · 배치표', '--k '+K()+' · 이름 '+fs('.cell .nm')+'px · '+spill());
+    L('  굴릴 수 있나', scrollable());
+    setView('work'); paint();
+    L('★아주 크게 · 근무표', '--k '+K()+' · 이름 '+fs('.jobd .wrow .n')+'px · '+spill());
+    L('  굴릴 수 있나', scrollable());
+
+    // 기억하나
+    L('', '');
+    L('★기억', 'localStorage board.ksz = '+localStorage.getItem('board.ksz')
+      + (localStorage.getItem('board.ksz')==='4' ? ' ◎' : ' ✗'));
+
+    // 보통으로 되돌리면 원래 값인가
+    tap(-1); tap(-1); setView('board'); paint();
+    L('보통으로 되돌림', '"'+$('kszNow').textContent+'" · --k '+K()+' · 이름 '+fs('.cell .nm')+'px · '+spill());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

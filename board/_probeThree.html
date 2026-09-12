@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function rows(){ return workRows(); }
+  function grp(c){ return rows().filter(function(r){ return r.cls===c; }); }
+  function show(list){ return list.map(function(r){
+      return r.n + '[' + (tagOf(r.n)||'-') + ']' + (partsOf(r.n).length? '자리'+partsOf(r.n).join(''):'자리0'); }).join(' '); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    o.push('════ ① 오늘(불러온 그대로) ════');
+    ['d','u','o'].forEach(function(c){
+      var g = grp(c), nm = c==='d'?'대기':c==='u'?'미배치':'자리 없음';
+      L(nm + '(' + c + ')', g.length + '명 — ' + (show(g) || '없음'));
+    });
+    L('대기는 자리가 있나', grp('d').every(function(r){ return partsOf(r.n).length; })
+      ? '전원 명단에 있음 ◎ (티오프만 없다)' : '자리 없는 사람 섞임 ✗');
+    L('미배치·자리없음은', (grp('u').concat(grp('o')))
+      .every(function(r){ return !partsOf(r.n).length; }) ? '전원 명단에 없음 ◎' : '✗');
+
+    o.push('');
+    o.push('════ ② 어제 것을 내일로 넘긴 뒤 (사용자 환경) ════');
+    carryToNextDay();
+    L('날짜', DATE);
+    ['d','u','o'].forEach(function(c){
+      var g = grp(c), nm = c==='d'?'대기':c==='u'?'미배치':'자리 없음';
+      L(nm, g.length + '명 — ' + (show(g) || '없음'));
+    });
+
+    o.push('');
+    o.push('════ ③ 3부반이 저절로 갈리나 (손 안 대고) ════');
+    var mem = bu3List();
+    var noSeat = mem.filter(function(n){ return !partsOf(n).length; });
+    L('3부반', mem.length + '명 · 그중 자리 없는 사람 ' + noSeat.length + '명');
+    if (noSeat.length){
+      var st = {};
+      noSeat.forEach(function(n){
+        var r = rows().filter(function(x){ return x.n===n; })[0];
+        (st[r.st] = st[r.st] || []).push(n + '[' + (tagOf(n)||'-') + ']'); });
+      Object.keys(st).forEach(function(k){ L('  "' + k + '"', st[k].length + '명 — ' + st[k].join(' ')); });
+      L('  ▶ 갈리나', Object.keys(st).length > 1 ? '갈린다 ✗ 같은 처지인데 다르게 붙는다'
+        : '안 갈린다 ◎ (지금 판에서는 다 같다)');
+    } else L('  ▶', '자리 없는 3부반이 없어 갈릴 일이 없다');
+    L('배지 없는 3부반', mem.filter(function(n){ return tagOf(n)!=='3부'; }).length + '명 '
+      + '(있으면 언젠가 갈린다)');
+
+    o.push('');
+    o.push('════ ④ 근무표에서 손으로 뺐을 때 (내가 재던 그 길) ════');
+    var a = mem.filter(function(n){ return partsOf(n).length && tagOf(n)==='3부'; })[0];
+    var T0 = workTally();
+    partsOf(a).slice().forEach(function(k){ delFromPart(k, a); });
+    var ra = rows().filter(function(r){ return r.n===a; })[0];
+    var T1 = workTally();
+    L('3부반 ' + a + ' 를 3부에서 뺌', '→ "' + ra.st + '" · 가용 ' + T0.avail + '→' + T1.avail
+      + (T1.avail === T0.avail ? ' 그대로 ◎' : ' 줄었다 ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

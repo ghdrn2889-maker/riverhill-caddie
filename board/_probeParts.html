@@ -1,0 +1,24 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; DATE=BOARD.date; bootLoad(); caughtSeen();
+    DAY.forEach(function(p){
+      var g=gridTimes(p);
+      L(p.name, p.tees.length+'팀 · '+g[0]+' ~ '+g[g.length-1]
+        + ' · 폭 '+(mm(g[g.length-1])-mm(g[0]))+'분 · 격자 '+GAP+'분');
+    });
+    for (var i=1;i<DAY.length;i++){
+      var a=gridTimes(DAY[i-1]), b=gridTimes(DAY[i]);
+      L(DAY[i-1].name+' 첫 티 → '+DAY[i].name+' 첫 티',
+        (mm(b[0])-mm(a[0]))+'분 ('+((mm(b[0])-mm(a[0]))/60).toFixed(1)+'시간)');
+      L('  '+DAY[i-1].name+' 마지막 티 → '+DAY[i].name+' 첫 티',
+        (mm(b[0])-mm(a[a.length-1]))+'분');
+    }
+    L('당번 기본 시간', DUTYKEYS.map(function(k){ var d=defOf(k);
+      return k+' '+(d.t||'—')+(d.h?' '+d.h+'h':''); }).join(' · '));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

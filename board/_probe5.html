@@ -1,0 +1,8 @@
+<script>
+(function(){
+  var r=document.getElementById('dutyBox').getBoundingClientRect();
+  var t=document.createElement('div'); t.id='PROBE';
+  t.textContent=[Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)].join(',');
+  document.body.appendChild(t);
+})();
+</script>

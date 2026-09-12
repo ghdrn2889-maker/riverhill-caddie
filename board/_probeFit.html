@@ -1,0 +1,43 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function K(){ return getComputedStyle(document.documentElement).getPropertyValue('--k').trim(); }
+  function spill(){
+    var bad=[],all=document.querySelectorAll('.stage, .stage *');
+    for(var i=0;i<all.length;i++){ var el=all[i],s=getComputedStyle(el);
+      if(s.display==='none'||s.visibility==='hidden'||el.clientHeight<=0) continue;
+      var ov=el.scrollHeight-el.clientHeight; if(ov<=3) continue;
+      if(/auto|scroll/.test(s.overflowY)) continue;
+      bad.push((s.overflowY==='hidden'||s.overflowY==='clip'?'잘림 ':'★샘 ')
+        +el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+'('+ov+')'); }
+    return bad.length? bad.join(' ') : '없음 ◎';
+  }
+  function rows(){   // 조 칸에 한 번에 보이는 줄 수
+    var b=document.querySelector('.jobd'); if(!b) return '-';
+    var r=b.querySelector('.wrow'); if(!r) return '-';
+    return Math.floor(b.clientHeight / r.getBoundingClientRect().height)+'줄';
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+    L('창', innerWidth+'x'+innerHeight);
+    setView('board'); paint();
+    L('  배치표', '--k '+K()+' / 샘 '+spill());
+    setView('work'); paint();
+    var v=$('viewWork');
+    L('  근무표', '--k '+K()+' / 샘 '+spill()
+      + ' / 판굴림 '+(v.scrollHeight-v.clientHeight>2 ? (v.scrollHeight-v.clientHeight)+'px' : '없음')
+      + ' / 조 칸 '+rows());
+    var nm=document.querySelector('.jobd .wrow .n');
+    L('  글씨', nm? Math.round(parseFloat(getComputedStyle(nm).fontSize)*10)/10+'px' : '-');
+    setView('board'); paint();
+    var c=document.querySelector('.cell .nm');
+    L('  배치표 글씨', c? Math.round(parseFloat(getComputedStyle(c).fontSize)*10)/10+'px' : '-');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

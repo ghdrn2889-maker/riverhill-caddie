@@ -1,0 +1,57 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i); return 0; }
+  function SH(){ return document.getElementById('sheet'); }
+  function tot(){ var t=0; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) t++; }); }); return t; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    var who = active(part('2')).filter(function(r){ return r.n && !r.itn; })
+      .slice(0,6).map(function(r){ return r.n; });
+    who.forEach(function(n){ if (partsOf(n).indexOf('3')<0) addRow('3', n); });
+    L('2·3 근무자 6명', who.join(' '));
+
+    // 3부 5번 칸 → 「2,3 6명」
+    openCell('3', 4);
+    var gb = [].slice.call(SH().querySelectorAll('[data-sg]'));
+    L('  3부 5번 칸 묶음', gb.map(function(b){ return b.textContent; }).join(' / '));
+    gb[0].click();
+
+    L('', '');
+    L('★바로 앉혔나', SH().querySelector('[data-act="sggo"]') ? '아니오 — 고르는 창이 떴다 ◎' : '앉혀버림(문제)');
+    L('  창 제목', (SH().querySelector('.k')||{}).textContent + ' / ' + (SH().querySelector('.st')||{}).textContent);
+    function list(){ return [].slice.call(SH().querySelectorAll('[data-sgs]')).map(function(b){
+      return b.textContent.replace(/\s+/g,' ').trim(); }); }
+    L('  차례(기본)', list().join(' | '));
+    L('  단추', (SH().querySelector('[data-act="sggo"]')||{}).textContent);
+
+    // 세 번째 사람을 첫 사람으로
+    var rows = [].slice.call(SH().querySelectorAll('[data-sgs]'));
+    var wantFirst = rows[2].getAttribute('data-sgs');
+    rows[2].click();
+    L('', '');
+    L('★' + wantFirst + '을(를) 첫 사람으로', list().join(' | '));
+    L('  맨 앞인가', list()[0].indexOf(wantFirst)>=0 ? '◎' : '어긋남');
+
+    var tot0 = tot();
+    SH().querySelector('[data-act="sggo"]').click();
+    L('', '');
+    L('★앉힌 뒤 3부 5~11번', [4,5,6,7,8,9,10].map(function(i){
+      var r=active(part('3'))[i]; return seatNo(part('3'),i)+'.'+(r?(r.n||'(빔)'):'-'); }).join(' '));
+    L('  5번이 ' + wantFirst + '인가', seatOf('3',wantFirst)===5 ? '◎' : '아니오 — ' + seatOf('3',wantFirst)+'번');
+    var g = who.map(function(n){ return seatOf('3',n); }).sort(function(a,b){return a-b;});
+    L('  여섯 명 번호', g.join(',') + (g.join(',')==='5,6,7,8,9,10' ? ' ◎ 연달아' : ' 어긋남'));
+    L('  배치표 전체', tot0 + ' → ' + tot() + (tot()===tot0 ? ' ◎ 옮긴 것' : ' 늘었다'));
+    L('  2부 자리', who.every(function(n){ return seatOf('2',n); }) ? '◎ 여섯 다 그대로' : '잃음');
+    L('  기록', LOG[0]?LOG[0].msg:'없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

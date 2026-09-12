@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function btn(a,v){ return qa('#sheet button').filter(function(b){return b.getAttribute(a)===v;})[0]; }
+function box(){ return qa('.sum > div').map(function(d){
+  return d.querySelector('.k').textContent+' '+d.querySelector('.v').textContent; }).join(' · '); }
+function rowOf(n){ var T=workTally(); var r=T.rows.filter(function(x){return x.n===n;})[0];
+  return r? r.st+'('+r.cls+')' : '없음'; }
+function chips(){ return qa('[data-wfil]').map(function(b){return b.textContent;}).join(' | '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    L('처음', box());
+    L('  거르개', chips());
+
+    var nm=active(part('1'))[10].n;
+    L('과녁', nm+' · 지금 '+rowOf(nm));
+
+    // 모든 부에서 빼기
+    openPerson(nm); tap(btn('data-prm','1')); tap(btn('data-prm','2'));
+    tap(q('#sheet button[data-act="close"]')||q('.close')); setView('work');
+    L('두 부에서 다 뺀 뒤', nm+' → '+rowOf(nm));
+    L('  ★휴무로 둔갑했나', rowOf(nm).indexOf('휴무')>=0? '예 ✗':'아니오 ◎');
+    L('  집계', box());
+    L('  거르개', chips());
+    L('  기록', LOG[0].msg);
+
+    // 그 상태에서 휴무를 붙이면 제외인원으로 가야
+    var T1=workTally();
+    openPerson(nm); tap(btn('data-abs','휴무'));
+    tap(q('#sheet button[data-act="close"]')||q('.close')); setView('work');
+    var T2=workTally();
+    L('휴무를 붙이면', nm+' → '+rowOf(nm)
+      + ' · 가용 '+T1.avail+'→'+T2.avail+' · 제외 '+T1.exc+'→'+T2.exc
+      + (T2.avail===T1.avail-1 && T2.exc===T1.exc+1 ? ' ◎':' ✗'));
+
+    // 근무로 되돌리면 다시 미배치
+    openPerson(nm); tap(btn('data-abs',''));
+    tap(q('#sheet button[data-act="close"]')||q('.close')); setView('work');
+    L('근무로 되돌리면', nm+' → '+rowOf(nm)+' · '+box());
+
+    // 대바로 자리를 내준 사람
+    while(STACK.length) undo();
+    setView('work');
+    var giver=active(part('1')).map(function(r){return r.n;}).filter(function(n){
+      return partsOf(n).length===1; })[0];
+    var taker=OFFDUTY.filter(function(n){ return !isAbs(tagOf(n)) && !tagOf(n); })[0]
+           || OFFDUTY.filter(function(n){ return isAbs(tagOf(n)); })[0];
+    L('  내주는 사람', giver+' · 뛰는 부 '+partsOf(giver).length+'개');
+    swapRef({pk:'1',ri:part('1').roster.map(function(r){return r.n;}).indexOf(giver)}, {offName:taker});
+    setView('work');
+    L('대바(자리 내줌)', giver+' → '+rowOf(giver)+' | '+taker+' → '+rowOf(taker));
+    L('  ★내준 사람이 휴무인가', rowOf(giver).indexOf('휴무')>=0? '예 ✗':'아니오 ◎');
+    L('  기록', LOG[0].msg);
+    L('  집계', box());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

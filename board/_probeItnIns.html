@@ -1,0 +1,121 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  // 그 부의 줄을 '번호 이름' 으로 죽 적는다 — 인턴은 번호 대신 '인턴'
+  function line(pk, n){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<Math.min(n,a.length);i++)
+      out.push(seatNoTx(p,i)+(a[i].n?' '+a[i].n:' (빈)'));
+    return out.join(' | ');
+  }
+  function nums(pk, n){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<Math.min(n,a.length);i++) out.push(seatNoTx(p,i));
+    return out.join(',');
+  }
+  function who(pk, n){
+    var p=part(pk), a=active(p), out=[];
+    for(var i=0;i<Math.min(n,a.length);i++) out.push(a[i].n||'(빈)');
+    return out.join(',');
+  }
+  function teeOf(pk, nm){
+    var p=part(pk), a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm)
+      return p.tees[i] ? p.tees[i].time : '대기';
+    return '없음';
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+  }
+  try{
+    reset();
+    var P='1';
+    var A=active(part(P))[0].n, B=active(part(P))[1].n,
+        C=active(part(P))[2].n, D=active(part(P))[3].n;
+    L('처음 네 자리', line(P,4));
+    L('  티오프', A+' '+teeOf(P,A)+' · '+B+' '+teeOf(P,B)+' · '+C+' '+teeOf(P,C)+' · '+D+' '+teeOf(P,D));
+    var tot0 = active(part(P)).filter(function(r){ return r.n && !r.itn; }).length;
+
+    // ★사용자 보기: 1 2 3 4 에서 2·3 자리를 인턴으로
+    o.push(''); L('★2번 자리를 인턴으로','');
+    setIntern(P, 1, '인턴가', true);
+    L('  줄', line(P,6));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    ok(who(P,3)===A+',인턴가,'+B, '  '+B+'가 남았나', who(P,3));
+
+    o.push(''); L('★3번 자리도 인턴으로','');
+    setIntern(P, 2, '인턴나', true);
+    L('  줄', line(P,6));
+    ok(nums(P,6)==='1,인턴,인턴,2,3,4', '  번호', nums(P,6)+'   (1,인턴,인턴,2,3,4 여야)');
+    ok(who(P,6)===A+',인턴가,인턴나,'+B+','+C+','+D, '  사람', who(P,6));
+
+    o.push(''); L('★아무도 안 잃었나','');
+    var tot1 = active(part(P)).filter(function(r){ return r.n && !r.itn; }).length;
+    ok(tot1===tot0, '  캐디 수', tot0+'명 → '+tot1+'명');
+    ok(OFFDUTY.indexOf(B)<0 && OFFDUTY.indexOf(C)<0, '  미배치로 쫓겨난 사람',
+       (OFFDUTY.indexOf(B)<0 && OFFDUTY.indexOf(C)<0) ? '없음 ◎' : '★'+B+'/'+C+' 중 하나가 쫓겨남');
+    L('  티오프', B+' '+teeOf(P,B)+' (한 칸씩 뒤로 가야) · '+C+' '+teeOf(P,C));
+
+    o.push(''); L('★순번 세우기가 인턴 칸을 안 건드리나','');
+    var before = who(P,6);
+    applyLineup(seonbal(), ['1','2']);
+    L('  줄', line(P,6));
+    ok(active(part(P))[1].itn && active(part(P))[2].itn, '  인턴 두 칸',
+       (active(part(P))[1].itn && active(part(P))[2].itn) ? '그대로 ◎' : '★없어졌다');
+    ok(nums(P,6)==='1,인턴,인턴,2,3,4', '  번호', nums(P,6));
+
+    o.push(''); L('★인턴 풀기 — 끼운 것의 반대','');
+    reset();
+    setIntern(P, 1, '인턴가', true);
+    L('  넣고', line(P,5));
+    setIntern(P, 1, '', false);
+    L('  풀고', line(P,5));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    ok(who(P,4)===A+','+B+','+C+','+D, '  처음으로', who(P,4));
+    ok(nums(P,4)==='1,2,3,4', '  번호', nums(P,4));
+
+    o.push(''); L('★되돌리기','');
+    reset();
+    var w0=who(P,4);
+    setIntern(P, 1, '인턴가', true);
+    undo();
+    ok(who(P,4)===w0, '  Ctrl+Z 한 번', who(P,4));
+
+    o.push(''); L('★빈 칸에 넣으면 밀지 않는다','');
+    reset();
+    var p1=part(P); p1.roster[1].n=''; p1.roster[1].tag=''; p1.roster[1].role='';
+    var w1=who(P,4);
+    setIntern(P, 1, '인턴다', true);
+    L('  줄', line(P,4));
+    ok(who(P,4)==='' + A + ',인턴다,' + C + ',' + D, '  빈 줄을 썼나', who(P,4)+'   (전: '+w1+')');
+
+    o.push(''); L('★이름 고치기가 인턴을 늘리지 않나','');
+    reset();
+    setIntern(P, 1, '인턴가', true);
+    var cnt0 = active(part(P)).filter(function(r){ return r.itn; }).length;
+    setIntern(P, 1, '김인턴', true);        // 이름 고치기가 오는 길
+    var cnt1 = active(part(P)).filter(function(r){ return r.itn; }).length;
+    ok(cnt1===cnt0, '  인턴 칸 수', cnt0+'칸 → '+cnt1+'칸');
+    ok(active(part(P))[1].n==='김인턴', '  이름', active(part(P))[1].n);
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    setIntern(P, 1, '김인턴', true);        // 같은 이름으로 또
+    ok(active(part(P)).filter(function(r){ return r.itn; }).length===cnt0,
+       '  같은 이름으로 또 눌러도', active(part(P)).filter(function(r){ return r.itn; }).length+'칸');
+
+    o.push(''); L('★총원·가용에 안 드나','');
+    reset();
+    var T0=workTally();
+    setIntern(P, 1, '인턴가', true);
+    var T1=workTally();
+    ok(T0.total===T1.total && T0.avail===T1.avail, '  셈',
+       '총원 '+T0.total+'→'+T1.total+' · 가용 '+T0.avail+'→'+T1.avail);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

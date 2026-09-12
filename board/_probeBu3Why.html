@@ -1,0 +1,44 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var TOASTS=[]; var _t=window.toast; window.toast=function(m){ TOASTS.push(m); return _t.apply(null,arguments); };
+  function boot(){ localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date; bootLoad(); caughtSeen(); TOASTS=[]; }
+  function a3(){ return active(part('3')).map(function(r){ return r.n; }); }
+  try{
+    // ── ① 시작만 고르고 안 세웠을 때
+    boot();
+    L('①  전 3부 1번', a3()[0]);
+    setBu3Start('최수원');
+    L('  3부 시작만 고름 → 1번', a3()[0] + (a3()[0]==='최수원'?' ◎':'  ← 아직 안 움직인다'));
+    L('  말해 준 것', TOASTS.join(' | ') || '아무 말 없음');
+
+    // ── ② 김예원에게 배지가 붙어 있으면
+    boot();
+    setDayTag('김예원','조출');
+    L('', '');
+    L('②  김예원 조출 → 3부 명단에', partsOf('김예원').length ? '남음' : '자리 비움(빠짐)');
+    setBu3Start('최수원'); TOASTS=[];
+    var pl2 = lineupPlan('최수원', ['3']);
+    L('  세울 자리', pl2 ? pl2.slots.length+'칸 · 못 박힌 줄 '+pl2.fixed[0].n+'개' : '없음');
+    applyLineup('최수원', ['3']);
+    L('  세운 뒤 앞 4', a3().slice(0,4).join(' '));
+    L('  최수원 자리', (a3().indexOf('최수원')+1)+'번 · 김예원 '+(a3().indexOf('김예원')+1)+'번');
+
+    // ── ③ 최수원에게 배지가 붙으면 (고른 뒤에 붙인 경우)
+    boot();
+    setBu3Start('최수원'); 
+    setDayTag('최수원','조출'); TOASTS=[];
+    L('', '');
+    L('③  3부 시작', bu3Start() + ' · 후보에 ' + (lineupPool('bu3').indexOf('최수원')>=0?'든다':'★안 든다'));
+    var pl3 = lineupPlan(bu3Start(), ['3']);
+    L('  실제로 1번이 될 사람', pl3 ? pl3.pool[0] : '없음');
+    applyLineup(bu3Start(), ['3']);
+    L('  세운 뒤 1번', a3()[0]);
+    L('  ★말해 준 것', TOASTS.join(' | ') || '★아무 말 없음 — 고른 사람이 아닌데 조용하다');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

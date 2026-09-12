@@ -1,0 +1,111 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function wk(n){
+    var r=document.querySelector('#workTable [data-who="'+n+'"]');
+    if(!r) return '(줄 없음)';
+    return [].slice.call(r.children).map(function(e){
+      var t=e.textContent.trim(); return t? e.className.replace(/\s+/g,'.')+'="'+t+'"':''; })
+      .filter(Boolean).join('  ');
+  }
+  function cells(n){
+    var out=[];
+    [].slice.call(document.querySelectorAll('#cols .cell[data-nm]')).forEach(function(c){
+      if(c.getAttribute('data-nm')!==n) return;
+      out.push(c.className.replace(/\s+/g,'.').replace('cell.','')
+        +'['+[].slice.call(c.querySelectorAll('.tag')).map(function(t){return t.textContent.trim();}).join('][')+']');
+    });
+    return out.join(' / ')||'(칸 없음)';
+  }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+  }
+  try{
+    reset();
+    var A='김상미', B='전형준', C='성지현';
+
+    // ── 1. 근무표에서 세 부를 다 지정 → 54
+    L('★1. 근무표에서 1·2·3부를 다 지정','');
+    setPlan(A,'1',true); setPlan(A,'2',true); setPlan(A,'3',true);
+    setView('work'); paint();
+    ok(tagOf(A)==='54','  '+A+' 배지', tagOf(A)||'★없음');
+    L('  근무표 줄', wk(A));
+    ok(!/1,2,3/.test(wk(A)),'  1,2,3 이라는 말', /1,2,3/.test(wk(A))?'★아직 나온다':'없음 ◎');
+
+    // ── 2. 두 부만 지정 → 2,3
+    o.push(''); L('★2. 2부·3부만 지정','');
+    setPlan(B,'2',true); setPlan(B,'3',true);
+    paint();
+    ok(tagOf(B)==='2,3','  '+B+' 배지', tagOf(B)||'★없음');
+    L('  근무표 줄', wk(B));
+    ok(!/예정/.test(wk(B)),'  "예정" 글씨', /예정/.test(wk(B))?'★같이 나온다':'안 나옴 ◎ (배지가 말한다)');
+
+    // ── 3. 지정한 사람과 앉힌 사람이 같은 말을 하나
+    o.push(''); L('★3. 배치표에 1·2·3부 다 앉힌다','');
+    seatPerson('1',0,C); seatPerson('2',0,C); seatPerson('3',0,C);
+    paint();
+    L('  '+C+' 부', partsOf(C).join(','));
+    ok(tagOf(C)==='54','  '+C+' 배지', tagOf(C)||'★없음');
+    L('  근무표 줄', wk(C));
+    setView('board'); paint();
+    L('  배치표 칸', cells(C));
+    ok(cells(C).indexOf('[54]')>=0 && cells(C).indexOf('[1,2]')<0,
+       '  칸 꼬리표', cells(C));
+
+    // ── 4. 두 부만 앉히면 그 두 부
+    o.push(''); L('★4. 자리를 하나 빼면(1·2부만)','');
+    delFromPart('3', C);
+    setView('work'); paint();
+    ok(tagOf(C)==='54','  '+C+' 배지', tagOf(C)+' (54 표시는 안 내린다)');
+    L('  근무표 줄', wk(C));
+
+    // ── 5. 처음부터 두 부만 앉히면
+    reset();
+    o.push(''); L('★5. 1부·3부만 앉힌다','');
+    seatPerson('1',0,A); seatPerson('3',0,A);
+    setView('work'); paint();
+    ok(tagOf(A)==='1,3','  '+A+' 배지', tagOf(A)||'★없음');
+    setView('board'); paint();
+    L('  배치표 칸', cells(A));
+
+    // ── 6. 지정 + 자리 섞임
+    reset();
+    o.push(''); L('★6. 1부에 앉히고 2·3부는 지정만','');
+    seatPerson('1',0,B); setPlan(B,'2',true); setPlan(B,'3',true);
+    setView('work'); paint();
+    ok(tagOf(B)==='54','  '+B+' 배지', tagOf(B)+' (1부 자리 + 2·3부 지정 = 세 부)');
+    L('  근무표 줄', wk(B));
+
+    // ── 7. 지정을 떼면 배지도 따라 내려온다
+    o.push(''); L('★7. 3부 지정을 뗀다','');
+    setPlan(B,'3',false); paint();
+    ok(tagOf(B)==='54','  '+B+' 배지', tagOf(B)+' (54는 안 내린다)');
+    o.push('');
+    L('★9. 3부반 사람에게 1·2·3부를 다 지정','');
+    reset();
+    var B3=JONAMES.filter(function(n){ return isBu3(n); })[0];
+    L('  고른 사람', B3+' · 처음 배지 '+(tagOf(B3)||'없음'));
+    setPlan(B3,'1',true); setPlan(B3,'2',true); setPlan(B3,'3',true);
+    setView('work'); paint();
+    ok(tagOf(B3)==='54','  '+B3+' 배지', tagOf(B3)||'★없음');
+    ok(isBu3(B3),'  3부반 소속은 그대로', isBu3(B3)?'그대로 ◎':'★풀렸다');
+    ok(/3부반/.test(wk(B3))&&/54/.test(wk(B3)),'  줄에 둘 다', wk(B3));
+    o.push('');
+    L('★8. 애초에 두 부만 — 하나를 떼면','');
+    reset();
+    setPlan(A,'1',true); setPlan(A,'2',true); paint();
+    L('  둘 지정', tagOf(A));
+    setPlan(A,'2',false); paint();
+    ok(!tagOf(A),'  하나 떼니', tagOf(A)||'배지 없음 ◎');
+    L('  근무표 줄', wk(A));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

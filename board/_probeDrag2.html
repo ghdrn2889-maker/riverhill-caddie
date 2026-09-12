@@ -1,0 +1,101 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function cells(pk){ return document.querySelectorAll('#col' + pk + ' [data-pk][data-i]'); }
+  function cellOf(pk, i){ var cs = cells(pk);
+    for (var j = 0; j < cs.length; j++) if (Number(cs[j].getAttribute('data-i')) === i) return cs[j];
+    return null; }
+  function nameAt(pk, i){ var c = cellOf(pk, i); return c ? c.getAttribute('data-nm') : '?'; }
+  function findIn(pk, nm){ var cs = cells(pk);
+    for (var j = 0; j < cs.length; j++) if (cs[j].getAttribute('data-nm') === nm) return cs[j];
+    return null; }
+  function pe(type, el, x, y){
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1,
+      pointerType: 'mouse', clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+  }
+  function mid(el){ var r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+  function drag(a, b){
+    var pa = mid(a), pb = mid(b);
+    pe('pointerdown', a, pa[0], pa[1]);
+    pe('pointermove', a, pa[0] + 10, pa[1] + 10);
+    pe('pointermove', a, pb[0], pb[1]);
+    var st = { ghost: document.getElementById('ghost').textContent,
+               cls: document.getElementById('ghost').className,
+               tgt: b.className.indexOf('hl') >= 0 ? 'hl' : (b.className.indexOf('no') >= 0 ? 'no' : '-') };
+    pe('pointerup', a, pb[0], pb[1]);
+    a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return st;
+  }
+  function tap(el){
+    var m = mid(el);
+    pe('pointerdown', el, m[0], m[1]);
+    pe('pointerup', el, m[0], m[1]);
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  }
+  (async function(){
+    try {
+      // ① 그냥 누르면 창이 열린다
+      tap(cellOf('1', 0));
+      log('그냥 누름', document.getElementById('sheet').classList.contains('on')
+        ? '창 열림 · ' + document.querySelector('#sheet .st').textContent : '안 열림(문제)');
+      closeSheet(); await wait(30);
+      // ② 같은 부 맞바꾸기
+      var b0 = [nameAt('1', 0), nameAt('1', 3)];
+      var st1 = drag(cellOf('1', 0), cellOf('1', 3));
+      log('같은 부', b0.join(' / ') + ' → ' + nameAt('1', 0) + ' / ' + nameAt('1', 3)
+        + ' | ' + st1.ghost + ' | ' + st1.tgt);
+      log('끈 뒤 창', document.getElementById('sheet').classList.contains('on') ? '열림(문제)' : '안 열림');
+      await wait(30);
+      // ③ 끈 다음의 보통 누름은 다시 열려야 한다
+      tap(cellOf('1', 0));
+      log('끈 다음 누름', document.getElementById('sheet').classList.contains('on') ? '창 열림' : '안 열림(문제)');
+      closeSheet(); await wait(30);
+      // ④ 부를 건너 맞바꾸기 — 양쪽 어디에도 겹치지 않는 사람으로
+      var n3 = null, src1 = null, cs3 = cells('3'), cs1 = cells('1');
+      for (var i = 0; i < cs3.length && !n3; i++){
+        var nm = cs3[i].getAttribute('data-nm');
+        if (nm && !findIn('1', nm)) n3 = cs3[i];
+      }
+      for (var j = 0; j < cs1.length && !src1; j++){
+        var nm2 = cs1[j].getAttribute('data-nm');
+        if (nm2 && !findIn('3', nm2)) src1 = cs1[j];
+      }
+      var an = src1.getAttribute('data-nm'), bn = n3.getAttribute('data-nm');
+      var ai = Number(src1.getAttribute('data-i')), bi = Number(n3.getAttribute('data-i'));
+      var st4 = drag(src1, n3);
+      log('부 건너', an + ' ↔ ' + bn + ' → 1부[' + ai + ']=' + nameAt('1', ai)
+        + ' 3부[' + bi + ']=' + nameAt('3', bi) + ' | ' + st4.cls);
+      await wait(30);
+      // ⑤ 같은 부에 이미 있는 사람 위로 끌면 막힌다
+      var dup = null, src2 = null;
+      var cs2 = cells('2');
+      for (var k = 0; k < cs2.length && !dup; k++){
+        var nm3 = cs2[k].getAttribute('data-nm');
+        if (nm3 && findIn('1', nm3)) { dup = findIn('1', nm3); src2 = cs2[k]; }
+      }
+      if (dup){
+        var was = [dup.getAttribute('data-nm'), src2.getAttribute('data-nm')];
+        var di = Number(dup.getAttribute('data-i'));
+        var st5 = drag(src2, dup);
+        log('막힘', st5.ghost + ' | ' + st5.cls + ' | 목표=' + st5.tgt
+          + ' | 그대로냐=' + (nameAt('1', di) === was[0] ? '예' : '아니오'));
+      } else log('막힘', '겹치는 사람이 없어 못 봄');
+      await wait(30);
+      // ⑥ 제 자리에 놓으면 아무 일도 없다
+      var self = cellOf('2', 0), sn = self.getAttribute('data-nm');
+      var n0 = document.querySelectorAll('#logsec .li').length;
+      drag(self, self);
+      log('제자리', nameAt('2', 0) === sn ? '그대로' : '바뀜(문제)'
+        + '', ' 기록 ' + n0 + '→' + document.querySelectorAll('#logsec .li').length);
+      await wait(30);
+      undo();
+      log('되돌림 기록', document.querySelectorAll('#logsec .li').length + '건');
+      log('errs', ERRS.join(' | ') || 'none');
+    } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+    document.getElementById('PROBE').textContent = out.join('  ;;  ');
+  })();
+})();
+</script>

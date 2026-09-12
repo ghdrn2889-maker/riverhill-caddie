@@ -1,0 +1,60 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function rows(pk){ var c=document.getElementById('col'+pk); if(!c) return [];
+    return [].slice.call(c.querySelectorAll('.brow:not(.spare) .tm'))
+      .map(function(e){ return e.textContent.replace('격자 밖','').trim(); }); }
+  function slotAt(pk,tm,ck){
+    var c=document.getElementById('col'+pk);
+    return c.querySelector('[data-slot="'+tm+'|'+ck+'"]');
+  }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm)
+      return seatNo(p,i)+'번 '+(i<p.tees.length?p.tees[i].time+' '+p.tees[i].course:'대기');
+    return '없음'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    var p=part('1'), t1=hm(mm(p.start)+19*GAP), t2=hm(mm(p.start)+20*GAP);
+
+    addTeam('1',t1,'OUT'); addTeam('1',t1,'IN'); addTeam('1',t2,'OUT'); paint();
+    L('격자 늘림', rows('1').length+'줄 · p.rows='+p.rows);
+
+    // ★격자 밖 팀을 전부 지운다 — 격자가 줄어드나
+    for (var i=p.tees.length-1;i>=0;i--) if (p.tees[i].time===t1||p.tees[i].time===t2) delTeam('1', i);
+    paint();
+    L('', ''); L('★늘린 뒤 그 팀을 전부 지우니', rows('1').length+'줄 · 마지막 '+rows('1')[rows('1').length-1]
+      + (rows('1').length===21?'  ◎ 안 줄어듦':'  ★줄어듦'));
+    L('  '+t1+' 칸', slotAt('1',t1,'OUT') ? '"+ 팀 넣기" 로 비어 있음 ◎' : '★칸이 없음');
+
+    // ★그 빈 칸에 팀을 도로 넣는다
+    var b1 = slotAt('1',t1,'OUT');
+    if (b1) b1.click();
+    paint();
+    L('  눌러서 넣은 뒤', part('1').tees.filter(function(t){ return t.time===t1; })
+        .map(function(t){ return t.time+' '+t.course; }).join(' ') || '★안 들어감');
+
+    // ★한가운데 시각을 비워 두고 순번 세우기
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; STACK=[]; REDO=[]; LOG=[]; bootLoad(); caughtSeen(); paint();
+    var p2=part('1'), mid=gridTimes(p2)[5];
+    for (i=p2.tees.length-1;i>=0;i--) if (p2.tees[i].time===mid) delTeam('1', i);
+    DAY.forEach(function(q){ q.roster=[]; }); OFFDUTY=JONAMES.slice(); paint();
+    L('', ''); L('★'+mid+' 를 비워 둔 채 순번 세우기', '1부 팀 '+part('1').tees.length+'개');
+    applyLineup(seonbal(), ['1','2']); paint();
+    var g=gridTimes(part('1'));
+    L('  '+mid+' 줄', g.indexOf(mid)>=0?'있음 ◎ (빈 칸)':'★사라짐');
+    L('  1부 앞', (function(){ var q=part('1'),a=active(q),s=[];
+      for(i=0;i<7;i++) s.push(seatNo(q,i)+'.'+(a[i]?a[i].n:'-')+'@'+(q.tees[i]?q.tees[i].time:'대기'));
+      return s.join(' '); })());
+    L('  사람이 빈 시각에 앉았나', part('1').tees.some(function(t){ return t.time===mid; })?'★앉음':'안 앉음 ◎');
+    L('  1부 근무 수', active(part('1')).filter(function(r){return r.n;}).length
+      +'명 · 팀 '+part('1').tees.length+'개 → '+(active(part('1')).filter(function(r){return r.n;}).length===part('1').tees.length?'◎ 맞음':'어긋남'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

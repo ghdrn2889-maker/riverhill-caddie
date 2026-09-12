@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function snapshot(pk){
+    var p=part(pk), a=active(p);
+    return a.slice(0,8).map(function(r,i){
+      return (i+1)+'. '+r.n+(p.tees[i]?' '+p.tees[i].time:' 대기'); });
+  }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    var i=a.map(function(r){return r.n;}).indexOf(nm);
+    return i<0?'없음':(i+1)+'번 '+(p.tees[i]?p.tees[i].time:'대기'); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var p=part('1'), watch=active(p)[6].n;
+    L('처음 1부', snapshot('1').join(' | '));
+    L('  지켜볼 사람', watch+' → '+seatOf('1',watch));
+    var tees0=p.tees.length, ros0=active(p).length;
+
+    // ① 취소 — 칸을 남긴다
+    cancelTee('1', 2);
+    L('3번 팀 취소', watch+' → '+seatOf('1',watch)
+      + ' · 티오프 '+tees0+'→'+part('1').tees.length
+      + ' '+(seatOf('1',watch).indexOf('7번')===0?'◎ 안 움직임':'✗ 움직임'));
+    cancelTee('1', 2);
+
+    // ② 팀 지움 — 시각이 재매칭된다
+    delTeam('1', 2);
+    L('3번 팀 지움', watch+' → '+seatOf('1',watch)
+      + ' · 티오프 '+part('1').tees.length
+      + ' · 대기로 밀린 사람 '+Math.max(0, active(part('1')).length-part('1').tees.length)+'명');
+    L('  1부 앞', snapshot('1').join(' | '));
+    undo();
+
+    // ③ 앞에 팀 추가 — 시각이 뒤로 밀린다
+    var t0=part('1').tees[0].time;
+    addTeam('1', '06:30', part('1').tees[0].course);
+    L('맨 앞에 팀 추가', watch+' → '+seatOf('1',watch)
+      + ' (전 7번 '+t0+' 자리였다)');
+    L('  1부 앞', snapshot('1').join(' | '));
+    undo();
+
+    // ④ 앞사람을 빼면 순번이 당겨진다
+    delRow('1', p.roster.indexOf(active(part('1'))[1]));
+    L('2번 사람 빼기', watch+' → '+seatOf('1',watch)+' ✗ 순번이 당겨졌다');
+    undo();
+    L('되돌림', watch+' → '+seatOf('1',watch));
+
+    // ⑤ 중복근무자는 지금 어떻게 서 있나
+    var dup=JONAMES.filter(function(n){ return partsOf(n).length>1; });
+    L('두 부에 선 사람', dup.length+'명'+(dup.length? ' — '+dup.slice(0,4).map(function(n){
+        return n+'('+partsOf(n).map(function(k){ return part(k).name+' '+seatOf(k,n); }).join(' + ')+')';
+      }).join(' / '):''));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

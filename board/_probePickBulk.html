@@ -1,0 +1,65 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function bar(){ var b=document.getElementById('bulkbar'); return b?b.textContent.replace(/\s+/g,' ').trim():'(없음)'; }
+  function inP(n){ return partsOf(n).join('')||'없음'; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    L('칩 차례', BULKTAGS.map(bulkLabel).join(' / '));
+
+    // ── 고르기
+    bulkStart(PICKTAG); paint();
+    L('고르기 켬', '고르는 중? ' + (bulkPicking()?'예':'아니오') + ' · 띠: ' + bar());
+    var W = active(part('1')).map(function(r){ return r.n; }).filter(function(n){ return !tagOf(n); }).slice(0,4);
+    W.forEach(bulkTap); paint();
+    L('★4명 고름', W.join(' ') + ' · 배지 그대로? '
+      + (W.every(function(n){ return !tagOf(n); }) ? '그대로 ◎ (아직 아무것도 안 바뀜)':'✗'));
+    L('  띠', bar());
+    L('  줄 표시', document.querySelectorAll('.wrow.bpick').length + '줄 파랗게 ◎');
+    bulkTap(W[0]); paint();
+    L('  한 번 더 눌러 뺌', bulkPicked().length + '명 ' + (bulkPicked().length===3?'◎':'✗'));
+    bulkTap(W[0]);
+
+    // ── 중복 근무: 2부에 넣기
+    var st0 = STACK.length, n2 = active(part('2')).length;
+    bulkApplyPart('2', true);
+    L('', '');
+    L('★2부에 넣기', W.map(function(n){ return n+'='+inP(n); }).join(' '));
+    L('  2부 인원', n2 + ' → ' + active(part('2')).length
+      + (active(part('2')).length === n2 + 4 ? ' ◎ 4명 늘음':' ✗'));
+    L('  ★되돌리기 걸음', (STACK.length - st0) + '걸음 ' + ((STACK.length-st0)===1?'◎ 한 번이면 통째로':'✗'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    var wr = workRows().filter(function(r){ return r.n===W[0]; })[0];
+    L('  근무표 상태', W[0] + ' → "' + wr.st + '" ' + (/,/.test(wr.st) ? '◎ 중복 근무':'(대기일 수 있음)'));
+    undo();
+    L('  되돌리기 한 번', W.map(function(n){ return inP(n); }).join(' ')
+      + ' · 2부 ' + active(part('2')).length + (active(part('2')).length===n2?' ◎':' ✗'));
+    redo();
+
+    // ── 근태 한꺼번에
+    var st1 = STACK.length;
+    bulkApplyTag('휴무');
+    L('', '');
+    L('★휴무 한꺼번에', W.map(function(n){ return n+'='+(tagOf(n)||'-'); }).join(' ')
+      + (W.every(function(n){ return tagOf(n)==='휴무'; }) ? ' ◎':' ✗'));
+    L('  되돌리기 걸음', (STACK.length - st1) + '걸음 ' + ((STACK.length-st1)===1?'◎':'✗'));
+    L('  자리는', W.map(inP).join(' ') + ' (휴무는 자리를 비운다)');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  띠', bar());
+
+    // ── 저장 · 끄기
+    bulkSave();
+    L('', '');
+    L('저장 뒤 띠', bar());
+    var back = bulkReset();
+    L('끄기(확인)', '되돌린 것 ' + back + ' · 휴무 ' + W.filter(function(n){ return tagOf(n)==='휴무'; }).length
+      + '/4 ' + (W.every(function(n){ return tagOf(n)==='휴무'; }) ? '◎ 저장한 것 그대로':'✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

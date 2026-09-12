@@ -1,0 +1,58 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var W = {};
+  function mark(who, what){ W[what] = who; }
+  function chk(what){
+    var n = W[what];
+    if (!n) return what+' (사람 못 고름)';
+    var now;
+    if (what === '3부반') now = isBu3(n) ? '3부반' : '';
+    else if (what === '조 편성') now = (JOLABEL[joOf(n)] || '미배정');
+    else if (what === '카트') now = String(CART[n] || 0);
+    else if (what === '명부') now = hasCaddie(n) ? '있음' : '없음';
+    else if (what === '당번') now = dutyAt('당번', n) >= 0 ? '당번' : '';
+    else now = tagOf(n) || '';
+    return (what+'          ').slice(0,10) + n + ' → ' + (now || '(사라짐)');
+  }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    var P = workRows().filter(function(r){ return !tagOf(r.n) && !isBu3(r.n); }).map(function(r){ return r.n; });
+    var k = 0;
+    function take(){ return P[k++]; }
+    mark(take(),'휴무');   setDayTag(W['휴무'],'휴무');
+    mark(take(),'휴가');   setDayTag(W['휴가'],'휴가');
+    mark(take(),'병가');   setDayTag(W['병가'],'병가');
+    mark(take(),'조출');   setDayTag(W['조출'],'조출');
+    mark(take(),'후출');   setDayTag(W['후출'],'후출');
+    mark(take(),'배치');   setDayTag(W['배치'],'배치');
+    mark(take(),'프리');   setDayTag(W['프리'],'프리');
+    mark(take(),'당번');   dutyToggle('당번', W['당번']);
+    mark(take(),'카트');   setCart(W['카트'], 88);
+    mark(take(),'조 편성'); 
+    mark(take(),'명부');
+    mark(workRows().filter(function(r){ return isBu3(r.n); })[0].n, '3부반');
+    mark(seonbal(), '선발');
+    paint();
+
+    L('넘기기 전', '');
+    ['3부반','휴무','휴가','병가','조출','후출','배치','프리','당번','카트','조 편성','명부','선발']
+      .forEach(function(x){ o.push('   '+chk(x)); });
+
+    L('', ''); L('이어받기 스위치', Object.keys(CARRY).map(function(c){
+      return c+'='+(CARRY[c]?'켜짐':'꺼짐'); }).join(' · '));
+
+    carryToNextDay(); paint();
+    L('', ''); L('★내일로 넘긴 뒤 '+DATE, '');
+    ['3부반','휴무','휴가','병가','조출','후출','배치','프리','당번','카트','조 편성','명부','선발']
+      .forEach(function(x){ o.push('   '+chk(x)); });
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

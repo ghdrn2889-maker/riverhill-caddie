@@ -1,0 +1,98 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'\u25ce ':'\u2717 ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function q(s){ return document.querySelector(s); }
+  function tees(pk){ return part(pk).tees.length; }
+  function cells(pk){
+    return [].slice.call(document.querySelectorAll('#col'+pk+' .cell[data-i]'));
+  }
+  function seated(pk){
+    return active(part(pk)).filter(function(r){ return r.n; }).length;
+  }
+  function waiting(pk){
+    var p=part(pk), a=active(p), c=0;
+    for(var i=p.tees.length;i<a.length;i++) if(a[i].n) c++;
+    return c;
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    L('\ucc98\uc74c', '1\ubd80 '+tees('1')+'\ud300 \u00b7 2\ubd80 '+tees('2')+'\ud300 \u00b7 3\ubd80 '+tees('3')+'\ud300');
+    L('  2\ubd80 \uc0ac\ub78c', '\uadfc\ubb34 '+seated('2')+'\uba85 \u00b7 \ub300\uae30 '+waiting('2')+'\uba85');
+
+    // \u2460 \ub2e8\ucd94\uac00 \uc788\ub098
+    o.push(''); L('\u2605\u2460 \ubd80 \uba38\ub9ac \ub2e8\ucd94','');
+    var bt=q('#col2 [data-delmode]');
+    ok(!!bt,'  \'\ud300 \uc9c0\uc6b0\uae30\'', bt? '"'+bt.textContent.trim()+'" \u25ce':'\u2605\uc5c6\ub2e4');
+
+    // \u2461 \ucf1c\ub3c4 \uc544\ubb34\uac83\ub3c4 \uc548 \uc9c0\uc6cc\uc9c4\ub2e4
+    o.push(''); L('\u2605\u2461 \ucf1c\uba74','');
+    tap(bt);
+    ok(tees('2')===24,'  \ud300 \uc218', tees('2')+'\ud300 (\uadf8\ub300\ub85c\uc5ec\uc57c)');
+    ok(!!q('#col2 .delbar'),'  \ub744', q('#col2 .delbar')? q('#col2 .delbar').textContent.trim():'\u2605\uc5c6\ub2e4');
+    ok(!q('#col1 .delbar'),'  1\ubd80\uc5d0\ub294', q('#col1 .delbar')?'\u2605\ub744\uac00 \ub5a0 \uc788\ub2e4':'\uc548 \ub728 \u25ce (\ucf1c\ub454 \ubd80\uc5d0\ub9cc)');
+
+    // \u2462 \uce78\uc744 \ub20c\ub7ec \uace0\ub978\ub2e4 \u2014 \ucc3d\uc740 \uc548 \uc5f4\ub9b0\ub2e4
+    o.push(''); L('\u2605\u2462 \uce78 \uc14b\uc744 \uace0\ub978\ub2e4','');
+    function teeCell(k){                  // paint() 뒤엔 칸이 새것이라 그때그때 집는다
+      return cells('2').filter(function(c){
+        return part('2').tees[Number(c.getAttribute('data-i'))]; })[k];
+    }
+    tap(teeCell(0)); paint(); tap(teeCell(2)); paint(); tap(teeCell(4));
+    ok(!q('#sheet.on'),'  \uce78 \ucc3d', q('#sheet.on')?'\u2605\uc5f4\ub838\ub2e4':'\uc548 \uc5f4\ub9bc \u25ce');
+    var sel=document.querySelectorAll('#col2 .cell.dsel').length;
+    ok(sel===3,'  \uace0\ub978 \uce78', sel+'\uce78');
+    L('  \ub744', q('#col2 .delbar').textContent.trim());
+    ok(tees('2')===24,'  \uc544\uc9c1 \ud300 \uc218', tees('2')+'\ud300 (\uc9c0\uc6b0\uae30 \uc804\uc774\ub2c8 \uadf8\ub300\ub85c)');
+
+    // \u2463 \ud558\ub098\ub97c \ub2e4\uc2dc \ub204\ub974\uba74 \ud480\ub9b0\ub2e4
+    tap(teeCell(2));
+    ok(document.querySelectorAll('#col2 .cell.dsel').length===2,'\u2605\u2463 \ub2e4\uc2dc \ub204\ub974\uba74',
+       document.querySelectorAll('#col2 .cell.dsel').length+'\uce78 \ub0a8\uc74c');
+
+    // \u2464 \uc9c0\uc6b0\uae30
+    o.push(''); L('\u2605\u2464 \uc9c0\uc6b0\uae30','');
+    var was=seated('2'), wasW=waiting('2');
+    tap(q('#col2 [data-delgo]')); paint();
+    ok(tees('2')===22,'  \ud300 \uc218', '24 \u2192 '+tees('2'));
+    L('  \uae30\ub85d', LOG[0]?LOG[0].msg:'(\uc5c6\uc74c)');
+    ok(seated('2')===was,'  \uc0ac\ub78c \uc218', was+'\uba85 \u2192 '+seated('2')+'\uba85 (\uc548 \uc904\uc5b4\uc57c)');
+    ok(waiting('2')===0,'  대기', waiting('2')+'명 — 팀 22 > 사람 11 이라 0이 맞다');
+    ok(!q('#col2 .delbar'),'  \ub744', q('#col2 .delbar')?'\u2605\uc544\uc9c1 \uc788\ub2e4':'\uc9c0\uc6b0\uace0 \uaebc\uc84c\ub2e4 \u25ce');
+
+    // \u2465 \ub418\ub3cc\ub9ac\uae30 \ud55c \ubc88
+    o.push(''); L('\u2605\u2465 \ub418\ub3cc\ub9ac\uae30 \ud55c \ubc88','');
+    undo(); paint();
+    ok(tees('2')===24,'  \ud300 \uc218', tees('2')+'\ud300 \u25ce (\ub450 \ud300\uc744 \ud55c \ubc88\uc5d0)');
+
+    // \u2466 \uc774 \ubd80 \uc804\ubd80 \u2014 \ubd80 \ud300 \ube44\uc6b0\uae30
+    o.push(''); L('\u2605\u2466 \uc774 \ubd80 \uc804\ubd80','');
+    tap(q('#col2 [data-delmode]'));
+    tap(q('#col2 [data-delall]'));
+    L('  \ub744', q('#col2 .delbar').textContent.trim());
+    ok(document.querySelectorAll('#col2 .cell.dsel').length===24,'  \uace0\ub978 \uce78',
+       document.querySelectorAll('#col2 .cell.dsel').length+'\uce78');
+    tap(q('#col2 [data-delgo]')); paint();
+    ok(tees('2')===0,'  \ud300 \uc218', tees('2')+'\ud300 \u25ce');
+    L('  \uae30\ub85d', LOG[0]?LOG[0].msg:'(\uc5c6\uc74c)');
+    ok(seated('2')===was && waiting('2')===was,'  사람은 명단에',
+       '\uadfc\ubb34 '+seated('2')+'\uba85 \u00b7 \ub300\uae30 '+waiting('2')+'\uba85');
+    var slots=document.querySelectorAll('#col2 [data-slot]').length;
+    ok(slots>0,'  \ube48 \uaca9\uc790', slots+'\uce78 \u2014 \ub2e4\uc2dc \ub123\uc744 \uc218 \uc788\uc5b4\uc57c');
+    undo(); paint();
+    ok(tees('2')===24,'  \ub418\ub3cc\ub9ac\uae30', tees('2')+'\ud300 \u25ce');
+
+    // \u2467 1\ubd80\ub294 \uc548 \uac74\ub4dc\ub838\ub098
+    ok(tees('1')===35 && tees('3')===3,'\u2605\u2467 \ub531 \ubd80\ub9cc',
+       '1\ubd80 '+tees('1')+'\ud300 \u00b7 3\ubd80 '+tees('3')+'\ud300');
+  }catch(err){ o.push('\ud130\uc9d0: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

@@ -1,0 +1,101 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function q(s){ return document.querySelector(s); }
+  // 대기 줄에 실제로 찍힌 것 — 번호와 이름
+  function spareShown(pk){
+    return [].slice.call(document.querySelectorAll('#col'+pk+' .brow.spare .cell'))
+      .map(function(c){
+        var p=c.querySelector('.p'), nm=c.querySelector('.nm');
+        return (p?p.textContent.trim():'?')+' '+(nm?nm.textContent.trim():'+대기');
+      }).join(' | ');
+  }
+  function noOf(pk, nm){
+    var p=part(pk), a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i);
+    return 0;
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0}; setView('board');
+  }
+  try{
+    reset();
+    var p1=part('1');
+    p1.roster = p1.roster.slice(0, p1.tees.length);   // 1부는 대기 0명
+    paint();
+    L('바탕', '1부 '+p1.tees.length+'팀 · 대기 '+spareNow(p1)+'명 · 근무 마지막 '+workLastNo(p1)+'번');
+
+    // ── 갑. 사람이 없어도 빈 대기 칸이 깔리나
+    L('','★갑. 아무도 없는데 39번까지 깐다');
+    setCapNo('1', 39); paint();
+    L('  대기 줄', spareShown('1'));
+    ok(document.querySelectorAll('#col1 .brow.spare .cell').length===4,
+       '  깔린 칸', document.querySelectorAll('#col1 .brow.spare .cell').length+'칸  (36~39, 4칸이어야)');
+    ok(spareNow(part('1'))===0,'  사람 수', spareNow(part('1'))+'명 (0이어야 — 자리만 깐 것)');
+    ok(active(part('1')).length===p1.tees.length,'  줄(roster)',
+       active(part('1')).length+'개 (안 늘어야 — 티오프 빈 칸과 같다)');
+    var T=workTally();
+    ok(T.total===82,'  총원', T.total+'명 (빈 칸은 사람이 아니다)');
+
+    // ── 을. 빈 대기 칸을 눌러 앉힌다
+    L('','★을. 38번 칸에 앉힌다');
+    var cells=[].slice.call(document.querySelectorAll('#col1 .brow.spare .cell[data-i]'));
+    var c38=cells.filter(function(c){ return c.querySelector('.p').textContent.trim()==='38'; })[0];
+    ok(!!c38,'  38번 칸', c38?'있음 ◎':'★없음');
+    tap(c38);
+    L('  창', q('#sheet .k')? q('#sheet .k').textContent.trim():'★안 열림');
+    ok(!!q('#seatQ'),'  이름 칸', q('#seatQ')?'있음 ◎':'★없음');
+    var who=JONAMES.filter(function(n){ return !partsOf(n).length; })[0]
+        || workRows().filter(function(r){ return r.cls==='u'||r.cls==='d'; })[0].n;
+    q('#seatQ').value=who;
+    tap(q('#sheet [data-act="seatgo"]')); paint();
+    ok(noOf('1',who)===38,'  '+who+' 순번', noOf('1',who)+'번  (38번이어야)');
+    L('  대기 줄', spareShown('1'));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 병. 앞의 빈 자리가 안 걷혀야 한다
+    L('','★병. 앞 빈 자리(36·37)가 안 걷히나');
+    addRow('1', JONAMES.filter(function(n){ return !partsOf(n).length; })[0]);
+    paint();
+    ok(noOf('1',who)===38,'  '+who+' 순번', noOf('1',who)+'번  (그대로 38번이어야)');
+    L('  대기 줄', spareShown('1'));
+
+    // ── 정. 순번 세우기가 깔아 둔 자리를 채우나
+    reset();
+    L('','★정. 2부 31번까지 깔고 순번 세우기');
+    setCapNo('2', 31);
+    applyLineup(seonbal(), ['1','2']); paint();
+    L('  대기 줄', spareShown('2'));
+    var a2=active(part('2')), last=0, cnt=0;
+    for(var i=part('2').tees.length;i<a2.length;i++) if(a2[i].n){ last=seatNo(part('2'),i); cnt++; }
+    ok(last<=31,'  31번을 안 넘나', '마지막 '+last+'번 · '+cnt+'명');
+    ok(workTally().total===82,'  총원', workTally().total+'명');
+
+    // ── 무. 제한을 없애면 빈 칸도 사라지나
+    L('','★무. 제한 없앰');
+    reset();
+    p1=part('1'); p1.roster=p1.roster.slice(0, p1.tees.length);
+    setCapNo('1', 39); paint();
+    ok(document.querySelectorAll('#col1 .brow.spare .cell').length===4,'  깔린 칸',
+       document.querySelectorAll('#col1 .brow.spare .cell').length+'칸');
+    setCapNo('1', 0); paint();
+    ok(document.querySelectorAll('#col1 .brow.spare .cell').length===0,'  없앤 뒤',
+       document.querySelectorAll('#col1 .brow.spare .cell').length+'칸 (0이어야)');
+    ok(!!q('#col1 [data-spadd]'),'  대기 넣기 문', q('#col1 [data-spadd]')?'있음 ◎':'★없음');
+
+    // ── 기. 되돌리기
+    L('','★기. 되돌리기 한 번');
+    undo(); paint();
+    ok(spareLastNo(part('1'))===39,'  다시 39번까지', spareLastNo(part('1'))+'번');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

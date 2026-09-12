@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="format-detection" content="telephone=no">
+<title>배치표 · 경기과</title>
+<style>
+/* ══════════════════════════════════════════════════════════
+   폰 배치표 — 데스크톱과 같은 기계, 다른 화면.
+   원칙 셋:
+     ① 화면은 안 흐른다. 가운데만 흐른다.   (머리와 발은 늘 제자리)
+     ② 손이 닿는 것은 아래에 둔다.          (엄지가 위까지 못 간다)
+     ③ 끌지 않는다. 두 번 누른다.           (끌기는 스크롤과 싸운다)
+   ══════════════════════════════════════════════════════════ */
+:root{
+  --paper:#eef1f5; --card:#fff; --ink:#111820; --sub:#4d5966; --dim:#7d8894;
+  --line:#c9d1da; --line2:#e6eaef;
+  --go:#14549c; --go-d:#0f4680; --goSoft:#e8f0fa;
+  --no:#a33b3b; --noSoft:#fbecec;
+  --cut:#a2540b; --cutSoft:#fdf2e2;
+  --swap:#b07a13; --swapSoft:#fff2d8;
+  --out:#b5521f; --outBg:#fbeee7;
+  --in:#1b5aa8; --inBg:#e8f0fa;
+  --duty2:#0f6b47; --dutyBg2:#e2f2ea;
+  /* 부 칸 · 꼬리표 색 — 두 화면이 한 벌을 쓴다 */
+  --c54:#ddf2b4; --c54i:#3d640f;
+  /* ★다섯을 한눈에 갈라 본다 — 집안이 겹치면 헷갈린다.
+     54 연두 · 2·3 청록 · 1·3 진분홍 · 조출 주황 · 후출 하늘 */
+  --c23:#cbeafd; --c23i:#0c4a73;   /* 2·3 — 연한 하늘(근무표 배지) */
+  --c23b:#e6f4fe; --c23p:#2782c0;  /* 2·3 배치표 — 칸은 더 옷게, 칩은 진한 하늘 */
+  --c13:#ff4fc1; --c13i:#4d0026;   /* 1·3 — 형광 핫핑크(근무표 배지) */
+  --c13b:#ff7ab8; --c13p:#4d0026;  /* 1·3 배치표 — 손대지 않은 옛 분홍 */
+  --cjo:#ffcb9a; --cjoi:#8f3f00;   /* 조출 — 주황(1·3 분홍과 갈랐다) */
+  --chu:#9ed8ff; --chui:#03446e;   /* 후출 — 하늘 */
+  --cpr:#d8e13f; --cpri:#3b4300;   /* 프리 — 형광 카키 */
+  --ccg:#d2da55; --ccgi:#3d4708;  /* 찾근 — 노란기 진한 녹차색 */
+  --c3b:#dcd0f7; --c3bi:#4a2a8c;   /* 3부반 — 보라 */
+  --csb:#6ef0ff; --csbi:#07424f;
+  --cru:#ffe066; --crui:#5a4200;   /* 휴무 — 근무표에서 제일 자주 찾는다 */
+  --cbg:#d9e8c3; --cbgi:#3d5a1f;  /* 병가 — 녹차색(사진) */
+  --cdu:#f2c718; --cdui:#3a2c00;  /* 당번 — 노랑(사진) */
+  --cbz:#ffd9b3; --cbzi:#8f3f00;  /* 배치 — 옅은 주황(당번과 한 집안) */
+  --cet:#eaeef2; --ceti:#5a6874;
+  --cin:#fdf3c9; --cini:#8a6a09;
+  --row:52px;      /* 손가락이 빗나가지 않는 최소 높이 */
+  --rail:56px;     /* 시각 기둥 */
+  --bar:58px;      /* 아래 단추 띠 */
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{
+  background:var(--paper);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;
+  font-size:15px;letter-spacing:-.03em;-webkit-text-size-adjust:100%;
+}
+button,input{font-family:inherit;letter-spacing:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+/* ── 껍데기 ── 머리·본문·발. 본문만 흐른다 ── */
+.app{height:100vh;display:flex;flex-direction:column;background:var(--card)}
+@supports (height:100dvh){ .app{height:100dvh} }
+
+/* ── 머리 ── */
+.hd{flex:0 0 auto;background:var(--card);border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top)}
+.hd .h1{display:flex;align-items:center;gap:9px;padding:5px 14px 4px}
+.hd .h1 b{font-size:16px;font-weight:900;letter-spacing:-.045em;white-space:nowrap}
+.hd .h1 .meta{font-size:11.5px;font-weight:760;color:var(--dim);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hd .h1 .sv{flex:0 0 auto;font-size:11px;font-weight:880;border-radius:999px;padding:4px 9px;
+  background:#eef1f5;color:var(--dim);border:1px solid var(--line2);white-space:nowrap}
+.hd .h1 .sv.un{background:var(--swapSoft);color:var(--swap);border-color:#e8d29a}
+.hd .h1 .sv.ok{background:#e2f2ea;color:#0f6b47;border-color:#a9d8c2}
+/* 삼선 — 어느 화면을 볼지 고르는 문. 늘 같은 자리에 있어야 길을 잃지 않는다 */
+.hd .h1 .burger{flex:0 0 auto;position:relative;width:38px;height:38px;margin-right:-6px;
+  border:0;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  border-radius:10px}
+.hd .h1 .burger:active{background:#eef1f5}
+.hd .h1 .burger svg{width:21px;height:21px;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round}
+
+/* 부 탭 — 옆으로 밀 수 있다 */
+.ptabs{display:flex;padding:0 8px;overflow-x:auto;scrollbar-width:none}
+.ptabs::-webkit-scrollbar{display:none}
+.ptabs button{flex:0 0 auto;border:0;background:transparent;cursor:pointer;
+  padding:9px 13px 10px;font-size:14.5px;font-weight:870;color:var(--dim);
+  border-bottom:2.5px solid transparent;display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+.ptabs button i{font-style:normal;font-size:11px;font-weight:900;border-radius:5px;padding:2px 5px;
+  background:#eef1f5;color:var(--dim)}
+.ptabs button.on{color:var(--ink);border-bottom-color:var(--go)}
+.ptabs button.on i{background:var(--goSoft);color:var(--go)}
+/* 근무표에서는 같은 줄이 거르개가 된다 — 82명을 굴리는 동안 늘 붙어 있어야 한다 */
+.ptabs.fil{gap:7px;padding:7px 12px}
+.ptabs .fchip{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:#fff;
+  padding:0 13px;min-height:36px;font-size:12.5px;font-weight:850;color:var(--sub);cursor:pointer;
+  border-bottom-width:1px}
+.ptabs .fchip.on{border-color:var(--go);background:var(--goSoft);color:var(--go)}
+
+/* ── 본문 ── */
+.main{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;background:var(--paper)}
+.pad{padding:0 0 18px}
+
+/* 코스 머리 — 시각 기둥 폭만큼 비우고 코스 이름을 얹는다 */
+.chead{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:var(--rail) 1fr;
+  background:#f6f8fa;border-bottom:1px solid var(--line);
+  font-size:10.5px;font-weight:900;color:var(--dim);letter-spacing:.02em}
+.chead .a{padding:7px 0 6px;text-align:center;border-right:1px solid var(--line2)}
+.chead .b{padding:7px 12px 6px}
+/* 코스가 둘일 때 — 시각이 가운데로 간다. 종이 배치표가 그렇게 생겼다 */
+.chead.two{grid-template-columns:1fr var(--rail) 1fr}
+.chead.two .l,.chead.two .r{padding:7px 12px 6px;border-right:0}
+.chead.two .r{text-align:right}
+.chead.two .m{padding:7px 0 6px;text-align:center;
+  border-left:1px solid var(--line2);border-right:1px solid var(--line2)}
+.trow{display:grid;grid-template-columns:1fr var(--rail) 1fr;
+  background:var(--card);border-bottom:1px solid var(--line)}
+.trow .tm{grid-column:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:#f6f8fa;border-left:1px solid var(--line2);border-right:1px solid var(--line2);
+  font-size:13.5px;font-weight:900;color:var(--sub);letter-spacing:-.04em}
+.trow .tm em{font-style:normal;font-size:8.5px;font-weight:900;color:var(--cut);
+  background:var(--cutSoft);border-radius:4px;padding:1px 3px;letter-spacing:-.06em}
+.trow .cell{border-bottom:0;padding:0 10px;gap:7px}
+.trow .cell.L{grid-column:1}
+.trow .cell.R{grid-column:3}
+.trow .cell .nm{font-size:15.5px}
+.trow .cell.slot{justify-content:center;font-size:12.5px}
+/* 대기는 코스가 없다 — 폭을 다 쓰고 한 줄에 한 명 */
+.spares{background:var(--card);border-bottom:1px solid var(--line)}
+.spares .cell{grid-column:auto}
+
+/* 시각 한 덩이 — 왼쪽에 시각, 오른쪽에 코스 수만큼 줄 */
+.tgrp{display:grid;grid-template-columns:var(--rail) 1fr;
+  background:var(--card);border-bottom:1px solid var(--line)}
+.tgrp .tm{grid-column:1;grid-row:span var(--n,2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  background:#f6f8fa;border-right:1px solid var(--line2);
+  font-size:13.5px;font-weight:900;color:var(--sub);letter-spacing:-.04em}
+.tgrp .tm em{font-style:normal;font-size:8.5px;font-weight:900;color:var(--cut);
+  background:var(--cutSoft);border-radius:4px;padding:1px 4px;letter-spacing:-.02em}
+.tgrp.spare .tm{background:#eef1f5;color:var(--dim);font-size:12px}
+
+/* 칸 하나 = 캐디 하나 */
+.cell{grid-column:2;min-height:var(--row);width:100%;
+  display:flex;align-items:center;gap:9px;padding:0 12px;
+  border:0;border-bottom:1px solid var(--line2);background:transparent;
+  text-align:left;cursor:pointer;font-size:15px;position:relative}
+.tgrp .cell:last-child{border-bottom:0}
+.cell .co{flex:0 0 auto;min-width:34px;text-align:center;font-size:9.5px;font-weight:900;
+  border-radius:5px;padding:3px 5px;background:#eef1f5;color:var(--dim);letter-spacing:-.01em}
+.cell.co-a .co{background:var(--outBg);color:var(--out)}
+.cell.co-b .co{background:var(--inBg);color:var(--in)}
+.cell.co-c .co{background:#e6f0e4;color:#3f6b34}
+.cell.co-d .co{background:#f0e9f7;color:#5f3f8a}
+.cell .p{flex:0 0 auto;width:25px;height:25px;border-radius:7px;background:#eef1f5;color:var(--sub);
+  display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:900}
+.cell .nm{flex:1 1 auto;min-width:0;font-size:16px;font-weight:850;letter-spacing:-.045em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell .nm.e{color:#b0b9c3;font-weight:760}
+.cell .tag{flex:0 0 auto;font-size:10px;font-weight:880;border-radius:5px;padding:2.5px 5px;
+  background:#eef1f5;color:var(--dim)}
+.cell .tag.x{background:var(--noSoft);color:var(--no)}
+.cell .tag.px{background:var(--cutSoft);color:var(--cut)}
+.cell .tag.rl{background:#e2f2ea;color:#0f6b47}
+/* 몇 번째로 집었는지 — 셋 넷을 돌릴 때 순서가 곧 어디로 가느냐다 */
+.cell .tag.pk{background:var(--swap);color:#fff;min-width:19px;text-align:center}
+/* 꼬리표가 칸 색을 정한다 — 종이 배치표 그대로 */
+.cell.c54{background:var(--c54)} .cell.c54 .tag{background:rgba(255,255,255,.62);color:var(--c54i)}
+.cell.c13 .nm{color:var(--c13i)} .cell.c13 .p{background:rgba(255,255,255,.72);color:var(--c13i)}
+.cell.c23{background:var(--c23b)} .cell.c23 .tag{background:rgba(255,255,255,.62);color:var(--c23i)}
+.cell.c13{background:var(--c13b)} .cell.c13 .tag{background:rgba(255,255,255,.72);color:var(--c13i)}
+.cell.cjo{background:var(--cjo)} .cell.cjo .tag{background:rgba(255,255,255,.62);color:var(--cjoi)}
+.cell.cpr{background:var(--cpr)} .cell.cpr .tag{background:rgba(255,255,255,.62);color:var(--cpri)}
+.cell.chu{background:var(--chu)} .cell.chu .tag{background:rgba(255,255,255,.62);color:var(--chui)}
+.cell.cin{background:var(--cin)} .cell.cin .tag{background:rgba(255,255,255,.62);color:var(--cini)}
+.cell.cx .nm{text-decoration:line-through;color:#93a0ac}
+.cell.dirty::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--swap)}
+.cell:active{filter:brightness(.95)}
+/* 꾹 누르는 동안 글자가 잡히거나 돋보기가 뜨지 않게 */
+.cell{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* 들린 칸 · 놓을 자리 */
+.cell.lift{opacity:.35}
+.cell.over{box-shadow:inset 0 0 0 2.5px var(--go);background:var(--goSoft)}
+.cell.over .nm{color:var(--go)}
+/* 손가락을 따라다니는 이름표 */
+.dghost{position:fixed;left:0;top:0;z-index:96;pointer-events:none;
+  transform:translate(-50%,-150%);display:flex;align-items:center;gap:8px;
+  background:#fff;border:2px solid var(--swap);border-radius:12px;padding:9px 13px;
+  box-shadow:0 12px 28px rgba(0,0,0,.3);font-size:15px;font-weight:880;white-space:nowrap}
+.dghost .p{width:23px;height:23px;border-radius:6px;background:var(--swapSoft);color:var(--swap);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900}
+/* 지금 집힌 칸 */
+.cell.pick{box-shadow:inset 0 0 0 2.5px var(--swap);background:var(--swapSoft)}
+.cell.pick .nm{color:var(--swap)}
+/* 빈 칸 */
+.cell.slot{color:var(--dim);font-size:13.5px;font-weight:820;gap:7px}
+.cell.slot .plus{color:#9aa5b1}
+.cell.blank{min-height:var(--row);border-bottom:1px solid var(--line2)}
+
+/* ── 순번 세우기 ── */
+.lineup{background:#fff;border-bottom:1px solid var(--line)}
+/* 어긋남 — 세운 뒤에 근태가 바뀌었다. 알려만 주고 시키지 않는다 */
+.drift{border-top:1px solid var(--line2);background:var(--cutSoft);padding:11px 14px 12px}
+.drift .dt{font-size:12.5px;font-weight:840;color:var(--cut);line-height:1.5}
+.drift .dbtn{display:flex;gap:8px;margin-top:9px}
+.drift .dbtn button{flex:1;min-height:40px;border-radius:9px;border:1px solid #e0c79b;
+  background:#fff;color:var(--cut);font-size:13px;font-weight:880;cursor:pointer}
+.drift .dbtn button.on{background:var(--cut);border-color:var(--cut);color:#fff}
+/* 스스로 만든 날 — 고칠 일이 아니라 알림이라 파랑 */
+.drift.newd{background:var(--goSoft)}
+.drift.newd .dt{color:var(--go-d)}
+.drift.newd .dbtn button{border-color:#b8cde6;color:var(--go)}
+.drift .dbtn button:active{opacity:.85}
+.lineup .lh{display:flex;align-items:baseline;gap:8px;padding:11px 14px 8px;
+  background:#f6f8fa;border-bottom:1px solid var(--line2)}
+.lineup .lh b{font-size:13px;font-weight:900}
+.lineup .lh span{font-size:11px;font-weight:820;color:var(--dim)}
+.lrow{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:0 14px;
+  border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;cursor:pointer}
+.lrow:active{background:#f2f5f8}
+.lrow .lk{flex:0 0 46px;font-size:11.5px;font-weight:880;color:var(--go);
+  background:var(--goSoft);border-radius:7px;padding:6px 0;text-align:center}
+.lrow .lv{flex:0 0 auto;font-size:16px;font-weight:880;letter-spacing:-.045em}
+.lrow .lv.none{color:#b0b9c3;font-weight:760;font-size:14px}
+.lrow .lw{flex:1;min-width:0;font-size:11.5px;font-weight:800;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lgo{display:block;width:100%;border:0;background:#fff;color:var(--go);
+  font-size:14.5px;font-weight:900;padding:15px 0;cursor:pointer}
+.lgo:active{background:var(--goSoft)}
+.lgo:disabled{color:#c3cbd4}
+/* 미리 보기 */
+.plan .pr{display:flex;align-items:center;gap:9px;padding:11px 18px;border-top:1px solid var(--line2);
+  font-size:14px;font-weight:820}
+.plan .pr .pw{flex:0 0 62px;font-size:11px;font-weight:880;color:var(--dim)}
+.plan .pr .pa{color:#98a3ae;text-decoration:line-through}
+.plan .pr .par{color:var(--dim);font-size:12px}
+.plan .pr .pb{font-weight:900;color:var(--go)}
+
+/* ── 근무표 — 사람 쪽 화면 ── */
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2);
+  border-bottom:1px solid var(--line)}
+.sum > div{background:#fff;padding:10px 6px;text-align:center}
+.sum .v{font-size:19px;font-weight:900;letter-spacing:-.05em}
+.sum .k{font-size:10px;font-weight:850;color:var(--dim);margin-top:1px}
+/* 이름을 따로 준다 — .cut 은 확정선이 이미 쓰고 있어서 물려받으면 칸이 옆으로 눕는다 */
+.sum .sgo .v{color:var(--go)} .sum .scut .v{color:var(--cut)} .sum .sno .v{color:var(--no)}
+.josec{margin-top:11px;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.johd{display:flex;align-items:baseline;gap:8px;padding:10px 14px 8px;
+  background:#f6f8fa;border-bottom:1px solid var(--line2)}
+.johd b{font-size:13px;font-weight:900}
+.johd span{font-size:11px;font-weight:820;color:var(--dim)}
+.wrow{display:flex;align-items:center;gap:10px;width:100%;min-height:50px;padding:0 14px;
+  border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;cursor:pointer}
+.wrow:last-child{border-bottom:0}
+.wrow:active{background:#f2f5f8}
+/* ★줄 왼쪽 띠는 걷었다 — 맨 오른쪽 '3부반' 배지가 이미 같은 말을 한다.
+   한 가지를 두 가지로 말하느라 줄마다 색이 하나씩 더 얹혀 있었다.
+   class 'b3' 는 남겨 둔다 — 거르개·프로브가 줄을 집는 손잡이다 */
+/* ★이름과 소속은 한 덩어리 */
+.wrow .nw{flex:1;min-width:0;display:flex;align-items:center;gap:4px}
+.wrow .nw .n{flex:0 1 auto}
+.wrow .n{flex:1;min-width:0;font-size:15.5px;font-weight:850;letter-spacing:-.045em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wrow.rest .n{color:#98a3ae}
+/* ★근무표 배지 — 배치표 칸과 같은 색표. 상태 칩과 나란히 서서 서로를 안 가린다 */
+.wrow .bt{flex:0 0 auto;font-size:10.5px;font-weight:900;border-radius:6px;padding:4px 7px;
+  letter-spacing:-.03em;white-space:nowrap;background:var(--cet);color:var(--ceti)}
+.wrow .bt.c54{background:var(--c54);color:var(--c54i)}
+.wrow .bt.c23{background:var(--c23);color:var(--c23i)}
+.wrow .bt.c13{background:var(--c13);color:var(--c13i)}
+.wrow .bt.c3b{background:var(--c3b);color:var(--c3bi)}
+.wrow .bt.csb{background:var(--csb);color:var(--csbi)}
+.wrow .bt.cdu{background:var(--cdu);color:var(--cdui)}
+.wrow .bt.cbz{background:var(--cbz);color:var(--cbzi)}
+.wrow .bt.cjo{background:var(--cjo);color:var(--cjoi)}
+.wrow .bt.chu{background:var(--chu);color:var(--chui)}
+.wrow .bt.cpr{background:var(--cpr);color:var(--cpri)}
+.wrow .bt.ccg{background:var(--ccg);color:var(--ccgi)}
+.wrow .bt.cin{background:var(--cin);color:var(--cini)}
+.wrow .bg{flex:0 0 auto;font-size:11px;font-weight:880;border-radius:6px;padding:4px 8px;
+  background:#eef1f5;color:var(--dim)}
+.wrow .bg.w{background:var(--goSoft);color:var(--go)}
+.wrow .bg.d{background:var(--cutSoft);color:var(--cut)}
+.wrow .bg.a{background:var(--noSoft);color:var(--no)}
+.wrow .bg.r{background:var(--cru);color:var(--crui)}
+.wrow .bg.v{background:#e2f2ea;color:#0f6b47}
+.wrow .bg.s{background:var(--cbg);color:var(--cbgi)}
+.wrow .bg.o{background:#eaeef2;color:#5a6874}
+.wrow .bg.u{background:#eef3f8;color:#4a7ab0}
+.cell.c3b{background:var(--c3b)} .cell.c3b .tag{background:rgba(255,255,255,.62);color:var(--c3bi)}
+/* 3부 사람이 남의 부에 앉았다 — 칩을 진하게 해서 눈에 걸리게 */
+.cell .tag.m3{background:var(--c3bi);color:#fff}
+/* ★칸 배지도 바탕과 같은 말을 한다 — 54·2,3·1,3·조출·후출 */
+.cell .tag.tc54{background:var(--c54i);color:#fff}
+.cell .tag.tc23{background:var(--c23p);color:#fff}
+.cell .tag.tc13{background:var(--c13p);color:#fff}
+.cell .tag.tcjo{background:var(--cjoi);color:#fff}
+.cell .tag.tchu{background:var(--chui);color:#fff}
+.cell .tag.tcpr{background:var(--cpri);color:#fff}
+.cell .tag.tccg{background:var(--ccgi);color:#fff}
+.cell .tag.tcin{background:var(--cini);color:#fff}
+.cell .tag.tcsb{background:var(--csbi);color:#fff}
+.cell .tag.tcdu{background:var(--cdui);color:#fff}
+.cell .tag.tcbz{background:var(--cbzi);color:#fff}
+/* ★카트는 배지가 아니다 — 알약을 벗기고 빗금 하나로 갈라 제 자리를 준다 */
+.wrow .ct{flex:0 0 38px;text-align:right;font-size:12px;font-weight:900;
+  color:var(--sub);background:transparent;border-radius:0;
+  font-variant-numeric:tabular-nums;
+  margin-left:2px;padding:4px 2px 4px 11px;border-left:1px solid var(--line)}
+/* ★빈 칸을 받치는 버팀목 — 글자가 없으면 빗금이 끊긴다 */
+.wrow .ct::before{content:"";display:inline-block;width:0;height:1.15em}
+.wrow .ct.no{color:transparent;background:transparent}
+/* 고장 난 카트는 배경 없이 빨간 글씨로만 */
+.wrow .ct.bad{background:transparent;color:var(--no)}
+.duty{margin-top:11px;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.duty .dr{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line2)}
+.duty .dr:last-child{border-bottom:0}
+.duty .dk{flex:0 0 88px;font-size:11.5px;font-weight:880;color:var(--dim)}
+.duty .dv{flex:1;min-width:0;font-size:14px;font-weight:850}
+.duty .dv.none{color:#b0b9c3;font-weight:760}
+.duty .dt{flex:0 0 auto;font-size:11.5px;font-weight:850;color:var(--sub)}
+
+/* ── 내일 준비 ── */
+.nday{margin-top:12px;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.nday .nh{display:flex;align-items:baseline;gap:8px;padding:11px 14px 8px;
+  background:#f6f8fa;border-bottom:1px solid var(--line2)}
+.nday .nh b{font-size:13px;font-weight:900}
+.nday .nh span{font-size:11px;font-weight:820;color:var(--dim)}
+.nday .ngo{display:block;width:100%;border:0;background:#fff;color:var(--go);
+  font-size:14.5px;font-weight:900;padding:16px 0;cursor:pointer}
+.nday .ngo:active{background:var(--goSoft)}
+/* 확인 창 속 요약 */
+.crl{margin:13px 14px 0;border:1px solid var(--line2);border-radius:12px;overflow:hidden}
+.crl .cr{display:flex;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line2);background:#fafbfc}
+.crl .cr:last-child{border-bottom:0}
+.crl .cr .ck{flex:0 0 74px;font-size:11.5px;font-weight:880;color:var(--dim)}
+.crl .cr .cv{flex:1;min-width:0;font-size:13px;font-weight:800;line-height:1.5}
+
+/* ── 당번 — 그날의 역할 ── */
+.dsec{margin-top:11px;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.dsec .dh2{display:flex;align-items:baseline;gap:8px;padding:10px 14px 8px;
+  background:#f6f8fa;border-bottom:1px solid var(--line2)}
+.dsec .dh2 b{font-size:13px;font-weight:900}
+.dsec .dh2 span{font-size:11px;font-weight:820;color:var(--dim)}
+.drow2{display:flex;align-items:center;gap:11px;width:100%;min-height:58px;padding:0 14px;
+  border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;cursor:pointer}
+.drow2:last-child{border-bottom:0}
+.drow2:active{background:#f2f5f8}
+.drow2 .dk2{flex:0 0 86px;font-size:12px;font-weight:880;color:var(--duty2);
+  background:var(--dutyBg2);border-radius:7px;padding:6px 5px;text-align:center;
+  line-height:1.3;word-break:keep-all}
+.drow2 .dv2{flex:1;min-width:0;font-size:15px;font-weight:850;letter-spacing:-.04em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drow2 .dv2.none{color:#b0b9c3;font-weight:760}
+.drow2 .dt2{flex:0 0 auto;font-size:11.5px;font-weight:850;color:var(--sub);text-align:right}
+.drow2 .dn2{flex:0 0 auto;font-size:10.5px;font-weight:900;color:var(--duty2);
+  background:var(--dutyBg2);border-radius:5px;padding:3px 6px}
+.drow2 .dv2{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.drow2 .go2{flex:0 0 auto;width:8px;height:8px;border-right:2px solid #c3cbd4;
+  border-bottom:2px solid #c3cbd4;transform:rotate(-45deg)}
+/* 보기만 하는 줄 — 딱지 색을 죽여 눌러도 되는 것과 구별한다 */
+.drow2.ro{cursor:default}
+.drow2.ro:active{background:#fff}
+.drow2.ro .dk2{background:#eef1f5;color:var(--dim)}
+/* 당번 고르는 창 */
+.dpick .who{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.dpick .who button{border:1px solid var(--duty2);border-radius:999px;background:var(--dutyBg2);
+  color:var(--duty2);font-size:13px;font-weight:860;padding:9px 12px;min-height:40px;cursor:pointer}
+.dpick .who button i{font-style:normal;margin-left:7px;font-weight:900;opacity:.7}
+
+/* 확정선 */
+.cut{display:flex;align-items:center;gap:9px;padding:12px 14px 10px;background:var(--paper)}
+.cut .ln{flex:1;height:1px;background:var(--line)}
+.cut .tx{font-size:11px;font-weight:900;color:var(--cut);background:var(--cutSoft);
+  border:1px solid #e8cfa4;border-radius:999px;padding:3px 10px;white-space:nowrap}
+
+/* 줄 끝 — 팀 넣기 */
+.addrow{display:block;width:100%;border:0;border-top:1px solid var(--line);
+  background:var(--card);color:var(--go);font-size:14px;font-weight:880;
+  padding:15px 0;cursor:pointer}
+.addrow:active{background:var(--goSoft)}
+.note{padding:13px 15px 0;font-size:11.5px;font-weight:760;color:var(--dim);line-height:1.55}
+.note a{display:inline-block;margin-top:9px;color:var(--go);font-weight:870;text-decoration:none;
+  border:1px solid var(--line);border-radius:9px;padding:9px 13px;background:#fff}
+
+/* 시각은 눌러서 고친다 — 누를 수 있다는 표를 낸다 */
+.tm.hit{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.tm.hit:active{background:var(--goSoft);border-radius:6px}
+
+/* ── 근무표 찾기 ── 주기능이라 맨 위에 늘 있다 ── */
+.wsr{display:flex;align-items:center;gap:7px;margin:10px 12px 0}
+.wsr input{flex:1;min-width:0;border:1px solid var(--line);border-radius:11px;background:var(--card);
+  padding:12px 13px;font:inherit;font-size:14px;font-weight:820;letter-spacing:-.03em;color:var(--ink)}
+.wsr input::placeholder{color:#9aa6b2;font-weight:750}
+.wsr input:focus{outline:0;border-color:var(--go);box-shadow:0 0 0 2px var(--goSoft)}
+.wsr .x{flex:0 0 auto;border:1px solid var(--line);border-radius:10px;background:var(--card);
+  color:var(--dim);font-size:12.5px;font-weight:860;padding:12px 12px;cursor:pointer}
+.wsr .x:active{background:#f2f5f8}
+
+/* ── 한꺼번에 지정 ── 무엇을 붙일지 먼저 못 박고 이름만 누른다 ── */
+.bulk{margin:10px 12px 0;background:var(--card);border:1px solid var(--line);border-radius:13px;
+  padding:11px 12px 10px}
+.bulk.on{border-color:var(--go);box-shadow:0 0 0 2px var(--goSoft)}
+.bulk .bh{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+.bulk .bh b{font-size:14px;font-weight:900;letter-spacing:-.04em}
+.bulk .bh span{font-size:11px;font-weight:800;color:var(--dim)}
+.bulk.on .bh span{color:var(--go)}
+/* ★'캐디 선택'은 배지가 아니라 방식이다 — 칩과 다르게 생겨야 안 헷갈린다 */
+.bulk .bpickbtn{display:flex;gap:9px;align-items:flex-start;width:100%;text-align:left;
+  border:1.5px dashed #9db4d8;background:#f2f6fd;border-radius:8px;padding:9px 11px;
+  margin:0 0 7px;cursor:pointer;color:#1c3f86}
+.bulk .bpickbtn .ck{flex:none;width:16px;height:16px;margin-top:2px;border-radius:5px;
+  border:2px solid #6f8ec4;background:#fff}
+.bulk .bpickbtn .tx{font-size:11.5px;line-height:1.45;color:#4a6392}
+.bulk .bpickbtn .tx b{display:block;font-size:13.5px;font-weight:900;color:#1c3f86}
+.bulk .bpickbtn.on{border-style:solid;border-color:#3b6fd4;background:#e3ecfb}
+.bulk .bpickbtn.on .ck{background:#3b6fd4;border-color:#3b6fd4;
+  box-shadow:inset 0 0 0 2px #fff}
+.bulk .bchs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.bulk .bch{border:1px solid var(--line);background:#fff;border-radius:9px;min-height:38px;
+  font-size:12.5px;font-weight:870;letter-spacing:-.03em;color:var(--ink);cursor:pointer;padding:0}
+.bulk .bch:active{background:#f2f5f8}
+.bulk .bch.on{border-color:transparent;box-shadow:inset 0 0 0 2px currentColor}
+.bulk .bch.on.c54{background:var(--c54);color:var(--c54i)}
+.bulk .bch.on.cjo{background:var(--cjo);color:var(--cjoi)}
+.bulk .bch.on.chu{background:var(--chu);color:var(--chui)}
+.bulk .bch.on.cpr{background:var(--cpr);color:var(--cpri)}
+.bulk .bch.on.cet{background:#2b3540;color:#fff}
+.bulk .bch.on.crs{background:#f3dede;color:#8c2b2b}
+.bulk .bch.on.cru{background:var(--cru);color:var(--crui)}
+/* 무엇을 들고 갈까요 — 칸은 늘 셋, 켜고 끄기만 한다 */
+.copt{display:flex;align-items:center;gap:10px;width:100%;border:1px solid var(--line);
+  background:#fff;border-radius:11px;padding:11px 12px;margin-bottom:6px;cursor:pointer;
+  text-align:left}
+.copt:active{background:#f2f5f8}
+.copt.on{border-color:var(--go);background:var(--goSoft)}
+.copt .cx{flex:0 0 auto;width:20px;height:20px;border-radius:6px;border:1.5px solid #c3cbd4;
+  background:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900;color:#fff}
+.copt.on .cx{border-color:var(--go);background:var(--go)}
+.copt .cn{flex:1;min-width:0;font-size:14px;font-weight:880;letter-spacing:-.04em}
+.copt .cn i{display:block;font-style:normal;font-size:11px;font-weight:760;color:var(--dim);
+  margin-top:2px}
+.copt.on .cn i{color:var(--go)}
+.copt .cs{flex:0 0 auto;font-size:11px;font-weight:900;color:var(--dim);
+  background:#eef1f5;border-radius:6px;padding:4px 8px}
+.copt.on .cs{color:#fff;background:var(--go)}
+
+.bulk .bsr{margin-top:7px;font-size:13px;font-weight:800;color:var(--sub);line-height:1.5}
+.bulk .bsr b{color:var(--ink)}
+.sheet .blst{padding:0 14px}
+.sheet .blst .bhd{padding:10px 4px 6px;font-size:11.5px;font-weight:800;color:var(--dim)}
+.sheet .blst .brow{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);
+  background:#fff;border-radius:10px;padding:11px 12px;margin-bottom:6px;cursor:pointer;
+  text-align:left}
+.sheet .blst .brow:active{background:#f2f5f8}
+.sheet .blst .brow.on{border-color:var(--go);background:var(--goSoft)}
+.sheet .blst .brow .n{flex:1;min-width:0;font-size:15px;font-weight:880;letter-spacing:-.04em}
+.sheet .blst .brow .bg{flex:0 0 auto;font-size:11px;font-weight:880;border-radius:6px;
+  padding:4px 8px;white-space:nowrap;background:#eef1f5;color:var(--dim)}
+.sheet .blst .brow .bg.w{background:var(--goSoft);color:var(--go)}
+.sheet .blst .brow .bg.d{background:var(--cutSoft);color:var(--cut)}
+.sheet .blst .brow .bg.a{background:var(--noSoft);color:var(--no)}
+.sheet .blst .brow .bg.r{background:var(--cru);color:var(--crui)}
+.sheet .blst .brow .bg.v{background:#e2f2ea;color:#0f6b47}
+.sheet .blst .brow .bg.s{background:var(--cbg);color:var(--cbgi)}
+.sheet .blst .brow .bg.u{background:#eef3f8;color:#4a7ab0}
+.sheet .blst .brow .k{flex:0 0 auto;font-size:11.5px;font-weight:900;color:var(--go);
+  white-space:nowrap;background:var(--goSoft);border-radius:7px;padding:5px 9px}
+.sheet .blst .brow.on .k{color:#fff;background:var(--no)}
+/* 안 쓰는 카트 고르기 — 빔·대기·사용중·고장을 갈라 놓는다 */
+.sheet .blst .brow:disabled{background:#f4f6f8;border-color:var(--line2);cursor:default}
+.sheet .blst .brow:disabled .n{color:#98a3ae}
+.sheet .blst .brow.ctwait{border-color:#e8cfa4;background:var(--cutSoft)}
+.sheet .blst .brow.ctwait .k{color:var(--cut);background:#fdeacd}
+.sheet .blst .brow.ctbusy .k,.sheet .blst .brow.ctbad .k{color:#8b95a0;background:#e7ebef}
+.sheet .blst .brow.ctbad .n{text-decoration:line-through}
+.sheet .blst .brow .bg{flex:0 0 auto;max-width:52%;overflow:hidden;text-overflow:ellipsis}
+/* 빌린 카트는 제 카트와 달라 보여야 한다 */
+.wrow .ct.lent{background:var(--cutSoft);color:var(--cut);box-shadow:inset 0 0 0 1px #e8cfa4}
+.bulk .dnote{padding:9px 1px 0}
+/* 지정된 줄 — 사라지지 않는다. 왼쪽에 굵은 표가 붙을 뿐이다 */
+.wrow.bsel{background:var(--goSoft);box-shadow:inset 3px 0 0 var(--go)}
+/* 손댔지만 지금은 그 배지가 아닌 줄 — 뗀 자국은 남긴다 */
+.wrow.bund{box-shadow:inset 3px 0 0 #b8c2cc}
+/* ★인턴 칸 — 종이 배치표의 노란 칸. 번호 자리에 숫자 대신 '인턴'이 온다 */
+.cell.itnc{background:var(--cin)}
+.cell .p.itn{width:auto;min-width:34px;padding:0 6px;font-size:9.5px;font-weight:900;
+  background:#8a6a12;color:#fff;letter-spacing:.02em;display:inline-flex;
+  align-items:center;justify-content:center;border-radius:6px}
+
+/* 고른 사람 — 아직 아무것도 안 바꿨다. 바꾼 사람(bsel)과 눈으로 갈라야 한다 */
+.wrow.bpick{background:#e8f0fe;box-shadow:inset 3px 0 0 #3b6fd4}
+.wrow.bpick .n{color:#1c3f86;font-weight:800}
+.wrow.bsel .n{color:var(--go-d,#0b5f2f)}
+.app.bulking .wrow{border-bottom-color:#dfe6ee}
+
+/* ── 아래 단추 띠 ── 엄지 자리 ── */
+.tabbar{flex:0 0 auto;display:flex;background:var(--card);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+.tabbar button{position:relative;flex:1;min-width:0;border:0;background:transparent;cursor:pointer;
+  height:var(--bar);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-size:11px;font-weight:850;color:var(--sub)}
+.tabbar button:disabled{color:#c3cbd4}
+.tabbar button .ic{display:flex}
+.tabbar button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+.tabbar button:active{background:#f2f5f8}
+.tabbar button.save{color:var(--go)}
+.tabbar button.save.un{color:var(--swap)}
+.tabbar .dot{position:absolute;top:8px;right:calc(50% - 17px);width:7px;height:7px;border-radius:50%;
+  background:var(--swap)}
+
+/* ── 집었을 때 — 아래 띠가 통째로 바뀐다 ── */
+.pickbar{flex:0 0 auto;display:none;align-items:center;gap:10px;
+  background:var(--swap);color:#fff;padding:11px 13px;
+  padding-bottom:calc(11px + env(safe-area-inset-bottom))}
+.pickbar.on{display:flex}
+.pickbar .tx{flex:1;min-width:0;font-size:12px;font-weight:790;line-height:1.4}
+.pickbar .tx b{display:block;font-size:14.5px;font-weight:900;letter-spacing:-.04em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pickbar button{flex:0 0 auto;border:0;border-radius:9px;background:rgba(255,255,255,.22);
+  color:#fff;font-size:13px;font-weight:880;padding:0 15px;min-height:44px;cursor:pointer}
+.pickbar button:active{background:rgba(255,255,255,.34)}
+.pickbar button.go{background:#fff;color:var(--swap);font-weight:900}
+.pickbar .x{padding:0 14px;font-size:17px}
+/* ── 한꺼번에 지정 띠 ── 탭 띠 위에 얹는다. 탭 띠를 가리면 갈 길이 막힌다 ── */
+.bulkbar{flex:0 0 auto;display:none;align-items:center;gap:8px;
+  background:var(--go);color:#fff;padding:9px 12px;border-top:1px solid rgba(0,0,0,.08)}
+.bulkbar.on{display:flex}
+.bulkbar .tx{flex:1;min-width:0;font-size:11px;font-weight:790;line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bulkbar .tx b{display:block;font-size:14px;font-weight:900;letter-spacing:-.04em}
+.bulkbar button{flex:0 0 auto;border:0;border-radius:9px;background:rgba(255,255,255,.22);
+  color:#fff;font-size:12.5px;font-weight:880;padding:0 13px;min-height:42px;cursor:pointer}
+.bulkbar button:active{background:rgba(255,255,255,.34)}
+.bulkbar button:disabled{opacity:.42}
+.bulkbar button.go{background:#fff;color:var(--go);font-weight:900}
+.bulkbar .x{padding:0 12px}
+
+/* 집힌 동안은 바탕이 데워진다 — 칸마다 테두리를 두르면 줄처럼 보여 지저분하다 */
+.app.picking .main{background:#fdf6e6}
+.app.picking .tgrp,.app.picking .chead{background:#fffdf7}
+
+/* ── 어두운 막 · 아래에서 올라오는 창 ── */
+.scrim{position:fixed;inset:0;background:rgba(12,18,26,.42);opacity:0;visibility:hidden;
+  transition:opacity .2s ease;z-index:80}
+.scrim.on{opacity:1;visibility:visible}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:84;background:var(--card);
+  border-radius:18px 18px 0 0;transform:translateY(101%);
+  transition:transform .26s cubic-bezier(.32,.72,0,1);
+  max-height:88vh;overflow-y:auto;overscroll-behavior:contain;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+@supports (max-height:88dvh){ .sheet{max-height:88dvh} }
+.sheet.on{transform:none}
+.sheet .grab{width:38px;height:4px;border-radius:99px;background:#d2d9e1;margin:9px auto 3px}
+.sheet .k{padding:6px 18px 0;font-size:11.5px;font-weight:880;color:var(--dim)}
+.sheet .st{padding:2px 18px 0;font-size:21px;font-weight:900;letter-spacing:-.05em}
+.sheet .sub{padding:5px 18px 0;font-size:12.5px;font-weight:760;color:var(--sub);line-height:1.5}
+.sheet .grp{margin:15px 14px 0;border:1px solid var(--line2);border-radius:13px;padding:13px;background:#fafbfc}
+.sheet .grp h4{margin:0 0 10px;font-size:11.5px;font-weight:900;color:var(--dim)}
+.sheet .fld{display:flex;gap:8px}
+.sheet .fld input{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;
+  padding:12px 13px;font-size:16px;font-weight:850;background:#fff}
+.sheet .fld input.tf{max-width:130px;text-align:center}
+.sheet .fld button{flex:0 0 auto;border:1px solid var(--go);border-radius:10px;background:var(--go);
+  color:#fff;font-size:13.5px;font-weight:880;padding:0 16px;cursor:pointer}
+.sheet .acts{display:flex;flex-wrap:wrap;gap:8px}
+.sheet .acts button{border:1px solid var(--line);border-radius:10px;background:#fff;
+  font-size:13.5px;font-weight:850;padding:12px 14px;cursor:pointer;min-height:46px}
+.sheet .acts button.on{border-color:var(--go);background:var(--goSoft);color:var(--go)}
+.sheet .acts button.warn{border-color:#e3b8b8;background:var(--noSoft);color:var(--no)}
+/* 번호가 없으면 고장을 정할 수 없다 — 칸은 두고 끈다 */
+.sheet .acts button:disabled{opacity:.4;background:#f6f8fa;border-color:var(--line2);cursor:default}
+.sheet .acts button.warn.on{border-color:var(--no);background:var(--no);color:#fff}
+/* 부 넣고 빼기 — 부마다 한 칸. 폭도 높이도 고정이라 눌러도 단추가 안 움직인다.
+   글자가 접히면 높이가 흔들려 손가락이 헛다리를 짚는다 — 그래서 두 줄로 못 박는다 */
+.sheet .acts.pm,.sheet .acts.fix{display:grid;grid-template-columns:repeat(3,1fr)}
+.sheet .acts.fix button{width:auto;padding:12px 4px}
+/* 꺼진 칸 — 없애지 않고 흐리게 둔다 */
+.sheet .acts button.dim{background:#f6f8fa;border-style:dashed;border-color:var(--line2);
+  color:var(--dim);font-weight:800;cursor:default}
+.sheet .acts.pm button{width:auto;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;padding:9px 4px;min-height:54px;line-height:1.2}
+.sheet .acts.pm button b{font-size:13.5px;font-weight:900}
+.sheet .acts.pm button span{font-size:11.5px;font-weight:840;color:var(--dim)}
+.sheet .acts.pm button.warn span{color:var(--no)}
+.sheet .acts button.go{border-color:var(--swap);background:var(--swapSoft);color:var(--swap)}
+.sheet .acts.two{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.sheet .acts.two button{justify-content:center;text-align:center}
+.sheet .sug{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px;max-height:136px;overflow-y:auto}
+.sheet .sug button{border:1px solid var(--line);border-radius:999px;background:#fff;
+  font-size:13px;font-weight:850;padding:9px 13px;cursor:pointer;min-height:40px}
+.sheet .sug button i{font-style:normal;font-size:10px;font-weight:900;color:var(--go);margin-right:5px}
+.sheet .dnote{margin-top:10px;font-size:11.5px;font-weight:760;color:var(--dim);line-height:1.55}
+.sheet .close{display:block;width:calc(100% - 28px);margin:15px 14px 4px;border:1px solid var(--line);
+  border-radius:12px;background:#fff;font-size:15px;font-weight:880;padding:15px 0;cursor:pointer}
+.warnbox{margin:14px 14px 0;border:1px solid #e3b8b8;background:var(--noSoft);border-radius:12px;
+  padding:13px;font-size:13px;font-weight:790;color:#7d2a2a;line-height:1.55}
+.calmbox{margin:9px 14px 0;border:1px solid #b9d2ee;background:var(--goSoft);border-radius:12px;
+  padding:13px;font-size:12.5px;font-weight:760;color:#1b4a7d;line-height:1.6}
+
+/* 삼선 차림표 — 지금 어디 있는지 보이고, 어디로든 한 번에 간다 */
+.menu{margin:13px 0 0;border-top:1px solid var(--line2)}
+.menu .mh{padding:14px 18px 6px;font-size:11px;font-weight:900;color:var(--dim);letter-spacing:.02em}
+.menu .mrow{display:flex;align-items:center;gap:11px;width:100%;min-height:56px;padding:0 18px;
+  border:0;border-top:1px solid var(--line2);background:#fff;text-align:left;cursor:pointer;
+  text-decoration:none;color:inherit}
+.menu .mrow:active{background:#f2f5f8}
+.menu .mrow .mn{flex:0 0 auto;font-size:16px;font-weight:880;letter-spacing:-.04em}
+.menu .mrow .mm{flex:1;min-width:0;font-size:12px;font-weight:790;color:var(--dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu .mrow .mk{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.5px solid var(--line)}
+.menu .mrow.on{background:var(--goSoft)}
+.menu .mrow.on .mn{color:var(--go)}
+.menu .mrow.on .mk{border-color:var(--go);background:var(--go);position:relative}
+.menu .mrow.on .mk::after{content:"";position:absolute;left:5.5px;top:2.5px;width:5px;height:9px;
+  border:solid #fff;border-width:0 2px 2px 0;transform:rotate(43deg)}
+
+/* 목록형 창 (명단·찾기) */
+.lst{margin:12px 0 0}
+.lst .row{display:flex;align-items:center;gap:10px;padding:0 18px;min-height:54px;width:100%;
+  border:0;border-top:1px solid var(--line2);background:#fff;
+  text-align:left;cursor:pointer;font-size:15px}
+.lst .row .p{flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:#eef1f5;color:var(--sub);
+  display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:900}
+.lst .row .nm{flex:1;min-width:0;font-size:16px;font-weight:850;letter-spacing:-.045em;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lst .row .wh{flex:0 0 auto;font-size:11.5px;font-weight:820;color:var(--dim)}
+.lst .row.off .nm{color:#a8b2bc;text-decoration:line-through}
+.lst .row .b{flex:0 0 auto;font-size:10.5px;font-weight:880;border-radius:5px;padding:3px 6px;
+  background:#eef1f5;color:var(--dim)}
+.lst .hd2{padding:13px 18px 6px;font-size:11px;font-weight:900;color:var(--dim);
+  background:#f6f8fa;border-top:1px solid var(--line2)}
+/* 창 안에 든 목록은 창 밖으로 넘치지 않게 제 안에서 굴린다 */
+.lst.inswap{max-height:44vh;overflow-y:auto;border-top:1px solid var(--line2)}
+.lst .row .b.w{background:var(--goSoft);color:var(--go)}
+.srch{padding:12px 14px 4px}
+.srch input{width:100%;border:1px solid var(--line);border-radius:11px;padding:13px 14px;
+  font-size:16px;font-weight:820;background:#fff}
+.empty{padding:26px 18px;text-align:center;font-size:13px;font-weight:780;color:var(--dim);line-height:1.6}
+
+/* 알림 */
+.toast{position:fixed;left:50%;bottom:calc(var(--bar) + 22px + env(safe-area-inset-bottom));
+  transform:translate(-50%,10px);z-index:95;max-width:86vw;
+  background:#14212e;color:#fff;border-radius:12px;padding:12px 16px;font-size:13.5px;font-weight:830;
+  letter-spacing:-.03em;opacity:0;visibility:hidden;transition:all .2s ease;
+  box-shadow:0 8px 26px rgba(0,0,0,.3);line-height:1.45}
+.toast.on{opacity:1;visibility:visible;transform:translate(-50%,0)}
+
+/* 넓은 화면에서 열면 폰 폭으로 가둔다 — 이 화면은 폰 것이다 */
+@media (min-width:620px){
+  body{background:#d8dee6}
+  .app{max-width:460px;margin:0 auto;box-shadow:0 0 0 1px rgba(0,0,0,.09),0 10px 40px rgba(0,0,0,.13)}
+  .sheet{width:460px;left:50%;right:auto;margin-left:-230px}
+  .toast{max-width:420px}
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="hd">
+    <div class="h1">
+      <b id="hDate">—</b>
+      <span class="meta" id="hMeta">—</span>
+      <span class="sv" id="hSave">—</span>
+      <button class="burger" id="btnMenu" aria-label="화면 고르기">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+    <nav class="ptabs" id="ptabs"></nav>
+  </header>
+
+  <main class="main" id="main"><div class="pad" id="pad"></div></main>
+
+  <div class="bulkbar" id="bulkbar"></div>
+
+  <nav class="tabbar" id="tabbar">
+    <button id="tbRoster"><span class="ic"></span><span class="lb">순번 · 명단</span></button>
+    <button id="tbFind"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>찾기</button>
+    <button id="tbUndo"><svg viewBox="0 0 24 24"><path d="M4 9h11a4.5 4.5 0 0 1 0 9h-6"/><path d="M8 5L4 9l4 4"/></svg>되돌리기</button>
+    <button id="tbSave" class="save"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 4v5h6"/><path d="M8 20v-6h8v6"/></svg>저장</button>
+  </nav>
+
+  <div class="pickbar" id="pickbar"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+
+<script>

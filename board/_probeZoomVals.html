@@ -1,0 +1,15 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var v=window.visualViewport;
+  document.getElementById('PROBE').textContent =
+    'inner '+innerWidth+'x'+innerHeight
+    +' | outer '+outerWidth+'x'+outerHeight
+    +' | dpr '+devicePixelRatio
+    +' | screen '+screen.width+'x'+screen.height
+    +' | availW '+screen.availWidth
+    +' | vv '+(v? v.width.toFixed(0)+'/'+v.scale : '-')
+    +' | out/in '+(outerWidth/innerWidth).toFixed(4)
+    +' | scr/in '+(screen.width/innerWidth).toFixed(4);
+},600);
+</script>

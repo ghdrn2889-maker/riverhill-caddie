@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function dupNow(who){ return who.map(function(n){ return n+':'+(partsOf(n).join(',')||'없음'); }).join(' '); }
+  function stOf(n){ var r = workRows().filter(function(x){ return x.n===n; })[0]; return r? r.st : '-'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    // ★사용자가 하는 대로 — 2부 사람을 3부에도 넣어 2·3 근무자로 만든다
+    var who = active(part('2')).filter(function(r){ return r.n && !r.itn; })
+      .slice(0,4).map(function(r){ return r.n; });
+    who.forEach(function(n){ if (partsOf(n).indexOf('3')<0) addRow('3', n); });
+    L('만든 2·3 근무자', dupNow(who));
+    L('  근무표 상태', who.map(function(n){ return n+'='+stOf(n); }).join(' '));
+    L('  칸 꼬리표', who.map(function(n){ var t='';
+      DAY.forEach(function(p){ p.roster.forEach(function(r){ if(r.n===n && r.tag) t=r.tag; }); });
+      return n+'='+(t||'없음'); }).join(' '));
+
+    // ① 그냥 저장하고 다시 읽으면
+    daySave();
+    var keep = JSON.stringify(state());
+    STACK=[]; REDO=[];
+    bootLoad(); paint();
+    L('', '');
+    L('① 저장 → 다시 읽기', dupNow(who));
+
+    // ② 아무 손질이나 한 번 (commit 이 도는지)
+    restore(JSON.parse(keep)); paint();
+    setDayTag(active(part('1'))[0].n, '조출');
+    L('② 아무 손질 뒤', dupNow(who));
+
+    // ③ 순번 세우기
+    restore(JSON.parse(keep)); paint();
+    var st = allPeople().filter(function(n){ return !dayMark(n) && !isBu3(n); })[0];
+    setSeonbal(st); applyLineup(st, ['1','2']);
+    L('③ 1·2부 순번 세우기 뒤', dupNow(who));
+    L('   근무표 상태', who.map(function(n){ return n+'='+stOf(n); }).join(' '));
+
+    // ④ 3부 순번 세우기
+    restore(JSON.parse(keep)); paint();
+    applyLineup(bu3Start(), ['3']);
+    L('④ 3부 순번 세우기 뒤', dupNow(who));
+
+    // ⑤ 「조출 N명 앉히기」
+    restore(JSON.parse(keep)); paint();
+    var jo = allPeople().filter(function(n){ return !dayMark(n) && who.indexOf(n)<0 && !isBu3(n); }).slice(0,3);
+    jo.forEach(function(n){ TAG[n]='조출'; });
+    seatGroup('2', 0, '조출');
+    L('⑤ 조출 앉히기 뒤', dupNow(who));
+
+    // ⑥ 날 넘기기
+    restore(JSON.parse(keep)); paint();
+    L('', '');
+    L('⑥ 날 넘기기 전', dupNow(who));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

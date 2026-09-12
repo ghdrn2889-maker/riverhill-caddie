@@ -1,0 +1,20 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setStaff(2, '우겸조', '05:23'); setStaff(3, '허웅진', '12:30');
+    setView('work'); paint();
+    L('경기과 칸에 붙은 딱지', STAFF.map(function(x,i){ var r=staffRole(i);
+      return x.k+' '+(x.n||'(빈)')+' → '+(r?r.t:'없음'); }).join(' | '));
+    L('그 사람의 근무표 배지', '우겸조 "'+(tagOf('우겸조')||'없음')+'" · 허웅진 "'+(tagOf('허웅진')||'없음')+'"');
+    var r = workRows().filter(function(x){ return x.n==='우겸조'; })[0];
+    L('근무표 줄', r ? '상태 "'+r.st+'" · 배지 ['+r.bts.join('][')+']' : '(줄 없음)');
+    L('순번에 서나', inLineup('우겸조','house') ? '섭니다' : '안 섭니다 — ' + whyNoLineup('우겸조'));
+    L('조출로 세는 곳이 있나', JONAMES.filter(function(n){ return tagOf(n)==='조출'; }).join(' ') || '아무도 없음');
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

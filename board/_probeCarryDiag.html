@@ -1,0 +1,53 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function absN(){ return JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // 하우스 캐디 · 1·2부에 앉아 있는 사람만 골라 쉬게 한다
+    var seed = JONAMES.filter(function(n){
+      return !tagOf(n) && !isBu3(n) && partsOf(n).some(function(k){ return k==='1'||k==='2'; });
+    }).slice(0, 8);
+    L('쉬게 할 사람', seed.map(function(n){ return n+'('+partsOf(n).join('')+'부)'; }).join(' '));
+    seed.forEach(function(n){ setAbsent(n, '휴무'); });
+    daySave();
+    L('오늘', DATE + ' · 근태 ' + absN() + '명 · STACK ' + STACK.length);
+
+    // ── 넘긴다 (근태 끔)
+    var d0 = DATE, stack0 = STACK.length;
+    carryToNextDay();
+    L('넘긴 뒤', DATE + ' · 근태 ' + absN() + '명 · STACK ' + STACK.length
+      + ' (+' + (STACK.length - stack0) + ')');
+    L('  8명 상태', seed.slice(0,3).map(function(n){
+        return n + '="' + workRows().filter(function(x){return x.n===n;})[0].st + '"'
+          + ' 자리' + partsOf(n).length; }).join(' '));
+
+    // ── 순번 세우기가 이들을 다시 앉히나
+    L('  후보에 드나', seed.filter(function(n){ return lineupPool('house').indexOf(n)>=0; }).length
+      + '/8명');
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('  세울 판', pl.slots.length + '칸 · 바뀌는 자리 ' + pl.moved
+      + ' · 그중 이 8명이 앉는 칸 '
+      + pl.slots.filter(function(x){ return seed.indexOf(x.to)>=0; }).length);
+    L('  후보 수', lineupPool('house').length + '명 · 1·2부 티오프 '
+      + (part('1').tees.length + part('2').tees.length) + '칸');
+    applyLineup(seonbal(), ['1','2']);
+    var got = seed.filter(function(n){ return partsOf(n).length; });
+    L('  ▶ 세운 뒤', got.length + '/8명 자리 받음 '
+      + (got.length ? '◎ ' + got.slice(0,4).join(',') : '✗ 아무도 안 섰다'));
+    L('  STACK', STACK.length + ' (세우기가 ' + (STACK.length > stack0+1 ? '쌓음':'안 쌓음') + ')');
+
+    // ── 되돌리기
+    var need = STACK.length - stack0;
+    for (var i=0; i<need; i++) undo();
+    L('되돌리기 ' + need + '번', DATE + ' · 근태 ' + absN() + '명 '
+      + (DATE === d0 && absN() === 8 ? '◎ 통째로 돌아옴' : '✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

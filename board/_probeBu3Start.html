@@ -1,0 +1,47 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function why(n){
+    if (!n) return '빈 자리';
+    if (dayMark(n)) return '배지 '+dayMark(n)+' → 못 박힘(안 움직임)';
+    return isBu3(n) ? '3부반 → 순번이 정함' : '하우스 → 못 박힘(안 움직임)';
+  }
+  function order(){ return active(part('3')).map(function(r,i){
+    return (i+1)+'.'+(r.n||'(빈칸)')+'['+why(r.n)+']'; }); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+
+    L('최수원', '3부반? '+(isBu3('최수원')?'예':'아니오')+' · 배지 "'+(tagOf('최수원')||'없음')+'" · 조 '+(joOf('최수원')+1));
+    L('김예원', '3부반? '+(isBu3('김예원')?'예':'아니오')+' · 배지 "'+(tagOf('김예원')||'없음')+'" · 조 '+(joOf('김예원')+1));
+
+    var ring = joRing('최수원');
+    L('★최수원부터 도는 차례', '최수원 '+(ring.indexOf('최수원')+1)+'번째 · 김예원 '+(ring.indexOf('김예원')+1)+'번째 (전체 '+ring.length+'명)');
+    setBu3Start('최수원');
+    var pl = lineupPlan(bu3Start(), ['3']);
+    L('3부 시작', bu3Start());
+    L('후보 차례 앞 8', pl.pool.slice(0,8).join(' → '));
+    L('  김예원은 후보 몇 번째', (pl.pool.indexOf('김예원')+1)+'/'+pl.pool.length);
+    L('세울 자리', pl.slots.length+'칸 · 못 박힌 줄 '+pl.fixed[0].n+'개');
+    L('  자리 앞 8칸이 누구 것', pl.slots.slice(0,8).map(function(s){ return (s.i+1)+'번←'+s.to; }).join(' '));
+
+    o.push(''); o.push('── 세우기 전 3부 앞 12 ──');
+    order().slice(0,12).forEach(function(x){ o.push('  '+x); });
+    applyLineup(bu3Start(), ['3']);
+    o.push(''); o.push('── 세운 뒤 3부 앞 12 ──');
+    order().slice(0,12).forEach(function(x){ o.push('  '+x); });
+    var a = active(part('3')).map(function(r){ return r.n; });
+    L('', '');
+    L('★최수원 자리', (a.indexOf('최수원')+1)+'번');
+    L('★김예원 자리', (a.indexOf('김예원')+1)+'번');
+    L('  김예원이 앞이면 이유', a.indexOf('김예원') < a.indexOf('최수원')
+      ? '앞 '+(a.indexOf('최수원'))+'칸 중 못 박힌 줄 '
+        + a.slice(0, a.indexOf('최수원')).filter(function(n){ return n && !(isBu3(n)&&!dayMark(n)); }).length + '개'
+      : '앞이 아님 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,107 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function backTo(d){ for (var i=0;i<8 && DATE!==d;i++) undo(); return DATE===d; }
+function opt(k){ return qa('#sheet [data-copt]').filter(function(b){ return b.getAttribute('data-copt')===k; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // 바탕 깔기 — 달력이 저절로 따라오며 이미 근태를 털어 갔으므로 오늘 것을 새로 넣는다
+    var seed = JONAMES.filter(function(n){ return !tagOf(n) && partsOf(n).length; }).slice(0, 8);
+    seed.forEach(function(n){ setAbsent(n, '휴무'); });
+    daySave();
+    var abs0 = JONAMES.filter(function(n){ return isAbs(tagOf(n)); });
+    var D0 = DATE;
+    var T0 = workTally();
+    L('오늘', '근태 ' + abs0.length + '명 · 가용 ' + T0.avail + ' · 미배치 ' + T0.cu);
+    L('  ★달력 자동 넘김', '켤 때 이미 ' + (CAUGHT ? CAUGHT.from + '→' + CAUGHT.to : '없음')
+      + ' 를 만들며 근태를 안 가져왔다');
+
+    // ── ① 창을 연다
+    tap(q('[data-act="nday"]'));
+    L('내일 준비 창', q('#sheet').classList.contains('on') ? '열림 ◎':'✗');
+    L('  칸 셋', qa('#sheet [data-copt]').map(function(b){
+        return b.getAttribute('data-copt') + '=' + (b.className.indexOf('on')>=0?'켬':'끔'); }).join(' '));
+    L('  ★근태 기본값', carryOpt('abs') ? '켬 ✗ (기본은 꺼야 한다)':'끔 ◎');
+    L('  글', opt('abs').querySelector('.cn').textContent.replace(/\s+/g,' ')
+      + ' / ' + opt('abs').querySelector('.cs').textContent);
+
+    // ── ② 눌러도 창이 안 닫힌다
+    tap(opt('abs'));
+    L('근태 켬', (q('#sheet').classList.contains('on') ? '창 그대로 ◎':'닫힘 ✗')
+      + ' · ' + (carryOpt('abs') ? '켜짐 ◎':'✗')
+      + ' · 표시 ' + opt('abs').querySelector('.cs').textContent);
+    tap(opt('abs'));
+    L('  도로 끔', (carryOpt('abs') ? '✗':'꺼짐 ◎'));
+
+    // ── ③ 근태를 안 가져가면 내일은 전원 근무로 시작한다
+    tap(qa('#sheet button[data-act="ndayyes"]')[0]);
+    var abs1 = JONAMES.filter(function(n){ return isAbs(tagOf(n)); });
+    var T1 = workTally();
+    L('넘긴 뒤(근태 끔)', DATE + ' · 근태 ' + abs1.length + '명 '
+      + (abs1.length === 0 ? '◎ 전원 근무로 시작':'✗ ' + abs1.join(','))
+      + ' · 가용 ' + T0.avail + '→' + T1.avail);
+    L('  ★쉬던 사람은', abs0.slice(0,3).map(function(n){
+        var r = workRows().filter(function(x){ return x.n===n; })[0];
+        return n + '="' + r.st + '"'; }).join(' ')
+      + ' ' + (abs0.every(function(n){
+          var r = workRows().filter(function(x){ return x.n===n; })[0];
+          return r.cls === 'u' || r.cls === 'w' || r.cls === 'd'; }) ? '◎ 가용에 든다':'✗'));
+    L('  선발·당번', '선발 ' + (seonbal()||'없음') + ' ' + (seonbal()?'남음 ◎':'✗')
+      + ' · 당번 ' + (function(){ var n=0; DUTYKEYS.forEach(function(k){ n+=dutyList(k).length; }); return n; })() + '명');
+    L('  3부 순번', (function(){ var pl=lineupPlan(bu3Start(),['3']);
+        return pl.moved===0 ? '이미 세워짐 ◎':pl.moved+'칸 남음 ✗'; })());
+    L('  기록', LOG[0].msg);
+    L('  순번 세우면 쉬던 사람이 서나', (function(){
+        applyLineup(seonbal(), ['1','2']);
+        var got = abs0.filter(function(n){ return partsOf(n).length; }).length;
+        return got + '/' + abs0.length + '명 자리 받음 '
+          + (got ? '◎ 다시 일한다':'✗ 아무도 안 섰다'); })());
+
+    // ── ④ 되돌리기로 통째로 (넘기기는 안쪽에서 3부까지 세우므로 판을 여러 장 쌓는다)
+    L('되돌리기', (backTo(D0) ? '' : '날짜 못 돌아옴 ✗ ') + DATE + ' · 근태 ' + JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length
+      + '명 ' + (JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length === abs0.length
+        ? '◎ 돌아옴':'✗'));
+
+    // ── ⑤ 근태를 켜면 옛날처럼 들고 간다
+    setCarryOpt('abs', true);
+    carryToNextDay();
+    L('근태 켜고 넘김', '근태 ' + JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length
+      + '명 ' + (JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length === abs0.length
+        ? '◎ 그대로 넘어옴(옛 동작)':'✗'));
+    backTo(D0);
+    setCarryOpt('abs', false);
+
+    // ── ⑥ 3부 순번 끄기
+    setCarryOpt('ln3', false);
+    carryToNextDay();
+    L('3부 순번 끄고 넘김', (function(){ var pl=lineupPlan(bu3Start(),['3']);
+        return pl.moved + '칸 남음 ' + (pl.moved ? '◎ 안 세웠다':'(원래 0이라 못 가림)'); })());
+    backTo(D0);
+    setCarryOpt('ln3', true);
+
+    // ── ⑦ '이 날의 구분 비우기'는 근태를 안 건드린다
+    var absN = JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length;
+    wipeDayMarks();
+    L('구분 비우기', '근태 ' + absN + '→'
+      + JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length + '명 '
+      + (JONAMES.filter(function(n){ return isAbs(tagOf(n)); }).length === absN
+        ? '◎ 안 건드림':'✗ 지워 버렸다')
+      + ' · 선발 ' + (seonbal()? '남음 ◎':'날아감 ✗'));
+
+    // ── ⑧ 설정에 남나
+    setCarryOpt('abs', true);
+    savedSig=null; PENDING=null; bootLoad();
+    L('새로 켠 뒤', '근태 가져가기 ' + (carryOpt('abs') ? '켬 ◎ 기억함':'끔 ✗ 잊음'));
+    setCarryOpt('abs', false);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

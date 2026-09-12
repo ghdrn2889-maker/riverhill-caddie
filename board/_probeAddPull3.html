@@ -1,0 +1,66 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'(빈)'; }); }
+  // 사람 → 그 사람이 앉은 티오프 시각
+  function whenMap(p){ var a=active(p), m={};
+    a.forEach(function(r,i){ if (r.n && p.tees[i]) m[r.n]=p.tees[i].time+' '+p.tees[i].course; });
+    return m; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var p = part('1');
+    var pool = addablePool('1').filter(function(n){ return !isBu3(n) && !isAbs(tagOf(n)); }).slice(0,3);
+    pool.forEach(function(n){ addRow('1', n); });
+    paint();
+
+    // ── 갑. 한가운데 끼워 넣기
+    L('','★갑. 한가운데 7:02 끼워 넣기');
+    var w0 = whenMap(p), s0 = seats(p), nt0 = p.tees.length;
+    L('  끼우기 전 대기', s0.slice(nt0).join(' '));
+    var tm = hm(mm(p.tees[4].time) - 3);
+    addTeam('1', tm, ''); paint();
+    var s1 = seats(p), w1 = whenMap(p), im=-1;
+    p.tees.forEach(function(t,k){ if (t.time===tm) im=k; });
+    L('  새 칸', tm+' · '+im+'번 · "'+(s1[im]||'')+'"');
+    ok(s1[im]===s0[nt0], '  ★다음 차례가 올라왔나', s0[nt0]+' → '+(s1[im]||'—'));
+    L('  지금 대기', s1.slice(p.tees.length).join(' '));
+    // ★딴 사람 시각은 그대로여야 한다
+    var moved = Object.keys(w0).filter(function(n){ return w1[n] && w1[n]!==w0[n]; });
+    ok(moved.length===0, '  ★딴 사람 티오프가 밀렸나',
+       moved.length ? '★'+moved.length+'명 밀림 — '+moved.slice(0,4).map(function(n){
+         return n+' '+w0[n]+'→'+w1[n]; }).join(' / ') : '한 사람도 안 밀림 ◎');
+    ok(s1.length===s0.length, '  줄 수', s0.length+' → '+s1.length+' (빈 줄이 안 낀다)');
+
+    // ── 을. 대기를 다 쓰면 빈 칸으로
+    L('','★을. 대기가 바닥나면');
+    var left = seats(p).slice(p.tees.length).filter(function(n){ return n!=='(빈)'; });
+    L('  남은 대기', left.length+'명 — '+left.join(' '));
+    var last = p.tees[p.tees.length-1].time, added=[];
+    for (var k=0; k<left.length+2; k++){
+      last = hm(mm(last)+GAP);
+      addTeam('1', last, ''); added.push(last);
+    }
+    paint();
+    var s2 = seats(p), nt2 = p.tees.length;
+    L('  '+added.length+'팀 더 넣음', added.join(' '));
+    L('  마지막 칸들', s2.slice(nt2-4, nt2).join(' '));
+    ok(s2[nt2-1]==='(빈)' && s2[nt2-2]==='(빈)', '  ★대기가 없으면 빈 칸', s2.slice(nt2-3).join(' '));
+    ok(left.every(function(n){ return s2.indexOf(n) < nt2; }), '  대기가 다 앉았나',
+       left.map(function(n){ var i=s2.indexOf(n); return n+'('+i+'번)'; }).join(' '));
+    ok(LOG[0] && /대기가 없어/.test(LOG[0].t||LOG[0].m||JSON.stringify(LOG[0])),
+       '  마지막 말', JSON.stringify(LOG[0]).slice(0,120));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

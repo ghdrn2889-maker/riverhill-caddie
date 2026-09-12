@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function rows(pk){
+    var col = document.getElementById('col'+pk);
+    if (!col) return [];
+    return [].slice.call(col.querySelectorAll('.brow:not(.spare) .tm'))
+      .map(function(e){ return e.textContent.replace('격자 밖','').trim(); });
+  }
+  function teeTimes(pk){
+    return part(pk).tees.map(function(t){ return t.time+'|'+t.course; });
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    L('격자 설정', 'GAP '+GAP+'분 · ROWS '+ROWS+'줄');
+    DAY.forEach(function(p){
+      var g = gridTimes(p);
+      L('  '+p.name, '시작 '+p.start+' · 팀 '+p.tees.length
+        +' · 격자 '+g.length+'줄 ('+g[0]+'~'+g[g.length-1]+')'
+        +' · 기본 19줄 끝 '+hm(mm(p.start)+18*GAP));
+    });
+
+    // ★1부에서 한 시각의 OUT·IN 을 둘 다 지운다
+    var p1 = part('1');
+    var g1 = gridTimes(p1);
+    var tm = g1[5];                                  // 격자 안쪽 시각
+    L('', ''); L('★격자 안쪽 시각 '+tm+' 의 팀을 둘 다 지운다', '');
+    L('  지우기 전 그 줄', rows('1').indexOf(tm)>=0 ? '있음 ◎' : '★없음');
+    for (var i=p1.tees.length-1;i>=0;i--) if (p1.tees[i].time===tm) delTeam('1', i);
+    paint();
+    L('  지운 뒤 그 줄', rows('1').indexOf(tm)>=0 ? '있음 ◎ (빈 칸으로 남음)' : '★사라짐');
+
+    // ★격자 바깥(19줄 너머) 시각을 둘 다 지운다
+    var last = gridTimes(p1);
+    var beyond = last.filter(function(t){ return mm(t) > mm(p1.start)+18*GAP; });
+    L('', ''); L('★기본 19줄 너머 시각', beyond.length? beyond.join(' ') : '없음');
+    if (beyond.length){
+      var tb = beyond[0];
+      L('  지우기 전 그 줄', rows('1').indexOf(tb)>=0 ? '있음 ◎' : '없음');
+      for (i=p1.tees.length-1;i>=0;i--) if (p1.tees[i].time===tb) delTeam('1', i);
+      paint();
+      L('  지운 뒤 그 줄', rows('1').indexOf(tb)>=0 ? '있음 ◎ (빈 칸으로 남음)' : '★사라짐 — 여기가 문제');
+    }
+    L('', ''); L('지금 1부 줄 수', rows('1').length+'줄 · 마지막 '+rows('1')[rows('1').length-1]);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

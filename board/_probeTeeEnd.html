@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen();
+}
+function idxAt(p, tm){ var a=[]; p.tees.forEach(function(t,k){ if (t.time===tm) a.push(k); }); return a; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ★사용자가 쓰는 판을 그대로 — 1부 6:37~8:50, 스무 칸
+    L('','★갑. 마지막 시각의 팀을 전부 지운다');
+    reset();
+    var p = part('1');
+    p.start = '6:37'; delete p.rows;
+    p.tees.push({ time:'8:50', course: COURSES[1], pax:4, cx:false }); sortTees(p);
+    var t0 = gridTimes(p), lastT = t0[t0.length-1];
+    L('  처음', t0.length + '칸 · ' + t0[0] + ' ~ ' + lastT + ' · ' + lastT + '에 팀 '
+      + idxAt(p, lastT).length + '개');
+    delTeams('1', idxAt(p, lastT));
+    var t1 = gridTimes(part('1'));
+    L('  지운 뒤', t1.length + '칸 · ' + t1[0] + ' ~ ' + t1[t1.length-1]);
+    ok(t1.indexOf(lastT) >= 0, '  ★마지막 칸 ' + lastT + ' 이 남나',
+       t1.indexOf(lastT)>=0 ? '남음 ◎' : '★사라짐 — ' + t0.length + '칸 → ' + t1.length + '칸');
+
+    // ── 을. 첫 시각의 팀을 전부 지운다
+    L('','★을. 첫 시각의 팀을 전부 지운다');
+    reset();
+    p = part('1'); p.start = '6:37'; delete p.rows;
+    p.tees.push({ time:'8:50', course: COURSES[1], pax:4, cx:false }); sortTees(p);
+    var s0 = gridTimes(p), firstT = s0[0];
+    L('  처음', s0.length + '칸 · ' + firstT + ' 에 팀 ' + idxAt(p, firstT).length + '개');
+    delTeams('1', idxAt(p, firstT));
+    var s1 = gridTimes(part('1'));
+    L('  지운 뒤', s1.length + '칸 · ' + s1[0] + ' ~ ' + s1[s1.length-1] + ' · 시작 ' + part('1').start);
+    ok(s1.indexOf(firstT) >= 0, '  ★첫 칸 ' + firstT + ' 이 남나',
+       s1.indexOf(firstT)>=0 ? '남음 ◎' : '★사라짐');
+
+    // ── 병. 기본 줄 안쪽(3부)은 어떤가
+    L('','★병. 3부 — 팀 3개, 기본 줄 안쪽');
+    reset();
+    var q = part('3');
+    var q0 = gridTimes(q), qLast = q.tees[q.tees.length-1].time;
+    L('  처음', q0.length + '칸 · ' + q0[0] + ' ~ ' + q0[q0.length-1]);
+    delTeams('3', idxAt(q, qLast));
+    L('  마지막 팀 지운 뒤', gridTimes(part('3')).length + '칸');
+    delTeams('3', idxAt(part('3'), gridTimes(part('3'))[0]));
+    L('  첫 팀까지 지운 뒤', gridTimes(part('3')).length + '칸 · 시작 ' + part('3').start);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

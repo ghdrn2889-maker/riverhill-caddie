@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seats(pk){ return active(part(pk)).map(function(r){ return r.n; }); }
+  function unplaced(){ return JONAMES.filter(function(n){
+    return !partsOf(n).length && !isAbs(tagOf(n)) && !isBu3(n); }); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']); setView('work');
+    L('세운 뒤 미배치', unplaced().length + '명');
+
+    // ① 조출을 붙이면 자리에서 내려온다
+    var who = seats('1').filter(function(n){ return tagOf(n) !== '선발'; })[4];
+    var n1 = active(part('1')).length;
+    setDayTag(who, '조출');
+    L('조출 붙임', who + ' 자리 ' + (partsOf(who).join(',') || '없음')
+      + ' ' + (partsOf(who).length ? '✗ 아직 앉아 있다' : '◎ 내려옴')
+      + ' · 1부 명단 ' + n1 + '→' + active(part('1')).length
+      + ' · 1부 5번은 이제 ' + seats('1')[4]);
+    L('  근무표에서는', (function(){ var r = workRows().filter(function(x){ return x.n===who; })[0];
+      return '"' + r.st + '"(' + r.cls + ') · 배지 ' + r.bts.join(','); })());
+    L('  가용에 드나', workTally().cu >= 1 ? '미배치로 셈 ◎' : '?');
+
+    // ② 떼면 돌아온다
+    setDayTag(who, '조출');
+    L('조출 뗌', who + ' 자리 ' + (partsOf(who).join(',') || '없음') + ' · 배지 "'
+      + (tagOf(who) || '없음') + '" '
+      + (partsOf(who).length && !tagOf(who) ? '◎ 돌아옴' : '✗'));
+    setDayTag(who, '조출');
+    undo();
+    L('  되돌리기', who + ' 자리 ' + (partsOf(who).join(',') || '없음') + ' · 배지 "'
+      + (tagOf(who) || '없음') + '"');
+
+    // ③ ★배지 여럿을 붙이면 그만큼 칸이 열리고, 미배치가 그 칸에 들어간다
+    var before = unplaced().length;
+    var pick = seats('1').filter(function(n){ return tagOf(n) !== '선발'; }).slice(0, 8);
+    pick.forEach(function(n){ setDayTag(n, '조출'); });
+    L('8명에게 조출', '자리 남은 사람 ' + pick.filter(function(n){ return partsOf(n).length; }).length
+      + '명 ' + (pick.every(function(n){ return !partsOf(n).length; }) ? '◎ 전부 내려옴':'✗'));
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('  선발', seonbal() || '없음 ✗');
+    L('  세울 자리', (pl?pl.slots.length:'—') + '칸 · 후보 ' + pl.pool.length + '명'
+      + ' (조출 8명은 후보에서 빠짐)');
+    applyLineup(seonbal(), ['1','2']);
+    L('  ★세운 뒤 미배치', before + ' → ' + unplaced().length + '명');
+    L('  조출 8명은', pick.filter(function(n){ return partsOf(n).length; }).length
+      + '명만 앉음 ' + (pick.every(function(n){ return !partsOf(n).length; })
+        ? '◎ 기계가 안 건드린다 — 관리자가 놓는다':'✗'));
+
+    // ④ 손으로 넣으면 그 자리에 남는다
+    addRow('1', pick[0]);
+    L('손으로 1부에 넣음', pick[0] + ' 1부 ' + (seats('1').indexOf(pick[0])+1) + '번');
+    applyLineup(seonbal(), ['1','2']);
+    L('  다시 세워도', pick[0] + ' 1부 ' + (seats('1').indexOf(pick[0])+1) + '번 '
+      + (partsOf(pick[0]).length ? '◎ 그대로':'✗ 밀려났다'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    setView('work');
+    L('깨끗한 판', bu3Strays().length+'명 (0이어야 ◎)');
+    L('  화면', document.querySelector('.drift') ? '뭔가 뜸':'조용함 ◎');
+    // 3부반 하나를 2부 대기에 억지로 넣는다
+    var b3 = bu3List()[0];
+    addRow('2', b3);
+    setView('work');
+    var st = bu3Strays();
+    L('★3부반을 2부에 넣으면', st.length+'명 — '+st.map(function(x){
+        return x.n+' '+part(x.pk).name+' '+(x.i+1)+'번'+(x.wait?'(대기)':''); }).join(' '));
+    // ★화면에는 안 적는다 — 관리자가 걷으라고 했다. 세는 일만 그대로 돈다
+    var d = Array.prototype.slice.call(document.querySelectorAll('.drift,.lnbar.dft'))
+      .filter(function(e){ return e.textContent.indexOf('3부반이 1·2부에')>=0
+        || e.textContent.indexOf('1·2부에')>=0; })[0];
+    L('  화면에', d ? '✗ 아직 뜸 — "'+d.textContent.replace(/\s+/g,' ').trim().slice(0,60)+'"'
+                    : '◎ 안 뜸 (세는 일만 남겼다)');
+    L('  ★순번 세우기가 빼나', (function(){
+        applyLineup(seonbal(),['1','2']);
+        return bu3Strays().length ? '안 뺌 ◎ (일부러 놓았을 수 있으니)':'뺐다'; })());
+    delFromPart('2', b3);
+    L('  손으로 빼면', bu3Strays().length+'명 ◎');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

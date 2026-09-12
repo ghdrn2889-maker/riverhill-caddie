@@ -1,0 +1,33 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seats(pk){ return active(part(pk)).map(function(r){ return r.n; }); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var pool0 = lineupPool('house');
+    L('후보', pool0.length + '명 · 1·2부 티오프 '
+      + (part('1').tees.length + part('2').tees.length) + '칸');
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('세울 자리', pl.slots.length + '칸 (티오프 + 대기) · 그중 대기 '
+      + pl.slots.filter(function(s){ return s.wait; }).length + '칸');
+    applyLineup(seonbal(), ['1','2']);
+    var T = workTally();
+    L('세운 뒤', '근무 ' + T.cw + ' · 대기 ' + T.cd + ' · 미배치 ' + T.cu);
+    var left = JONAMES.filter(function(n){
+      return !partsOf(n).length && !tagOf(n) && !isBu3(n); });
+    L('★배지 없는 하우스 중 명단 밖', left.length + '명 ' + (left.length ? left.join(' ') + ' ✗':'없음 ◎'));
+    L('2부 꼬리', seats('2').slice(-6).join(' ') + ' (티오프 ' + part('2').tees.length + '칸)');
+    L('  ★대기 차례가 고리 차례인가', (function(){
+        var line = seats('1').slice(0, part('1').tees.length).concat(seats('2'));
+        var bad = 0;
+        for (var i=0;i<line.length;i++) if (line[i] !== pl.pool[i % pl.pool.length]) bad++;
+        return bad ? bad + '칸 다름 ✗' : '한 칸도 안 다름 ◎'; })());
+    L('한 번 더 세우면', lineupPlan(seonbal(), ['1','2']).moved + '자리 바뀜');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

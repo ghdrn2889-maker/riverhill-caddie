@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ── 갑. 고르개가 사라졌나
+    L('','★갑. 글씨 고르개');
+    ok(!document.getElementById('ksz'), '  상단 칸', document.getElementById('ksz')?'★남아 있음':'없음 ◎');
+    ok(!document.querySelector('[data-ksz]'), '  단추', document.querySelectorAll('[data-ksz]').length+'개');
+    ok(!document.getElementById('kszNow'), '  지금 크기 글', document.getElementById('kszNow')?'★남음':'없음 ◎');
+    ok(typeof KSZ === 'undefined' && typeof setKsz === 'undefined',
+       '  기계 쪽', (typeof KSZ)+' / '+(typeof setKsz));
+
+    // ── 을. 글씨는 '보통' 그대로인가
+    L('','★을. 크기는 그대로');
+    var k = getComputedStyle(document.documentElement).getPropertyValue('--k').trim();
+    L('  --k', k);
+    ok(Number(k) > 0.5 && Number(k) < 2.3, '  울타리 안', k);
+    var nm = document.querySelector('.cell .nm');
+    L('  칸 이름 글씨', nm ? getComputedStyle(nm).fontSize : '(칸 없음)');
+
+    // ── 병. 상단 줄이 안 무너졌나
+    L('','★병. 상단 줄');
+    ['btnRoster','btnCfg','savebar','findBox'].forEach(function(id){
+      var e=document.getElementById(id);
+      L('  #'+id, e? Math.round(e.getBoundingClientRect().left)+'px' : '(없음)');
+    });
+    var hd = document.querySelector('.hd .top');
+    ok(!!hd && hd.getBoundingClientRect().height < 200, '  머리 높이',
+       hd? Math.round(hd.getBoundingClientRect().height)+'px' : '★없음');
+    // 겹친 데 없나 — 설정 단추와 저장줄
+    var c=document.getElementById('btnCfg'), s=document.getElementById('savebar');
+    ok(!c||!s||c.getBoundingClientRect().right <= s.getBoundingClientRect().left+1,
+       '  설정 ↔ 저장줄', c&&s? Math.round(c.getBoundingClientRect().right)+' ≤ '+Math.round(s.getBoundingClientRect().left) : '—');
+
+    // ── 정. 옛 기억이 남아 있어도 안 터지나
+    L('','★정. 옛 기억');
+    try{ localStorage.setItem('board.ksz','4'); }catch(e2){}
+    ok(true, '  board.ksz 를 4 로 적어 둠', '다음 열기에서 무시되어야 한다');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

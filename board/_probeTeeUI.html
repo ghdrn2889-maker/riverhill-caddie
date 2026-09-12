@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function click(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+function rowsOn(){ return qa('#col1 .brow:not(.spare)').length; }
+function lastTm(){ var r=qa('#col1 .brow:not(.spare)'); if(!r.length) return '-';
+  return r[r.length-1].querySelector('.tm').textContent.replace('격자 밖','').trim(); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    // ★사용자 판을 흉내: 1부를 스무 칸으로 (6:44 시작에 8:57 한 팀 더)
+    var p = part('1');
+    var beyond = hm(mm(p.start) + ROWS*GAP);
+    addTeam('1', beyond, COURSES[0]);
+    addTeam('1', beyond, COURSES[1]);
+    daySave(); bootLoad();
+    setView('board'); paint();
+    L('','★갑. 스무 칸 판');
+    L('  1부', part('1').start + ' ~ ' + lastTm() + ' · 화면 ' + rowsOn() + '줄 · p.rows ' + (part('1').rows||0));
+
+    // ── 을. 팀 지우기 단추로 마지막 줄을 고른 뒤 지운다
+    L('','★을. 팀 지우기 단추로');
+    click(document.querySelector('[data-delmode="1"]'));
+    var rows = qa('#col1 .brow:not(.spare)');
+    var last = rows[rows.length-1];
+    var cells = qa('.cell', last).length ? qa('.cell', last) : Array.prototype.slice.call(last.querySelectorAll('.cell'));
+    L('  마지막 줄 칸', cells.length + '개 · ' + last.querySelector('.tm').textContent.trim());
+    cells.forEach(function(c){ click(c); });
+    var go = document.querySelector('[data-delgo="1"]');
+    L('  고른 팀', go ? go.textContent.trim() : '(단추 없음)');
+    if (go) click(go);
+    paint();
+    L('  지운 뒤', '화면 ' + rowsOn() + '줄 · 끝 ' + lastTm());
+    ok(lastTm() === beyond, '  ★' + beyond + ' 줄이 남나', lastTm());
+
+    // ── 병. 저장하고 다시 열어도
+    L('','★병. 저장 · 다시 열기');
+    daySave(); bootLoad(); setView('board'); paint();
+    L('  다시 연 뒤', '화면 ' + rowsOn() + '줄 · 끝 ' + lastTm() + ' · p.rows ' + (part('1').rows||0));
+    ok(lastTm() === beyond, '  ★그대로인가', lastTm());
+
+    // ── 정. 내일로 넘기면
+    L('','★정. 내일로 넘기기 (팀은 안 들고 감)');
+    L('  지금 CARRY.tees', typeof CARRY==='object' ? String(CARRY.tees) : '?');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

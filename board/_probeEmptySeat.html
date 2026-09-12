@@ -1,0 +1,86 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function cell(pk,i){ return qa('.cell[data-pk="'+pk+'"]').filter(function(c){
+  return Number(c.getAttribute('data-i'))===i; })[0]; }
+function nameAt(pk,i){ var r=active(part(pk))[i]; return r ? (r.n||'(빈 이름)') : '(줄 없음)'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    cur='1'; setView('board'); paint();
+    var T0=workTally();
+    L('처음', '1부 명단 '+active(part('1')).length+' · 티오프 '+part('1').tees.length
+      + ' · 총원 '+T0.total);
+
+    // ① 이 자리 비우기 — 순번은 그대로
+    var i=5, who=nameAt('1',i), n0=active(part('1')).length;
+    openCell('1', i);
+    L('칸 창 단추', qa('#sheet [data-act="seatclr"]').length ? '"이 자리 비우기" 있음 ◎':'없음 ✗');
+    tap(qa('#sheet [data-act="seatclr"]')[0]);
+    L('비우기', who+' → 1부 6번 "'+nameAt('1',i)+'"'
+      + ' · 명단 '+n0+'→'+active(part('1')).length
+      + ' '+(active(part('1')).length===n0 ? '◎ 순번 그대로':'✗ 당겨졌다'));
+    L('  총원', T0.total+'→'+workTally().total
+      + ' '+(workTally().total<=T0.total ? '◎ 빈 이름이 사람으로 안 끼었다':'✗ 유령이 늘었다'));
+    L('  화면', cell('1',i) ? cell('1',i).textContent.replace(/\s+/g,' ').trim().slice(0,24):'칸 없음');
+
+    // ② ★진짜 끌기 — 사용자가 안 된다고 한 그 길
+    var src=8, sn=nameAt('1',src);
+    var se=cell('1',src), te=cell('1',i);
+    var tr=te.getBoundingClientRect(), tx=tr.left+tr.width/2, ty=tr.top+tr.height/2;
+    dgLift(se, 10, 10);
+    L('끌어 듦', sn+' · 들렸나 '+(dg?'◎':'✗'));
+    L('  빈 칸 위에서', dgOver(tx,ty) ? '놓을 자리로 잡힘 ◎':'못 잡음 ✗ (여기가 문제였다)');
+    dgEnd({ clientX: tx, clientY: ty });
+    L('빈 칸에 놓음', '1부 6번 "'+nameAt('1',i)+'" '+(nameAt('1',i)===sn ? '◎ 들어감':'✗')
+      + ' · 원래 자리 9번 "'+nameAt('1',8)+'" '
+      + (nameAt('1',8)==='(빈 이름)' ? '◎ 빈 칸이 됨':'✗'));
+    // 집어서 놓기도 되는지
+    pickStart('1', src); pickTap('1', i);
+    L('집어서도', '집힌 칸 '+pickList.length+' → 맞바꾸기 누르면');
+    pickGo();
+    L('  ', '1부 6번 "'+nameAt('1',i)+'" · 9번 "'+nameAt('1',8)+'"');
+    pickGo();
+    L('  기록', LOG[0].msg);
+    L('  명단 수', active(part('1')).length+' '+(active(part('1')).length===n0?'◎ 그대로 — 남들 순번 안 흔들림':'✗'));
+    undo();
+    L('  되돌리기', '1부 6번 "'+nameAt('1',i)+'" · 9번 "'+nameAt('1',8)+'"');
+
+    // ③ 줄이 아예 없는 빈 칸(꼬리)에 옮기기
+    var p1=part('1'), tail=active(p1).length;
+    if (tail < p1.tees.length){
+      var s2=nameAt('1',2);
+      pickStart('1',2); pickTap('1', tail);
+      L('꼬리 빈 칸', '1부 '+(tail+1)+'번 "'+nameAt('1',tail)+'" '
+        + (nameAt('1',tail)===s2?'◎':'✗'));
+    } else {
+      // 꼬리를 만들어 본다 — 마지막 사람을 명단에서 빼면 칸이 빈다
+      delRow('1', p1.roster.length-1);
+      var tail2=active(part('1')).length, s3=nameAt('1',2);
+      pickStart('1',2); pickTap('1', tail2);
+      var at3 = active(part('1')).map(function(r){return r.n;}).indexOf(s3);
+      L('꼬리 빈 칸(줄 없음)', s3+' → 1부 '+(at3+1)+'번 '
+        + (at3>=0 && at3>=tail2-1 ? '◎ 첫 빈 자리로':'✗')
+        + ' · 명단 '+active(part('1')).length);
+    }
+
+    // ④ 빈 칸은 못 든다
+    setView('board'); paint();
+    var e2 = active(part('1')).map(function(r){return r.n;}).indexOf('');
+    if (e2 >= 0){
+      var before = JSON.stringify(active(part('1')).map(function(r){return r.n;}));
+      pickStart('1', e2);
+      L('빈 칸을 집으려 하면', '집힌 칸 '+pickList.length+' (0이어야 ◎)');
+      pickOff();
+    } else L('빈 칸을 집으려 하면', '빈 이름 줄이 없어 못 봄');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,35 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  function spill(){
+    var bad=[],all=document.querySelectorAll('.stage, .stage *');
+    for(var i=0;i<all.length;i++){ var el=all[i],s=getComputedStyle(el);
+      if(s.display==='none'||s.visibility==='hidden'||el.clientHeight<=0) continue;
+      var ov=el.scrollHeight-el.clientHeight; if(ov<=3) continue;
+      if(/auto|scroll/.test(s.overflowY)) continue;
+      if(s.overflowY==='hidden'||s.overflowY==='clip') continue;
+      bad.push(el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+'(+'+ov+')'); }
+    return bad.length? '★겹침 '+bad.join(' ') : '겹침 없음 ◎';
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('board'); paint();
+    var Z=devicePixelRatio;
+    function line(tag,sel){
+      var k=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'));
+      var e=document.querySelector(sel), css=e?parseFloat(getComputedStyle(e).fontSize):0;
+      return tag+' k'+k.toFixed(3)+' · 눈에 '+(css*Z).toFixed(1)+'px · '+spill();
+    }
+    o.push('CSS창 '+innerWidth+'x'+innerHeight+' · 확대 '+Z+'배');
+    o.push('  '+line('배치표','.cell .nm'));
+    setView('work'); paint();
+    o.push('  '+line('근무표','.jobd .wrow .n'));
+    setView('board'); paint();
+    var col=document.querySelector('.pscroll');
+    o.push('  부칸 '+(col&&col.scrollHeight-col.clientHeight>2?(col.scrollHeight-col.clientHeight)+'px 굴림':'다 들어옴'));
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

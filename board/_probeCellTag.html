@@ -1,0 +1,55 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function cellOf(n){
+    var els = document.querySelectorAll('.cell[data-pk][data-i]');
+    for (var k=0;k<els.length;k++){
+      var nm = els[k].querySelector('.nm');
+      if (nm && nm.textContent === n) return els[k];
+    }
+    return null;
+  }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    var who = active(part('1'))[10].n;
+    setDayTag(who, '조출');
+    L('① ' + who + ' 조출', '배지 "' + tagOf(who) + '" · 자리 ' + (partsOf(who).join('')||'없음'));
+
+    insertAt('1', 19, who); paint();
+    var ri = active(part('1')).map(function(r){ return r.n; }).indexOf(who);
+    var row = active(part('1'))[ri];
+    L('② 끼워 넣은 뒤', '순번 ' + seatNo(part('1'), ri) + '번 · ★줄의 tag "' + (row.tag||'없음') + '"');
+    L('  seatRowTag 는', '"' + seatRowTag(who) + '"');
+    L('  tagClass 는', '"' + tagClass(row) + '"');
+    var c = cellOf(who);
+    L('★③ 화면 칸', c ? 'class="' + c.className + '"' : '못 찾음 ✗');
+    L('  칸 안 글', c ? c.textContent.replace(/\s+/g,' ').trim() : '-');
+    L('  ★배지 조각', c ? (c.querySelectorAll('.tag').length + '개 — '
+      + Array.prototype.map.call(c.querySelectorAll('.tag'), function(x){ return x.textContent; }).join(' ')) : '-');
+    L('  ★배경 색', c ? getComputedStyle(c).backgroundColor : '-');
+
+    // 근무표 쪽은 어떤가
+    setView('work'); paint();
+    var wr = workRows().filter(function(r){ return r.n===who; })[0];
+    L('', '');
+    L('근무표 줄', wr ? ('상태 "' + wr.st + '" · 배지 ' + JSON.stringify(wr.bts)) : '없음');
+
+    // 다른 배지도 되는지
+    setView('board'); cur='1';
+    var w2 = active(part('1'))[3].n;
+    setDayTag(w2, '후출'); paint();
+    L('', '');
+    L('④ ' + w2 + ' 후출 (자리에서 내려감)', partsOf(w2).join('')||'없음');
+    insertAt('1', 2, w2); paint();
+    var c2 = cellOf(w2);
+    L('  넣은 뒤 칸', c2 ? 'class="' + c2.className + '" · 배지 '
+      + Array.prototype.map.call(c2.querySelectorAll('.tag'), function(x){ return x.textContent; }).join(' ') : '✗');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

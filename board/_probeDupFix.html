@@ -1,0 +1,40 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(s){ o.push(s); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    // 사용자 화면처럼 꾸민다 — 자리가 없는데 2,3 배지가 붙은 사람
+    var v=JONAMES.filter(function(n){ return !partsOf(n).length && !isAbs(tagOf(n)); })[0]
+        || bu3List()[0];
+    ['1','2','3'].forEach(function(k){ if(partsOf(v).indexOf(k)>=0) delFromPart(k,v); });
+    TAG[v]='2,3';
+    L('꾸민 상태: '+v+' TAG="'+tagOf(v)+'" 자리 '+(partsOf(v).join(',')||'없음'));
+    L('  근무표 줄: 배지['+wkBadges(v).join('+')+']');
+    L('');
+    L('한 번 고치면 (commit 이 맞춰 준다) —');
+    setDayTag(JONAMES.filter(function(n){return !tagOf(n);})[0],'조출');
+    L('  '+v+' TAG="'+(tagOf(v)||'없음')+'" '+(tagOf(v)?'남음 ✗':'떨어짐 ◎'));
+    L('');
+    // 진짜 두 부에 있는 사람은 그대로 둔다
+    var w=JONAMES.filter(function(n){
+      return !tagOf(n) && partsOf(n).length===1 && partsOf(n)[0]!=='3'; })[0];
+    insertAt(partsOf(w)[0]==='1' ? '2' : '1', 0, w);     // 손으로 1·2부 두 자리를 만든다
+    setDayTag(JONAMES.filter(function(n){return !tagOf(n) && n!==w;})[0],'후출');
+    L('진짜 두 부인 사람: '+w+' 자리 '+partsOf(w).join(',')+' 배지="'+(tagOf(w)||'없음')+'" '
+      + (dupPinned(w)?'못 박힘 ◎ (1·2부는 배지가 없다)':'★못이 없다'));
+    L('  근무표 줄: 배지['+wkBadges(w).join('+')+'] (중복은 배지에 안 적는다 ◎)');
+    L('');
+    var T=workTally();
+    ['정진영','김동우'].forEach(function(n){
+      var r=T.rows.filter(function(x){return x.n===n;})[0];
+      if(r) L(n+'  배지['+r.bts.join('+')+']  상태"'+r.st+'"');
+    });
+    L('');
+    L('배지와 상태가 같은 말을 하는 줄: '+T.rows.filter(function(r){
+        return r.bts.some(function(b){ return b===r.st; }); }).length+'명 (0이어야)');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

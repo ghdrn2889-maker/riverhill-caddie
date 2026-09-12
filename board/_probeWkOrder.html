@@ -1,0 +1,38 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    // 조 편성표 원본 차례
+    for (var g=0; g<JOCNT; g++){
+      var want=joMembers(g);
+      var sec=qa('.josec')[g];
+      var got=sec? qa('.josec')[g].querySelectorAll('.wrow') : [];
+      got=Array.prototype.map.call(got,function(r){return r.querySelector('.n').textContent;});
+      var same = want.length===got.length && want.every(function(n,i){return n===got[i];});
+      L(JOLABEL[g], (same?'원본과 같음 ◎ ':'다름 ✗ ')+got.length+'명');
+      if(!same){
+        L('  원본', want.slice(0,10).join(', '));
+        L('  화면', got.slice(0,10).join(', '));
+      } else if (g===0) L('  앞 9', got.slice(0,9).join(', '));
+    }
+    L('조 미배정', (function(){ var s=qa('.josec'); return s.length>JOCNT? s[JOCNT].querySelector('.johd').textContent : '(없음)'; })());
+    L('전체 줄', qa('.wrow').length+'명 / 총원 '+peopleIndex().order.length);
+
+    // 거르개를 걸어도 차례가 유지되나
+    tap(qa('#ptabs .fchip')[1]);   // 근무만
+    var g0=qa('.josec')[0];
+    var got2=Array.prototype.map.call(g0.querySelectorAll('.wrow'),function(r){return r.querySelector('.n').textContent;});
+    var want2=joMembers(0).filter(function(n){ return got2.indexOf(n)>=0; });
+    L('근무만 거름', (want2.join()===got2.join()?'차례 유지 ◎ ':'흐트러짐 ✗ ')+got2.length+'명 · '+got2.slice(0,6).join(', '));
+    tap(qa('#ptabs .fchip')[0]);
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

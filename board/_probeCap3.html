@@ -1,0 +1,66 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function reset(){
+  localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+  savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+  bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+  DAY.forEach(function(p){ p.roster=[]; });
+  PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+}
+function seatsOf(pk){ return active(part(pk)).map(function(r){ return r.n||'(빈)'; }); }
+function dups(list){ var c={},o=[]; list.forEach(function(n){ if(n==='(빈)')return;
+  c[n]=(c[n]||0)+1; if(c[n]===2) o.push(n); }); return o; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    // ── 갑. 1·2부: 한도를 걸고 세운다
+    L('','★갑. 1·2부 — 대기 한도 5');
+    reset(); SMAX['1']=5; SMAX['2']=5;
+    var pool12 = lineupPool('house').length;
+    applyLineup(seonbal(), ['1','2']);
+    var s1=seatsOf('1'), s2=seatsOf('2');
+    L('  설 사람', pool12+'명 · 1부 티오프 '+part('1').tees.length+' · 2부 '+part('2').tees.length);
+    L('  1부 자리', s1.length+'칸 (근무 '+part('1').tees.length+' + 대기 '+(s1.length-part('1').tees.length)+')');
+    L('  2부 자리', s2.length+'칸 (근무 '+part('2').tees.length+' + 대기 '+(s2.length-part('2').tees.length)+')');
+    L('  두 부 겹친 사람', dups(s1.concat(s2)).length+'명 — '+dups(s1.concat(s2)).slice(0,3).join(' '));
+    ok(dups(s1).length===0 && dups(s2).length===0, '  한 부 안에서 같은 사람이 두 번',
+       '1부 '+dups(s1).length+' · 2부 '+dups(s2).length+'명');
+
+    // ── 을. 3부: 똑같이 한도를 걸고 세운다
+    L('','★을. 3부 — 대기 한도 5');
+    reset(); SMAX['3']=5;
+    var pool3 = lineupPool('bu3').length;
+    var t3 = part('3').tees.length;
+    applyLineup(bu3Start(), ['3']);
+    var s3 = seatsOf('3');
+    L('  설 사람', pool3+'명 · 3부 티오프 '+t3+'팀');
+    L('  3부 자리', s3.length+'칸 (근무 '+t3+' + 대기 '+(s3.length-t3)+')');
+    L('  자리 > 사람인가', (t3+5)+'칸 vs '+pool3+'명');
+    var d3 = dups(s3);
+    ok(d3.length===0, '  ★한 부 안에서 같은 사람이 두 번', d3.length? '★'+d3.length+'명 — '+d3.slice(0,5).join(' ') : '없음 ◎');
+    L('  3부 줄', s3.join(' · '));
+
+    // ── 병. 한도 없이 3부
+    L('','★병. 3부 — 한도 없음');
+    reset();
+    applyLineup(bu3Start(), ['3']);
+    var s3b = seatsOf('3');
+    L('  3부 자리', s3b.length+'칸 (근무 '+t3+' + 대기 '+(s3b.length-t3)+')');
+    ok(dups(s3b).length===0, '  같은 사람 두 번', dups(s3b).length? '★'+dups(s3b).join(' ') : '없음 ◎');
+
+    // ── 정. 한도 없이 1·2부
+    L('','★정. 1·2부 — 한도 없음');
+    reset();
+    applyLineup(seonbal(), ['1','2']);
+    var a1=seatsOf('1'), a2=seatsOf('2');
+    L('  1부', a1.length+'칸 · 대기 '+(a1.length-part('1').tees.length));
+    L('  2부', a2.length+'칸 · 대기 '+(a2.length-part('2').tees.length));
+    L('  두 부 겹친 사람', dups(a1.concat(a2)).length+'명');
+    ok(dups(a1).length===0 && dups(a2).length===0, '  한 부 안 중복', '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

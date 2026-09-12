@@ -1,0 +1,11 @@
+<script>
+(function(){
+  openDuty('\ubc8c\ub2f9');
+  document.querySelectorAll('#dutySug button')[0].click();
+  document.getElementById('dutyQ').value='';
+  (function(){var bs=document.querySelectorAll('#sheet button');
+    for(var i=0;i<bs.length;i++)if(bs[i].getAttribute('data-act')==='dutyadd'){bs[i].click();return;}})();
+  var t=document.querySelectorAll('#sheet .dtm')[1];
+  t.value='18:00'; t.dispatchEvent(new Event('change',{bubbles:true}));
+})();
+</script>

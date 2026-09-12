@@ -1,0 +1,65 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function ms(){ return STAFF.map(function(x,i){ return i+':'+x.k+'='+(x.n||'빔'); }).join(' '); }
+  function badge(n){
+    paint();
+    var r=document.querySelector('[data-who="'+n+'"]');
+    if(!r) return '(줄 없음)';
+    return [].slice.call(r.querySelectorAll('.bt,.bg')).map(function(e){return e.textContent.trim();}).join('][');
+  }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work');
+  }
+  try{
+    reset();
+    L('경기과 자리', ms());
+    L('허웅진 명부에 있나', hasCaddie('허웅진')?'있음':'★없음');
+    L('허웅진 조', (JOLABEL[joOf('허웅진')]||('조 미배정 '+joOf('허웅진'))));
+    L('허웅진 처음 배지', tagOf('허웅진')||'없음');
+
+    // ── 갑. 이미 자리에 있는데 배지를 뗀 뒤, 자리를 다시 저장하면?
+    o.push(''); L('★갑. 이미 마샬인 사람의 배지를 떼고 → 자리를 다시 넣어 본다','');
+    setDayTag('허웅진','');                      // 배지를 손으로 뗀다
+    L('  뗀 뒤 배지', tagOf('허웅진')||'없음');
+    var mi=[]; STAFF.forEach(function(x,i){ if(x.k==='마샬') mi.push(i); });
+    setStaff(mi[1], '허웅진', STAFF[mi[1]].t);   // 같은 이름을 다시 넣는다
+    ok(tagOf('허웅진')==='배치','  다시 넣은 뒤 배지', tagOf('허웅진')||'★없음');
+
+    // ── 을. 다른 마샬 칸에 넣으면?
+    reset();
+    o.push(''); L('★을. 이미 4번 칸 마샬인 허웅진을 3번 칸에도 넣는다','');
+    setDayTag('허웅진','');
+    L('  배지를 떼 둔다', tagOf('허웅진')||'없음');
+    L('  넣기 전 자리', ms());
+    setStaff(mi[0], '허웅진', STAFF[mi[0]].t);
+    L('  넣은 뒤 자리', ms());
+    ok(tagOf('허웅진')==='배치','  배지', tagOf('허웅진')||'★없음');
+    L('  고침 기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 병. 판을 열 때부터 자리엔 있고 배지는 없으면?
+    reset();
+    o.push(''); L('★병. 자리엔 있는데 배지가 없는 채로 판을 다시 연다','');
+    setDayTag('허웅진','');
+    daySave();
+    L('  저장할 때 배지', tagOf('허웅진')||'없음');
+    TAG={}; STAFF=[]; JONAMES=[];
+    bootLoad();
+    L('  다시 연 뒤 자리', ms());
+    ok(tagOf('허웅진')==='배치','  다시 연 뒤 배지', tagOf('허웅진')||'★없음');
+
+    // ── 정. 근무표 줄에 실제로 뭐라고 찍히나
+    reset();
+    o.push(''); L('★정. 씨앗 그대로일 때 근무표 줄','');
+    L('  허웅진', badge('허웅진'));
+    L('  우겸조', badge('우겸조'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

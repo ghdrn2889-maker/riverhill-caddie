@@ -1,0 +1,25 @@
+<div id="PROBE">시작 안 함</div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+(function(){
+  var P=document.getElementById('PROBE'), out=[];
+  function log(k,v){ out.push(k+': '+v); P.textContent=out.join('  ;;  '); }
+  function pe(t,el,x,y){el.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+    pointerType:'mouse',clientX:x,clientY:y,button:0,buttons:t==='pointerup'?0:1}));}
+  function rows(){return document.querySelectorAll('#drwBody .rrow');}
+  function drag(f,to,below){var g=f.querySelector('[data-grip]');
+    var a=f.getBoundingClientRect(),b=to.getBoundingClientRect();
+    var ty=below?b.bottom-2:b.top+2;
+    pe('pointerdown',g,a.left+5,a.top+a.height/2);
+    pe('pointermove',g,a.left+5,ty); pe('pointerup',g,a.left+5,ty);}
+  try{
+    openDrawer(); log('열림', rows().length+'줄');
+    drag(rows()[4], rows()[0], false);
+    log('끌었음', document.querySelectorAll('#logsec .li').length+'건 / sortBlock='+sortBlock);
+    log('undo 직전','ok');
+    undo();
+    log('undo 뒤', document.querySelectorAll('#logsec .li').length+'건');
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ log('ERROR', e.message+' | '+(e.stack||'').split('\n')[1]); }
+})();
+</script>

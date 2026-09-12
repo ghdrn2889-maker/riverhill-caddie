@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function row(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+  function say(n){ var r=row(n); return '['+r.bts.join(' ')+'] '+r.st+' (cls '+r.cls+')'; }
+  function T(){ var t=workTally(); return '총원 '+t.total+' · 가용 '+t.avail+' · 제외 '+t.exc; }
+  function win(){ return DAY.map(function(p){
+    var a=p.tees[0], b=p.tees[p.tees.length-1];
+    return p.name+' '+(a?a.time:'-')+'~'+(b?b.time:'-'); }).join(' | '); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('한 라운드', ROUNDMIN+'분');
+    L('오늘 티오프', win());
+    L('걸기 전', T());
+
+    // 자리 없는 사람 넷을 만든다
+    var W = workRows().filter(function(r){ return r.cls==='w'; });
+    var A=W[0].n, B=W[1].n, C=W[2].n, D=W[3].n;
+    [A,B,C,D].forEach(function(n){ vacateSeats(n); });
+    paint();
+    L('', '');
+    L('자리 비운 뒤 '+A, say(A));
+
+    // ㉠ 아침 당번 7:00~12:00
+    dutyToggle('당번', A);
+    // ㉡ 오후 벌당 13:00~18:00
+    dutyToggle('벌당', B);
+    // ㉢ 시각 없는 당번(흡연실)
+    dutyToggle('흡연실 당번', C);
+    // ㉣ 밤 늦은 당번 21:00~23:00 — 아무 라운드도 안 막는다
+    if (DUTYKEYS.indexOf('야간 당번')<0){ DUTYKEYS.push('야간 당번'); DUTY['야간 당번']=[]; DUTYDEF['야간 당번']={t:'21:00',h:2}; }
+    dutyToggle('야간 당번', D);
+    paint();
+
+    o.push('');
+    L('★시각별로 갈리나', '');
+    L('  ㉠ '+A+' 당번 7:00~12:00 ', say(A) + ' · 뛸 수 있나 ' + (canRound(A)?'있다':'없다'));
+    L('  ㉡ '+B+' 벌당 13:00~18:00', say(B) + ' · 뛸 수 있나 ' + (canRound(B)?'있다':'없다'));
+    L('  ㉢ '+C+' 흡연실(시각없음)  ', say(C) + ' · 뛸 수 있나 ' + (canRound(C)?'있다':'없다'));
+    L('  ㉣ '+D+' 야간 21:00~23:00 ', say(D) + ' · 뛸 수 있나 ' + (canRound(D)?'있다':'없다'));
+    o.push('');
+    L('  셈', T());
+    L('  안 겹치는 티오프(㉡ 벌당)', (function(){
+      var out=[];
+      DAY.forEach(function(p){ p.tees.forEach(function(t){
+        if(!t||t.cx) return; var a=mm(t.time), b=a+ROUNDMIN;
+        if (!(a < mm('18:00') && b > mm('13:00'))) out.push(p.name+' '+t.time); }); });
+      return out.length? out.slice(0,4).join(' · ')+(out.length>4?' 외 '+(out.length-4):'') : '없음'; })());
+    L('  안 겹치는 티오프(㉠ 당번)', (function(){
+      var out=[];
+      DAY.forEach(function(p){ p.tees.forEach(function(t){
+        if(!t||t.cx) return; var a=mm(t.time), b=a+ROUNDMIN;
+        if (!(a < mm('12:00') && b > mm('7:00'))) out.push(p.name+' '+t.time); }); });
+      return out.length? out.slice(0,4).join(' · ')+(out.length>4?' 외 '+(out.length-4):'') : '없음'; })());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

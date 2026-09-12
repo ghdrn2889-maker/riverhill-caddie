@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+setTimeout(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function sh(){ return document.getElementById('sheet'); }
+  function act(n){ var bs = sh().querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  function padd(){ var e = document.querySelector('#cols .padd'); return e ? e.textContent.trim() : '(없음)'; }
+  function toastTx(){ return document.getElementById('toast').textContent; }
+  try {
+    // ① 3부 상태 — 더 못 넣는다
+    log('지금', DAY.length + '부 · 오른쪽 열 "' + padd() + '"');
+    var pb = document.querySelector('#cols .padd button');
+    log('넣기 단추', pb ? '있음(문제 — 3부인데)' : '없음(정상)');
+    addPart();
+    log('억지로 넣기', DAY.length + '부 · ' + toastTx());
+
+    // ② 하나 지우면 다시 넣을 수 있어야 한다
+    delPart('3');
+    log('3부 지움', DAY.length + '부 · 오른쪽 열 "' + padd() + '"');
+    document.querySelector('#cols .padd button').dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    log('다시 넣음', DAY.map(function(p){ return p.name; }).join(' ') + ' · 열 "' + padd() + '"');
+
+    // ③ 코스 넷까지
+    openCourses();
+    ['남','북'].forEach(function(nm){
+      var i = document.getElementById('csNew'); if (!i) return;
+      i.value = nm; act('cadd').click();
+    });
+    log('코스 넷', COURSES.map(cname).join(',') + ' · 넣기칸 '
+      + (document.getElementById('csNew') ? '있음(문제)' : '없음(정상)'));
+    ctAdd('동');
+    log('억지로 넣기', COURSES.length + '개 · ' + toastTx());
+    closeSheet();
+
+    // ④ 최악 — 3부 × 4코스
+    var cols = getComputedStyle(document.querySelector('#col1 .brow')).gridTemplateColumns;
+    log('최악 격자', cols);
+    var nm = document.querySelectorAll('#cols .cell .nm'), bad = 0, minw = 9999;
+    for (var i = 0; i < nm.length; i++){
+      if (nm[i].scrollWidth > nm[i].clientWidth + 1) bad++;
+      minw = Math.min(minw, Math.round(nm[i].getBoundingClientRect().width));
+    }
+    log('이름 잘림', bad + '건 · 가장 좁은 이름칸 ' + minw + 'px');
+    var ps = document.querySelectorAll('#viewBoard .pscroll'), ov = 0;
+    for (var z = 0; z < ps.length; z++) ov = Math.max(ov, ps[z].scrollHeight - ps[z].clientHeight);
+    log('세로 넘침', ov + 'px · --k ' + getComputedStyle(document.documentElement).getPropertyValue('--k').trim());
+    log('머리글', Array.prototype.map.call(document.querySelectorAll('#col1 .ghd button.co'),
+      function(b){ return b.childNodes[0].textContent; }).join('|')
+      + ' · ' + (document.querySelector('#col1 .ghd').classList.contains('wide') ? '시각 왼쪽' : '시각 가운데'));
+
+    // ⑤ 설정 쪽도 막혔나
+    openCfg(); cfgTab = 'ct'; drawCfg();
+    log('설정 부 넣기', document.querySelector('#cfg [data-padd]') ? '있음(문제)' : '없음(정상)');
+    log('설정 코스 넣기', document.querySelector('#cfg [data-ctadd]') ? '있음(문제)' : '없음(정상)');
+    var lbs = []; document.querySelectorAll('#cfg .crow .lb').forEach(function(e){
+      if (/까지/.test(e.textContent)) lbs.push(e.textContent); });
+    log('설정 안내', lbs.join(' / ') || '(없음)');
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+}, 400);
+</script>

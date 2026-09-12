@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function offN(list){ return list.filter(function(n){ return tagOf(n)==='휴무'; }).length; }
+  function bar(){ var b=document.getElementById('bulkbar'); return b ? b.textContent.replace(/\s+/g,' ').trim() : '(없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    var H = JONAMES.filter(function(n){ return !tagOf(n); }).slice(0,5);
+    bulkStart('휴무');
+    H.forEach(bulkTap);
+    L('휴무 5명 지정', offN(H) + '/5 · 띠: ' + bar());
+
+    // ── ① 띠의 '저장하기'를 눌렀을 때 띠가 어떻게 보이나
+    bulkSave(); paint();
+    L('', '');
+    L('① 띠의 저장하기 뒤', '휴무 ' + offN(H) + '/5 (배지는 그대로)');
+    L('  ★띠에는', bar());
+    L('  ★쌓아 둔 명단', bulkDone().length + '명 — ' + (bulkDone().join(' ')||'비었다'));
+
+    // 끄면?
+    var n1 = bulkReset();
+    L('  끄기(확인)', '되돌린 사람 ' + n1 + '명 · 휴무 ' + offN(H) + '/5 '
+      + (offN(H)===5 ? '◎ 저장한 것 그대로':'✗ 저장했는데 풀렸다'));
+
+    // ── ② 위쪽 '저장' 단추(daySave)를 눌렀을 때
+    localStorage.clear(); resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    bulkStart('휴무');
+    H.forEach(bulkTap);
+    L('', '');
+    L('② 휴무 5명 지정', offN(H) + '/5');
+    daySave();                       // 사용자가 흔히 누르는 그 저장
+    L('  위쪽 저장을 누름', '저장됨 · 쌓아 둔 명단 ' + bulkDone().length + '명');
+    var n2 = bulkReset();
+    L('  ★끄기(확인)', '되돌린 사람 ' + n2 + '명 · 휴무 ' + offN(H) + '/5 '
+      + (offN(H)===5 ? '◎ 그대로':'✗ 저장했는데 다 풀렸다'));
+    L('  저장본에는', (function(){ try{ var d=JSON.parse(localStorage.getItem(DAYPFX+DATE));
+        var t=JSON.parse(JSON.parse(d.s).tag ? d.s : d.s); var tg=JSON.parse(d.s).tag;
+        return H.filter(function(n){ return tg[n]==='휴무'; }).length + '/5'; }catch(e){ return '?'; } })());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,95 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function wait(pk){ return spareNow(part(pk)); }
+  function unplaced(){
+    return workRows().filter(function(r){ return r.cls==='u'; }).length;
+  }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    SMAX={'1':0,'2':0,'3':0};
+  }
+  try{
+    reset();
+    L('바탕', '1부 '+part('1').tees.length+'팀 · 2부 '+part('2').tees.length+'팀');
+
+    // ── 갑. 한도 없이 세우면 남는 사람이 다 대기로
+    L('','★갑. 한도 없음(0) — 여태 하던 대로');
+    applyLineup(seonbal(), ['1','2']);
+    var w0=wait('2'), u0=unplaced();
+    L('  2부 대기', w0+'명 · 미배치 '+u0+'명');
+    ok(w0>0,'  대기가 섰나', w0+'명');
+
+    // ── 을. 한도 5명
+    reset();
+    L('','★을. 2부 대기 한도 1명 — 넘친 사람은 어디로 가나');
+    SMAX['2']=1;
+    applyLineup(seonbal(), ['1','2']);
+    var w1=wait('2'), u1=unplaced();
+    L('  2부 대기', w1+'명 · 미배치 '+u1+'명');
+    ok(w1===1,'  한도에서 끊었나', w1+'명  (1명이어야)');
+    ok(u1===u0+(w0-1),'  넘친 사람은 미배치로',
+       '대기 '+w0+'→'+w1+'명 · 미배치 '+u0+'→'+u1+'명');
+    var T=workTally();
+    ok(T.avail===82-T.exc,'  가용에 그대로 드나', '총원 '+T.total+' · 가용 '+T.avail+' · 제외 '+T.exc);
+
+    // ── 병. 한도 0명 — 대기를 아예 안 세운다
+    reset();
+    L('','★병. 2부 대기 한도… 0은 제한 없음이니 1명으로');
+    SMAX['2']=1;
+    applyLineup(seonbal(), ['1','2']);
+    ok(wait('2')===1,'  2부 대기', wait('2')+'명  (1명이어야)');
+
+    // ── 정. 티오프 자리는 한도와 상관없다
+    reset();
+    L('','★정. 자리(티오프)는 한도와 상관없이 다 찬다');
+    SMAX['2']=2;
+    applyLineup(seonbal(), ['1','2']);
+    var a1=active(part('1')), a2=active(part('2'));
+    var e1=0,e2=0;
+    for(var i=0;i<part('1').tees.length;i++) if(!a1[i]||!a1[i].n) e1++;
+    for(i=0;i<part('2').tees.length;i++) if(!a2[i]||!a2[i].n) e2++;
+    ok(e1===0 && e2===0,'  빈 티오프', '1부 '+e1+'칸 · 2부 '+e2+'칸  (0이어야)');
+    ok(wait('2')===2,'  2부 대기', wait('2')+'명');
+
+    // ── 무. 손으로 넣는 것은 안 막는다
+    L('','★무. 한도를 넘겨 손으로 넣기');
+    var free=workRows().filter(function(r){
+      return (r.cls==='u'||r.cls==='d') && partsOf(r.n).indexOf('2')<0; })[0];
+    if(free){
+      addRow('2', free.n);
+      ok(wait('2')===3,'  넣어졌나', wait('2')+'명 (막지 않는다)');
+      L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+      ok(/한도/.test(LOG[0]?LOG[0].msg:''),'  기록에 한도를 적나',
+         /한도/.test(LOG[0]?LOG[0].msg:'')?'적음 ◎':'★안 적음');
+    }
+
+    // ── 기. 설정 칸이 있나
+    L('','★기. 설정 칸');
+    reset();
+    cfgTab='ct'; openCfg();
+    var ins=[].slice.call(document.querySelectorAll('[data-smax]'));
+    ok(ins.length===3,'  칸', ins.map(function(x){ return x.getAttribute('data-smax')+'부'; }).join(' '));
+    ins[1].value='4';
+    ins[1].dispatchEvent(new Event('change',{bubbles:true}));
+    ok(spareCap('2')===4,'  2부 한도', spareCap('2')+'명');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 경. 저장하고 다시 열어도 남나
+    L('','★경. 설정은 날을 넘겨도 남나');
+    var keep=spareCap('2');
+    SMAX={'1':0,'2':0,'3':0};
+    cfgLoad();
+    ok(spareCap('2')===keep,'  다시 읽으니', spareCap('2')+'명');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

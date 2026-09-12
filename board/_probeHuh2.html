@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function badge(n){
+    var r=document.querySelector('[data-who="'+n+'"]');
+    if(!r) return '(줄 없음)';
+    return '['+[].slice.call(r.querySelectorAll('.bt,.bg'))
+      .map(function(e){return e.textContent.trim();}).join('][')+']';
+  }
+  try{
+    // 손 안 댄 판 그대로 — 씨앗 마샬 둘이 어떻게 보이나
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('경기과 마샬', STAFF.filter(function(x){return x.k==='마샬';})
+      .map(function(x){return x.n||'빔';}).join(' · '));
+    ok(tagOf('우겸조')==='배치','우겸조 배지', tagOf('우겸조')+' · 줄 '+badge('우겸조'));
+    ok(tagOf('허웅진')==='배치','허웅진 배지', tagOf('허웅진')+' · 줄 '+badge('허웅진'));
+    ok(!unsaved(),'열자마자 저장 안 함 뜨나', unsaved()?'★뜬다':'안 뜬다 ◎');
+
+    // 내일로 넘긴 뒤에도 자리에 남은 마샬은 배치다
+    o.push(''); L('★내일로 넘기기 뒤','');
+    carryToNextDay(); paint();
+    var kept=JONAMES.filter(function(n){ return tagOf(n)==='배치'; });
+    L('  배치인 사람', kept.join('·')||'없음');
+    L('  경기과 마샬', STAFF.filter(function(x){return x.k==='마샬';})
+      .map(function(x){return x.n||'빔';}).join(' · '));
+    var msn=STAFF.filter(function(x){return x.k==='마샬'&&x.n&&hasCaddie(x.n);})
+      .map(function(x){return x.n;}).sort().join('·');
+    ok(kept.slice().sort().join('·')===msn,'  배치 = 마샬 자리에 앉은 캐디',
+       '배치['+kept.slice().sort().join('·')+'] vs 마샬['+msn+']');
+
+    // 마샬을 빼면 둘 다 떨어진다
+    o.push(''); L('★마샬 둘을 다 비우면','');
+    var mi=[]; STAFF.forEach(function(x,i){ if(x.k==='마샬') mi.push(i); });
+    mi.forEach(function(i){ setStaff(i, '', STAFF[i].t); });
+    ok(JONAMES.filter(function(n){return tagOf(n)==='배치';}).length===0,
+       '  배치인 사람', JONAMES.filter(function(n){return tagOf(n)==='배치';}).join('·')||'없음 ◎');
+
+    // 손으로 붙인 배치는 마샬이 아니어도 안 걷어낸다
+    o.push(''); L('★손으로 붙인 배치는 지키나','');
+    var hand=JONAMES.filter(function(n){ return !tagOf(n); })[0];
+    setDayTag(hand,'배치');
+    setStaff(mi[0], '허웅진', STAFF[mi[0]].t);   // 딴 자리를 건드린다
+    ok(tagOf(hand)==='배치','  '+hand+' 배지', tagOf(hand)||'★걷혔다');
+    ok(tagOf('허웅진')==='배치','  허웅진 배지', tagOf('허웅진')||'★없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

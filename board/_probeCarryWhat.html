@@ -1,0 +1,47 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shot(){ return DAY.map(function(p){
+    return p.name + ' 이름 ' + active(p).filter(function(r){ return r.n; }).length
+      + '명 · 팀 ' + p.tees.length + '칸'; }).join(' | '); }
+  try{
+    localStorage.clear();
+    resetToBoard(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    L('이어받기 설정', '근태 ' + (carryOpt('abs')?'가져옴':'안 가져옴')
+      + ' · 역할 ' + (carryOpt('role')?'가져옴':'안 가져옴')
+      + ' · 3부순번 ' + (carryOpt('ln3')?'세움':'안 세움')
+      + ' · ★자리 ' + (carryOpt('seats')?'가져옴':'안 가져옴'));
+    L('오늘', shot());
+
+    var d0 = DATE;
+    carryToNextDay();
+    L('', '');
+    L('★날 넘긴 뒤', shot());
+    L('  날짜', d0 + ' → ' + DATE);
+    L('  ★이름이 남았나', DAY.some(function(p){ return active(p).some(function(r){ return r.n; }); })
+      ? '남았다 ✗' : '없다 ◎ (빈 배치표)');
+    L('  ★팀(티오프)은', DAY.map(function(p){ return p.name+' '+p.tees.length; }).join(' ')
+      + ' — 어제 것을 그대로 들고 왔다');
+    L('  1부 앞 티오프', part('1').tees.slice(0,4).map(function(t){ return t.time+' '+t.course; }).join(' '));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  근무표 총원', workTally().total + '명 · 미배치 ' + workTally().cu + '명');
+
+    // 자리를 가져오게 켜 두면?
+    L('', '');
+    localStorage.clear();
+    resetToBoard(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    setCarryOpt('seats', true);
+    carryToNextDay();
+    L('★자리 가져오기를 켜면', shot());
+    L('  이름이', DAY.some(function(p){ return active(p).some(function(r){ return r.n; }); })
+      ? '남는다 — 순번 세우기를 안 눌러도 어제 사람이 앉아 있다' : '없다');
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

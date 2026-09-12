@@ -1,0 +1,89 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+setTimeout(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function sh(){ return document.getElementById('sheet'); }
+  function open_(){ return sh().classList.contains('on'); }
+  function st(){ var e = sh().querySelector('.st'); return e ? e.textContent : '(없음)'; }
+  function act(n){ var bs = sh().querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  function clickIn(sel){ var e = document.querySelector(sel); if (!e) return false;
+    e.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true})); return true; }
+  try {
+    // ① 배치표에서 바로 보이나
+    log('부 이름 단추', document.querySelectorAll('#cols .ph .pname').length + '개'
+      + ' · 첫째 "' + document.querySelector('#cols .ph .pname').textContent + '"');
+    log('코스 머리 단추', document.querySelectorAll('#cols .ghd button.co').length + '개'
+      + ' · "' + document.querySelector('#cols .ghd button.co').textContent + '"');
+    var pa = document.querySelector('#cols .padd button');
+    log('부 넣기 열', pa ? '"' + pa.textContent + '" 폭 ' + Math.round(pa.getBoundingClientRect().width) + 'px' : '없음(문제)');
+
+    // ② 부 이름 눌러 창
+    clickIn('#col2 .ph .pname');
+    log('부 창', open_() ? st() + ' · ' + sh().querySelector('.sub').textContent.slice(0, 42) : '안 열림(문제)');
+
+    // ③ 이름 바꾸기
+    var inp = document.getElementById('pnName');
+    inp.value = '오후';
+    inp.dispatchEvent(new Event('change', {bubbles:true}));
+    log('이름 바꿈', DAY.map(function(p){ return p.name; }).join(' ')
+      + ' · 배치표머리 "' + document.querySelector('#col2 .ph .pname b').textContent + '"');
+
+    // ④ 지우기 → 경고창
+    act('pdel').click();
+    log('경고창', st());
+    log('  무엇이 사라지나', (sh().querySelector('.warnbox') || {textContent:'(없음)'}).textContent.trim().slice(0, 46));
+    log('  안심 문구', (sh().querySelector('.calmbox') || {textContent:'(없음)'}).textContent.trim().slice(0, 56));
+    var two = sh().querySelectorAll('.acts.two button');
+    log('  단추', Array.prototype.map.call(two, function(b){ return b.textContent; }).join(' / '));
+
+    // ⑤ 그만두기 → 안 지워져야 한다
+    act('pback').click();
+    log('그만두기', DAY.length + '부 그대로 · 창 ' + st());
+
+    // ⑥ 진짜 지우기
+    act('pdel').click(); act('pdelyes').click();
+    log('지움', DAY.map(function(p){ return p.name; }).join(' ') + ' · 창 ' + (open_() ? '열림(문제)' : '닫힘'));
+    undo();
+    log('되돌림', DAY.map(function(p){ return p.name; }).join(' '));
+
+    // ⑦ 부 넣기 열
+    document.querySelector('#cols .padd button').dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    log('부 넣기', DAY.map(function(p){ return p.name; }).join(' ')
+      + ' · 열 ' + getComputedStyle(document.querySelector('#viewBoard .body')).gridTemplateColumns);
+    undo();
+
+    // ⑧ 코스 머리 눌러 창
+    clickIn('#col1 .ghd button.co');
+    log('코스 창', open_() ? st() + ' · 줄 ' + sh().querySelectorAll('.drow').length : '안 열림(문제)');
+    document.getElementById('csNew').value = '남코스';
+    act('cadd').click();
+    log('코스 넣음', COURSES.map(cname).join(',') + ' · 창 줄 ' + sh().querySelectorAll('.drow').length);
+    var cn = sh().querySelector('[data-csname="C3"]');
+    cn.value = '남'; cn.dispatchEvent(new Event('change', {bubbles:true}));
+    log('코스 이름', COURSES.map(cname).join(',')
+      + ' · 배치표머리 ' + Array.prototype.map.call(document.querySelectorAll('#col1 .ghd button.co'),
+          function(b){ return b.childNodes[0].textContent; }).join('|'));
+    sh().querySelector('[data-cdel="C3"]').click();
+    log('코스 지움', COURSES.map(cname).join(',') + ' · 창 ' + st());
+    closeSheet();
+
+    // ⑨ 대바가 여전히 되나 (머리 단추가 끌기를 안 막나)
+    function nameAt(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j].getAttribute('data-nm');
+      return '?'; }
+    function cellOf(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j]; return null; }
+    function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+      pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+    function mid(el){ var r = el.getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }
+    var b0 = [nameAt(0), nameAt(3)], A = cellOf(0), B = cellOf(3), pA = mid(A), pB = mid(B);
+    pe('pointerdown', A, pA[0], pA[1]); pe('pointermove', A, pA[0]+10, pA[1]+10);
+    pe('pointermove', A, pB[0], pB[1]); pe('pointerup', A, pB[0], pB[1]);
+    log('대바', b0.join('/') + ' → ' + nameAt(0) + '/' + nameAt(3));
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+}, 400);
+</script>

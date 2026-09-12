@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function cols(){ return [].slice.call(document.querySelectorAll('#viewWork .jobd')); }
+  function tops(){ return cols().map(function(c){ return Math.round(c.scrollTop); }).join(','); }
+  function rowAt(ci, nth){
+    var rs = cols()[ci].querySelectorAll('.wrow');
+    return rs[Math.min(nth, rs.length-1)];
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('work'); paint();
+
+    var c = cols();
+    L('조 칸', c.length+'개 · 굴릴 수 있는 높이 '+c.map(function(x){
+        return Math.max(0,x.scrollHeight-x.clientHeight); }).join(','));
+
+    // 1조·3조를 아래까지 내린다
+    c[0].scrollTop = Math.max(0, c[0].scrollHeight - c[0].clientHeight);
+    if (c[2]) c[2].scrollTop = Math.round(Math.max(0, c[2].scrollHeight - c[2].clientHeight)/2);
+    var before = tops();
+    L('', '');
+    L('내려 놓은 자리', before);
+
+    // 아래쪽에 보이는 사람 하나를 고른다
+    var last = c[0].querySelectorAll('.wrow');
+    var who = last[last.length-1].getAttribute('data-who');
+    L('  1조 맨 아래 사람', who);
+
+    // ★상태를 준다 — 여기서 예전에는 맨 위로 튀어 올랐다
+    setDayTag(who, '휴무'); paint();
+    L('', '');
+    L('★상태 준 뒤 자리', tops() + (tops()===before ? ' ◎ 그대로' : ' ✗ 튀었다(전 '+before+')'));
+
+    // 되돌리기도
+    setDayTag(who, '휴무'); paint();
+    L('  배지 뗀 뒤', tops() + (tops()===before ? ' ◎ 그대로' : ' ✗ 튀었다'));
+
+    // 카트 번호처럼 목록만 다시 그리는 길
+    drawWkList();
+    L('  목록만 다시 그린 뒤', tops() + (tops()===before ? ' ◎ 그대로' : ' ✗ 튀었다'));
+
+    // 이름 찾기로 목록이 짧아지면 갈 수 있는 데까지만
+    wkQ='김'; paint();
+    L('', '');
+    L('찾기로 짧아지면', tops()+' (짧아진 만큼만 내려간다)');
+    wkQ=''; paint();
+    L('  찾기 지운 뒤', tops());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

@@ -1,0 +1,116 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function rowTx(n){ var r=rowOf(n); if(!r) return '(줄 없음)';
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return '['+e.textContent.trim()+']'; }).join(' '); }
+function stOf(n){ var r=workRows().filter(function(x){ return x.n===n; })[0]; return r? r.st : '(없음)'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+  }
+  try{
+    // ══ 갑. 순번 세우기로 1·2부를 다 뛰게 된 사람
+    reset();
+    // ★자리가 사람보다 많아야 차례가 한 바퀴 더 돈다 — 그래야 1·2부를 다 뛰는 사람이 생긴다.
+    //   2부에 대기 자리를 넉넉히 깔아 그 판을 만든다 (관리자가 실제로 하는 일이다)
+    var pool0 = joRing(seonbal()).filter(function(n){ return inLineup(n,'house'); }).length;
+    var t1 = part('1').tees.length, t2 = part('2').tees.length;
+    SMAX['2'] = Math.max(5, pool0 - (t1 + t2) + 5);
+    applyLineup(seonbal(), ['1','2']);
+    setView('work'); paint();
+    L('  판', '자리 '+t1+'+'+t2+'팀 + 2부 대기 '+spareCap('2')+'칸 · 설 사람 '+pool0+'명');
+    var two = JONAMES.filter(function(n){ return partsOf(n).length===2
+      && partsOf(n).indexOf('1')>=0 && partsOf(n).indexOf('2')>=0; });
+    var one = JONAMES.filter(function(n){ return partsOf(n).length===1 && partsOf(n)[0]==='1'; });
+    L('','★갑. 1부 선발이 2부 뒤에 다시 붙은 사람들');
+    L('  1·2부 둘 다', two.length+'명 — '+two.slice(0,5).join(' · '));
+    ok(two.length>0, '  그런 사람이 있나', two.length+'명');
+    var w = two[0];
+    L('  '+w+' 상태', '"'+stOf(w)+'"');
+    L('  '+w+' 화면 줄', rowTx(w));
+    ok(stOf(w)==='근무', '  ★상태 글', '"'+stOf(w)+'"  (전에는 "1부·2부")');
+    ok(rowTx(w).indexOf('1부·2부')<0, '  화면에 1부·2부', rowTx(w).indexOf('1부·2부')<0?'안 뜸 ◎':'★아직 뜸');
+    ok(wkBadges(w).indexOf('1,2')<0 && wkBadges(w).indexOf('1부·2부')<0,
+       '  배지에 남았나', wkBadges(w).join(' / ')||'(없음)');
+    // 한 부만 하는 사람은 그대로 부 이름
+    if (one.length){
+      L('  '+one[0]+' (1부만)', '"'+stOf(one[0])+'"');
+      ok(stOf(one[0])==='1부', '  한 부는 그대로', '"'+stOf(one[0])+'"');
+    }
+    // 셈은 안 변한다
+    var T=workTally();
+    ok(T.total===82, '  총원', T.total+'명 · 근무 '+T.cw+' · 가용 '+T.avail);
+
+    // ══ 을. 진짜 중복(2,3 · 54)은 그대로 구분한다
+    L('','★을. 진짜 중복은 그대로');
+    reset();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    var t23 = JONAMES.filter(function(n){ var p=partsOf(n);
+      return p.length===2 && p.indexOf('2')>=0 && p.indexOf('3')>=0; })[0];
+    if (!t23){
+      var cand = JONAMES.filter(function(n){ return partsOf(n).length===1 && partsOf(n)[0]==='2'; })[0];
+      addRow('3', cand); t23 = cand;
+    }
+    L('  '+t23, '자리 '+partsOf(t23).join('+')+' · 상태 "'+stOf(t23)+'"');
+    ok(stOf(t23).indexOf('2,3')===0, '  2,3은 여전히 2,3', '"'+stOf(t23)+'"');
+    var t54 = JONAMES.filter(function(n){ return partsOf(n).length>=3; })[0];
+    if (!t54){
+      var c3 = JONAMES.filter(function(n){ return partsOf(n).length===2
+        && partsOf(n).indexOf('1')>=0 && partsOf(n).indexOf('2')>=0; })[0];
+      if (c3){ addRow('3', c3); t54 = c3; }
+    }
+    if (t54) ok(stOf(t54).indexOf('54')===0, '  세 부는 여전히 54',
+                t54+' 자리 '+partsOf(t54).join('+')+' · "'+stOf(t54)+'"');
+
+    // ══ 병. 손으로 1·2부를 만들면 — 못은 박되 중복이라 안 부른다
+    L('','★병. 손으로 2부에 앉히기');
+    reset();
+    applyLineup(seonbal(), ['1']);
+    var solo = JONAMES.filter(function(n){ return partsOf(n).length===1 && partsOf(n)[0]==='1'
+      && !isBu3(n); })[0];
+    LOG=[];
+    addRow('2', solo);
+    L('  '+solo, '자리 '+partsOf(solo).join('+'));
+    L('  기록', LOG[0]? LOG[0].msg : '(없음)');
+    ok(LOG[0] && LOG[0].msg.indexOf('중복 근무')<0, '  "중복 근무"라 했나',
+       LOG[0] && LOG[0].msg.indexOf('중복 근무')<0 ? '안 했음 ◎':'★아직 중복이라 부름');
+    ok(LOG[0] && LOG[0].msg.indexOf('두 자리를 못 박습니다')>=0, '  뭐라 했나',
+       LOG[0]? '"'+LOG[0].msg.split(' · ').filter(function(x){ return x.indexOf('못 박')>=0; })[0]+'"':'—');
+    // ★못은 그대로 박혀야 한다 — 손으로 만든 자리를 기계가 흩으면 안 된다
+    ok(dupPinned(solo), '  ★못은 박혔나', dupPinned(solo)?'박힘 ◎ (자리를 지킨다)':'★안 박힘');
+    ok(!inLineup(solo,'house'), '  순번 세우기가 비켜 가나', inLineup(solo,'house')?'★건드림':'비켜 감 ◎');
+    L('  못 박은 까닭', '"'+whyNoLineup(solo)+'"');
+    ok(whyNoLineup(solo).indexOf('중복 근무')<0, '  까닭에 "중복 근무"',
+       whyNoLineup(solo).indexOf('중복 근무')<0?'없음 ◎':'★있음');
+    // 자리가 실제로 지켜지나
+    var before = partsOf(solo).slice().join('+');
+    applyLineup(seonbal(), ['1','2']);
+    ok(partsOf(solo).indexOf('2')>=0, '  ★세운 뒤에도 2부 자리',
+       before+' → '+partsOf(solo).join('+')+(partsOf(solo).indexOf('2')>=0?'  지켜짐 ◎':'  ★잃음'));
+
+    // ══ 정. 진짜 중복을 손으로 만들면 여전히 '중복 근무'라 한다
+    L('','★정. 손으로 2,3 만들기');
+    reset();
+    applyLineup(seonbal(), ['1','2']);
+    var s2 = JONAMES.filter(function(n){ return partsOf(n).length===1 && partsOf(n)[0]==='2'
+      && !isBu3(n); })[0];
+    LOG=[];
+    addRow('3', s2);
+    L('  '+s2, '자리 '+partsOf(s2).join('+') + ' · 기록 ' + (LOG[0]?LOG[0].msg:'(없음)'));
+    ok(LOG[0] && LOG[0].msg.indexOf('중복 근무')>=0, '  "중복 근무"라 하나',
+       LOG[0] && LOG[0].msg.indexOf('중복 근무')>=0?'그대로 ◎':'★안 함');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

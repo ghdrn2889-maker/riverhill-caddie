@@ -1,0 +1,62 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function seats(pk){ return active(part(pk)).length; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var b3n = bu3List().length, joN = JOCNT, cartN = Object.keys(CART).length;
+    L('오늘', DAY.map(function(p){ return p.name+' '+seats(p.key)+'명/'+p.tees.length+'팀'; }).join(' · '));
+
+    carryToNextDay();
+    L('★내일로 (자리 안 가져옴)', DAY.map(function(p){
+      return p.name+' '+seats(p.key)+'명/'+p.tees.length+'팀'; }).join(' · '));
+    L('  ★배치표', DAY.every(function(p){ return seats(p.key)===0; })
+      ? '전부 비었음 ◎':'✗ 남아 있음');
+    L('  팀(티오프)', DAY.every(function(p){ return p.tees.length>0; }) ? '그대로 옴 ◎':'✗');
+    L('  ★관리자 것은 남았나', '3부반 '+bu3List().length+'/'+b3n
+      + ' · 조 '+JOCNT+'/'+joN + ' · 카트 주인 '+Object.keys(CART).length+'/'+cartN
+      + ' · 선발 '+(seonbal()||'없음')
+      + ' ' + (bu3List().length===b3n && JOCNT===joN && Object.keys(CART).length===cartN
+        ? '◎':'✗'));
+    L('  기록', LOG[0].msg);
+    var T=workTally();
+    L('  셈', '총원 '+T.total+' · 근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu);
+
+    // ★팀을 넣어도 스페어가 안 올라온다
+    var w0 = workTally().cw;
+    addTeam('1','06:20');
+    L('★팀 하나 넣음', '근무 '+w0+'→'+workTally().cw+' '
+      + (workTally().cw===w0 ? '◎ 아무도 안 올라옴':'✗ 스페어가 올라왔다'));
+
+    // 손으로 몇 명만 놓기
+    seatPerson('1', 0, '정용만');
+    seatPerson('1', 4, '배문숙');
+    L('손으로 둘만 놓음', '1부 '+seats('1')+'줄 · 1번 '+(active(part('1'))[0].n)
+      + ' · 5번 '+(active(part('1'))[4].n||'(빈칸)'));
+    var w1 = workTally().cw;
+    addTeam('1','06:10');
+    L('  또 팀 넣음', '근무 '+w1+'→'+workTally().cw+' '
+      + (workTally().cw===w1 ? '◎ 그대로':'✗ 올라왔다'));
+
+    // 순번 세우기로 채운다
+    applyLineup(seonbal(), ['1','2']);
+    var T2=workTally();
+    L('순번 세우기', '근무 '+T2.cw+' · 대기 '+T2.cd+' · 미배치 '+T2.cu
+      + ' · 1부 '+seats('1')+'줄');
+
+    // 자리를 가져오게 켜면 옛날처럼
+    for (var i=0;i<8 && DATE!==BOARD.date;i++) undo();
+    setCarryOpt('seats', true);
+    carryToNextDay();
+    L('자리 가져오기 켜면', DAY.map(function(p){
+      return p.name+' '+seats(p.key)+'명'; }).join(' · ') + ' ◎ 옛 방식도 됨');
+    setCarryOpt('seats', false);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

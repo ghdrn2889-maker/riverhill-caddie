@@ -1,0 +1,51 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seat(n){ var s=[]; DAY.forEach(function(p){ var a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===n) s.push(p.name+' '+seatNo(p,i)+'번'); });
+    return s.join(' · ')||'자리 없음'; }
+  function row(n){ var r=workRows().filter(function(x){ return x.n===n; })[0];
+    return r? '['+r.bts.join(' ')+'] '+r.st : '(없음)'; }
+  function T(){ var t=workTally(); return '가용 '+t.avail+' · 제외 '+t.exc+' · 근무 '+
+    workRows().filter(function(r){return r.cls==='w';}).length; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('처음', T());
+    var W=workRows().filter(function(r){ return r.cls==='w' && !tagOf(r.n) && !isBu3(r.n); });
+    var A=W[0].n;
+    var was=seat(A);
+    L('  '+A, was);
+
+    // ★붙였다 떼면 돌아오나
+    setDayTag(A,'배치'); paint();
+    L('', ''); L('배치 붙임', seat(A)+' · '+row(A)+' · '+T());
+    setDayTag(A,'배치'); paint();
+    L('배치 뗌  ', seat(A)+' · '+row(A)+' · '+T()
+      + (seat(A)!=='자리 없음' ? '  ◎ 돌아옴' : '  ✗ 안 돌아옴'));
+
+    // ★한꺼번에 지정으로 걸어도 내려오나
+    var B=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); })[1].n;
+    var C=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); })[2].n;
+    L('', ''); L('한꺼번에 지정 전', B+' '+seat(B)+' / '+C+' '+seat(C));
+    bulkTap(B); bulkTap(C); bulkApplyTag('배치'); paint();
+    L('  묶음으로 배치', B+' '+seat(B)+' '+row(B)+' / '+C+' '+seat(C)+' '+row(C));
+    try{ bulkReset(); }catch(e){}
+
+    // ★순번 세우기가 도로 앉히지 않나
+    var D=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); })[3].n;
+    setDayTag(D,'프리');
+    applyLineup(seonbal()||lineupPool('house')[0], ['1','2']); paint();
+    L('', ''); L('★순번 세운 뒤', '');
+    L('  배치 '+B, seat(B)+' '+row(B) + (seat(B)==='자리 없음'?'  ◎':'  ✗ 도로 앉음'));
+    L('  프리 '+D, seat(D)+' '+row(D) + (seat(D)==='자리 없음'?'  ◎':'  ✗ 도로 앉음'));
+    L('  셈', T());
+    L('  순번 후보 수', '하우스 '+lineupPool('house').length+' · 3부반 '+lineupPool('bu3').length);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

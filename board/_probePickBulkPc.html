@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // 칩이 화면에 났나
+    var chip = document.querySelector('[data-bulk="' + PICKTAG + '"]');
+    L('★고르기 칩', chip ? '"' + chip.textContent + '" ◎' : '없음 ✗');
+    chip.click();
+    L('  누르니', bulkPicking() ? '고르는 중 ◎' : '✗');
+
+    // 근무표 이름 줄을 눌러 고른다
+    var rows = document.querySelectorAll('.wrow[data-who]');
+    L('  근무표 줄', rows.length + '줄');
+    var names = [];
+    for (var i = 0; i < 5; i++){                      // 그릴 때마다 줄이 새로 나므로 다시 찾는다
+      var rr = document.querySelectorAll('.wrow[data-who]');
+      names.push(rr[i].getAttribute('data-who')); rr[i].click();
+    }
+    L('★줄을 눌러 고름', bulkPicked().length + '명 — ' + bulkPicked().join(' ')
+      + (bulkPicked().length===5?' ◎':' ✗'));
+    L('  배지 그대로', names.every(function(n){ return !tagOf(n) || tagOf(n)===TAG[n]; }) ? '◎ 아직 안 바뀜' : '✗');
+    L('  파랗게', document.querySelectorAll('.wrow.bpick').length + '줄');
+
+    // 띠 단추
+    var go = document.querySelector('#bulkbar [data-act="bkact"]');
+    L('★띠 단추', go ? '"' + go.textContent + '" ◎' : '없음 ✗');
+    go.click();
+    var sheet = document.getElementById('sheet');
+    var acts = Array.prototype.map.call(sheet.querySelectorAll('[data-bkdo]'), function(b){ return b.textContent; });
+    L('★창 안 단추', acts.length + '개 — ' + acts.join(' / '));
+
+    // 2부에 넣기를 눌러 본다
+    var n2 = active(part('2')).length;
+    var btn = Array.prototype.filter.call(sheet.querySelectorAll('[data-bkdo]'), function(b){
+      return b.getAttribute('data-bkdo') === '+2'; })[0];
+    L('', '');
+    L('2부에 넣기 단추', btn ? '"' + btn.textContent + '"' : '없음 ✗');
+    var st0 = STACK.length;
+    btn.click();
+    L('★누른 뒤', '2부 ' + n2 + ' → ' + active(part('2')).length
+      + ' · 되돌리기 ' + (STACK.length-st0) + '걸음 ' + ((STACK.length-st0)===1?'◎':'✗'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  창은', document.getElementById('sheet').classList.contains('on') ? '열린 채 ◎ (이어서 더 한다)' : '닫힘');
+    var dupn = bulkPicked().filter(function(n){ return partsOf(n).length > 1; }).length;
+    L('  두 부에 선 사람', dupn + '/' + bulkPicked().length);
+
+    // 고른 것 풀기
+    var cl = Array.prototype.filter.call(document.querySelectorAll('[data-bkdo]'), function(b){
+      return b.getAttribute('data-bkdo') === 'clear'; })[0];
+    cl.click();
+    L('  고른 것 모두 풀기', bulkPicked().length + '명 ' + (bulkPicked().length===0?'◎':'✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

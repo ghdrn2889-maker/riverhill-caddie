@@ -1,0 +1,81 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var SEED=null, H=null;
+  function reload(){
+    resetToBoard(); BU3SET = SEED.slice(); SB3=''; DATE = BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+  }
+  function got(){ return H.filter(isBu3).length + '/3'; }
+  function cfgHas(){ try{ var c=JSON.parse(localStorage.getItem(CFGKEY));
+      return H.filter(function(n){ return (c.bu3set||[]).indexOf(n)>=0; }).length + '/3'; }catch(e){ return '?'; } }
+  function setup(){
+    localStorage.clear();
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    H.forEach(function(n){ setBu3(n, true); });
+    daySave();
+  }
+  try{
+    SEED = Object.keys(TAG).filter(function(n){ return TAG[n]==='3부'; });
+    H = JONAMES.filter(function(n){ return SEED.indexOf(n)<0; }).slice(0,3);
+    L('시험 대상', H.join(' '));
+
+    // ── ⓐ 지난 날을 펼쳐 보면
+    setup();
+    var today = DATE;
+    carryToNextDay(); daySave();          // 내일 칸도 만든다
+    var tmr = DATE;
+    L('', '');
+    L('ⓐ 오늘/내일', today + ' / ' + tmr + ' · 3부반 ' + got() + ' · cfg ' + cfgHas());
+    daySwitch(today);
+    L('  지난 날을 펼침', '3부반 ' + got() + ' · cfg ' + cfgHas()
+      + (H.every(isBu3) ? ' ◎' : ' ✗ 하우스로 돌아감'));
+    daySave();
+    L('  거기서 저장', 'cfg ' + cfgHas() + (cfgHas()==='3/3' ? ' ◎' : ' ✗ 설정까지 옛것으로 덮임'));
+    reload();
+    L('  새로고침', '3부반 ' + got() + (H.every(isBu3)?' ◎':' ✗'));
+
+    // ── ⓑ 되돌리기로 지정 이전까지 되감으면
+    setup();
+    L('', '');
+    L('ⓑ 지정 뒤', '3부반 ' + got() + ' · cfg ' + cfgHas());
+    undo(); undo(); undo();
+    L('  되돌리기 세 번', '3부반 ' + got() + ' · cfg ' + cfgHas());
+    redo(); redo(); redo();
+    L('  다시 하기 세 번', '3부반 ' + got() + ' · cfg ' + cfgHas()
+      + (H.every(isBu3)?' ◎':' ✗'));
+
+    // ── ⓒ 저장을 안 누르고 날이 넘어가면
+    setup();
+    localStorage.clear();                 // 저장본 없이 시작
+    resetToBoard(); BU3SET = SEED.slice(); DATE = BOARD.date; savedSig=null; PENDING=null; CAUGHT=null;
+    STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    H.forEach(function(n){ setBu3(n, true); });   // 지정만 하고 저장은 안 누른다
+    L('', '');
+    L('ⓒ 저장 안 누름', '3부반 ' + got() + ' · cfg ' + cfgHas());
+    reload();
+    L('  새로고침', '3부반 ' + got() + (H.every(isBu3)?' ◎':' ✗'));
+    L('  이어서 할 고침', PENDING ? '있음(묻는다)' : '없음');
+
+    // ── ⓓ 설정 저장이 막히면 (사생활 창·용량 초과)
+    setup();
+    var real = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(k,v){ if (k===CFGKEY) throw new Error('quota'); return real(k,v); };
+    var H2 = JONAMES.filter(function(n){ return !isBu3(n); }).slice(0,2);
+    H2.forEach(function(n){ setBu3(n, true); });
+    L('', '');
+    L('ⓓ 설정 저장이 막혔을 때', '화면엔 ' + H2.filter(isBu3).length + '/2 · 말해 준 것 없음');
+    localStorage.setItem = real;
+    reload();
+    L('  새로고침', H2.filter(isBu3).length + '/2 ' + (H2.every(isBu3)?'◎':'✗ 조용히 사라짐'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    L('조 미배정', joUnset() + '명 / 총 ' + JONAMES.length);
+
+    var nm = active(part('1'))[9].n;
+    L('시험 대상', nm + ' · 조 ' + (joOf(nm)>=0 ? (joOf(nm)+1)+'조' : '미배정')
+      + ' · 부 ' + partsOf(nm).join(','));
+    delFromPart('1', nm);
+    L('1부에서 뺀 뒤', '부 ' + (partsOf(nm).join(',') || '없음'));
+
+    ['1','2','3'].forEach(function(pk){
+      L('  ' + part(pk).name + ' 넣기 후보에', addablePool(pk).indexOf(nm)>=0 ? '있음 ◎':'없음 ✗');
+    });
+
+    // 화면 목록에 진짜 뜨나
+    openAddPerson('2');
+    var rows = qa('#sheet [data-pn]').map(function(b){ return b.getAttribute('data-pn'); });
+    L('2부 넣기 창', rows.length + '명 뜸 · ' + nm + ' '
+      + (rows.indexOf(nm)>=0 ? '보임 ◎':'★안 보임 ✗'));
+    L('  후보 수와 견주면', '후보 ' + addablePool('2').length + '명 vs 화면 ' + rows.length + '명 '
+      + (rows.length === addablePool('2').length ? '◎ 같다':'✗ 화면이 적다 — 새는 데가 있다'));
+    var missing = addablePool('2').filter(function(n){ return rows.indexOf(n) < 0; });
+    L('  ★화면에서 빠진 사람', missing.length + '명'
+      + (missing.length ? ' — ' + missing.slice(0,8).join(' ')
+        + ' (조 ' + missing.slice(0,8).map(function(n){
+            return joOf(n)>=0 ? (joOf(n)+1) : '없음'; }).join(',') + ')' : ''));
+    closeSheet();
+
+    // 칸 창의 '사람 골라 맞바꾸기' 목록에도 뜨나
+    openCell('2', 0);
+    swQ = nm; drawSwapList();
+    var sw = qa('#swOut [data-sw]').length + qa('#swOut .row').length;
+    L('맞바꾸기 목록', nm + ' 찾으면 ' + sw + '줄 '
+      + (q('#swOut') && q('#swOut').textContent.indexOf(nm)>=0 ? '보임 ◎':'✗ 안 보임'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

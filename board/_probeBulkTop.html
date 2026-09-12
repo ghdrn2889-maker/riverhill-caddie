@@ -1,0 +1,105 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function chip(t){ return qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')===t; })[0]; }
+function R(s){ var el=q(s); if(!el) return null; var b=el.getBoundingClientRect();
+  return {x:Math.round(b.left),y:Math.round(b.top),w:Math.round(b.width),h:Math.round(b.height),
+          r:Math.round(b.right),b:Math.round(b.bottom)}; }
+function rows(){ return qa('.wrow[data-who]'); }
+function names(){ return rows().map(function(b){ return b.querySelector('.n').textContent; }); }
+function rowOf(n){ return rows().filter(function(b){ return b.querySelector('.n').textContent===n; })[0]; }
+function type(v){ var i=q('#wkQ'); i.focus(); i.value=v; i.dispatchEvent(new Event('input',{bubbles:true})); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var H=innerHeight;
+
+    // ── 갑. 3부반 줄이 사라졌나
+    L('','★갑. 3부반 줄');
+    var b3 = bu3List()[0];
+    addRow('2', b3); paint();
+    ok(bu3Strays().length>0, '  일부러 3부반을 2부에', bu3Strays().length+'명 (세는 일은 그대로)');
+    var stray = qa('.lnbar, .drift').filter(function(e){
+      return e.textContent.indexOf('1·2부에')>=0 || e.textContent.indexOf('3부반이')>=0; });
+    ok(stray.length===0, '  화면에 뜨나', stray.length? '★아직 뜸: "'+stray[0].textContent.slice(0,40)+'"':'안 뜸 ◎');
+    ok(typeof bu3StrayBar==='undefined', '  옛 함수', typeof bu3StrayBar==='undefined'?'없어짐 ◎':'★남음');
+    delFromPart('2', b3); paint();
+
+    // ── 을. 배지가 찾는 칸 옆에 있나
+    L('','★을. 배지 자리');
+    var inp=R('#workTable .wsr input'), bw=R('.wsr .bulk.wb');
+    L('  찾기 칸', inp? inp.w+'×'+inp.h+' @'+inp.x+','+inp.y : '★없음');
+    L('  배지 묶음', bw? bw.w+'×'+bw.h+' @'+bw.x+','+bw.y : '★없음');
+    ok(!!bw, '  찾는 칸 띠 안에 있나', bw?'있음 ◎':'★없음');
+    ok(inp && bw && Math.abs(inp.y - bw.y) < 24, '  같은 줄인가',
+       inp&&bw? '찾기 y='+inp.y+' / 배지 y='+bw.y : '—');
+    ok(!q('.wkrail .bulk'), '  오른쪽 줄에 남았나', q('.wkrail .bulk')?'★아직 있음':'떠났음 ◎');
+    var chips = qa('.wsr [data-bulk]');
+    L('  배지', chips.length+'개 — '+chips.map(function(b){ return b.textContent.trim(); }).join(' '));
+    ok(chips.length>=8, '  배지 수', chips.length+'개');
+    ok(!!q('.wsr .bch.pk'), '  캐디 선택', q('.wsr .bch.pk')?'칩 하나로 ◎':'★없음');
+
+    // ── 병. 오른쪽 줄이 그만큼 헐거워졌나
+    L('','★병. 오른쪽 줄');
+    var dz=R('#dutyBox'), sb=R('#staffBox'), rl=R('.wkrail');
+    L('  당번', dz? dz.w+'×'+dz.h+' 아래끝 '+dz.b : '—');
+    L('  경기과', sb? sb.w+'×'+sb.h+' 아래끝 '+sb.b : '—');
+    ok(dz && dz.b <= H, '  당번이 안 굴려도 보이나', dz? '아래끝 '+dz.b+' / 창 '+H : '—');
+    ok(sb && sb.b <= H, '  경기과도 보이나', sb? '아래끝 '+sb.b+' / 창 '+H : '—');
+    var need=0; qa('.wkrail > *').forEach(function(el){ need+=el.getBoundingClientRect().height; });
+    L('  줄 속 내용', Math.round(need)+'px / 줄 '+(rl?rl.h:0)+'px'
+      + (need>(rl?rl.h:0)? '  → '+Math.round(need-(rl?rl.h:0))+'px 굴림':'  → 다 보인다'));
+
+    // ── 정. 명단은 더 길어졌나
+    L('','★정. 조 명단');
+    var jb=R('.jobd'), rowH=R('.wrow')?R('.wrow').h:0;
+    L('  명단 속', jb? jb.w+'×'+jb.h : '—');
+    ok(rowH && Math.floor(jb.h/rowH) >= 13, '  한 화면에', Math.floor(jb.h/rowH)+'명');
+
+    // ── 무. 눌러서 실제로 지정되나 (왕복 없이)
+    L('','★무. 찾아서 그 자리에서 누르기');
+    tap(chip('휴무'));
+    ok(bulkOn() && bulkTag()==='휴무', '  휴무 켜짐', String(bulkTag()));
+    ok(document.activeElement && document.activeElement.id==='wkQ', '  깜빡이',
+       document.activeElement? '#'+(document.activeElement.id||document.activeElement.tagName):'—');
+    ok(!!q('.wsr .bulk.wb.on'), '  띠가 켜진 티', q('.wsr .bulk.wb.on')?'남 ◎':'★안 남');
+    L('  지금 상태 글', q('.wsr .bnow')? q('.wsr .bnow').textContent.trim() : '(없음)');
+    ok(!!q('[data-wfil="*now"]'), '  지금-칩', q('[data-wfil="*now"]')?'"'+q('[data-wfil="*now"]').textContent.trim()+'" ◎':'★없음');
+    type('김');
+    var got=names(), nm=got[0];
+    tap(rowOf(nm));
+    ok(tagOf(nm)==='휴무', '  '+nm+' 누름', '"'+(tagOf(nm)||'근무')+'"');
+    ok(q('#wkQ').value==='김', '  친 말 남나', '"'+q('#wkQ').value+'"');
+    ok(!!q('#bulkbar.on'), '  아래 띠', q('#bulkbar .tx b')? q('#bulkbar .tx b').textContent.trim():'★없음');
+    // 켠 것을 또 누르면 끄기를 묻는다
+    type('');
+    tap(chip('휴무'));
+    ok(q('#sheet').classList.contains('on'), '  같은 배지 또 누름',
+       q('#sheet').classList.contains('on')? '끄기를 묻는 창 ◎':'★안 물음');
+    tap(qa('#sheet button[data-act="bkyes"]')[0]);
+    ok(!bulkOn(), '  끔', bulkOn()?'★아직':'꺼짐 ◎');
+    ok(!q('[data-wfil="*now"]'), '  지금-칩', q('[data-wfil="*now"]')?'★남음':'같이 걷힘 ◎');
+
+    // ── 기. 캐디 선택
+    L('','★기. 캐디 선택');
+    tap(q('.wsr .bch.pk'));
+    ok(bulkPicking(), '  고르기 중', bulkPicking()?'◎':'★아님');
+    ok(!!q('.wsr .bch.pk.on'), '  칩이 켜졌나', q('.wsr .bch.pk.on')?'◎':'★안 켜짐');
+    ok(!q('[data-wfil="*now"]'), '  고르는 중엔 지금-칩 없음',
+       q('[data-wfil="*now"]')?'★있음':'없음 ◎');
+    type('박');
+    var p1=names()[0]; tap(rowOf(p1));
+    ok(bulkPicked().indexOf(p1)>=0, '  '+p1+' 고름', bulkPicked().join('·')||'★비었음');
+    ok(tagOf(p1)!=='휴무', '  아직 안 바뀜', '"'+(tagOf(p1)||'근무')+'" ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

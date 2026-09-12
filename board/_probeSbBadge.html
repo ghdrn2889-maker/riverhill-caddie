@@ -1,0 +1,85 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function pills(n){ var r=rowOf(n); if(!r) return null;
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return e.textContent.trim(); }); }
+function sbEl(n){ var r=rowOf(n); if(!r) return null;
+  return qa('.bt').filter(function(e){ return r.contains(e) && e.textContent.trim()==='선발'; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    // ── 갑. 선발에게 배지가 붙나
+    L('','★갑. 선발 배지');
+    var sb = seonbal();
+    L('  오늘 선발', sb);
+    ok(!!sb, '  선발이 있나', sb || '★없음');
+    L('  '+sb+' 줄', '['+(pills(sb)||[]).join('] [')+']');
+    ok((pills(sb)||[]).indexOf('선발')>=0, '  ★배지가 붙었나',
+       (pills(sb)||[]).indexOf('선발')>=0 ? '붙음 ◎' : '★안 붙음');
+    ok(wkBadges(sb).indexOf('선발')>=0, '  기계 쪽 목록', wkBadges(sb).join(' / '));
+    // 딴 사람에게는 안 붙는다
+    var others = JONAMES.filter(function(n){ return n!==sb && rowOf(n); });
+    var stray = others.filter(function(n){ return (pills(n)||[]).indexOf('선발')>=0; });
+    ok(stray.length===0, '  딴 사람에게 붙었나', stray.length? '★'+stray.join(' ') : '아무도 ◎');
+
+    // ── 을. 색
+    L('','★을. 색');
+    var el = sbEl(sb), cs = el? getComputedStyle(el) : null;
+    ok(!!el, '  배지 알약', el? '있음 ◎':'★없음');
+    if (el){
+      L('  바탕 / 글씨', cs.backgroundColor + ' / ' + cs.color);
+      var root = getComputedStyle(document.documentElement);
+      L('  색표 값', '--csb ' + root.getPropertyValue('--csb').trim()
+        + ' · --csbi ' + root.getPropertyValue('--csbi').trim());
+      ok(el.className.indexOf('csb')>=0, '  선발 색표를 쓰나', '"'+el.className+'"');
+      ok(cs.backgroundColor==='rgb(255, 217, 138)', '  바탕 #ffd98a', cs.backgroundColor);
+      ok(cs.color==='rgb(107, 68, 0)', '  글씨 #6b4400', cs.color);
+    }
+
+    // ── 병. 선발을 바꾸면 배지도 따라가나
+    L('','★병. 선발을 옮기면');
+    var next = JONAMES.filter(function(n){ return n!==sb && rowOf(n) && !isBu3(n)
+      && !isAbs(tagOf(n)) && !tagOf(n); })[0];
+    setSeonbal(next); paint();
+    L('  새 선발', next);
+    ok((pills(next)||[]).indexOf('선발')>=0, '  새 사람에게 붙나', '['+(pills(next)||[]).join('] [')+']');
+    ok((pills(sb)||[]).indexOf('선발')<0, '  옛 사람에게서 떨어지나',
+       sb+' ['+(pills(sb)||[]).join('] [')+']');
+    ok(seonbal()===next, '  기계 쪽', seonbal());
+
+    // ── 정. ★선발이 순번 세우기에서 안 빠져야 한다 (dayMark 를 안 건드린 까닭)
+    L('','★정. 선발은 순번에 서야 한다');
+    ok(inLineup(next, 'house'), '  순번 후보인가',
+       inLineup(next,'house')? '◎ 선다' : '★빠짐 — 배지가 순번을 막았다');
+    ok(whyNoLineup(next)==='', '  못 서는 까닭', '"'+whyNoLineup(next)+'" (비어야 한다)');
+    applyLineup(next, ['1','2']); paint();
+    var a1 = active(part('1'));
+    ok(a1[0] && a1[0].n===next, '  1번 자리', (a1[0]?a1[0].n:'—')+' (선발부터 센다)');
+    ok((pills(next)||[]).indexOf('선발')>=0, '  세운 뒤에도 배지', '['+(pills(next)||[]).join('] [')+']');
+
+    // ── 무. 3부반 배지와 같이 있으면 자리 차례
+    L('','★무. 3부반과 같이');
+    var b3 = JONAMES.filter(function(n){ return isBu3(n) && rowOf(n) && !isAbs(tagOf(n)); })[0];
+    setSeonbal(b3); paint();
+    var p3 = pills(b3)||[];
+    L('  '+b3, '['+p3.join('] [')+']');
+    ok(p3.indexOf('선발')>=0 && p3[p3.length-1]==='3부반',
+       '  선발은 앞, 3부반은 맨 뒤', p3.join(' → '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

@@ -1,0 +1,45 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  var GONE = ['송승은','도영학','김세빈','우희민','김태민','신철'];
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // 지금 명단 밖(미배치)인 사람은 누구인가
+    var on = {};
+    DAY.forEach(function(p){ active(p).forEach(function(r){ on[r.n] = 1; }); });
+    var out = JONAMES.filter(function(n){ return !on[n]; });
+    L('명단 밖', out.length + '명 — ' + out.map(function(n){
+        return n + '[' + (tagOf(n)||'-') + ']'; }).join(' '));
+    L('  그중 배지 없는 사람(가용)', out.filter(function(n){ return !tagOf(n); }).join(' ') || '없음');
+    L('  ★떠난 6명이 섞여 있나', GONE.filter(function(n){ return JONAMES.indexOf(n)>=0; }).length
+      + '명이 조 편성에 있음 — ' + (GONE.filter(function(n){ return JONAMES.indexOf(n)>=0; }).join(' ') || '없음'));
+
+    // 지금 판 (좁은 후보)
+    var p1 = lineupPlan(seonbal(), ['1','2']);
+    var dbl = {}; p1.slots.forEach(function(s){ dbl[s.to] = (dbl[s.to]||0)+1; });
+    L('지금 (명단에 있는 사람만)', '후보 ' + p1.pool.length + '명 · 자리 ' + p1.slots.length
+      + ' · 두 부 뛰는 사람 ' + Object.keys(dbl).filter(function(n){ return dbl[n]>1; }).length + '명');
+
+    // 넓히면 어떻게 되나 — 아직 안 고치고 세워만 본다
+    var kind = 'house';
+    var wide = JONAMES.filter(function(n){ return inLineup(n, kind); });
+    var got = {};
+    p1.pool.forEach(function(n){ got[n] = 1; });
+    var add = wide.filter(function(n){ return !got[n]; });
+    L('넓히면 드는 사람', add.length + '명 — ' + (add.join(' ') || '없음'));
+    L('  ★그중 떠난 사람', add.filter(function(n){ return GONE.indexOf(n)>=0; }).join(' ') || '없음 ◎');
+    var ring = joRing(seonbal()).filter(function(n){ return wide.indexOf(n)>=0; });
+    var dbl2 = {};
+    for (var i=0;i<p1.slots.length;i++){ var t=ring[i%ring.length]; dbl2[t]=(dbl2[t]||0)+1; }
+    L('  넓힌 뒤', '후보 ' + ring.length + '명 · 자리 ' + p1.slots.length
+      + ' · 두 부 뛰는 사람 ' + Object.keys(dbl2).filter(function(n){ return dbl2[n]>1; }).length + '명');
+    L('  자리 못 받는 후보', ring.filter(function(n){ return !dbl2[n]; }).length + '명');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

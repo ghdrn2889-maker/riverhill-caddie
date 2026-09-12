@@ -1,0 +1,42 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i); return 0; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+
+    var pool = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); });
+    var pick = pool.slice(0,4);
+    pick.forEach(function(n){ setDayTag(n,'조출'); });
+
+    bulkStart(PICKTAG); pick.forEach(function(n){ bulkPickTap(n); });
+    openBulkAct();
+    var sh = document.getElementById('sheet');
+    var fe = sh.querySelector('#bkFrom');
+    L('시작 번호 칸', fe ? '있음 ◎ (지금 ' + fe.value + ')' : '없음 — 문이 안 났다');
+    var bs = [].slice.call(sh.querySelectorAll('[data-bkdo^="s|"]'));
+    L('앉히기 단추', bs.length + '개 ' + bs.map(function(b){ return b.textContent; }).join(' / '));
+
+    if (fe && bs.length){
+      fe.value = '7';
+      bs[0].click();                                  // 1부에 앉히기
+      L('', '');
+      L('★7번부터 눌렀더니', pick.map(function(n){ return n+':'+(seatOf('1',n)||'-'); }).join(' '));
+      var g = pick.map(function(n){ return seatOf('1',n); }).sort(function(a,b){return a-b;});
+      L('  번호', g.join(',') + (g.join(',')==='7,8,9,10' ? ' ◎ 7~10 연달아' : ' 어긋남'));
+      L('  기록', LOG[0]?LOG[0].msg:'없음');
+      var sh2 = document.getElementById('sheet');
+      var fe2 = sh2.querySelector('#bkFrom');
+      L('  창을 다시 그려도 7이 남아 있나', fe2 ? (fe2.value==='7' ? '◎ ' + fe2.value : '지워짐 ' + fe2.value) : '창 없음');
+      L('  저장하기 띠가 떴나', bulkDirty() ? '◎ ' + bulkDirty() : '안 뜸');
+    }
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

@@ -1,0 +1,43 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function tabsShown(){
+    var t = document.getElementById('tabs');
+    var cs = getComputedStyle(t);
+    return { disp: cs.display, h: Math.round(t.getBoundingClientRect().height) };
+  }
+  function board(){ var v=document.getElementById('viewBoard'); return Math.round(v.getBoundingClientRect().top); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    L('창 폭', window.innerWidth + 'px · 부 띠가 뜨는 폭인가');
+
+    setView('board'); paint();
+    var b = tabsShown();
+    L('배치표 화면', '부 띠 display:' + b.disp + ' · 높이 ' + b.h + 'px '
+      + (b.h > 0 ? '◎ 보인다' : '(넓은 창이라 원래 안 보임)'));
+    L('  띠 안', document.getElementById('tabs').textContent.replace(/\s+/g,' ').trim() || '(빔)');
+
+    setView('work'); paint();
+    var w = tabsShown();
+    L('★근무표 화면', '부 띠 display:' + w.disp + ' · 높이 ' + w.h + 'px '
+      + (w.h === 0 ? '◎ 사라짐' : '✗ 아직 자리를 차지한다'));
+    L('  근무표 맨 위가', Math.round(document.getElementById('railSum').getBoundingClientRect().top) + 'px');
+
+    setView('board'); paint();
+    var b2 = tabsShown();
+    L('다시 배치표', '부 띠 높이 ' + b2.h + 'px ' + (b2.h === b.h ? '◎ 돌아옴' : '✗'));
+    L('  띠를 눌러 부 바꾸기', (function(){
+        var bt = document.querySelectorAll('#tabs button');
+        if (!bt.length) return '(넓은 창이라 띠가 없음 — 좁은 창에서만 나온다)';
+        var was = cur; bt[1].click();
+        var now = cur; cur = was; paint();
+        return was + ' → ' + now + (now !== was ? ' ◎ 그대로 된다' : ' ✗');
+      })());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

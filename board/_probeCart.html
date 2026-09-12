@@ -1,0 +1,94 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function act(a){ return qa('#sheet [data-act="'+a+'"]')[0]; }
+function row(n){ return qa('.wrow').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function ctOf(n){ var r=row(n); return r ? r.querySelector('.ct').textContent.trim() : '?'; }
+function ctBad(n){ var r=row(n); return r ? r.querySelector('.ct').className.indexOf('bad')>=0 : false; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    var nm = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return !cartOf(n); })[0];
+    L('카트 없는 사람', nm + ' · 근무표 칸 "' + ctOf(nm) + '"');
+
+    // ── ① 근무표에서 이름을 누르면 카트 칸이 있다
+    tap(row(nm));
+    L('이름 누름', q('#sheet').classList.contains('on') ? '창 열림 ◎':'✗');
+    L('  칸 차례', qa('#sheet .grp h4').map(function(x){ return x.textContent; }).join(' | '));
+    L('  카트 칸', q('#cartN') ? '있음 ◎ · 값 "' + q('#cartN').value + '"' : '없음 ✗');
+    L('  번호 없을 때 고장 단추', (act('cartbad').disabled && act('cartok').disabled)
+      ? '둘 다 꺼짐 ◎ (칸은 그대로 있다)':'켜져 있음 ✗');
+    L('  제 카트로', act('cartmine').disabled ? '꺼짐 ◎ (빌린 게 없다)':'켜짐 ✗');
+    L('  주인 카트 칸', q('#cartOwnN') ? '따로 있음 ◎ 값 "' + q('#cartOwnN').value + '"':'없음 ✗');
+
+    // ── ② 번호를 넣는다
+    q('#cartN').value = '77';
+    tap(act('cartsave'));
+    L('77 넣기', '카트 ' + cartOf(nm) + '번 ' + (cartOf(nm)===77 ? '◎':'✗')
+      + ' · 창 ' + (q('#sheet').classList.contains('on') ? '그대로 ◎':'닫힘 ✗')
+      + ' · 근무표 칸 "' + ctOf(nm) + '" ' + (ctOf(nm)==='77' ? '◎':'✗'));
+    L('  고장 단추', (!act('cartbad').disabled) ? '이제 켜짐 ◎':'아직 꺼짐 ✗');
+    L('  지금 상태', act('cartok').className.indexOf('on')>=0 ? '쓸 수 있음 ◎':'✗');
+
+    // ── ③ 고장
+    tap(act('cartbad'));
+    L('고장 누름', '77번 ' + (cartBad(77) ? '고장 ◎':'✗')
+      + ' · 단추 ' + (act('cartbad').className.indexOf('on')>=0 ? '켜짐 ◎':'✗')
+      + ' · 근무표 칸 ' + (ctBad(nm) ? '빨감 ◎':'그대로 ✗'));
+    L('  기록', LOG[0].msg);
+
+    // ── ④ ★고장은 사람이 아니라 카트에 붙는다
+    var mate = qa('.wrow').map(function(b){ return b.getAttribute('data-who'); })
+      .filter(function(n){ return n!==nm && !cartOf(n); })[0];
+    setCart(mate, 77);
+    setView('work');
+    L('★같은 번호를 쓰는 다른 사람', mate + ' 77번 · 근무표 칸 '
+      + (ctBad(mate) ? '빨감 ◎ (카트에 붙었다)':'멀쩡 ✗ (사람에 붙었다)'));
+    tap(row(mate));
+    L('  그 사람 창', act('cartbad').className.indexOf('on')>=0 ? '고장으로 보임 ◎':'✗');
+    var cg = qa('#sheet .grp').filter(function(g){
+      var h = g.querySelector('h4'); return h && h.textContent === '오늘 타는 카트'; })[0];
+    L('  같은 번호 안내', (cg && cg.querySelector('.dnote').textContent.indexOf(nm)>=0)
+      ? '"' + nm + '도 같은 번호" 적힘 ◎':'안 적힘 ✗ — "'
+        + (cg ? cg.querySelector('.dnote').textContent.slice(0,40) : '칸 없음') + '"');
+
+    // ── ⑤ 고침
+    tap(act('cartok'));
+    setView('work');
+    L('고침', '77번 ' + (cartBad(77) ? '아직 고장 ✗':'고쳐짐 ◎')
+      + ' · ' + nm + ' 칸 ' + (ctBad(nm) ? '빨감 ✗':'멀쩡 ◎')
+      + ' · ' + mate + ' 칸 ' + (ctBad(mate) ? '빨감 ✗':'멀쩡 ◎'));
+
+    // ── ⑥ 번호 없애기 — 0을 넣으면 빌림이 풀리고, 제 카트가 없으면 빈칸이 된다
+    tap(row(nm));
+    q('#cartN').value = '0';
+    tap(act('cartsave'));
+    L('번호 없애기', nm + ' 카트 ' + (cartOf(nm) || '없음') + ' '
+      + (cartOf(nm)===0 ? '◎':'✗') + ' · 근무표 칸 "' + ctOf(nm) + '" '
+      + (ctOf(nm)==='—' || ctOf(nm)==='' ? '빈칸 ◎':'✗'));
+
+    // ── ⑦ 되돌리기
+    undo();
+    L('되돌리기', nm + ' 카트 ' + (cartOf(nm)||'없음') + ' ' + (cartOf(nm)===77 ? '◎ 돌아옴':'✗')
+      + ' · 빌림 ' + (isLent(nm)?'◎':'✗')
+      + ' · 창 ' + (q('#cartN') ? '따라 그려짐 ◎ 값 "' + q('#cartN').value + '"':'닫힘'));
+
+    // ── ⑧ 저장에 담기나
+    daySave();
+    var raw = localStorage.getItem('board.day.v3::' + DATE);
+    var st = JSON.parse(JSON.parse(raw).s);
+    L('저장본', '주인 ' + (st.cart[nm] || '없음') + ' · 빌림 ' + (st.lend[nm] || '없음')
+      + ' · 고장표 ' + JSON.stringify(st.cbad)
+      + ' ' + (st.lend[nm]===77 ? '◎ 빌림 칸에 담겼다':'✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

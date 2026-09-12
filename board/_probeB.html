@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out=[]; function log(k,v){ out.push(k+': '+v); }
+  try{
+    DUTYDEF['\ud765\uc5f0\uc2e4 \ub2f9\ubc88']='9:30';
+    openDuty('\ud765\uc5f0\uc2e4 \ub2f9\ubc88');
+    var el=document.getElementById('dutyT');
+    log('outerHTML', el.outerHTML);
+    log('value', '['+el.value+'] attr=['+el.getAttribute('value')+']');
+    log('pad', pad('9:30'));
+    log('boxes', document.querySelectorAll('#dutyBox').length+' sheets='+document.querySelectorAll('#sheet').length);
+    DUTY['\ud765\uc5f0\uc2e4 \ub2f9\ubc88']=[{n:'\ud14c\uc2a4\ud2b8',t:'9:30'}];
+    paint();
+    log('paint후', document.querySelectorAll('#dutyBox .slot')[2].querySelector('.v').textContent);
+    log('dutyLabel', dutyLabel('\ud765\uc5f0\uc2e4 \ub2f9\ubc88'));
+    log('DUTYKEYS', JSON.stringify(DUTYKEYS));
+  }catch(e){ out.push('ERROR: '+e.message); }
+  document.getElementById('PROBE').textContent=out.join('  ;;  ');
+})();
+</script>

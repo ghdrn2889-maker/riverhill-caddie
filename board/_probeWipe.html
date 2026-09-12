@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function marks(){ return JONAMES.filter(function(n){ var t=dayMark(n);
+  return t && !isAbs(t) && t!=='당번' && t!=='벌당'; }).length; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    L('처음', '3부반 '+bu3List().length+'명 · 그날의 구분 '+marks()+'건 · 근태 '
+      + JONAMES.filter(function(n){return isAbs(tagOf(n));}).length+'명');
+    L('근무표 배지 앞 6줄', qa('.wrow').slice(0,6).map(function(w){
+        return w.querySelector('.n').textContent+'['
+          + Array.prototype.slice.call(w.querySelectorAll('.bt')).map(function(b){return b.textContent;}).join('+')
+          + ']'; }).join(' '));
+    var b3=bu3List()[0];
+    L('3부반 줄', b3+' 배지 ['+wkBadges(b3).join('+')+']');
+    setDayTag(bu3List()[1],'조출');
+    L('3부반+조출', bu3List()[1]+' 배지 ['+wkBadges(bu3List()[1]).join('+')+']');
+
+    // ① 날을 넘기면 그날의 구분이 지워지나
+    var abs0=JONAMES.filter(function(n){return isAbs(tagOf(n));}).length;
+    var sb0=seonbal(), b30=bu3List().length;
+    carryToNextDay();
+    L('내일로 넘긴 뒤', DATE);
+    // ★경기과 마샬 자리는 내일로 넘어가도 남는다(설정에 붙어 있다).
+    //   자리가 정본이니 그 사람들의 '배치'도 같이 남는 것이 맞다 — 이건 안 지워야 한다
+    var msKeep=JONAMES.filter(function(n){ return tagOf(n)==='배치'
+      && marshalNames().indexOf(n)>=0; });
+    L('  그날의 구분', marks()+'건 '+((marks()-msKeep.length)===0
+      ? '지워짐 ◎'+(msKeep.length?' (마샬 '+msKeep.join('·')+'의 배치는 자리가 남아 그대로)':'')
+      : '남음 ✗'));
+    L('  근태', JONAMES.filter(function(n){return isAbs(tagOf(n));}).length+'명 '
+      + (JONAMES.filter(function(n){return isAbs(tagOf(n));}).length===abs0?'그대로 ◎':'바뀜 ✗'));
+    L('  선발', (seonbal()||'없음')+' '+(seonbal()===sb0?'그대로 ◎':'바뀜 ✗'));
+    L('  3부반', bu3List().length+'명 '+(bu3List().length===b30?'그대로 ◎':'풀림 ✗'));
+    L('  배치표 꼬리표', (function(){ var n=0; DAY.forEach(function(p){
+        p.roster.forEach(function(r){ if(r.tag && !isAbs(r.tag) && r.tag!=='선발') n++; }); });
+        return n+'건 '+(n===0?'지워짐 ◎':'남음 ✗'); })());
+    L('  3부반 배지는 남나', wkBadges(b3).join('+')||'없음 ✗');
+    undo();
+    L('  되돌리기', DATE+' · 그날의 구분 '+marks()+'건');
+
+    // ② 손으로 비우기
+    tap($('hDate'));
+    L('날짜 고르개 단추', qa('#sheet .acts button').map(function(b){return '"'+b.textContent+'"';}).join(' '));
+    var m0=marks();
+    tap(qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='wipemk';})[0]);
+    L('비우기', m0+'건 → '+marks()+'건 '+(marks()===0?'◎':'✗')+' · 알림 "'+q('#toast').textContent+'"');
+    L('  3부반', bu3List().length+'명 · 배지 ['+wkBadges(b3).join('+')+']');
+    undo();
+    L('  되돌리기', marks()+'건 돌아옴');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

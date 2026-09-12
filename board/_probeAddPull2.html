@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'(빈)'; }); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var p = part('1'), nt0 = p.tees.length;
+    // 대기 세 사람을 뒤에 세운다
+    var pool = addablePool('1').filter(function(n){ return !isBu3(n) && !isAbs(tagOf(n)); }).slice(0,3);
+    pool.forEach(function(n){ addRow('1', n); });
+    paint();
+    var s0 = seats(p);
+    L('1부', '티오프 '+nt0+'팀 · 앉은 줄 '+s0.length);
+    L('  마지막 티오프 칸', (nt0-1)+'번 '+p.tees[nt0-1].time+' — '+s0[nt0-1]);
+    L('  ★뒤에 선 대기', s0.slice(nt0).join(' '));
+    var nextUp = s0[nt0];
+
+    L('','★갑. 마지막 뒤에 팀 하나 추가');
+    var t2 = hm(mm(p.tees[nt0-1].time) + GAP);
+    addTeam('1', t2, ''); paint();
+    var s1 = seats(p), i2=-1;
+    p.tees.forEach(function(t,k){ if (t.time===t2) i2=k; });
+    L('  새 칸', t2+' · '+i2+'번 · 앉은 사람 "'+(s1[i2]||'')+'"');
+    L('  지금 대기', s1.slice(i2+1).join(' '));
+    ok(s1[i2]===nextUp, '  ★다음 차례('+nextUp+')가 당겨졌나',
+       s1[i2]==='(빈)' ? '★안 당겨짐 — 빈 칸이 끼었고 '+nextUp+'는 그대로 대기' : s1[i2]);
+    L('  줄 수', s0.length+' → '+s1.length);
+
+    L('','★을. 옛 방식이었다면 (빈 줄을 걷어 보면)');
+    trimBlanks(p); paint();
+    var s2 = seats(p);
+    L('  걷은 뒤 '+i2+'번 칸', '"'+(s2[i2]||'')+'"');
+    ok(s2[i2]===nextUp, '  이러면 당겨지나', s2[i2]||'—');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

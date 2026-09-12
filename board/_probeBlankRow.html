@@ -1,0 +1,57 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function blanks(){ var out=[];
+    DAY.forEach(function(p){ active(p).forEach(function(r,i){
+      if(!r.n) out.push(p.name+' '+(i+1)+'번'); }); }); return out; }
+  function shown(pk){                       // 화면에 뭐라고 찍히나
+    var el = document.querySelectorAll('.spares .cell');
+    return el.length ? Array.prototype.map.call(el,function(b){
+      var nm=b.querySelector('.nm'); return b.querySelector('.p').textContent+':'+
+        (nm? (nm.textContent||'(아무것도 안 찍힘)') : '?'); }) : ['(대기 칸 없음)'];
+  }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+
+    var p3 = part('3'), a3 = active(p3);
+    var i = 13;                                     // 3부 14번
+    L('3부 14번', a3[i].n + ' · 3부반? ' + (isBu3(a3[i].n)?'예':'아니오')
+      + ' · 티오프 ' + p3.tees.length + '칸이라 ' + (i < p3.tees.length ? '근무':'대기'));
+    var who = a3[i].n;
+
+    L('비우기 전 빈 줄', blanks().join(' ') || '없음');
+    clearSeat('3', i);
+    L('★자리 비우기 뒤 빈 줄', blanks().join(' ') || '없음');
+    L('  ' + who + '는', partsOf(who).length ? '아직 '+partsOf(who).join('')+'부' : '어느 부에도 없음 (미배치)');
+    var wr = workRows().filter(function(r){ return r.n===who; })[0];
+    L('  근무표에서는', wr ? '"'+wr.st+'" 로 보임' : '안 보임 ✗');
+
+    // 화면에 어떻게 찍히나
+    cur='3'; setView('board'); paint();
+    var sp = shown('3');
+    var hit = sp.filter(function(s){ return /아무것도 안 찍힘/.test(s); });
+    L('★그 칸이 화면에', hit.length ? hit.join(' ') + '  ← 이름도 "비어 있음"도 안 찍힌다 ✗'
+      : '이름이나 "비어 있음"이 찍힌다 ◎');
+    L('  대기 칸 앞 6개', sp.slice(0,6).join(' | '));
+
+    // 3부 순번을 다시 세우면 그 빈 줄이 채워지나
+    L('', '');
+    L('빈 이름이 3부 후보 자리로 세어지나', inLineup('', 'bu3') ? '센다 ◎' : '★안 센다 — 3부는 그 줄을 영영 안 채운다 ✗');
+    L('빈 이름이 1·2부에서는', inLineup('', 'house') ? '센다 ◎ (그래서 1·2부는 저절로 채워진다)' : '안 센다');
+    var pl = lineupPlan(bu3Start(), ['3']);
+    L('3부 순번 세우기', pl ? ('자리 '+pl.slots.length+'칸 · 후보 '+pl.pool.length+'명 · '+pl.moved+'자리 바뀜') : '못 세움');
+    if (pl){
+      var touches = pl.slots.some(function(s){ return s.pk==='3' && s.i===i; });
+      L('  빈 줄('+(i+1)+'번)을 건드리나', touches ? '건드린다 ◎' : '★안 건드린다 — 빈 채로 남는다 ✗');
+      applyLineup(bu3Start(), ['3']);
+      L('  세운 뒤 빈 줄', blanks().join(' ') || '없음 ◎');
+      L('  '+who+'는', partsOf(who).length ? partsOf(who).join('')+'부 ◎ 돌아옴' : '★그대로 밖 ✗');
+    }
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

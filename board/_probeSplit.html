@@ -1,0 +1,76 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+setTimeout(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function on(id){ return document.getElementById(id).classList.contains('on'); }
+  function vis(id){ var e = document.getElementById(id); return e.offsetWidth > 0 && e.offsetHeight > 0; }
+  function k(){ return getComputedStyle(document.documentElement).getPropertyValue('--k').trim() || '(기본)'; }
+  function num(sel){ var e = document.querySelector(sel); return e ? e.textContent : '?'; }
+  function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+    pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+  function mid(el){ var r = el.getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; }
+  try {
+    // ① 기본은 배치표
+    log('처음', '배치표=' + on('viewBoard') + ' 근무표=' + on('viewWork') + ' · 보임 배치표=' + vis('viewBoard') + ' 근무표=' + vis('viewWork'));
+    log('--k', k());
+
+    // ② 부 열이 부 수만큼
+    var cols = getComputedStyle(document.querySelector('#viewBoard .body')).gridTemplateColumns.split(' ').length;
+    log('부 열', cols + '개 / DAY ' + DAY.length + '부');
+    log('배치표 칸', document.querySelectorAll('#cols .cell[data-nm]').length + '개');
+
+    // ③ 숫자 띠가 근무표 숫자와 같은가
+    var strip = document.getElementById('bstrip').textContent.replace(/\s+/g, ' ').trim();
+    log('숫자 띠', strip.slice(0, 90));
+    var sums = [];
+    document.querySelectorAll('#railSum .sumc').forEach(function(c){
+      sums.push(c.querySelector('.k').textContent + '=' + c.querySelector('.v').textContent); });
+    log('근무표 숫자', sums.join(' '));
+
+    // ④ 배치표에서 대바가 여전히 되나
+    var cs = document.querySelectorAll('#col1 .cell[data-nm]');
+    function nameAt(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j].getAttribute('data-nm');
+      return '?'; }
+    function cellOf(i){ var c = document.querySelectorAll('#col1 .cell[data-i]');
+      for (var j = 0; j < c.length; j++) if (Number(c[j].getAttribute('data-i')) === i) return c[j];
+      return null; }
+    var b0 = [nameAt(0), nameAt(3)], A = cellOf(0), B = cellOf(3);
+    var pa = mid(A), pb = mid(B);
+    pe('pointerdown', A, pa[0], pa[1]); pe('pointermove', A, pa[0]+10, pa[1]+10);
+    pe('pointermove', A, pb[0], pb[1]); pe('pointerup', A, pb[0], pb[1]);
+    log('대바', b0.join('/') + ' → ' + nameAt(0) + '/' + nameAt(3));
+    log('띠 갱신', document.getElementById('bstrip').textContent.replace(/\s+/g,' ').trim().slice(0, 40));
+
+    // ⑤ 근무표로 전환
+    document.querySelector('[data-view="work"]').click();
+    log('전환 뒤', '배치표=' + vis('viewBoard') + ' 근무표=' + vis('viewWork') + ' · --k ' + k());
+    var jo = document.querySelectorAll('#workTable .jocol');
+    log('조 열', jo.length + '개, 첫 열 폭 ' + Math.round(jo[0].getBoundingClientRect().width) + 'px');
+    log('근무표 줄', document.querySelectorAll('#workTable .wrow').length + '개');
+    log('경기과·당번', vis('staffBox') + ' / ' + vis('dutyBox'));
+
+    // ⑥ 서랍이 근무표 화면에서도 열리나
+    document.getElementById('btnRoster').click();
+    log('서랍', document.getElementById('drw').classList.contains('on') ? '열림 · 줄 ' + document.querySelectorAll('#drwBody .rrow').length : '안 열림(문제)');
+    document.getElementById('drwClose').click();
+
+    // ⑦ 되돌리기가 화면을 안 바꿔야 한다
+    undo();
+    log('되돌린 뒤', '보는 화면=' + (on('viewWork') ? '근무표(유지 정상)' : '배치표(문제)') + ' · 1부 첫칸 ' + nameAt(0));
+
+    // ⑧ 배치표로 돌아오면 --k 다시 잡히나
+    document.querySelector('[data-view="board"]').click();
+    log('돌아옴', '배치표=' + vis('viewBoard') + ' · --k ' + k() + ' · 이름 잘림 ' + (function(){
+      var n = document.querySelectorAll('#cols .cell .nm'), bad = 0;
+      for (var i = 0; i < n.length; i++) if (n[i].scrollWidth > n[i].clientWidth + 1) bad++;
+      return bad + '건'; })());
+    var ps = document.querySelectorAll('#viewBoard .pscroll'), ov = 0;
+    for (var z = 0; z < ps.length; z++) ov = Math.max(ov, ps[z].scrollHeight - ps[z].clientHeight);
+    log('세로 넘침', ov + 'px');
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+}, 400);
+</script>

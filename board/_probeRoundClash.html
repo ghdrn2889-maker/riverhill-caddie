@@ -1,0 +1,75 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function tmAt(pk,i){ var p=part(pk); return p.tees[i]?p.tees[i].time:'대기'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    setView('work');
+    L('기준', '한 라운드 ' + gapText(ROUNDMIN));
+    L('처음 겹침', roundClashes().length + '건 (두 부에 선 사람 '
+      + JONAMES.filter(function(n){ return partsOf(n).length>1; }).length + '명)');
+
+    // ① 겹치게 만든다 — 1부 늦은 자리 + 2부 이른 자리
+    var p1=part('1'), late=active(p1).length-1, nm=active(p1)[late].n;
+    addRow('2', nm);
+    var i2=active(part('2')).map(function(r){return r.n;}).indexOf(nm);
+    // 대기가 아니라 진짜 이른 티오프에 앉힌다 — 2부 1번과 맞바꾼다
+    rotateSeats([{pk:'2',ri:part('2').roster.indexOf(active(part('2'))[i2])},
+                 {pk:'2',ri:part('2').roster.indexOf(active(part('2'))[0])}]);
+    i2=active(part('2')).map(function(r){return r.n;}).indexOf(nm);
+    L('두 부에 세움', nm+' · 1부 '+(late+1)+'번 '+tmAt('1',late)
+      + ' · 2부 '+(i2+1)+'번 '+tmAt('2',i2));
+    var cl=roundClashes();
+    L('  겹침', cl.length+'건'+(cl.length? ' — '+cl[0].n+' '+cl[0].a.time+' → '+cl[0].b.time
+      +' ('+gapText(cl[0].gap)+')':''));
+    var bar = Array.prototype.slice.call(document.querySelectorAll('.drift,.lnbar.dft'))
+      .filter(function(e){ return /두 부 시각|겹침/.test(e.textContent); })[0];
+    L('  화면', bar ? '◎ 근무표에 뜸 — "'
+      + bar.textContent.replace(/\s+/g,' ').trim().slice(0,52) + '"' : '✗ 안 뜸');
+
+    // ② 취소된 티오프는 안 센다 (겹침이 살아 있을 때 본다)
+    var k2=active(part('2')).map(function(r){return r.n;}).indexOf(nm);
+    var was=roundClashes().length;
+    if (k2 >= part('2').tees.length) { L('취소 시험', '그 사람이 대기라 못 봄'); k2 = -1; }
+    if (k2 >= 0){
+    cancelTee('2', k2);
+    L('그 티오프를 취소하면', roundClashes().length+'건 (전 '+was+'건) '
+      + (roundClashes().length<was ? '◎ 안 셈':'✗ 아직 셈'));
+    cancelTee('2', k2);
+    }
+
+    // ③ 1부에서 이른 자리로 옮기면 풀린다
+    var f1=active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    rotateSeats([{pk:'1',ri:part('1').roster.indexOf(active(part('1'))[f1])},
+                 {pk:'1',ri:part('1').roster.indexOf(active(part('1'))[0])}]);
+    var g1=active(part('1')).map(function(r){return r.n;}).indexOf(nm);
+    L('1부 첫 자리로 옮김', nm+' 1부 '+(g1+1)+'번 '+tmAt('1',g1)
+      + ' · 겹침 '+roundClashes().length+'건 '
+      + (roundClashes().length? '(아직 '+gapText(roundClashes()[0].gap)+')':'◎ 풀림'));
+
+    // ③ 기준을 바꾸면 셈이 바뀐다
+    var n0=roundClashes().length;
+    setRoundMin(60);
+    L('기준 1시간으로', roundClashes().length+'건 (전 '+n0+'건) '
+      + (roundClashes().length<=n0 ? '◎ 느슨해짐':'✗'));
+    setRoundMin(600);
+    L('기준 10시간으로', roundClashes().length+'건 '
+      + (roundClashes().length>=n0 ? '◎ 빡빡해짐':'✗'));
+    setRoundMin(270);
+
+
+    // ⑤ 설정에 남나
+    setRoundMin(300);
+    savedSig=null; PENDING=null; bootLoad();
+    L('새로 켠 뒤', '기준 '+gapText(ROUNDMIN)+' '+(ROUNDMIN===300?'◎ 기억함':'✗'));
+    setRoundMin(270);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

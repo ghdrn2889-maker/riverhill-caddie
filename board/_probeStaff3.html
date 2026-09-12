@@ -1,0 +1,31 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    // 마샬 두 명을 넣어 역할 딱지를 본다
+    setStaff(2, '우겸조', '05:40');
+    setStaff(3, '허웅진', '12:30');
+    setView('work'); paint();
+    L('  STAFF', STAFF.map(function(x,i){ var r=staffRole(i);
+      return x.k+' '+(x.n||'(빈)')+' '+(x.t||'')+' → '+(r?r.t:'(딱지 없음)'); }).join(' | '));
+    ok(staffRole(2) && staffRole(2).t === '조출', '  이른 마샬', staffRole(2)?staffRole(2).t:'(없음)');
+    ok(staffRole(3) === null, '  ★늦은 마샬에 마감이 없나', staffRole(3)?('★'+staffRole(3).t):'없음 ◎');
+    ok(staffRole(1) === null, '  ★주임에 정출이 없나', staffRole(1)?('★'+staffRole(1).t):'없음 ◎');
+    ok(staffRole(0) === null, '  대리', staffRole(0)?staffRole(0).t:'없음 ◎');
+    // 마샬 하나만 있고 늦을 때
+    setStaff(2, '', '');
+    ok(staffRole(3) === null, '  마샬 하나(12:30)일 때', staffRole(3)?('★'+staffRole(3).t):'없음 ◎');
+    setStaff(2, '우겸조', '05:40'); setStaff(3, '', '');
+    ok(staffRole(2) && staffRole(2).t === '조출', '  마샬 하나(05:40)일 때', staffRole(2)?staffRole(2).t:'★없음');
+    // 화면
+    paint();
+    var slots = Array.prototype.slice.call(document.querySelectorAll('#staffBox .slot'));
+    L('  경기과 칸', slots.map(function(b){ return b.textContent.trim().replace(/\s+/g,' '); }).join(' / '));
+  }catch(e){ o.push('터짐: '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

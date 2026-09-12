@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nm(el){ return el.tagName.toLowerCase()+(el.className?'.'+String(el.className).trim().split(/\s+/).join('.'):''); }
+  function bg(el){ return getComputedStyle(el).backgroundColor; }
+  function fg(el){ return getComputedStyle(el).color; }
+  function where(el){
+    var p=el, path=[];
+    while(p && p.nodeType===1 && path.length<4){
+      path.unshift(p.id? '#'+p.id : (String(p.className).trim().split(/\s+/)[0]||p.tagName.toLowerCase()));
+      p=p.parentNode; }
+    return path.join('>');
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); setView('work'); paint();
+
+    // 근무표에서 '부'가 들어간 작은 표를 전부 모은다
+    var seen={};
+    [].slice.call(document.querySelectorAll('#viewWork span')).forEach(function(el){
+      var t=(el.textContent||'').trim();
+      if(!/^\d부(반)?$/.test(t)) return;
+      if(el.children.length) return;
+      var k=t+'|'+nm(el);
+      if(seen[k]) return; seen[k]=1;
+      o.push('  "'+t+'"  '+nm(el)+'  바탕 '+bg(el)+'  글자 '+fg(el)+'  자리 '+where(el));
+    });
+    L('★근무표에 뜨는 부 표시', '');
+    o.push('');
+    // 한 사람 예로
+    var W=workRows();
+    ['w','d','u','o'].forEach(function(c){
+      var r=W.filter(function(x){ return x.cls===c; })[0];
+      if(r) L('  cls '+c, r.n+' → 배지['+r.bts.join(' ')+'] 상태칩["'+r.st+'"]');
+    });
+    o.push('');
+    L('★두 부에 앉은 사람', (function(){
+      var r=W.filter(function(x){ return x.st.indexOf(',')>0; })[0];
+      return r? r.n+' 상태칩["'+r.st+'"] 배지['+r.bts.join(' ')+']' : '오늘은 없음'; })());
+    L('★3부반인 사람', (function(){
+      var r=W.filter(function(x){ return isBu3(x.n); })[0];
+      return r? r.n+' 상태칩["'+r.st+'"] 배지['+r.bts.join(' ')+']' : '없음'; })());
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

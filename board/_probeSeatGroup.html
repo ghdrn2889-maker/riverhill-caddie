@@ -1,0 +1,76 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seats(pk,a,b){ var p=part(pk); return active(p).slice(a,b).map(function(r,j){
+    var i=a+j; return (r.itn?'인턴':seatNo(p,i))+' '+(r.n||'(빔)')+(r.tag?' '+r.tag:''); }); }
+  function seatOf(pk,nm){ var p=part(pk),a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===nm) return seatNo(p,i); return 0; }
+  function tot(){ var t=0; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) t++; }); }); return t; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    // 조출 4명 · 후출 2명 · 2부에만 있는 사람(중복 근무 후보)
+    var pool = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); });
+    var jo = pool.slice(0,4), hu = pool.slice(4,6);
+    jo.forEach(function(n){ setDayTag(n,'조출'); });
+    hu.forEach(function(n){ setDayTag(n,'후출'); });
+    // ★당번·벌당은 자리를 정하는 값이 아니다 — 묶음에 나오면 안 된다
+    var duty = pool.slice(6,8);
+    duty.forEach(function(n){ TAG[n] = '당번'; });
+    var only2 = active(part('2')).map(function(r){ return r.n; })
+      .filter(function(n){ return n && partsOf(n).length===1 && !dayMark(n); });
+    var tot0 = tot();
+
+    // ★칸 창을 열어 문이 났는지 본다 — 1부 8번 칸
+    openCell('1', 7);
+    var sh = document.getElementById('sheet');
+    var gb = [].slice.call(sh.querySelectorAll('[data-sg]'));
+    L('1부 8번 칸을 여니 묶음', gb.length + '개 — ' + gb.map(function(b){ return b.textContent; }).join(' / '));
+    L('  당번 묶음', gb.filter(function(b){ return b.textContent.indexOf('당번')>=0
+      || b.textContent.indexOf('벌당')>=0; }).length ? '있음(문제)' : '없음 ◎');
+    L('  당번 배지 달아 둔 사람', duty.join(' ') + ' — tag ' + duty.map(function(n){ return tagOf(n); }).join('/'));
+
+    var jb = gb.filter(function(b){ return b.getAttribute('data-sg').indexOf('|조출')>0; })[0];
+    L('', '');
+    if (!jb) { L('조출 단추', '없음'); }
+    else {
+      jb.click();
+      var g = jo.map(function(n){ return seatOf('1',n); }).sort(function(a,b){return a-b;});
+      L('★「조출 4명」을 누르니', jo.map(function(n){ return n+':'+(seatOf('1',n)||'-'); }).join(' '));
+      L('  번호', g.join(',') + (g.join(',')==='8,9,10,11' ? ' ◎ 8~11 연달아' : ' 어긋남'));
+      L('  8~12번 칸', seats('1',7,12).join(' | '));
+      L('  배치표 전체', tot0 + ' → ' + tot() + (tot()===tot0+4 ? ' ◎ 4명만 늘었다' : ' 어긋남'));
+      L('  기록', LOG[0]?LOG[0].msg:'없음');
+    }
+
+    // ★다른 부에만 있는 사람 = 중복 근무
+    openCell('1', 0);
+    var sh2 = document.getElementById('sheet');
+    var db = [].slice.call(sh2.querySelectorAll('[data-sg]'))
+      .filter(function(b){ return b.textContent.indexOf('다른 부')>=0; })[0];
+    L('', '');
+    L('다른 부에만 있는 사람 단추', db ? db.textContent : '없음');
+    if (db && only2.length){
+      var t1 = tot();
+      db.click();
+      var dup = only2.filter(function(n){ return partsOf(n).length>=2; }).length;
+      L('  눌렀더니 1부 1~5번', seats('1',0,5).join(' | '));
+      L('  두 부에 선 사람', dup + '명 (중복 근무 배지가 붙어야 한다)');
+      L('  기록', LOG[0]?LOG[0].msg:'없음');
+    }
+
+    // ★순번 세우기가 안 건드리나
+    var st = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); })[0];
+    setSeonbal(st); applyLineup(st, ['1','2']);
+    var g2 = jo.map(function(n){ return seatOf('1',n); }).sort(function(a,b){return a-b;});
+    L('', '');
+    L('★순번 세운 뒤 조출 4명', g2.join(',') + (g2.length===4 && g2[0]>0 ? ' (자리 지킴)' : ' 쓸려 나감'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

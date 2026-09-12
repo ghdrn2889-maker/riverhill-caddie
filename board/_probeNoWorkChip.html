@@ -1,0 +1,115 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function rowTx(n){ var r=rowOf(n); if(!r) return '(줄 없음)';
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return '['+e.textContent.trim()+']'; }).join(' ') || '(칩 없음)'; }
+function R(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function reset(){
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+  }
+  try{
+    reset();
+    var pool0 = joRing(seonbal()).filter(function(n){ return inLineup(n,'house'); }).length;
+    var t1=part('1').tees.length, t2=part('2').tees.length;
+    SMAX['2'] = Math.max(5, pool0 - (t1+t2) + 5);       // 차례가 한 바퀴 더 돌게
+    applyLineup(seonbal(), ['1','2']);
+    applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    // ── 갑. 일하는 사람 줄에 칩이 남았나
+    L('','★갑. 일하는 사람');
+    var one1 = JONAMES.filter(function(n){ return partsOf(n).join()==='1'; })[0];
+    var one2 = JONAMES.filter(function(n){ return partsOf(n).join()==='2'; })[0];
+    var one3 = JONAMES.filter(function(n){ return partsOf(n).join()==='3'; })[0];
+    var two  = JONAMES.filter(function(n){ return partsOf(n).join()==='1,2'; })[0];
+    [['1부만',one1],['2부만',one2],['3부만',one3],['1부+2부',two]].forEach(function(x){
+      if (!x[1]) { L('  '+x[0], '(그런 사람 없음)'); return; }
+      var r=R(x[1]);
+      L('  '+x[0]+' '+x[1], '칩 "'+r.chip+'" · 상태(속) "'+r.st+'" · 화면 '+rowTx(x[1]));
+    });
+    var bad = [one1,one2,one3,two].filter(function(n){ return n && R(n).chip !== ''; });
+    ok(bad.length===0, '  ★근무·1부·2부·3부 칩', bad.length
+      ? '★남음 — '+bad.map(function(n){ return n+'"'+R(n).chip+'"'; }).join(' ') : '전부 걷힘 ◎');
+    // 화면에도 정말 없나 (3부반 소속 배지는 배지라 남는다)
+    var shownBad = [one1,one2,one3,two].filter(function(n){
+      if (!n) return false; var t=rowTx(n);
+      return /\[근무\]|\[1부\]|\[2부\]|\[3부\]|\[1부·2부\]/.test(t); });
+    ok(shownBad.length===0, '  화면 줄', shownBad.length? '★'+shownBad.map(rowTx).join(' ') : '깨끗함 ◎');
+
+    // ── 을. 봐야 할 것은 그대로 남았나 — 판에 없으면 만들어서 본다
+    L('','★을. 남아야 할 칩');
+    function chipOf(n){ var r=R(n); return r? r.chip : '(줄 없음)'; }
+    function see(lab, n){
+      L('  '+lab+' '+n, '칩 "'+chipOf(n)+'" · 화면 '+rowTx(n));
+      ok(!!chipOf(n), '   남았나', chipOf(n)? '"'+chipOf(n)+'" ◎' : '★사라짐');
+    }
+    // 대기
+    see('대기', JONAMES.filter(function(n){ return R(n) && R(n).cls==='d'; })[0]);
+    // 2,3 — 2부만 하는 사람을 3부에도 앉힌다
+    var a23 = JONAMES.filter(function(n){ return partsOf(n).join()==='2' && !isBu3(n); })[0];
+    addRow('3', a23); paint(); see('2,3', a23);
+    // 54 — 1·2부 하는 사람을 3부에도
+    var a54 = JONAMES.filter(function(n){ return partsOf(n).join()==='1,2'; })[0];
+    addRow('3', a54); paint(); see('54', a54);
+    // 미배치 — 자리를 다 뺀다
+    var au = JONAMES.filter(function(n){ return partsOf(n).join()==='1' && !isBu3(n); })[0];
+    partsOf(au).slice().forEach(function(k){ delFromPart(k, au); }); paint();
+    see('미배치', au);
+    // 휴무
+    var rest = JONAMES.filter(function(n){ return !partsOf(n).length && !isBu3(n) && n!==au; })[0];
+    setAbsent(rest, '휴무'); paint(); see('휴무', rest);
+    // 당번
+    var dk = DUTYKEYS.filter(function(k){ return /흡연/.test(k); })[0] || DUTYKEYS[0];
+    var don = JONAMES.filter(function(n){ return !partsOf(n).length && !hasDuty(n)
+      && !isAbs(tagOf(n)) && n!==rest && n!==au; })[0];
+    if (!don){                                   // 다들 자리가 있으면 하나를 빼서 만든다
+      don = JONAMES.filter(function(n){ return partsOf(n).join()==='2' && !isBu3(n)
+        && n!==rest && n!==au; })[0];
+      partsOf(don).slice().forEach(function(k){ delFromPart(k, don); });
+    }
+    dutyToggle(dk, don); paint(); see('당번', don);
+    // 아직 자리 없는 지정 ①: 1부에 앉은 사람에게 3부 — 이건 진짜 중복이라 배지가 맡는다
+    var ap3 = JONAMES.filter(function(n){ return partsOf(n).join()==='1' && !isBu3(n); })[0];
+    setPlan(ap3, '3', true); paint();
+    L('  1부 앉음 + 3부 지정 '+ap3, '칩 "'+chipOf(ap3)+'" · 화면 '+rowTx(ap3));
+    ok(/1,3/.test(rowTx(ap3)), '   배지가 말하나', rowTx(ap3)+'  (1,3 은 진짜 중복이다)');
+    // 아직 자리 없는 지정 ②: 1부에 앉은 사람에게 2부 — 배지가 안 붙는다. 칩이 맡아야 한다
+    var ap2 = JONAMES.filter(function(n){ return partsOf(n).join()==='1' && !isBu3(n) && n!==ap3; })[0];
+    setPlan(ap2, '2', true); paint();
+    L('  1부 앉음 + 2부 지정 '+ap2, '칩 "'+chipOf(ap2)+'" · 상태(속) "'+R(ap2).st+'" · 화면 '+rowTx(ap2));
+    ok(!!chipOf(ap2), '   칩이 맡나', chipOf(ap2)? '"'+chipOf(ap2)+'" ◎ (안 적으면 잊힌다)':'★비었음');
+    ok(chipOf(ap2).indexOf('1부') < 0, '   앉은 부(1부)는 안 적나', '"'+chipOf(ap2)+'"');
+
+    // ── 병. 끼워 넣기 목록에서는 '어디서 일하나'가 그대로
+    L('','★병. 끼워 넣기 목록');
+    if (typeof openInsert === 'function'){
+      openInsert('1', 0);
+      var tx = q('#insOut') ? q('#insOut').textContent.replace(/\s+/g,' ').trim() : '';
+      L('  목록 앞부분', tx.slice(0, 110) + ' …');
+      ok(/1부|2부|3부/.test(tx), '  부 이름이 뜨나', /1부|2부|3부/.test(tx)? '뜸 ◎ (여기선 알아야 한다)':'★안 뜸');
+      closeSheet();
+    } else L('  (이 화면엔 없음)', '');
+
+    // ── 정. 셈은 그대로
+    L('','★정. 셈');
+    var T = workTally();
+    ok(T.total===82, '  총원', T.total+'명 · 근무 '+T.cw+' · 대기 '+T.cd+' · 미배치 '+T.cu+' · 가용 '+T.avail);
+    var fil = qa('[data-wfil]').map(function(b){ return b.textContent.trim(); });
+    L('  거르개', fil.join(' | '));
+    ok(fil.some(function(x){ return x.indexOf('근무')===0; }), '  거르개의 근무 칸', '그대로 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

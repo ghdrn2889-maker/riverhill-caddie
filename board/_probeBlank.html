@@ -1,0 +1,71 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = [];
+window.addEventListener('error', function(ev){ ERRS.push(ev.message + ' @' + ev.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function slots(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot');
+    for (var i = 0; i < ks.length; i++)
+      a.push(ks[i].querySelector('.k').textContent + '=' + ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push(rs[i].querySelector('.num').textContent + '[' + rs[i].querySelector('.dnm').value + ']'
+        + '@' + rs[i].querySelector('.dtm').value + '/' + rs[i].querySelector('.dhr').value
+        + '/' + rs[i].querySelector('.til').textContent);
+    return a.join('  '); }
+  function fire(el, v){ el.value = v; el.dispatchEvent(new Event('change', {bubbles:true})); }
+  function act(n){ var bs = document.querySelectorAll('#sheet button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+    pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+  function drag(f, to, below){ var g = f.querySelector('[data-grip]');
+    var a = f.getBoundingClientRect(), b = to.getBoundingClientRect();
+    var ty = below ? b.bottom - 2 : b.top + 2;
+    pe('pointerdown', g, a.left + 5, a.top + a.height / 2);
+    pe('pointermove', g, a.left + 5, ty); pe('pointerup', g, a.left + 5, ty); }
+  try {
+    openDuty('벌당');
+    log('단추', act('dutyadd').textContent);
+    // 이름 없이 넣기
+    act('dutyadd').click();
+    log('공백1', rows() + ' || ' + slots());
+    // 한 번 더 (같은 공백이 또 들어가야 한다)
+    act('dutyadd').click();
+    log('공백2', rows() + ' || ' + slots());
+    // 이름 있는 사람도
+    document.getElementById('dutyQ').value = '김홍구';
+    log('단추2', (function(){ document.getElementById('dutyQ')
+      .dispatchEvent(new Event('input', {bubbles:true})); return act('dutyadd').textContent; })());
+    act('dutyadd').click();
+    log('셋', rows() + ' || ' + slots());
+    // 공백 줄에 이름을 나중에 적는다
+    fire(document.querySelectorAll('#sheet .dnm')[0], '조하빈');
+    log('이름채움', rows() + ' || ' + slots());
+    // 이름을 지우면 다시 공백
+    fire(document.querySelectorAll('#sheet .dnm')[0], '');
+    log('이름지움', rows() + ' || ' + slots());
+    // 공백 줄의 시각·시간도 고쳐진다
+    fire(document.querySelectorAll('#sheet .dtm')[1], '06:00');
+    fire(document.querySelectorAll('#sheet .dhr')[1], '4');
+    log('공백시각', rows() + ' || ' + slots());
+    // 공백 줄을 끌어서 차례 바꾸기
+    var rs = document.querySelectorAll('#sheet .drow');
+    drag(rs[0], rs[2], true);
+    log('차례', rows() + ' || ' + slots());
+    // 가운데 줄만 빼기
+    var bs = document.querySelectorAll('#sheet [data-dutydel]');
+    bs[1].click();
+    log('빼기', rows() + ' || ' + slots());
+    // 시각도 시간도 이름도 없는 줄
+    fire(document.getElementById('dutyT'), ''); fire(document.getElementById('dutyH'), '');
+    document.getElementById('dutyQ').value = '';
+    act('dutyadd').click();
+    log('완전공백', rows() + ' || ' + slots());
+    undo(); log('되돌림', slots());
+    daySave(); log('저장', document.getElementById('btnSave').textContent);
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

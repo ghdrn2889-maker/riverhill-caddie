@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var bars=qa('.lnbar');
+    L('띠', bars.length+'줄');
+    bars.forEach(function(b,i){ L('  '+(i+1), b.textContent.replace(/\s+/g,' ').trim()); });
+    tap(qa('.lnbar')[1].querySelectorAll('button')[0]);
+    L('3부 고르기', q('#sheet .st').textContent+' · 후보 '+qa('#sheet .sug button').length+'명');
+    tap(qa('#sheet .sug button')[3]);
+    L('바꿈', '3부시작 '+bu3Start()+' · 선발 '+seonbal());
+    var b1=active(part('1')).map(function(r){return r.n;}).join();
+    tap(qa('.lnbar')[1].querySelectorAll('button')[1]);
+    L('미리보기', q('#sheet .k').textContent+' / '+q('#sheet .st').textContent+' · 줄 '+qa('#sheet .plan .pr').length);
+    tap(act('lnyes'));
+    L('세움', LOG[0].msg);
+    L('  1부 안 흔들림', active(part('1')).map(function(r){return r.n;}).join()===b1?'그대로 ◎':'흔들림 ✗');
+    L('  ▶ 대조', lineupPlan(bu3Start(),['3']).moved===0?'그 차례대로 ◎':'어긋남 ✗');
+    undo(); undo();
+    L('되돌림', bu3Start());
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},600);
+</script>

@@ -1,0 +1,43 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function seat(n){ var s=[]; DAY.forEach(function(p){ var a=active(p);
+    for(var i=0;i<a.length;i++) if(a[i].n===n) s.push(p.name+' '+seatNo(p,i)+'번'); });
+    return s.join(' · ')||'자리 없음'; }
+  function row(n){ var r=workRows().filter(function(x){ return x.n===n; })[0];
+    return r? '['+r.bts.join(' ')+'] '+r.st : '(없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('묶음 지정에 있는 것', BULKTAGS.map(function(t){ return bulkLabel(t); }).join(' / '));
+    L('사람 창에 있는 것', DAYTAGS.join(' / '));
+
+    // ★한꺼번에 지정 — 프리
+    var W=workRows().filter(function(r){ return r.cls==='w'&&!tagOf(r.n)&&!isBu3(r.n); });
+    var B=W[0].n, C=W[1].n;
+    L('', ''); L('묶음 전', B+' '+seat(B)+' / '+C+' '+seat(C));
+    bulkStart('프리'); bulkTap(B); bulkTap(C); paint();
+    L('묶음으로 프리', B+' '+seat(B)+' '+row(B)+' / '+C+' '+seat(C)+' '+row(C)
+      + ((seat(B)==='자리 없음'&&seat(C)==='자리 없음') ? '  ◎ 둘 다 내려옴' : '  ✗'));
+    L('  기록', LOG[0]?LOG[0].msg.slice(0,70):'-');
+    BULK = null; paint();   // 되돌리지 말고 묶음만 끈다
+
+    // ★순번 세우기가 도로 안 앉히나 — 배치표에 있던 사람만 후보로 좁혀서 본다
+    var D=W[2].n;
+    setDayTag(D,'배치'); paint();
+    var seatedBefore = {}; DAY.forEach(function(p){ active(p).forEach(function(r){ if(r.n) seatedBefore[r.n]=1; }); });
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']); paint();
+    L('', ''); L('★순번 세운 뒤', '');
+    L('  배치 '+D, seat(D)+' '+row(D)+(seat(D)==='자리 없음'?'  ◎ 안 앉음':'  ✗ 도로 앉음'));
+    L('  프리 '+B, seat(B)+' '+row(B)+(seat(B)==='자리 없음'?'  ◎ 안 앉음':'  ✗ 도로 앉음'));
+    L('  프리 '+C, seat(C)+' '+row(C)+(seat(C)==='자리 없음'?'  ◎ 안 앉음':'  ✗ 도로 앉음'));
+    L('  순번 후보에', '배치 '+(lineupPool('house').indexOf(D)>=0?'★든다':'안 든다 ◎')
+      +' · 프리 '+(lineupPool('house').indexOf(B)>=0?'★든다':'안 든다 ◎'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

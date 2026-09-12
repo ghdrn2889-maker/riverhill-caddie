@@ -1,0 +1,66 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function row(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+  function say(n){
+    var r=row(n);
+    return n+' → 배지['+(r?r.bts.join(' '):'?')+'] 상태['+(r?r.st:'?')+'] TAG['+(tagOf(n)||'-')+']';
+  }
+  // 화면에 실제로 그려진 그 줄
+  function drawn(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    return b ? b.textContent.replace(/\s+/g,' ').trim() : '(그 줄 없음)';
+  }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    L('당번 종류', DUTYKEYS.join(' / '));
+    L('지금 당번', DUTYKEYS.map(function(k){ return k+'['+dutyNames(k).join('·')+']'; }).join(' '));
+
+    // ㉮ 배치표에 자리가 있고 꼬리표가 없는 사람 — 여기에 당번을 건다
+    var free = workRows().filter(function(r){ return !tagOf(r.n) && r.cls==='w'; })[0].n;
+    // ㉯ 이미 다른 꼬리표(조출 등)를 단 사람
+    setDayTag(workRows().filter(function(r){ return !tagOf(r.n); })[1].n, '조출');
+    var tagged = workRows().filter(function(r){ return tagOf(r.n)==='조출'; })[0].n;
+    // ㉰ 배치표에 자리가 없는 사람
+    var noseat = workRows().filter(function(r){ return r.cls!=='w' && !tagOf(r.n); })[0];
+    noseat = noseat ? noseat.n : '';
+
+    L('', '');
+    L('고르기', '㉮ 꼬리표 없음 '+free+' / ㉯ 조출 '+tagged+' / ㉰ 자리 없음 '+(noseat||'-'));
+    L('  걸기 전 ㉮', say(free));
+    L('  걸기 전 ㉯', say(tagged));
+
+    // ★당번 걸기
+    dutyToggle('당번', free);
+    dutyToggle('벌당', tagged);
+    if (noseat) dutyToggle('당번', noseat);
+    paint();
+
+    L('', '');
+    L('★당번 건 뒤', '');
+    L('  ㉮ '+free, say(free));
+    L('     화면', drawn(free));
+    L('  ㉯ '+tagged, say(tagged));
+    L('     화면', drawn(tagged));
+    if (noseat){ L('  ㉰ '+noseat, say(noseat)); L('     화면', drawn(noseat)); }
+    L('  당번 목록', DUTYKEYS.map(function(k){ return k+'['+dutyNames(k).join('·')+']'; }).join(' '));
+
+    // ★떼면 되돌아가나
+    dutyToggle('당번', free);
+    dutyToggle('벌당', tagged);
+    paint();
+    L('', '');
+    L('★당번 뗀 뒤', '');
+    L('  ㉮ '+free, say(free) + (tagOf(free)==='' ? ' ◎ 깨끗' : ' ✗ 찌꺼기'));
+    L('  ㉯ '+tagged, say(tagged) + (tagOf(tagged)==='조출' ? ' ◎ 조출 그대로' : ' ✗ 조출을 잃음'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

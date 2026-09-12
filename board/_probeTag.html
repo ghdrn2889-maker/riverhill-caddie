@@ -1,0 +1,46 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+setTimeout(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  try {
+    log('DAY', typeof DAY + ' ' + (DAY && DAY.length));
+    var rows = document.querySelectorAll('#workTable .wrow');
+    log('줄수', rows.length);
+    var seen = {}, bads = [];
+    for (var i = 0; i < rows.length; i++){
+      var nm = rows[i].querySelector('.n').textContent;
+      var bg = rows[i].querySelector('.bg').textContent;
+      seen[nm] = bg;
+      if (/(\S+)\s+\1/.test(bg) || /\d,\d.*54/.test(bg)) bads.push(nm + '=' + bg);
+    }
+    var want = ['김동우','조하빈','오동현','정진영','홍준표','연승준','윤형수','이은지','장소희','강아란','김홍구','성지현','강민순','차은경'];
+    log('배지', want.map(function(n){ return n + '[' + (seen[n] === undefined ? '?' : seen[n]) + ']'; }).join(' '));
+    log('겹쳐적음', bads.length ? bads.join(' / ') : '없음');
+    var all = [];
+    for (var k in seen) if (all.indexOf(seen[k]) < 0) all.push(seen[k]);
+    log('배지 종류', all.join(' | '));
+
+    var cs = document.querySelectorAll('#cols .cell[data-nm]');
+    log('칸수', cs.length);
+    var byc = {};
+    for (var j = 0; j < cs.length; j++){
+      var c = cs[j], cl = c.className.replace(/^cell ?/, '').split(' ')[0] || '기본';
+      if (!byc[cl]) byc[cl] = c.getAttribute('data-nm') + ' bg=' + getComputedStyle(c).backgroundColor
+        + ' 글자=' + getComputedStyle(c.querySelector('.nm')).color;
+    }
+    for (var q in byc) log('칸 ' + q, byc[q]);
+
+    openDrawer();
+    var rts = document.querySelectorAll('#drwBody .rrow .rt'), m = {};
+    for (var z = 0; z < rts.length; z++){
+      var tx = rts[z].textContent;
+      if (!m[tx]) m[tx] = rts[z].className + ' bg=' + getComputedStyle(rts[z]).backgroundColor;
+    }
+    for (var y in m) log('꼬리표 ' + y, m[y]);
+    closeDrawer();
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+}, 300);
+</script>

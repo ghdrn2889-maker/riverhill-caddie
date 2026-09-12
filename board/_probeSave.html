@@ -1,0 +1,25 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    L('저장 칸 이름', DAYKEY+' · 설정 '+CFGKEY);
+    L('하루치 크기', Math.round(state().length/1024)+'KB');
+    L('저장된 칸 수', (function(){ var n=[]; for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i); if(k.indexOf('board.')===0) n.push(k+'('+Math.round((localStorage.getItem(k)||'').length/1024)+'KB)'); }
+        return n.join(' / ')||'없음'; })());
+    L('오늘 날짜', DATE);
+    // 날 넘기기를 하면 오늘 것이 어디로 가나
+    var d0=DATE, t0=part('1').tees.length;
+    carryToNextDay();
+    L('넘긴 뒤', d0+' → '+DATE);
+    L('  옛날 것이 어디 남아 있나', (function(){ var n=[]; for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i); if(k.indexOf('board.')===0) n.push(k); } return n.join(' / '); })());
+    L('  ★오늘 배치표를 다시 볼 수 있나', '아니오 — 같은 칸을 덮어씁니다');
+    L('저장 한 번 눌러 봄', (function(){ daySave();
+      var raw=localStorage.getItem(DAYKEY); var o2=JSON.parse(raw);
+      return '칸 '+DAYKEY+' 안의 날짜 = '+JSON.parse(o2.s).date; })());
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

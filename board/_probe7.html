@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out=[]; function log(k,v){ out.push(k+': '+v); }
+  function slots(){ var a=[],ks=document.querySelectorAll('#dutyBox .slot');
+    for(var i=0;i<ks.length;i++)a.push(ks[i].querySelector('.k').textContent+'='+ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a=[],rs=document.querySelectorAll('#sheet .drow');
+    for(var i=0;i<rs.length;i++)a.push(rs[i].querySelector('.num').textContent+rs[i].querySelector('b').textContent
+      +'@'+(rs[i].querySelector('.dtm')||{value:'-'}).value); return a.join(' '); }
+  function pe(t,el,x,y){ el.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,pointerId:1,
+    pointerType:'mouse',clientX:x,clientY:y,button:0,buttons:t==='pointerup'?0:1})); }
+  function drag(f,to,below){ var g=f.querySelector('[data-grip]');
+    var a=f.getBoundingClientRect(),b=to.getBoundingClientRect();
+    var ty=below?b.bottom-2:b.top+2;
+    pe('pointerdown',g,a.left+5,a.top+a.height/2); pe('pointermove',g,a.left+5,ty); pe('pointerup',g,a.left+5,ty); }
+  try{
+    log('처음', slots());
+    openDuty('\ubc8c\ub2f9');
+    log('기본시각', document.getElementById('dutyT').value);
+    // 후보 둘을 기본 13:00으로
+    document.querySelectorAll('#dutySug button')[0].click(); openDuty('\ubc8c\ub2f9');
+    document.querySelectorAll('#dutySug button')[0].click(); openDuty('\ubc8c\ub2f9');
+    log('두명', rows());
+    // 두 번째 사람 시각을 7:00으로
+    var tm=document.querySelectorAll('#sheet .dtm')[1];
+    tm.value='07:00'; tm.dispatchEvent(new Event('change',{bubbles:true}));
+    log('시각고침', rows());
+    log('배치표', slots());
+    // 차례 바꾸면 시각도 따라가야 한다
+    var rs=document.querySelectorAll('#sheet .drow');
+    drag(rs[0],rs[1],true);
+    log('차례바꿈', rows()+' || '+slots());
+    // 시각 없이 넣기
+    document.getElementById('dutyT').value='';
+    document.getElementById('dutyQ').value='\uae40\ud64d\uad6c';
+    (function(){var bs=document.querySelectorAll('#sheet button');
+      for(var i=0;i<bs.length;i++)if(bs[i].getAttribute('data-act')==='dutyadd'){bs[i].click();return;}})();
+    log('시각없이', rows()+' || '+slots());
+    // 설정에서 기본 시각
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var d=document.querySelectorAll('#cfg [data-dtdef]');
+    log('설정칸', d.length+' / 당번='+d[0].value+' 벌당='+d[1].value+' 흡연실='+d[2].value);
+    d[2].value='09:30'; d[2].dispatchEvent(new Event('change',{bubbles:true}));
+    log('흡연실기본', (function(){var e=document.querySelectorAll('#cfg [data-dtdef]');return e[2].value;})());
+    openDuty('\ud765\uc5f0\uc2e4 \ub2f9\ubc88');
+    log('새기본', document.getElementById('dutyT').value);
+    document.querySelectorAll('#dutySug button')[0].click(); openDuty('\ud765\uc5f0\uc2e4 \ub2f9\ubc88');
+    log('흡연실', rows()+' || '+slots());
+    undo(); log('되돌림', slots());
+    daySave(); log('저장', document.getElementById('btnSave').textContent
+      +' / '+(localStorage.getItem('board.day.v3')||'').length+'B');
+  }catch(e){ out.push('ERROR: '+e.message+' | '+e.stack.split('\n')[1]); }
+  document.getElementById('PROBE').textContent=out.join('  ;;  ');
+})();
+</script>

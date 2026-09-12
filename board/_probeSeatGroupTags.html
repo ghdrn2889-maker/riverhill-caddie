@@ -1,0 +1,50 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint();
+
+    // 자리 없는 사람을 만들고, 한 명씩 배지를 다르게 달아 본다
+    var pool = JONAMES.filter(function(n){ return !dayMark(n) && !isBu3(n); });
+    var want = ['조출','후출','54h','2,3','1,3'];
+    var no   = ['배치','당번','벌당','정출','찾근','프리'];
+    var all = want.concat(no), used = [];
+    all.forEach(function(t, k){
+      var n = pool[k];
+      used.push(n);
+      // 중복 항목은 한 부에만 자리를 남긴다 — 두 번째 자리를 앞으로 앜힐 사람이다
+      var dup = /^(54h?|\d(\s*,\s*\d)+)$/.test(t);
+      partsOf(n).forEach(function(q){ if (!(dup && q === '2')) delFromPart(q, n); });
+      if (dup && !partsOf(n).length) addRow('2', n);
+      TAG[n] = t;
+    });
+    L('달아 둔 배지', all.map(function(t,k){ return used[k]+'='+t; }).join(' · '));
+
+    L('  지금 자리', used.map(function(n,k){ return n+'['+all[k]+']='+(partsOf(n).join('·')||'없음')
+      +'/tag '+(tagOf(n)||'없음'); }).join(' '));
+    function groupsAt(pk, ix){
+      openCell(pk, ix);
+      return [].slice.call(document.getElementById('sheet').querySelectorAll('[data-sg]'))
+        .map(function(b){ return b.getAttribute('data-sg').split('|').slice(2).join('|'); });
+    }
+    var g1 = groupsAt('1', 7), g2 = groupsAt('2', 2), g3 = groupsAt('3', 2);
+    function ok(g, yes, nope){
+      var miss = yes.filter(function(t){ return g.indexOf(t)<0; });
+      var bad  = g.filter(function(t){ return nope.indexOf(t)>=0; });
+      return (miss.length? ' 빠짐['+miss.join(' ')+']':'') + (bad.length? ' 섞임['+bad.join(' ')+']':'')
+        || ' ◎';
+    }
+    L('', '');
+    L('★1부 칸', (g1.join(' / ')||'없음') + ok(g1, ['조출','후출','54h','1,3'], no.concat(['2,3'])));
+    L('★2부 칸', (g2.join(' / ')||'없음') + ok(g2, ['조출','후출','54h','2,3'], no.concat(['1,3'])));
+    L('  (2부에 이미 있어도 부른다 — 여기로 옮기는 것. 1,3 은 2부가 아니니 안 부른다)', '');
+    L('★3부 칸', (g3.join(' / ')||'없음') + ok(g3, ['조출','후출','54h','2,3','1,3'], no));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

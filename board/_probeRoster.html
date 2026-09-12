@@ -1,0 +1,70 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function inCol(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    if(!b) return '(근무표에 없음)';
+    var col=b.closest('.jocol').querySelector('.johd b').textContent;
+    return col+' — '+b.textContent.replace(/\s+/g,' ').trim();
+  }
+  function T(){ var t=workTally(); return '총원 '+t.total+' · 가용 '+t.avail; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('처음', T()+' · 명부 '+JONAMES.length+'명');
+
+    // ★넣기 — 2조에
+    addCaddie('나신입', 1); paint();
+    L('', ''); L('★2조에 나신입 넣음', T()+' · 명부 '+JONAMES.length);
+    L('  근무표', inCol('나신입'));
+    L('  조', JOLABEL[joOf('나신입')] || '미배정');
+    L('  기록', LOG[0]?LOG[0].msg:'-');
+
+    // 조 미배정으로도
+    addCaddie('조없음', -1); paint();
+    L('  조 미배정으로', inCol('조없음'));
+
+    // 같은 이름 두 번
+    var before=JONAMES.length; addCaddie('나신입', 0);
+    L('  같은 이름 또 넣기', JONAMES.length===before ? '막힘 ◎' : '✗ 들어감');
+    addCaddie('   ', 0);
+    L('  빈 이름', JONAMES.length===before ? '막힘 ◎' : '✗');
+
+    // 넣은 사람을 배치표에 앉히고 배지·카트·당번까지 준 뒤 지운다
+    setDayTag('나신입','조출'); setCart('나신입', 99);
+    dutyToggle('당번','나신입'); setBu3('나신입', true);
+    addRow('3','나신입'); addRow('1','나신입'); paint();   // 자리는 마지막에 준다
+    L('', ''); L('★지우기 전 나신입', inCol('나신입')
+      +' · 자리 '+partsOf('나신입').join(',')+' · 카트 '+(CART['나신입']||0)
+      +' · 당번 '+(dutyAt('당번','나신입')>=0?'있음':'없음')+' · 3부반 '+(isBu3('나신입')?'예':'아니오'));
+    var t0=workTally().total;
+    delCaddie('나신입'); paint();
+    L('★지운 뒤', T()+' · 명부 '+JONAMES.length);
+    L('  근무표', inCol('나신입'));
+    L('  남은 찌꺼기', [
+      JONAMES.indexOf('나신입')>=0?'명부':'',
+      ('나신입' in JOMAP)?'조':'',
+      TAG['나신입']?'배지':'',
+      CART['나신입']?'카트':'',
+      partsOf('나신입').length?'자리':'',
+      dutyAt('당번','나신입')>=0?'당번':'',
+      isBu3('나신입')?'3부반':'',
+      OFFDUTY.indexOf('나신입')>=0?'명단밖':''
+    ].filter(function(x){return x;}).join(' ') || '없음 ◎');
+    L('  기록', LOG[0]?LOG[0].msg:'-');
+
+    // 되돌리기
+    undo(); paint();
+    L('', ''); L('★되돌리기', inCol('나신입')
+      + ' · 자리 '+(partsOf('나신입').join(',')||'없음')
+      + ' · 카트 '+(CART['나신입']||0)
+      + ' · 당번 '+(dutyAt('당번','나신입')>=0?'있음':'없음'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

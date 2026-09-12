@@ -1,0 +1,101 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function sheetOn(){ return q('#sheet').classList.contains('on'); }
+function st(){ var e=q('#sheet .st'); return e?e.textContent:'(없음)'; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+function cell(pk,i){ return q('.cell[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    // ① 껍데기 — 화면이 안 흐르고 가운데만 흐르나
+    var vh=window.innerHeight, vw=window.innerWidth;
+    log('창', vw+'x'+vh);
+    log('몸통 넘침', (document.body.scrollHeight-vh)+'px (0이어야)');
+    log('가로 넘침', (document.documentElement.scrollWidth-vw)+'px (0이어야)');
+    var hd=q('.hd').getBoundingClientRect(), mn=q('.main').getBoundingClientRect(), tb=q('.tabbar').getBoundingClientRect();
+    log('머리 높이', Math.round(hd.height)+'px');
+    log('본문 높이', Math.round(mn.height)+'px ('+Math.round(mn.height/vh*100)+'%)');
+    log('아래띠', Math.round(tb.height)+'px · 바닥까지 '+Math.round(vh-tb.bottom)+'px');
+    log('본문만 흐름', q('.main').scrollHeight>q('.main').clientHeight?'예':'아니오(내용이 짧음)');
+
+    // ② 내용
+    log('부 탭', qa('#ptabs button').map(function(b){return b.textContent;}).join(' | '));
+    log('날짜', q('#hDate').textContent+' · '+q('#hSave').textContent);
+    log('시각 덩이', qa('.tgrp:not(.spare)').length+'개');
+    var g0=q('.tgrp');
+    log('첫 덩이', g0.querySelector('.tm').textContent+' → '
+      + qa('.tgrp:first-of-type .cell').map(function(c){return c.textContent;}).join(' / '));
+    log('대기', (q('.tgrp.spare')?qa('.tgrp.spare .cell').length+'명':'없음'));
+    var sp=qa('.tgrp.spare .cell').slice(0,4).map(function(c){return c.querySelector('.p').textContent+c.querySelector('.nm').textContent;});
+    log('대기 앞 4', sp.join(' → ')+' (세로로 이어져야)');
+    log('확정선', q('.cut')?q('.cut .tx').textContent:'없음');
+
+    // ③ 칸 크기 — 손가락이 닿나
+    var cs=qa('.cell[data-pk]'), small=0, minh=999;
+    cs.forEach(function(c){ var h=c.getBoundingClientRect().height; if(h<44)small++; minh=Math.min(minh,Math.round(h)); });
+    log('칸 높이', cs.length+'칸 · 가장 낮은 '+minh+'px · 44px 미만 '+small+'개');
+    var nm=qa('.cell .nm'), clip=0;
+    nm.forEach(function(e){ if(e.scrollWidth>e.clientWidth+1) clip++; });
+    log('이름 잘림', clip+'건');
+    var tbb=qa('.tabbar button'), tsm=0;
+    tbb.forEach(function(b){ var r=b.getBoundingClientRect(); if(r.height<44||r.width<44) tsm++; });
+    log('아래 단추', tbb.map(function(b){return b.textContent;}).join('/')+' · 작은 것 '+tsm+'개');
+
+    // ④ 칸 누르면 창
+    tap(cell('2',0));
+    log('칸 누름', sheetOn()?st()+' · '+q('#sheet .k').textContent:'안 열림(문제)');
+    log('  창 높이', Math.round(q('#sheet').getBoundingClientRect().height)+'px / 화면 '+vh);
+
+    // ⑤ 두 번 눌러 맞바꾸기
+    var n0=[cell('2',0),cell('2',3)].map(function(c){return c.querySelector('.nm').textContent;});
+    tap(act('pick'));
+    log('집기', '창 '+(sheetOn()?'열림(문제)':'닫힘')
+      +' · picking '+(q('#app').classList.contains('picking')?'켜짐':'꺼짐(문제)')
+      +' · 아래띠 "'+q('#pickbar').textContent.trim()+'"'
+      +' · 원래띠 '+(getComputedStyle(q('.tabbar')).display==='none'?'숨음':'보임(문제)'));
+    log('  집힌 칸', qa('.cell.pick').length+'개');
+    tap(cell('2',3));
+    var n1=[cell('2',0),cell('2',3)].map(function(c){return c.querySelector('.nm').textContent;});
+    log('놓기', n0.join('/')+' → '+n1.join('/')+(n0[0]===n1[1]&&n0[1]===n1[0]?' ◎맞바뀜':' ✗안바뀜'));
+    log('  뒤처리', 'picking '+(q('#app').classList.contains('picking')?'켜짐(문제)':'꺼짐')
+      +' · 아래띠 '+(getComputedStyle(q('.tabbar')).display==='none'?'숨음(문제)':'보임')
+      +' · 저장표시 "'+q('#hSave').textContent+'"');
+
+    // ⑥ 되돌리기
+    tap(q('#tbUndo'));
+    log('되돌림', [cell('2',0),cell('2',3)].map(function(c){return c.querySelector('.nm').textContent;}).join('/'));
+
+    // ⑦ 부 바꾸기
+    tap(qa('#ptabs button')[2]);
+    log('3부', q('#ptabs button.on').textContent+' · 시각덩이 '+qa('.tgrp:not(.spare)').length
+      +' · 대기 '+qa('.tgrp.spare .cell').length);
+    tap(qa('#ptabs button')[1]);
+
+    // ⑧ 명단
+    tap(q('#tbRoster'));
+    log('명단', sheetOn()?st()+' · '+q('#sheet .sub').textContent+' · 줄 '+qa('#sheet .lst .row').length:'안 열림(문제)');
+    tap(act('close'));
+
+    // ⑨ 찾기
+    tap(q('#tbFind'));
+    var fq=q('#fdQ'); fq.value='정진'; fq.dispatchEvent(new Event('input',{bubbles:true}));
+    log('찾기', qa('#fdOut .row').map(function(r){return r.textContent;}).join(' | ')||'(결과 없음)');
+    tap(q('#fdOut .row'));
+    log('  뛰기', '창 '+(sheetOn()?'열림(문제)':'닫힘')+' · 부 '+q('#ptabs button.on').textContent);
+
+    // ⑩ 팀 추가 → 저장
+    tap(q('.addrow'));
+    log('팀추가창', sheetOn()?st():'안 열림(문제)');
+    tap(act('close'));
+    tap(q('#tbSave'));
+    log('저장', q('#hSave').textContent+' · 점 '+(q('#tbSave .dot')?'있음(문제)':'없음'));
+
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

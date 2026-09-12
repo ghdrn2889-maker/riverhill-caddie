@@ -1,0 +1,87 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function on(){ return q('#sheet').classList.contains('on'); }
+function st(){ var e=q('#sheet .st'); return e?e.textContent:'(없음)'; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+function set(id,v){ var e=q('#'+id); if(!e) return false; e.value=v;
+  e.dispatchEvent(new Event('change',{bubbles:true})); return true; }
+function kinds(){ return DUTYKEYS.join(', '); }
+function rows(){ return qa('.dsec [data-duty]').map(function(e){return e.getAttribute('data-duty');}); }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    setView('duty');
+    log('처음', kinds());
+    var add=q('.dsec [data-act="dtnew"]');
+    log('추가 단추', add? '"'+add.textContent+'" · 높이 '+Math.round(add.getBoundingClientRect().height)+'px' : '없음(문제)');
+
+    // ① 만들기
+    tap(add);
+    log('만들기 창', on()?st():'안 열림(문제)');
+    log('  칸', ['dtName','dtTime','dtHour'].map(function(i){return q('#'+i)?i:i+'✗';}).join(' '));
+    set('dtName','그늘집 당번'); set('dtTime','930'); set('dtHour','4');
+    log('  시각 다듬기', q('#dtTime').value+' (09:30 이어야)');
+    tap(act('dtmake'));
+    log('만듦', kinds()+' · 창 '+(on()?'열림(문제)':'닫힘'));
+    log('  줄', rows().join(', ')+' ('+rows().length+'개)');
+    var r=qa('.dsec [data-duty]').filter(function(e){return e.getAttribute('data-duty')==='그늘집 당번';})[0];
+    log('  새 줄', r.querySelector('.dk2').textContent+' / '+r.querySelector('.dv2').textContent
+      +' / '+r.querySelector('.dt2').textContent);
+    log('  머리', q('.dsec .dh2 span').textContent);
+
+    // ② 같은 이름 막히나
+    tap(q('.dsec [data-act="dtnew"]')); set('dtName','그늘집 당번'); tap(act('dtmake'));
+    log('같은 이름', DUTYKEYS.filter(function(k){return k==='그늘집 당번';}).length+'개 · '
+      + q('#toast').textContent + ' · 창 '+(on()?'열림 ◎':'닫힘(문제)'));
+    tap(act('close'));
+
+    // ③ 사람 세우기 — 기본 시간표로 서나
+    tap(r);
+    log('사람 창', st()+' · '+q('#sheet .sub').textContent);
+    var ed=act('dtedit'); log('  고치기 문', ed?'있음 ◎':'없음(문제)');
+    set('dpQ','김상미'); q('#dpQ').dispatchEvent(new Event('input',{bubbles:true}));
+    tap(q('#sheet #dpOut .row'));
+    log('  세움', dutyList('그늘집 당번').map(function(x){return x.n+' '+dutySpan(x);}).join(','));
+
+    // ④ 종류 고치기
+    tap(act('dtedit'));
+    log('고치기 창', st()+' · '+q('#sheet .sub').textContent);
+    set('dtName','그늘집'); set('dtTime','10:00'); set('dtHour','3');
+    tap(act('dtsave'));
+    log('고침', kinds());
+    log('  선 사람 남았나', (DUTY['그늘집']||[]).map(function(x){return x.n;}).join(',')||'✗사라짐');
+    var r2=qa('.dsec [data-duty]').filter(function(e){return e.getAttribute('data-duty')==='그늘집';})[0];
+    log('  줄', r2.querySelector('.dk2').textContent+' / '+r2.querySelector('.dv2').textContent
+      +' / '+r2.querySelector('.dt2').textContent+' (기본 10:00~13:00, 사람은 09:30~13:30 이라 "여럿")');
+
+    // ⑤ 지우기 — 경고 거쳐야
+    tap(r2); tap(act('dtedit')); tap(act('dtdel'));
+    log('경고창', on()?st():'안 뜸(문제)');
+    log('  붉은 상자', (q('#sheet .warnbox')||{textContent:'✗없음'}).textContent.trim().slice(0,46));
+    log('  단추', qa('#sheet .acts.two button').map(function(b){return b.textContent;}).join(' / '));
+    tap(act('close'));
+    log('그만두기', kinds());
+    tap(r2); tap(act('dtedit')); tap(act('dtdel')); tap(act('dtdelyes'));
+    log('지움', kinds()+' · 창 '+(on()?'열림(문제)':'닫힘'));
+
+    // ⑥ 되돌리기
+    undo();
+    log('되돌림', kinds()+' · 선 사람 '+((DUTY['그늘집']||[]).map(function(x){return x.n;}).join(',')||'없음'));
+
+    // ⑦ 마지막 하나는 못 지운다
+    var keep=DUTYKEYS.slice();
+    keep.slice(1).forEach(function(k){ dtDel(k); });
+    log('하나만 남김', kinds());
+    confirmDelDuty(DUTYKEYS[0]);
+    log('마지막 지우기', (on()?'창 뜸(문제)':'막힘 ◎ · '+q('#toast').textContent));
+
+    log('가로 넘침', (document.documentElement.scrollWidth-window.innerWidth)+'px');
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function at(pk, n){ return active(part(pk)).map(function(r){ return r.n; }).indexOf(n) + 1; }
+  function boot(){ localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); }
+  try{
+    // 팀만 있고 사람은 없는 판 (사용자 상태)
+    boot();
+    L('판', DAY.map(function(p){ return p.name+' 팀 '+p.tees.length+' · 이름 '
+      + active(p).filter(function(r){ return r.n; }).length; }).join(' | '));
+
+    // ── ① 조출을 붙이고 원하는 자리에 못 박는다
+    var jc = JONAMES[10], dup = JONAMES[20];
+    setDayTag(jc, '조출');
+    insertAt('1', 19, jc);                       // 1부 20번
+    L('', '');
+    L('① 조출 ' + jc, '1부 ' + at('1', jc) + '번 · 배지 "' + tagOf(jc) + '"');
+
+    // ── ② 중복 근무자를 두 부에 넣고 자리를 못 박는다 (배지 없음)
+    insertAt('1', 4, dup);                       // 1부 5번
+    insertAt('2', 2, dup);                       // 2부 3번
+    L('② 중복 ' + dup, '1부 ' + at('1', dup) + '번 · 2부 ' + at('2', dup) + '번 · 배지 "' + (tagOf(dup)||'없음') + '"');
+
+    // ── ③ 순번 세우기
+    var pl = lineupPlan(seonbal(), ['1','2']);
+    L('', '');
+    L('★순번 세우기가 건드리는가', '조출 자리(1부 20번) '
+      + (pl.slots.some(function(s){ return s.pk==='1' && s.i===19; }) ? '건드림 ✗' : '안 건드림 ◎')
+      + ' · 중복 자리(1부 5번) '
+      + (pl.slots.some(function(s){ return s.pk==='1' && s.i===4; }) ? '★건드림' : '안 건드림')
+      + ' · (2부 3번) '
+      + (pl.slots.some(function(s){ return s.pk==='2' && s.i===2; }) ? '★건드림' : '안 건드림'));
+    applyLineup(seonbal(), ['1','2']);
+    L('  세운 뒤 조출 ' + jc, '1부 ' + at('1', jc) + '번 ' + (at('1',jc)===20?'◎ 그대로':'✗ 밀림'));
+    L('  ★세운 뒤 중복 ' + dup, '1부 ' + at('1', dup) + '번 · 2부 ' + at('2', dup) + '번 '
+      + (at('1',dup)===5 && at('2',dup)===3 ? '◎ 그대로' : '✗ 흔들림'));
+    L('  두 부 뛰는 사람 수', (function(){ var c={}; ['1','2'].forEach(function(k){
+        active(part(k)).forEach(function(r){ if(r.n) c[r.n]=(c[r.n]||0)+1; }); });
+        return Object.keys(c).filter(function(n){ return c[n]>1; }).length + '명'; })());
+
+    // ── ④ 순서를 바꾸면? 먼저 세우고 나중에 못 박기
+    boot();
+    setDayTag(jc, '조출');
+    applyLineup(seonbal(), ['1','2']);
+    insertAt('1', 19, jc);
+    insertAt('1', 4, dup);
+    insertAt('2', 2, dup);
+    L('', '');
+    L('④ 세우고 나서 못 박기', '조출 1부 ' + at('1', jc) + '번 · 중복 1부 ' + at('1', dup)
+      + '번/2부 ' + at('2', dup) + '번');
+    var pl2 = lineupPlan(seonbal(), ['1','2']);
+    L('  다시 세우면 바뀔 자리', pl2 ? pl2.moved + '칸' : '-');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

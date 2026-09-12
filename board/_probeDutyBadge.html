@@ -1,0 +1,102 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function chip(t){ return qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')===t; })[0]; }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function rowTx(n){ var r=rowOf(n); if(!r) return '(줄 없음)';
+  return qa('.bt, .bg').filter(function(e){ return r.contains(e); })
+    .map(function(e){ return '['+e.textContent.trim()+']'; }).join(' '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    L('당번 종류', DUTYKEYS.join(' / '));
+    L('','★갑. 배지에 적히는 말');
+    DUTYKEYS.forEach(function(k){
+      L('  ' + k, '배지 "' + dutyBadge(k) + '" · 칩 "' + dutyChip(k) + '" · 색 ' + tagCls(dutyBadge(k)));
+    });
+    ok(DUTYKEYS.every(function(k){ return dutyBadge(k) === dutyChip(k); }),
+       '  배지와 칩이 같은 말인가', '둘 다 짧은 이름');
+    ok(DUTYKEYS.every(function(k){ return tagCls(dutyBadge(k)) === 'cdu'; }),
+       '  색은 당번 색인가', DUTYKEYS.map(function(k){ return tagCls(dutyBadge(k)); }).join(' '));
+    ok(!DUTYKEYS.some(function(k){ return /\s당번$/.test(dutyBadge(k)); }),
+       '  "… 당번" 꼬리가 남았나', DUTYKEYS.map(dutyBadge).join(' / '));
+
+    // ── 을. 진짜 사람에게 붙여 본다
+    L('','★을. 한 사람에게 붙이기');
+    var k0 = DUTYKEYS.filter(function(k){ return /흡연/.test(k); })[0] || DUTYKEYS[0];
+    var who = JONAMES.filter(function(n){ return !hasDuty(n) && !isAbs(tagOf(n)); })[0];
+    dutyToggle(k0, who);
+    paint();
+    L('  ' + who + ' 를 ' + k0, '');
+    L('  배지·상태 칸', rowTx(who));
+    var bts = wkBadges(who), r = workRows().filter(function(x){ return x.n===who; })[0];
+    L('  배지 목록', bts.join(' / ') + '   상태 "' + r.st + '"(' + r.cls + ')');
+    ok(bts.indexOf(dutyChip(k0)) >= 0, '  배지에 짧은 이름', '"' + dutyChip(k0) + '"');
+    ok(bts.indexOf(dutyChip(k0) + ' 당번') < 0 && r.st !== '당번 중',
+       '  "당번 중"·"… 당번"이 남았나', '상태 "' + r.st + '"');
+    // ★한 줄에 같은 말이 두 번 안 나와야 한다
+    var shown = rowTx(who).split(' ').filter(function(x){ return x; });
+    var dup = shown.filter(function(x){ return x === '[' + dutyChip(k0) + ']'; }).length;
+    ok(dup === 1, '  한 줄에 몇 번 적히나', dup + '번 — ' + rowTx(who));
+
+    // ── 을-2. ★자리가 없는 당번 — 여기가 옛날에 '당번 중'이라 적히던 길이다
+    L('','★을-2. 자리 없는 당번 (옛 "당번 중" 길)');
+    var solo = JONAMES.filter(function(n){ return !hasDuty(n) && !isAbs(tagOf(n)) && !partsOf(n).length
+      && !isBu3(n); })[0]
+      || (function(){ var n2 = JONAMES.filter(function(n){ return !hasDuty(n) && !isAbs(tagOf(n)) && !isBu3(n); })[0];
+            partsOf(n2).slice().forEach(function(k){ delFromPart(k, n2); }); return n2; })();
+    dutyToggle(k0, solo); paint();
+    var r2 = workRows().filter(function(x){ return x.n===solo; })[0];
+    L('  ' + solo, '배지 ' + wkBadges(solo).join(' / ') + '   상태 "' + r2.st + '"(' + r2.cls + ')');
+    L('  화면 줄', rowTx(solo));
+    ok(r2.st !== '당번 중', '  "당번 중"', '상태 "' + r2.st + '"');
+    ok(r2.st === dutyChip(k0), '  상태도 같은 말인가', '"' + r2.st + '" === "' + dutyChip(k0) + '"');
+    var sh2 = rowTx(solo).split(' ').filter(function(x){ return x; });
+    var d2 = sh2.filter(function(x){ return x === '[' + dutyChip(k0) + ']'; }).length;
+    ok(d2 === 1, '  ★한 줄에 배지 하나뿐인가', d2 + '번 — ' + rowTx(solo));
+    ok(r2.cls === 'o', '  셈은 그대로 "그 밖"', r2.cls);
+    dutyToggle(k0, solo);
+
+    // ── 병. 문장에는 장부 이름을 그대로
+    L('','★병. 문장');
+    ok(whyNoLineup(who) === k0, '  순번에 왜 못 서나',
+       '"' + whyNoLineup(who) + '"  (장부 이름 "' + k0 + '" 그대로여야)');
+    L('  실제 말', who + '은(는) 오늘 ' + whyNoLineup(who) + '이라 순번에 못 섭니다');
+    ok(!inLineup(who, 'house'), '  순번에서 빠지나', inLineup(who,'house')?'★들어감':'빠짐 ◎');
+
+    // ── 정. 당번 상자의 칩은 그대로
+    L('','★정. 당번 상자');
+    var dchips = qa('#dutyBox .slot .k').map(function(e){ return e.textContent.trim(); });
+    L('  칩', dchips.join(' / '));
+    ok(dchips.join('|') === DUTYKEYS.map(dutyChip).join('|'), '  칩 글자', dchips.join(' '));
+
+    // ── 무. ★프로브가 잡았던 것: 켜도 단추가 안 밀리나
+    L('','★무. 배지를 켜도 단추가 제자리인가');
+    var x0 = qa('.wsr .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    var y0 = qa('.wsr .bch').map(function(b){ return Math.round(b.getBoundingClientRect().top); });
+    tap(chip('휴무'));
+    var x1 = qa('.wsr .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    var y1 = qa('.wsr .bch').map(function(b){ return Math.round(b.getBoundingClientRect().top); });
+    ok(x0.join()===x1.join() && y0.join()===y1.join(), '  단추 자리',
+       x0.join()===x1.join()&&y0.join()===y1.join() ? '안 밀림 ◎'
+         : '★밀림  전 '+x0.join(',')+'  후 '+x1.join(','));
+    ok(!!q('.wsr .bch.on'), '  켠 티', q('.wsr .bch.on')?'배지가 물듦 ◎':'★안 남');
+    ok(!!q('#bulkbar.on'), '  아래 띠가 말하나',
+       q('#bulkbar .tx b')? '"'+q('#bulkbar .tx b').textContent.trim()+'" ◎':'★없음');
+    // 다른 배지로 갈아타도 제자리
+    tap(chip('조출'));
+    var x2 = qa('.wsr .bch').map(function(b){ return Math.round(b.getBoundingClientRect().left); });
+    ok(x0.join()===x2.join(), '  갈아타도', x0.join()===x2.join()?'제자리 ◎':'★밀림');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

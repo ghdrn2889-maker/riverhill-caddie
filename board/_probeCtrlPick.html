@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nameAt(pk,i){ var r=active(part(pk))[i]; return r? (r.n||'(빔)') : '-'; }
+  function cellEl(pk,i){ return document.querySelector('[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+  function ctrlClick(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true})); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    var a0=nameAt('1',2), b0=nameAt('1',5), c0=nameAt('1',9);
+    L('1부 3·6·10번', a0+' · '+b0+' · '+c0);
+
+    ctrlClick(cellEl('1',2));
+    L('', '');
+    L('Ctrl+클릭 1번', '집힌 자리 ' + pickList.length + '개 · 창 열렸나 '
+      + (document.getElementById('sheet').classList.contains('on') ? '열림(문제)' : '안 열림 ◎'));
+    L('  칸에 표', (cellEl('1',2).className.indexOf('pick')>=0 ? '◎ pick' : '표 없음'));
+
+    ctrlClick(cellEl('1',5));
+    ctrlClick(cellEl('1',9));
+    L('  세 자리 집으니', pickList.length + '개 · 띠: ' + document.getElementById('bnTx').textContent);
+    L('  단추', document.getElementById('bnGo').textContent
+      + (document.getElementById('bnGo').hidden ? ' (숨음)' : ' (보임)'));
+
+    document.getElementById('bnGo').click();
+    L('', '');
+    L('★돌리기 누르니 3·6·10번', nameAt('1',2)+' · '+nameAt('1',5)+' · '+nameAt('1',9));
+    L('  한 바퀴 돌았나',
+      (nameAt('1',5)===a0 && nameAt('1',9)===b0 && nameAt('1',2)===c0) ? '◎ 셋이 한 바퀴'
+      : (nameAt('1',2)===b0 && nameAt('1',5)===c0 && nameAt('1',9)===a0) ? '◎ 셋이 한 바퀴(반대)'
+      : '어긋남');
+    L('  기록', LOG[0]?LOG[0].msg:'없음');
+    L('  집은 것 풀렸나', pickList.length===0 ? '◎' : '남음 '+pickList.length);
+
+    // 그냥 클릭은 창이 열려야 한다
+    cellEl('1',2).dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    L('', '');
+    L('맨 클릭', document.getElementById('sheet').classList.contains('on') ? '◎ 창 열림' : '안 열림(문제)');
+    closeSheet();
+
+    // Ctrl 을 누르고 있으면 무대에 표가 난다
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Control',bubbles:true}));
+    L('Ctrl 누르고 있을 때', document.getElementById('stage').className.indexOf('ctrlpick')>=0 ? '◎ 표 남' : '표 없음');
+    document.dispatchEvent(new KeyboardEvent('keyup',{key:'Control',bubbles:true}));
+    L('  떼면', document.getElementById('stage').className.indexOf('ctrlpick')>=0 ? '남아 있음(문제)' : '◎ 사라짐');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

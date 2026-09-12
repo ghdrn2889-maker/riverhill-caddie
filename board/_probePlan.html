@@ -1,0 +1,105 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function rosterLen(){ return DAY.map(function(p){return p.roster.length;}).join('/'); }
+  function wkRow(n){
+    var r=document.querySelector('#workTable [data-who="'+n+'"]');
+    if(!r) return '(줄 없음)';
+    return [].slice.call(r.children).map(function(e){
+      var t=e.textContent.trim(); return t? e.className.replace(/\s+/g,'.')+'="'+t+'"':''; })
+      .filter(Boolean).join('  ');
+  }
+  function pmBtns(){
+    return [].slice.call($('sheet').querySelectorAll('.pm button'))
+      .map(function(b){ return b.textContent.trim()+(b.classList.contains('on')?'★':''); }).join(' · ');
+  }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work');
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={};
+    paint();
+    var A='김홍구';
+    L('처음 명단 길이', rosterLen());
+
+    // ── 갑. 사람 창에서 2부 근무로 지정
+    L('','★갑. 사람 창에서 2부를 누른다');
+    openPerson(A);
+    L('  단추', pmBtns());
+    var b2=$('sheet').querySelector('[data-pln="2"]');
+    ok(!!b2,'  부 단추', b2? '있음 ◎' : '★없음 — 기능이 없다');
+    tap(b2);
+    ok(inPlan(A,'2'),'  2부 지정', inPlan(A,'2')?'켜짐 ◎':'★안 켜짐');
+    ok(rosterLen()==='0/0/0','  배치표 명단', rosterLen()+' (안 늘어야 한다)');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+    L('  단추', pmBtns());
+
+    // ── 을. 근무표 줄에 보이나
+    closeSheet(); paint();
+    L('','★을. 근무표 줄');
+    L('  '+A, wkRow(A));
+    ok(/2부 예정/.test(wkRow(A)),'  상태에 적히나', /2부 예정/.test(wkRow(A))?'적힘 ◎':'★안 적힘');
+
+    // ── 병. 다시 누르면 꺼진다
+    L('','★병. 다시 누르면');
+    openPerson(A); tap($('sheet').querySelector('[data-pln="2"]'));
+    ok(!inPlan(A,'2'),'  2부 지정', inPlan(A,'2')?'★아직 켜짐':'꺼짐 ◎');
+    ok(rosterLen()==='0/0/0','  배치표 명단', rosterLen());
+
+    // ── 정. 두 부를 같이 지정
+    L('','★정. 1부·3부를 같이');
+    openPerson(A);
+    tap($('sheet').querySelector('[data-pln="1"]'));
+    openPerson(A);
+    tap($('sheet').querySelector('[data-pln="3"]'));
+    L('  planOf', planOf(A).join(','));
+    closeSheet(); paint();
+    L('  근무표 줄', wkRow(A));
+    ok(rosterLen()==='0/0/0','  배치표 명단', rosterLen());
+
+    // ── 무. 배치표에 앉히면 '예정'이 '실제'로
+    L('','★무. 배치표 1부 1번에 앉힌다');
+    seatPerson('1', 0, A); paint();
+    L('  근무표 줄', wkRow(A));
+    L('  partsPlanned', partsPlanned(A).join(','));
+    ok(partsOf(A).indexOf('1')>=0,'  1부 자리', partsOf(A).join(',')||'★없음');
+
+    // ── 기. 한꺼번에 지정으로 여럿을
+    L('','★기. 한꺼번에 지정 — 셋을 2부 근무로');
+    bulkStart(PICKTAG); bulkTap('김상미'); bulkTap('전형준'); bulkTap('성지현');
+    openBulkAct();
+    var pb=[].slice.call($('sheet').querySelectorAll('[data-bkdo]'))
+      .filter(function(b){ return b.getAttribute('data-bkdo')==='p+2'; })[0];
+    ok(!!pb,'  2부 지정 단추', pb? pb.textContent.trim() : '★없음');
+    tap(pb);
+    ok(inPlan('김상미','2')&&inPlan('전형준','2')&&inPlan('성지현','2'),
+       '  셋 다 2부 지정', ['김상미','전형준','성지현'].map(function(n){
+         return n+':'+(inPlan(n,'2')?'◎':'✗'); }).join(' '));
+    ok(rosterLen()==='1/0/0','  배치표 명단', rosterLen()+' (김홍구 1부 하나뿐이라야 한다)');
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 경. 되돌리기 한 번이면 셋이 통째로
+    L('','★경. 되돌리기 한 번');
+    undo();
+    ok(!inPlan('김상미','2')&&!inPlan('전형준','2')&&!inPlan('성지현','2'),
+       '  셋 다 풀림', ['김상미','전형준','성지현'].map(function(n){
+         return n+':'+(inPlan(n,'2')?'★':'◎'); }).join(' '));
+    bulkOff();
+
+    // ── 신. 저장하고 다시 열어도 남나
+    L('','★신. 저장 → 다시 열기');
+    setPlan('김수룡','3',true);
+    daySave();
+    var keep=planOf('김수룡').join(',');
+    PLAN={}; bootLoad();
+    ok(planOf('김수룡').join(',')===keep && keep==='3','  김수룡 지정', planOf('김수룡').join(',')||'★없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

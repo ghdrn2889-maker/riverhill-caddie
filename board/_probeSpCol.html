@@ -1,0 +1,23 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board');
+    applyLineup(seonbal(), ['1','2']); paint();
+    var rows=[].slice.call(document.querySelectorAll('#col2 .brow.spare'));
+    o.push('대기 줄: '+rows.length+'개');
+    var wide=rows.filter(function(r){ return r.classList.contains('sp1'); }).length;
+    ok(wide===rows.length,'  폭을 다 쓰는 줄', wide+'/'+rows.length);
+    var many=rows.filter(function(r){ return r.querySelectorAll('.cell').length>1; }).length;
+    ok(many===0,'  한 줄에 두 칸인 줄', many+'개 (0이어야 — OUT/IN 으로 안 읽히게)');
+    var blanks=document.querySelectorAll('#col2 .brow.spare .cell.blank').length;
+    ok(blanks===0,'  빈 껍데기 칸', blanks+'개');
+    var add=document.querySelectorAll('#col2 .cell.spadd').length;
+    ok(add===1,'  + 대기 칸', add+'개');
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

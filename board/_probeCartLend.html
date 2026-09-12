@@ -1,0 +1,67 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+
+    // ── ① 지정 카트는 날을 넘겨도 남나 (= 주인표인가)
+    var noCart = JONAMES.filter(function(n){ return !cartOf(n); })[0];
+    setCart(noCart, 501);
+    var d0 = DATE;
+    carryToNextDay();
+    L('★빌린 번호를 넣고 날을 넘기면', noCart + ' 카트 ' + (cartOf(noCart) || '없음')
+      + (cartOf(noCart) === 501 ? ' — 내일까지 따라온다 (주인표를 덮었다)'
+                                : ' — 안 따라온다'));
+    for (var i=0;i<6 && DATE!==d0;i++) undo();
+    L('  되돌림', DATE + ' · ' + noCart + ' 카트 ' + (cartOf(noCart) || '없음'));
+
+    // 순번을 세워 실제 근무 판을 만든 뒤에 센다 — 안 그러면 빈 부를 재게 된다
+    setCart(noCart, 0);
+    applyLineup(seonbal(), ['1','2']);
+    applyLineup(bu3Start(), ['3']);
+
+    // ── ② 카트 없는 사람은 몇 명인가
+    var own = JONAMES.filter(function(n){ return cartOf(n); });
+    var none = JONAMES.filter(function(n){ return !cartOf(n); });
+    L('카트', '주인 있는 사람 ' + own.length + '명 · 카트 없는 사람 ' + none.length + '명'
+      + ' (총원 ' + JONAMES.length + ')');
+
+    // ── ③ 부마다: 그 부에서 일하는데 카트가 없는 사람 / 그 부에 안 나온 주인의 카트
+    ['1','2','3'].forEach(function(pk){
+      var p = part(pk), a = active(p);
+      var work = a.slice(0, p.tees.length).map(function(r){ return r.n; });
+      var need = work.filter(function(n){ return !cartOf(n); });
+      var busy = {};
+      work.forEach(function(n){ if (cartOf(n)) busy[cartOf(n)] = n; });
+      var freeAll = own.filter(function(n){ return !busy[cartOf(n)]; })
+        .map(function(n){ return cartOf(n); });
+      var freeOk = own.filter(function(n){ return !busy[cartOf(n)] && !cartBad(cartOf(n)); });
+      var rest = own.filter(function(n){ return !busy[cartOf(n)] && isAbs(tagOf(n)); });
+      L(p.name, '근무 ' + work.length + '명 · 카트 없는 사람 ' + need.length + '명'
+        + ' · 이 부에 안 쓰이는 카트 ' + freeAll.length + '대'
+        + ' (그중 주인이 아예 쉬는 것 ' + rest.length + '대)');
+      L('  ', need.length
+        ? '모자람 ' + Math.max(0, need.length - freeAll.length) + '대 · 남음 '
+          + Math.max(0, freeAll.length - need.length) + '대'
+        : '다 자기 카트가 있다');
+    });
+
+    // ── ④ 한 카트를 같은 부에서 둘이 쓰는 일이 지금 있나
+    var dup = [];
+    ['1','2','3'].forEach(function(pk){
+      var p = part(pk), a = active(p), seen = {};
+      a.slice(0, p.tees.length).forEach(function(r){
+        var c = cartOf(r.n); if (!c) return;
+        if (seen[c]) dup.push(p.name + ' ' + c + '번 ' + seen[c] + '·' + r.n);
+        seen[c] = r.n;
+      });
+    });
+    L('★같은 부에서 한 카트를 둘이', dup.length ? dup.join(' / ') : '없음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

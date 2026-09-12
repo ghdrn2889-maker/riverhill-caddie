@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ctrlS(target){
+    var ev = new KeyboardEvent('keydown', { key:'s', ctrlKey:true, bubbles:true, cancelable:true });
+    (target || document.body).dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+
+    // 뭔가 고쳐 '저장 안 함' 상태를 만든다
+    var H = JONAMES.filter(function(n){ return !tagOf(n); }).slice(0,3);
+    bulkStart('휴무'); H.forEach(bulkTap); paint();
+    L('고친 뒤', unsaved() ? '저장 안 함' : '저장됨');
+
+    // ① 아무 데도 커서가 없을 때
+    var p1 = ctrlS(document.body);
+    L('① 배경에서 Ctrl+S', '브라우저 막음 ' + (p1?'◎':'✗') + ' · ' + (unsaved()?'아직 저장 안 함 ✗':'저장됨 ◎'));
+
+    // ② 글자 칸에 커서가 있을 때
+    bulkTap(JONAMES.filter(function(n){ return !tagOf(n); })[0]); paint();
+    var box = document.getElementById('findQ') || document.querySelector('input');
+    box.focus();
+    L('', '');
+    L('② 커서를', (box.id||box.className||'input') + ' 안 · ' + (unsaved()?'저장 안 함':'저장됨'));
+    var p2 = ctrlS(box);
+    L('   Ctrl+S', '브라우저 막음 ' + (p2?'◎':'✗ 페이지 저장 창이 뜬다')
+      + ' · ' + (unsaved()?'아직 저장 안 함 ✗':'저장됨 ◎'));
+
+    // ③ 이미 저장돼 있으면
+    var p3 = ctrlS(document.body);
+    L('', '');
+    L('③ 또 누르면', '막음 ' + (p3?'◎':'✗') + ' · 저장본 그대로 ' + (unsaved()?'✗':'◎'));
+
+    // ④ Ctrl+Z 는 글자 칸에서 여전히 안 가로채나
+    box = document.querySelector('input'); box.focus();
+    var ez = new KeyboardEvent('keydown', { key:'z', ctrlKey:true, bubbles:true, cancelable:true });
+    box.dispatchEvent(ez);
+    L('④ 글자 칸에서 Ctrl+Z', ez.defaultPrevented ? '가로챈다 ✗ (글자 되돌리기가 안 된다)' : '안 가로챈다 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

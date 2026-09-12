@@ -1,0 +1,23 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function inWork(n){ return workRows().some(function(r){ return r.n===n; }); }
+  function st(n){ return n+' : 배지 '+(tagOf(n)||'없음')
+    +' · 자리 '+(partsOf(n).join(',')||'없음')
+    +' · OFFDUTY '+(OFFDUTY.indexOf(n)>=0?'있음':'없음')
+    +' · 근무표 '+(inWork(n)?'보임':'★안 보임'); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('달력 자동 넘김 뒤 '+DATE, '');
+    ['강민순','차은경'].forEach(function(n){ o.push('   '+st(n)); });
+    L('  총원', workRows().length+'명 · 명부 '+JONAMES.length+' · OFFDUTY '+OFFDUTY.length);
+    L('', '');
+    L('배지는 있는데 근무표에 없는 사람', JONAMES.filter(function(n){
+      return tagOf(n) && !inWork(n); }).map(function(n){ return n+'('+tagOf(n)+')'; }).join(' ') || '없음 ◎');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

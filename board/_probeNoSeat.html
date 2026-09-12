@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    var rows = workRows();
+    var u = rows.filter(function(r){ return r.cls==='u'; });
+    var oo = rows.filter(function(r){ return r.cls==='o'; });
+    L('미배치(u)', u.length + '명 — ' + u.map(function(r){
+        return r.n + '[' + (tagOf(r.n)||'배지없음') + ']'; }).join(' '));
+    L('자리 없음(o)', oo.length + '명 — ' + oo.map(function(r){
+        return r.n + '[' + (tagOf(r.n)||'배지없음') + ']'; }).join(' '));
+    L('  두 무리 다 자리는', 'u ' + u.filter(function(r){ return partsOf(r.n).length; }).length
+      + '명 · o ' + oo.filter(function(r){ return partsOf(r.n).length; }).length + '명 (0이어야 맞다)');
+    var T = workTally();
+    L('셈', '총원 ' + T.total + ' = 가용 ' + T.avail + ' + 제외 ' + T.exc
+      + ' · 가용 = 근무 ' + T.cw + ' + 대기 ' + T.cd + ' + 미배치 ' + T.cu);
+    L('  자리 없음은', '제외인원 쪽 (가용 밖)');
+
+    // 어떤 배지가 어느 쪽으로 가나 — 표를 그대로 뽑는다
+    var probe = ['', '조출', '후출', '정출', '찾근', '당번', '벌당', '배치', '프리',
+                 '3부', '선발', '54h', '2,3', '휴무', '휴가', '병가'];
+    L('배지별 갈림', probe.map(function(t){
+        var c = absCls(t ? t : '미배치');
+        var nm = c==='u'?'미배치':c==='o'?'자리없음':c==='r'?'휴무':c==='v'?'휴가':c==='s'?'병가':c;
+        return (t||'(없음)') + '→' + nm; }).join('  '));
+
+    // ★진짜로 새나 — 3부반을 부에서 빼면 어느 쪽으로 가나
+    var b3 = bu3List().filter(function(n){ return partsOf(n).length===1; })[0];
+    var before = workTally();
+    L('시험', b3 + ' 배지="' + tagOf(b3) + '" 자리=' + partsOf(b3).join(','));
+    delFromPart(partsOf(b3)[0], b3);
+    var T2 = workTally(), r2 = workRows().filter(function(r){ return r.n===b3; })[0];
+    L('  3부에서 뺐더니', b3 + ' → "' + r2.st + '" (' + r2.cls + ')'
+      + ' · 가용 ' + before.avail + '→' + T2.avail
+      + ' · 제외 ' + before.exc + '→' + T2.exc
+      + (T2.avail === before.avail ? ' ◎ 가용 그대로' : ' ✗ 가용에서 샜다'));
+    var sb = seonbal();
+    L('선발은', sb + ' 배지="' + tagOf(sb) + '" · 자리 빼면 → "'
+      + (function(){ var c=absCls(absOf(sb)); return c==='o'?'자리 없음':c==='u'?'미배치':c; })() + '"');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

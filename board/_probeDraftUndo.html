@@ -1,0 +1,33 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function draft(){ var r=localStorage.getItem('board.draft.v3::'+DATE);
+    return r? JSON.parse(JSON.parse(r).s) : null; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    var nm=active(part('1'))[5].n;
+    L('바탕', DATE+' · '+nm+' 배지 "'+(tagOf(nm)||'없음')+'" · 초안 '+(draft()?'있음':'없음'));
+    setAbsent(nm,'휴무');
+    L('휴무 붙임', '초안 속 배지 "'+(draft()? (draft().tag[nm]||'없음'):'초안 없음')+'"');
+    undo();
+    L('되돌림', '화면 "'+(tagOf(nm)||'없음')+'" · 초안 속 "'
+      + (draft()? (draft().tag[nm]||'없음') : '초안 지워짐')+'"'
+      + ((!draft() || !draft().tag[nm])? ' → 맞음 ◎':' → 되돌린 게 초안에 남음 ✗'));
+    L('  저장 표시', unsaved()? '저장 안 함(문제 — 바탕으로 돌아왔는데)':'저장됨 ◎');
+    redo();
+    L('다시 함', '화면 "'+(tagOf(nm)||'없음')+'" · 초안 속 "'
+      + (draft()? (draft().tag[nm]||'없음'):'없음')+'"'
+      + ((draft() && draft().tag[nm]==='휴무')? ' → 맞음 ◎':' → 어긋남 ✗'));
+    // 되돌린 뒤 닫았다 켜면 물어보나
+    undo();
+    savedSig=null; PENDING=null; bootLoad();
+    L('되돌린 채 닫았다 켜기', '물어볼 초안 '+(PENDING? '있음(문제 — 물어볼 게 없다)':'없음 ◎')
+      + ' · '+nm+' "'+(tagOf(nm)||'없음')+'"');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

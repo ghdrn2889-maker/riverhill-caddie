@@ -1,0 +1,62 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var card=q('.lineup');
+    L('카드', card? '있음 ◎ · "'+card.querySelector('.lh').textContent+'"' : '없음(문제)');
+    L('  선발 줄', q('.lrow').textContent);
+    L('  단추', q('.lgo').textContent+' · '+(q('.lgo').disabled?'꺼짐':'켜짐 ◎'));
+    L('  줄 높이', Math.round(q('.lrow').getBoundingClientRect().height)+'px / '
+      + Math.round(q('.lgo').getBoundingClientRect().height)+'px');
+
+    // ① 선발 고르기 창
+    tap(q('.lrow'));
+    L('고르기 창', q('#sheet .st').textContent);
+    L('  조 묶음', qa('#sheet .hd2').map(function(e){return e.textContent;}).join(' | '));
+    L('  후보 수', qa('#sheet .lst .row').length+'명');
+    L('  지금 선발 표시', qa('#sheet .lst .row').filter(function(r){return r.querySelector('.p').textContent==='✓';})
+      .map(function(r){return r.querySelector('.nm').textContent;}).join(',')||'(없음)');
+    var qe=q('#sbQ'); qe.value='서동명'; qe.dispatchEvent(new Event('input',{bubbles:true}));
+    L('  찾기', qa('#sheet .lst .row').map(function(r){return r.textContent;}).join(' | '));
+
+    // ② 선발 바꾸기
+    tap(q('#sheet .lst .row'));
+    L('선발 바꿈', seonbal()+' · 창 '+(q('#sheet').classList.contains('on')?'열림(문제)':'닫힘 ◎'));
+    L('  카드', q('.lrow').textContent);
+    L('  기록', LOG[0].msg);
+
+    // ③ 미리 보기
+    tap(q('.lgo'));
+    L('미리보기', q('#sheet .st').textContent+' · '+q('#sheet .sub').textContent);
+    L('  바뀌는 줄', qa('#sheet .plan .pr').length+'개 · 첫 '+
+      (q('#sheet .plan .pr')?q('#sheet .plan .pr').textContent:'-'));
+    L('  단추', qa('#sheet .acts.two button').map(function(b){return b.textContent+(b.disabled?'(꺼짐)':'');}).join(' / '));
+
+    // ④ 그만두기 → 안 바뀌어야
+    var b0=active(part('1')).slice(0,8).map(function(r){return r.n;});
+    tap(act('close'));
+    L('그만두기', active(part('1')).slice(0,8).map(function(r){return r.n;}).join()===b0.join()?'그대로 ◎':'바뀜(문제)');
+
+    // ⑤ 진짜 세우기
+    tap(q('.lgo')); tap(act('lnyes'));
+    L('세움', '창 '+(q('#sheet').classList.contains('on')?'열림(문제)':'닫힘 ◎')+' · '+LOG[0].msg);
+    L('  1부 앞 8', active(part('1')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    var chk=lineupPlan(seonbal(),['1','2']);
+    L('  ▶ 다시 대조', chk.moved===0?'그 차례대로 섰음 ◎':chk.moved+'자리 어긋남 ✗');
+    undo();
+    L('되돌림', active(part('1')).slice(0,8).map(function(r){return r.n;}).join(', '));
+    undo();
+    L('선발도 되돌림', seonbal());
+
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

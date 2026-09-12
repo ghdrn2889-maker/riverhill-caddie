@@ -1,0 +1,66 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function rowOf(pk, n){ var a=active(part(pk)); for (var i=0;i<a.length;i++) if (a[i].n===n) return a[i]; return null; }
+  function cellCls(n){
+    var els = document.querySelectorAll('.cell[data-pk][data-i]');
+    for (var k=0;k<els.length;k++){ var nm=els[k].querySelector('.nm');
+      if (nm && nm.textContent === n) return els[k].className + ' | ' + els[k].textContent.replace(/\s+/g,' ').trim(); }
+    return '못 찾음';
+  }
+  function boot(){ localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); cur='1'; paint(); }
+  try{
+    boot();
+    var w = active(part('1'))[10].n;
+
+    // ① '부에 넣기'(addRow) 로 넣었을 때 — 전에는 꼬리표가 안 붙었다
+    setDayTag(w, '조출');
+    addRow('1', w); paint();
+    L('① 조출 ' + w + ' 을 부에 넣기', '줄 tag "' + (rowOf('1', w)||{}).tag + '"'
+      + ((rowOf('1',w)||{}).tag === '조출' ? ' ◎' : ' ✗'));
+    L('  화면 칸', cellCls(w));
+
+    // ② 배지를 떼면 칸에서도 지워지나
+    setDayTag(w, '조출'); paint();     // 같은 것을 또 누르면 뗀다
+    L('', '');
+    L('② 배지를 떼니', '사람 배지 "' + (tagOf(w)||'없음') + '" · 줄 tag "'
+      + ((rowOf('1', w)||{}).tag || '없음') + '"'
+      + (!(rowOf('1',w)||{}).tag ? ' ◎ 같이 지워짐' : ' ✗ 남음'));
+
+    // ③ 순번 세우기가 남의 꼬리표를 물려주지 않나
+    boot();
+    var w2 = active(part('1'))[5].n;
+    setDayTag(w2, '후출');
+    insertAt('1', 5, w2);
+    applyLineup(seonbal(), ['1','2']); paint();
+    var bad = [];
+    ['1','2'].forEach(function(k){ active(part(k)).forEach(function(r, i){
+      if (!r.n || r.itn) return;
+      var want = dayMark(r.n); if (DAYTAGS.indexOf(want) < 0) want = '';
+      var has = DAYTAGS.indexOf(r.tag) >= 0 ? r.tag : '';
+      if (want !== has) bad.push(part(k).name+' '+(i+1)+'번 '+r.n+' 칸"'+(r.tag||'-')+'" 사람"'+(tagOf(r.n)||'-')+'"');
+    }); });
+    L('', '');
+    L('③ 순번 세운 뒤 어긋난 칸', bad.length ? bad.slice(0,5).join(' / ') + ' ✗' : '없음 ◎');
+    L('  ' + w2 + ' 칸', cellCls(w2));
+
+    // ④ 빈 칸에 끼워 넣으면 밀지 않고 채우나
+    boot();
+    var w3 = active(part('1'))[8].n;
+    clearSeat('1', 24);                      // 25번을 비운다
+    var N0 = active(part('1')).length;
+    insertAt('1', 24, w3); paint();
+    L('', '');
+    L('④ 빈 칸(25번)에 ' + w3, '1부 인원 ' + N0 + ' → ' + active(part('1')).length
+      + (active(part('1')).length === N0 ? ' ◎ 안 늘었다(빈 칸을 채움)' : ' ✗ 밀었다'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  빈 줄 남았나', active(part('1')).filter(function(r){ return !r.n; }).length + '줄');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

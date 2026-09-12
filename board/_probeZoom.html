@@ -1,0 +1,90 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nm(el){
+    if (!el) return '-';
+    return el.tagName.toLowerCase() + (el.id?'#'+el.id:'') +
+      (el.className && typeof el.className==='string' ? '.'+el.className.trim().split(/\s+/).slice(0,2).join('.') : '');
+  }
+  function vis(el){
+    var s = getComputedStyle(el);
+    if (s.display==='none'||s.visibility==='hidden'||s.opacity==='0') return false;
+    var r = el.getBoundingClientRect();
+    return r.width>1 && r.height>1;
+  }
+  function R(el){ return el.getBoundingClientRect(); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    if (typeof fit==='function') fit();
+
+    L('창', innerWidth+'x'+innerHeight+' · --k '+getComputedStyle(document.documentElement).getPropertyValue('--k').trim());
+    var st = document.querySelector('.stage'), sw = document.getElementById('stagewrap');
+    L('판', '판 '+Math.round(R(st).height)+' / 틀 '+Math.round(R(sw).height)
+       + ' · 판이 넘치나 ' + (st.scrollHeight - sw.clientHeight > 2 ? '넘침 '+(st.scrollHeight-sw.clientHeight)+'px ←' : '아니오'));
+
+    // ① 화면 밖으로 나간 것
+    var out=[], all=document.querySelectorAll('.stage *');
+    for (var i=0;i<all.length;i++){
+      var el=all[i]; if(!vis(el)) continue;
+      var r=R(el);
+      if (r.bottom > innerHeight+1 || r.right > innerWidth+1 || r.top < -1 || r.left < -1){
+        // 스크롤되는 통 안이면 정상
+        var p=el.parentNode, inScroll=false;
+        while(p && p.nodeType===1){ var s=getComputedStyle(p);
+          if (/auto|scroll/.test(s.overflowY+s.overflowX)) { inScroll=true; break; } p=p.parentNode; }
+        if (!inScroll) out.push(nm(el)+'['+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height)+']');
+      }
+    }
+    L('', '');
+    L('★화면 밖으로 나간 것', out.length ? out.length+'개 — '+out.slice(0,8).join(' ') : '없음');
+
+    // ② 형제끼리 겹침
+    function sibOverlap(root, label){
+      var bad=[], kids=[].slice.call(root.children).filter(vis);
+      for (var a=0;a<kids.length;a++) for (var b=a+1;b<kids.length;b++){
+        var A=R(kids[a]), B=R(kids[b]);
+        var ox=Math.min(A.right,B.right)-Math.max(A.left,B.left);
+        var oy=Math.min(A.bottom,B.bottom)-Math.max(A.top,B.top);
+        if (ox>2 && oy>2) bad.push(nm(kids[a])+'×'+nm(kids[b])+'('+Math.round(ox)+'x'+Math.round(oy)+')');
+      }
+      if (bad.length) L('  '+label, bad.slice(0,6).join(' '));
+      return bad.length;
+    }
+    L('', '');
+    L('★형제끼리 겹침', '');
+    var n=0;
+    ['.hd .top','.savebar','.bstrip','.body','.ph','.wkfoot','.banner'].forEach(function(sel){
+      var e=document.querySelector(sel); if(e) n+=sibOverlap(e, sel);
+    });
+    [].slice.call(document.querySelectorAll('.brow')).slice(0,40).forEach(function(e,i){ n+=sibOverlap(e,'.brow#'+i); });
+    if (!n) L('  ', '없음');
+
+    // ③ 잘려 나간 글씨 — 통보다 안이 큰데 굴릴 수 없는 것
+    var clip=[];
+    for (var j=0;j<all.length;j++){
+      var q=all[j]; if(!vis(q)) continue;
+      var cs=getComputedStyle(q);
+      if (cs.overflow==='hidden' || cs.overflowY==='hidden'){
+        if (q.scrollHeight - q.clientHeight > 3 && q.clientHeight>0)
+          clip.push(nm(q)+'(+'+(q.scrollHeight-q.clientHeight)+')');
+      }
+    }
+    L('', '');
+    L('★잘려 나간 칸', clip.length ? clip.length+'개 — '+clip.slice(0,8).join(' ') : '없음');
+
+    // ④ 창 띄우면
+    openCell('3', 1);
+    var sh=document.getElementById('sheet'), rs=R(sh);
+    L('', '');
+    L('★칸 창', Math.round(rs.width)+'x'+Math.round(rs.height)+' at '+Math.round(rs.top)
+      + (rs.top < 0 || rs.bottom > innerHeight+1 ? ' ← 화면 밖으로 나감' : ' ◎ 들어옴'));
+    closeSheet();
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

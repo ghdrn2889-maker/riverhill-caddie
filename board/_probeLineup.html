@@ -1,0 +1,40 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    var start=null;
+    Object.keys(TAG).forEach(function(n){ if(TAG[n]==='선발') start=n; });
+    L('선발', start+' · '+JOLABEL[joOf(start)]);
+    L('고를 수 있는 사람', lineupPool().length+'명');
+    var ring=joRing(start);
+    L('조 한 바퀴', ring.length+'명 · 앞 6 '+ring.slice(0,6).join(','));
+    var plan=lineupPlan(start,['1','2']);
+    L('세울 자리', plan.slots.length+'개 · 바뀌는 자리 '+plan.moved+'개 (이미 그대로면 0)');
+    L('  건드리지 않는 자리', plan.fixed.map(function(f){return part(f.pk).name+' '+f.n+'개';}).join(' · '));
+    var bad=plan.slots.filter(function(s){return s.from!==s.to;});
+    L('  ▶ 지금 배치표와', bad.length? bad.length+'자리 다름 ✗':'한 자리도 안 다름 ◎ (규칙이 실제와 같다)');
+
+    // 일부러 흐트러뜨린 뒤 되세우기
+    rotateSeats([{pk:'1',ri:riOf('1',5)},{pk:'1',ri:riOf('1',9)},{pk:'1',ri:riOf('1',14)}]);
+    var p1=active(part('1')).slice(5,16).map(function(r){return r.n;});
+    L('흐트림', p1.slice(0,5).join(','));
+    L('되세우기', applyLineup(start,['1','2'])?'했음':'안 함');
+    L('  기록', LOG[0].msg);
+    var chk=lineupPlan(start,['1','2']);
+    L('  ▶ 다시 대조', chk.moved===0?'제자리로 돌아옴 ◎':chk.moved+'자리 어긋남 ✗');
+    undo(); undo();
+
+    // 선발을 다른 사람으로
+    var alt=lineupPool()[10];
+    var p2=lineupPlan(alt,['1','2']);
+    L('다른 선발', alt+' → 1부 첫 배지없는 자리에 '+p2.slots[0].to+' (바뀌는 자리 '+p2.moved+')');
+
+    // 배지 붙은 사람은 선발이 못 된다
+    L('배지 붙은 사람', lineupPool().indexOf('김동우')<0?'후보에서 빠짐 ◎':'들어감 ✗');
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

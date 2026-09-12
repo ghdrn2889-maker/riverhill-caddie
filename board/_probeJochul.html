@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // 켤 때 그날의 구분이 지워지므로, 시험할 조출을 직접 붙인다
+    if (!JONAMES.filter(function(n){ return tagOf(n)==='조출'; }).length){
+      active(part('1')).map(function(r){return r.n;})
+        .filter(function(n){ return !tagOf(n); }).slice(0,3)
+        .forEach(function(n){ setDayTag(n, '조출'); });
+    }
+    var jc=JONAMES.filter(function(n){ return tagOf(n)==='조출'; });
+    L('조출인 사람', jc.join(' · '));
+    jc.forEach(function(n){ L('  '+n, '부='+(partsOf(n).join(',')||'없음')+' · 배지='+tagOf(n)); });
+    var n1=jc[0];
+    setView('work');
+    var row=qa('[data-who]').filter(function(b){return b.getAttribute('data-who')===n1;})[0];
+    L('근무표 줄', row? '있음 · 눌러본다':'없음(문제)');
+    if(row) tap(row);
+    L('  열린 창', q('#sheet .st')? q('#sheet .st').textContent : '(안 열림)');
+    L('  칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+    L('  부 단추', qa('#sheet .acts.pm button').map(function(b){return b.textContent;}).join(' | '));
+
+    // 배치표 칸에서 열면?
+    var pk=partsOf(n1)[0];
+    if(pk){
+      var i=active(part(pk)).map(function(r){return r.n;}).indexOf(n1);
+      cur=pk; VIEW='board'; paint();
+      openCell(pk, i);
+      L('배치표 칸 창', q('#sheet .st')? q('#sheet .st').textContent:'(안 열림)');
+      L('  칸', qa('#sheet .grp h4').map(function(x){return x.textContent;}).join(' | '));
+      L('  이 사람 단추', qa('#sheet .acts button').map(function(b){return b.textContent;}).join(' | ').slice(0,220));
+      var rm=qa('#sheet button').filter(function(b){return b.getAttribute('data-act')==='prmhere';})[0];
+      L('  빼기 단추', rm? '"'+rm.textContent+'" ◎':'없음(문제)');
+      var n0=part(pk).roster.length, below=active(part(pk))[i+1].n;
+      tap(rm);
+      L('  누른 뒤', n1+' → 부 '+(partsOf(n1).join(',')||'없음')
+        + ' · '+part(pk).name+' 명단 '+n0+'→'+part(pk).roster.length
+        + ' · 그 칸 '+(active(part(pk))[i]? active(part(pk))[i].n:'(빈칸)')
+        + (active(part(pk))[i] && active(part(pk))[i].n===below? ' (아래가 당겨짐 ◎)':' (✗)'));
+      L('  창', q('#sheet').className.indexOf('on')>=0? '열림(문제 — 딴 사람 이야기가 된다)':'닫힘 ◎');
+      L('  기록', LOG[0].msg);
+      L('  근무표에서', (function(){ var T=workTally(), r=T.rows.filter(function(x){return x.n===n1;})[0];
+          return r? r.st+'('+r.cls+')':'없음'; })());
+      undo();
+      L('  되돌리기', n1+' → 부 '+(partsOf(n1).join(',')||'없음')+' · 명단 '+part(pk).roster.length);
+    }
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

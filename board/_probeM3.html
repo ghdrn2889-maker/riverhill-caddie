@@ -1,0 +1,81 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function on(){ return q('#sheet').classList.contains('on'); }
+function st(){ var e=q('#sheet .st'); return e?e.textContent:'(없음)'; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+function tabs(){ return qa('#ptabs button').map(function(b){return b.textContent;}).join(' | '); }
+function bar1(){ return q('#tbRoster .lb').textContent; }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    var vh=window.innerHeight;
+    // ① 머리 — 삼선이 있나, 줄이 안 늘었나
+    log('머리 높이', Math.round(q('.hd').getBoundingClientRect().height)+'px');
+    var bg=q('#btnMenu'), br=bg.getBoundingClientRect();
+    log('삼선', bg?Math.round(br.width)+'x'+Math.round(br.height)+'px · 오른쪽끝에서 '
+      +Math.round(window.innerWidth-br.right)+'px':'없음(문제)');
+    log('저장뱃지', q('#hSave').textContent);
+    log('둘째줄(배치표)', tabs());
+    log('  근무표 섞였나', /근무표/.test(tabs())?'예(문제)':'아니오 ◎');
+    log('아래 첫칸', bar1()+' · '+(q('#tbRoster').disabled?'꺼짐':'켜짐'));
+
+    // ② 삼선 차림표
+    tap(bg);
+    log('차림표', on()?st():'안 열림(문제)');
+    log('  묶음', qa('#sheet .menu .mh').map(function(e){return e.textContent;}).join(' | '));
+    log('  줄', qa('#sheet .menu .mrow').map(function(e){
+      return e.querySelector('.mn').textContent+'('+e.querySelector('.mm').textContent+')'
+        +(e.className.indexOf('on')>=0?'✓':''); }).join(' | '));
+    var mh=q('#sheet').getBoundingClientRect().height;
+    log('  창 높이', Math.round(mh)+'px / 화면 '+vh+(mh<=vh?' ◎':' 넘침(문제)'));
+
+    // ③ 근무표로 가기
+    tap(q('#sheet [data-goto="work"]'));
+    log('근무표', '창 '+(on()?'열림(문제)':'닫힘')+' · 둘째줄 '+tabs());
+    log('  부탭 남았나', /부/.test(tabs())&&/팀/.test(tabs())?'예(문제)':'아니오 ◎');
+    log('  머리 높이', Math.round(q('.hd').getBoundingClientRect().height)+'px');
+    log('  집계', qa('.sum > div').map(function(d){return d.querySelector('.k').textContent+' '+d.querySelector('.v').textContent;}).join(' · '));
+    log('  몸통 거르개', q('.wfil')?'남음(문제)':'없음 ◎');
+    log('  아래 첫칸', bar1());
+    var fc=qa('#ptabs .fchip'), fsm=0;
+    fc.forEach(function(b){ if(b.getBoundingClientRect().height<34) fsm++; });
+    log('  거르개 칩', fc.length+'개 · 34px 미만 '+fsm+'개 · 가로넘침 '
+      +(document.documentElement.scrollWidth-window.innerWidth)+'px');
+
+    // ④ 거르개가 머리에서 도나
+    tap(fc[2]);
+    log('대기만', qa('.wrow').length+'명 · 둘째줄 '+q('#ptabs .fchip.on').textContent);
+    tap(qa('#ptabs .fchip')[0]);
+
+    // ⑤ 아래 띠로 배치표 복귀
+    tap(q('#tbRoster'));
+    log('아래로 복귀', '둘째줄 '+tabs()+' · 배치표 '+(q('.trow')?'보임 ◎':'안보임(문제)')+' · 첫칸 '+bar1());
+
+    // ⑥ 순번·명단은 여전히 되나
+    tap(q('#tbRoster'));
+    log('순번·명단', on()?st():'안 열림(문제)');
+    tap(act('close'));
+
+    // ⑦ 삼선 → 부 바꾸기
+    tap(q('#btnMenu'));
+    tap(q('#sheet [data-goto="3"]'));
+    log('3부로', '둘째줄 '+tabs()+' · 줄 '+qa('.trow').length);
+    tap(q('#btnMenu'));
+    log('  지금 표시', qa('#sheet .mrow.on').map(function(e){return e.querySelector('.mn').textContent;}).join(','));
+
+    // ⑧ 없앤 것이 정말 없나
+    tap(q('#btnMenu'));
+    log('차림표 줄', qa('#sheet .menu .mrow').map(function(e){
+      return e.querySelector('.mn').textContent; }).join(' | '));
+    log('  고친 것', q('#sheet [data-act="log"]') ? '남음(문제)' : '없음 ◎');
+    log('  PC 링크', q('#sheet .menu a') ? '남음(문제)' : '없음 ◎');
+    tap(act('close'));
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

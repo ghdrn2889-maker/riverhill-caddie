@@ -1,0 +1,27 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[];
+window.addEventListener('error', function(ev){ ERRS.push(ev.message+' @'+ev.lineno+':'+ev.colno); });
+(function(){
+  var out=[]; function log(k,v){ out.push(k+': '+v); }
+  function slots(){ var a=[],ks=document.querySelectorAll('#dutyBox .slot');
+    for(var i=0;i<ks.length;i++)a.push(ks[i].querySelector('.k').textContent+'='+ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  try{
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var d=document.querySelectorAll('#cfg [data-dtdef]');
+    log('칸', d.length+' 흡연실attr='+d[2].getAttribute('data-dtdef'));
+    d[2].value='09:30';
+    d[2].dispatchEvent(new Event('change',{bubbles:true}));
+    log('DUTYDEF', JSON.stringify(DUTYDEF));
+    log('errs1', ERRS.join(' | ')||'none');
+    closeCfg();
+    openDuty('\ud765\uc5f0\uc2e4 \ub2f9\ubc88');
+    log('dutyT', document.getElementById('dutyT').value);
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('DUTY', JSON.stringify(DUTY['\ud765\uc5f0\uc2e4 \ub2f9\ubc88'])+' || '+slots());
+    log('errs2', ERRS.join(' | ')||'none');
+  }catch(e){ out.push('ERROR: '+e.message); }
+  document.getElementById('PROBE').textContent=out.join('  ;;  ');
+})();
+</script>

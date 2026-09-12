@@ -1,0 +1,91 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+function cell(pk,i){ return q('.cell[data-pk="'+pk+'"][data-i="'+i+'"]'); }
+function nm(pk,i){ var c=cell(pk,i); return c?c.querySelector('.nm').textContent:'?'; }
+function seats(pk,n){ var o=[]; for(var i=0;i<n;i++) o.push(nm(pk,i)); return o; }
+function bar(){ return q('#pickbar').textContent.replace(/\s+/g,' ').trim(); }
+function go(){ return qa('#pickbar button').filter(function(b){return b.getAttribute('data-act')==='pickgo';})[0]; }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    var b0=seats('2',5);
+    log('처음 2부', b0.join(', '));
+
+    // ① 둘 — 예전처럼 맞바꾸기 (한 번 더 누르는 대신 미리 보고 누른다)
+    tap(cell('2',0)); tap(act('pick'));
+    log('하나 집음', '"'+bar()+'" · 돌리기단추 '+(go()?'있음(문제)':'없음 ◎')+' · 표시 '+qa('.cell.pick').length+'칸');
+    tap(cell('2',3));
+    log('둘 집음', '"'+bar()+'" · 단추 "'+(go()?go().textContent:'없음(문제)')+'"');
+    log('  번호표', qa('.cell .tag.pk').map(function(e){return e.textContent;}).join(','));
+    tap(go());
+    var b1=seats('2',5);
+    log('맞바꿈', b1.join(', ')
+      + (b1[0]===b0[3]&&b1[3]===b0[0]?' ◎':' ✗'));
+    log('  뒤처리', '띠 '+(q('#pickbar').classList.contains('on')?'남음(문제)':'닫힘 ◎')
+      +' · 집힌칸 '+qa('.cell.pick').length);
+    undo();
+
+    // ② 셋 — 한 바퀴
+    tap(cell('2',0)); tap(act('pick'));
+    tap(cell('2',1)); tap(cell('2',2));
+    log('셋 집음', '"'+bar()+'"');
+    log('  번호표', qa('.cell .tag.pk').map(function(e){return e.textContent;}).join(','));
+    tap(go());
+    var b2=seats('2',5);
+    log('돌림', b2.join(', '));
+    log('  ▶ 맞나', (b2[1]===b0[0] && b2[2]===b0[1] && b2[0]===b0[2])
+      ? '◎ '+b0[0]+'→2번, '+b0[1]+'→3번, '+b0[2]+'→1번'
+      : '✗ 기대 '+[b0[2],b0[0],b0[1]].join(',')+' / 실제 '+b2.slice(0,3).join(','));
+    log('  기록', LOG[0].msg);
+    undo();
+    log('  되돌림', seats('2',3).join(', ')+(seats('2',3).join()===b0.slice(0,3).join()?' ◎':' ✗'));
+
+    // ③ 넷
+    tap(cell('2',0)); tap(act('pick'));
+    tap(cell('2',1)); tap(cell('2',2)); tap(cell('2',3));
+    log('넷 집음', '"'+bar()+'"');
+    tap(go());
+    var b3=seats('2',5);
+    log('돌림', b3.join(', ')
+      + ((b3[1]===b0[0]&&b3[2]===b0[1]&&b3[3]===b0[2]&&b3[0]===b0[3])?' ◎':' ✗'));
+    undo();
+
+    // ④ 다시 눌러 빼기
+    tap(cell('2',0)); tap(act('pick'));
+    tap(cell('2',1)); tap(cell('2',2));
+    tap(cell('2',1));
+    log('가운데 뺌', '"'+bar()+'" · 번호표 '+qa('.cell .tag.pk').map(function(e){return e.textContent;}).join(','));
+    tap(cell('2',0)); tap(cell('2',2));
+    log('다 뺌', '띠 '+(q('#pickbar').classList.contains('on')?'남음(문제)':'닫힘 ◎')
+      +' · 아래띠 '+(getComputedStyle(q('.tabbar')).display==='none'?'숨음(문제)':'보임 ◎'));
+
+    // ⑤ 부를 넘어서 — 두 부 근무자가 겹치면 막아야
+    tap(cell('2',0)); tap(act('pick'));
+    tap(qa('#ptabs button')[2]);
+    log('3부로 이동', '집힌 것 '+pickList.length+'개 유지 · 띠 "'+bar()+'"');
+    tap(cell('3',0));
+    log('3부 칸 얹음', '"'+bar()+'"');
+    tap(go());
+    log('부 넘기', LOG.length?LOG[0].msg:'(기록 없음)');
+    log('  토스트', q('#toast').textContent||'(없음)');
+    undo();
+
+    // ⑥ 같은 자리 두 번은 애초에 안 얹힌다
+    tap(qa('#ptabs button')[1]);
+    tap(cell('2',0)); tap(act('pick')); tap(cell('2',0));
+    log('같은 칸 두 번', '집힌 '+pickList.length+'개 (0이어야 — 놓아진다)');
+
+    // ⑦ 기계 혼자서도 막나
+    log('빈 목록', rotateSeats([])===false?'막힘 ◎':'통과(문제)');
+    log('같은 자리 둘', rotateBlock([{pk:'2',ri:0},{pk:'2',ri:0}]));
+
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    var p3=part('3');
+    for(var i=0;i<5;i++) addTeam('3', hm(mm(p3.tees[p3.tees.length-1].time)+GAP), COURSES[0]);
+    setView('work');
+    var bars=qa('.lnbar');
+    L('띠', bars.length+'줄 · 마지막 "'+bars[bars.length-1].textContent.replace(/\s+/g,' ').trim()+'"');
+    tap(bars[2].querySelector('button'));
+    L('확인 창', q('#sheet .k').textContent+' / '+q('#sheet .st').textContent);
+    L('  줄', qa('#sheet .crl .cr').length+'개');
+    qa('#sheet .crl .cr').forEach(function(r){ L('  · '+r.querySelector('.ck').textContent, r.querySelector('.cv').textContent); });
+    L('  단추', qa('#sheet .acts.two button').map(function(b){return '"'+b.textContent+'"';}).join(' '));
+    var d0=DATE; tap(act('close'));
+    L('먼저 고치기', DATE===d0?'안 바뀜 ◎':'바뀜(문제)');
+    tap(bars[2].querySelector('button')); tap(act('ndayyes'));
+    L('넘김', DATE+' · 3부시작 '+SB3+' · 머리 '+q('#hDate').textContent);
+    L('  ▶ 3부 대조', lineupPlan(SB3,['3']).moved===0?'그 차례대로 ◎':'어긋남 ✗');
+    undo(); undo();
+    L('되돌림', DATE);
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},700);
+</script>

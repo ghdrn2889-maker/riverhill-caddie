@@ -1,0 +1,55 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seats(p){ return active(p).map(function(r){ return r.n||'—'; }); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(q){ q.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var p = part('1');
+    var s0 = seats(p), nt = p.tees.length;
+    L('1부 티오프', nt+'팀 · 마지막 '+(p.tees[nt-1]||{}).time);
+    L('앉은 줄', s0.length+'줄');
+    L('  티오프 칸 안', s0.slice(0,nt).join(' '));
+    L('  ★뒤에 선 대기', s0.slice(nt, nt+5).join(' ') + ' …');
+    var nextUp = s0[nt];
+    ok(!!nextUp, '다음 차례', nextUp||'★없음');
+
+    // ── 갑. 뒤에 팀을 하나 붙인다
+    L('','★갑. 마지막 뒤에 팀 추가');
+    var t2 = hm(mm(p.tees[nt-1].time) + GAP);
+    addTeam('1', t2, ''); paint();
+    var s1 = seats(p), i2 = -1;
+    p.tees.forEach(function(t,k){ if (t.time===t2) i2=k; });
+    L('  새 칸', t2 + ' · '+i2+'번째');
+    L('  그 칸에 앉은 사람', '"'+(s1[i2]||'')+'"');
+    ok(s1[i2]===nextUp, '  ★대기가 당겨졌나',
+       s1[i2] ? '"'+s1[i2]+'" 가 앉음' : '★비어 있음 — '+nextUp+' 는 그대로 대기');
+    L('  지금 대기 앞줄', s1.slice(i2, i2+4).join(' '));
+    L('  줄 수', s0.length+' → '+s1.length+(s1.length>s0.length?' (빈 줄이 끼었다)':''));
+
+    // ── 을. 한가운데에 끼워 넣으면
+    L('','★을. 한가운데 끼워 넣기');
+    var mid = 4, before = seats(p).slice(mid, mid+3);
+    L('  끼우기 전 '+mid+'~', before.join(' '));
+    var tm = hm(mm(p.tees[mid].time) - 3);   // 격자 밖 중간 시각
+    addTeam('1', tm, ''); paint();
+    var s2 = seats(p), im=-1;
+    p.tees.forEach(function(t,k){ if (t.time===tm) im=k; });
+    L('  새 칸', tm+' · '+im+'번째 · "'+(s2[im]||'')+'"');
+    L('  그 뒤', s2.slice(im, im+4).join(' '));
+    ok(s2[im+1]===before[0], '  뒤 사람은 제 시각을 지켰나',
+       before[0]+' → '+(s2[im+1]||'—'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

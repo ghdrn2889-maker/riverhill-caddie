@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function st(n){ var r=workRows().filter(function(x){return x.n===n;})[0]; return r?r.st:'★없어짐'; }
+  function blanks(pk){ return active(part(pk)).filter(function(r){ return !r.n; }).length; }
+  try{
+    localStorage.clear(); resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    L('빈 판', '1부 '+active(part('1')).length+'명/'+part('1').tees.length+'팀');
+    // 사용자 흐름: 빈 판에 두 사람만 먼 번호에 앉힌다
+    seatPerson('1', 0, '정용만');
+    seatPerson('1', 34, '배문숙');
+    L('둘만 앉힘', '1부 '+active(part('1')).length+'줄 · 빈 줄 '+blanks('1')+'개');
+    var T0=workTally();
+    L('  셈', '총원 '+T0.total+' · 근무 '+T0.cw+' · 미배치 '+T0.cu);
+    // 팀을 지운다
+    delTeam('1', 10);
+    L('★11번 팀 지움', '1부 '+active(part('1')).length+'줄/'+part('1').tees.length+'팀 · 빈 줄 '+blanks('1'));
+    L('   정용만', '"'+st('정용만')+'" · 배문숙 "'+st('배문숙')+'"');
+    L('   총원', workTally().total+' '+(workTally().total===T0.total?'◎ 아무도 안 사라짐':'✗'));
+    L('   배문숙 자리', (function(){ var a=active(part('1')).map(function(r){return r.n;});
+      var i=a.indexOf('배문숙'); var p=part('1');
+      return i<0?'없음':(i+1)+'번 '+(p.tees[i]?p.tees[i].time:'대기'); })());
+    // 순번 세우기로 빈 줄을 채운다
+    applyLineup(seonbal(), ['1','2']);
+    L('순번 세우기', '빈 줄 '+blanks('1')+'개 '+(blanks('1')===0?'◎ 다 찼다':'남음')
+      + ' · 정용만 "'+st('정용만')+'"');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

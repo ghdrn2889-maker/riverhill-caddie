@@ -1,0 +1,19 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    var none = JONAMES.filter(function(n){ return !cartOf(n); });
+    var b3 = none.filter(function(n){ return isBu3(n); });
+    L('카트 없는 사람', none.length + '명 — 3부반 ' + b3.length + '명 · 하우스 '
+      + (none.length - b3.length) + '명');
+    L('3부반 전체', bu3List().length + '명 중 카트 있는 사람 '
+      + bu3List().filter(function(n){ return cartOf(n); }).length + '명');
+    L('하우스 전체', JONAMES.filter(function(n){ return !isBu3(n); }).length + '명 중 카트 있는 사람 '
+      + JONAMES.filter(function(n){ return !isBu3(n) && cartOf(n); }).length + '명');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},800);
+</script>

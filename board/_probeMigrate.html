@@ -1,0 +1,38 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function keys(){ var n=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i);
+  if(k.indexOf('board.')===0) n.push(k); } return n.sort().join(' / '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // 옛 판처럼 꾸민다 — 칸 하나에 하루치, 이름 하나 고쳐 표시를 남겨서
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */
+    var mark=active(part('1'))[3].n;
+    setAbsent(mark,'휴가');
+    localStorage.setItem('board.day.v3', JSON.stringify({v:BUILD, at:'09:41', s:state()}));
+    L('옛 칸만 있는 상태', keys());
+    L('  그 안의 날짜', JSON.parse(JSON.parse(localStorage.getItem('board.day.v3')).s).date
+      + ' · 표시 '+mark+'='+tagOf(mark));
+
+    // 새로 켜는 셈
+    restore(JSON.stringify({}));   // 일부러 못 쓰게 만들지 않고 그냥 다시 켠다
+  }catch(e){}
+  try{
+    savedSig=null; PENDING=null;
+    bootLoad();
+    L('켠 뒤 칸', keys());
+    L('  옛 칸', localStorage.getItem('board.day.v3')? '남음(문제)':'지워짐 ◎');
+    L('  펼쳐진 날', DATE);
+    L('  저장된 날 목록', dayList().map(function(d){return d.date+'('+d.at+')';}).join(' / '));
+    var mk=JONAMES.filter(function(n){ return tagOf(n)==='휴가'; });
+    L('  ★고쳐 뒀던 것', mk.join(',')+' 이 휴가 — '+(mk.length>=1?'살아남 ◎':'잃음 ✗'));
+    L('  저장 표시', unsaved()? '저장 안 함(문제)':'저장됨 ◎');
+    // 한 번 더 켜도 안 망가지나
+    savedSig=null; bootLoad();
+    L('한 번 더 켜기', DATE+' · 칸 '+keys());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

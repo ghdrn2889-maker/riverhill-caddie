@@ -1,0 +1,80 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function on(){ return q('#sheet').classList.contains('on'); }
+function st(){ var e=q('#sheet .st'); return e?e.textContent:'(없음)'; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    // ① 차림표
+    tap(q('#btnMenu'));
+    log('묶음 이름', qa('#sheet .menu .mh').map(function(e){return e.textContent;}).join(' | '));
+    log('  그 밖 남았나', /그 밖/.test(q('#sheet .menu').textContent)?'예(문제)':'아니오 ◎');
+    log('줄', qa('#sheet .menu .mrow').map(function(e){
+      return e.querySelector('.mn').textContent+'['+e.querySelector('.mm').textContent+']'; }).join(' | '));
+    log('창 높이', Math.round(q('#sheet').getBoundingClientRect().height)+'px / '+window.innerHeight);
+
+    // ② 당번 페이지로
+    tap(q('#sheet [data-goto="duty"]'));
+    log('당번 페이지', '창 '+(on()?'열림(문제)':'닫힘')
+      +' · 둘째줄 '+(q('#ptabs').hidden?'숨김 ◎':'보임(문제)')
+      +' · 머리 '+Math.round(q('.hd').getBoundingClientRect().height)+'px');
+    log('  덩이', qa('.dsec .dh2 b').map(function(e){return e.textContent;}).join(' | '));
+    log('  당번 줄', qa('.dsec [data-duty]').map(function(e){
+      return e.querySelector('.dk2').textContent+'='+e.querySelector('.dv2').textContent
+        +'('+e.querySelector('.dt2').textContent+')'; }).join(' | '));
+    log('  경기과 줄', qa('.dsec .drow2.ro').map(function(e){
+      return e.querySelector('.dk2').textContent+'='+e.querySelector('.dv2').textContent; }).join(' | '));
+    var dr=qa('.drow2'), sm=0; dr.forEach(function(e){ if(e.getBoundingClientRect().height<44) sm++; });
+    log('  줄 높이', dr.length+'줄 · 44px 미만 '+sm+' · 가로넘침 '+(document.documentElement.scrollWidth-window.innerWidth));
+    log('  아래 첫칸', q('#tbRoster .lb').textContent);
+
+    // ③ 근무표에 당번 덩이가 남았나
+    setView('work');
+    log('근무표', '당번덩이 '+(q('.duty')||q('.dsec')?'남음(문제)':'없음 ◎')
+      +' · 사람줄 '+qa('.wrow').length);
+    setView('duty');
+
+    // ④ 당번 넣기
+    tap(q('.dsec [data-duty]'));
+    log('당번 창', on()?st()+' · '+q('#sheet .sub').textContent:'안 열림(문제)');
+    log('  지금 서는 사람', qa('#sheet .dpick .who button').map(function(b){return b.textContent;}).join(',')||'(없음)');
+    log('  고를 명단', qa('#sheet #dpOut .row').length+'명 · 첫 '
+      + (q('#sheet #dpOut .row')?q('#sheet #dpOut .row').textContent:'-'));
+    // 검색
+    var dq=q('#dpQ'); dq.value='김상미'; dq.dispatchEvent(new Event('input',{bubbles:true}));
+    log('  찾기', qa('#sheet #dpOut .row').map(function(r){return r.textContent;}).join(' | '));
+    tap(q('#sheet #dpOut .row'));
+    log('  넣음', st()+' → '+qa('#sheet .dpick .who button').map(function(b){return b.textContent;}).join(','));
+    tap(act('close'));
+    log('  당번 줄', qa('.dsec [data-duty]')[0].querySelector('.dv2').textContent
+      +' ('+qa('.dsec [data-duty]')[0].querySelector('.dt2').textContent+')');
+    log('  꼬리표 붙었나', (function(){ var t=TAG['김상미']; return t?t:'(없음)'; })());
+    // 다시 빼기
+    tap(q('.dsec [data-duty]'));
+    var rm=qa('#sheet .dpick .who button').filter(function(b){return b.textContent.indexOf('김상미')>=0;})[0];
+    tap(rm);
+    log('  뺌', qa('#sheet .dpick .who button').map(function(b){return b.textContent;}).join(',')||'(없음)');
+    tap(act('close'));
+
+    // ⑤ 차림표에 당번 요약이 도나
+    tap(q('#btnMenu'));
+    log('차림표 당번줄', q('#sheet [data-goto="duty"]').textContent
+      + ' · 표시 ' + (q('#sheet [data-goto="duty"]').className.indexOf('on')>=0?'현재 ◎':'아님(문제)'));
+    tap(q('#sheet [data-goto="2"]'));
+    log('2부로', '둘째줄 '+(q('#ptabs').hidden?'숨김(문제)':'보임 ◎')+' · '
+      + qa('#ptabs button').map(function(b){return b.textContent;}).join('|')
+      + ' · 배치표 '+(q('.trow')?'보임 ◎':'안보임(문제)'));
+
+    // ⑥ 아래 띠로 복귀
+    setView('duty'); tap(q('#tbRoster'));
+    log('아래로 복귀', '배치표 '+(q('.trow')?'보임 ◎':'안보임(문제)')+' · 첫칸 '+q('#tbRoster .lb').textContent);
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},500);
+</script>

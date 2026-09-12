@@ -1,0 +1,32 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function row(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    // 3부반 사람 하나에 후출 + 당번을 같이 건다
+    var D = workRows().filter(function(r){ return isBu3(r.n); })[0].n;
+    L('3부반', D+' 처음 ['+row(D).bts.join(' ')+']');
+    setDayTag(D,'후출'); paint();
+    L('  후출 걸고', '['+row(D).bts.join(' ')+']');
+    dutyToggle('당번', D); paint();
+    L('  당번까지', '['+row(D).bts.join(' ')+'] · '+row(D).st);
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===D; })[0];
+    L('  화면', b? b.textContent.replace(/\s+/g,' ').trim() : '(없음)');
+    L('  배지 색', b? [].slice.call(b.querySelectorAll('.bt,.bg')).map(function(x){
+        return x.textContent.trim()+'='+x.className.replace('bg','').trim(); }).join(' ') : '-');
+    // 흡연실 당번도 뜨나
+    dutyToggle('흡연실 당번', D); paint();
+    L('  흡연실 당번까지', '['+row(D).bts.join(' ')+']');
+    var b2=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===D; })[0];
+    L('  그때 색', b2? [].slice.call(b2.querySelectorAll('.bt')).map(function(x){
+        return x.textContent.trim()+'='+x.className.replace('bt','').trim(); }).join(' ') : '-');
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

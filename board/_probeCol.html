@@ -1,0 +1,15 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out=[], ps=document.querySelectorAll('.pscroll');
+  for (var i=0;i<ps.length;i++){
+    var e=ps[i], r=e.getBoundingClientRect(), kids=e.children, last=kids[kids.length-1];
+    var lr=last.getBoundingClientRect();
+    out.push('부'+(i+1)+' scrollH='+Math.round(e.scrollHeight)+' clientH='+Math.round(e.clientHeight)
+      +' 막내='+last.className+' 아래끝='+Math.round(lr.bottom-r.top)
+      +' 자식수='+kids.length);
+  }
+  out.push('k='+getComputedStyle(document.documentElement).getPropertyValue('--k'));
+  document.getElementById('PROBE').textContent=out.join('  ;;  ');
+})();
+</script>

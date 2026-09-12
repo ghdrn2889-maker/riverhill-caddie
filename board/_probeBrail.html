@@ -1,0 +1,23 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('board'); paint();
+    var b=document.querySelector('.body'), r=document.getElementById('brail'),
+        c=document.querySelector('.pcol');
+    var B=function(e){ var x=e.getBoundingClientRect();
+      return Math.round(x.left)+','+Math.round(x.top)+' '+Math.round(x.width)+'×'+Math.round(x.height); };
+    L('창', window.innerWidth+'×'+window.innerHeight+' · --k '
+      + getComputedStyle(document.documentElement).getPropertyValue('--k').trim());
+    L('.body display', getComputedStyle(b).display);
+    L('.body 칸', getComputedStyle(b).gridTemplateColumns);
+    L('.cols display', getComputedStyle(document.getElementById('cols')).display);
+    L('1부', B(c));
+    L('brail', B(r));
+    L('brail 안', r.innerHTML.length+'자 · lnbar '+r.querySelectorAll('.lnbar').length+'개');
+    L('railSum 안', document.getElementById('railSum').querySelectorAll('.lnbar').length+'개 lnbar');
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

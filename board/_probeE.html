@@ -1,0 +1,65 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = [];
+window.addEventListener('error', function(ev){ ERRS.push(ev.message + ' @' + ev.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function slots(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot');
+    for (var i = 0; i < ks.length; i++)
+      a.push(ks[i].querySelector('.k').textContent + '=' + ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push(rs[i].querySelector('.num').textContent + rs[i].querySelector('b').textContent
+        + '@' + (rs[i].querySelector('.dtm')||{value:'-'}).value
+        + '/' + (rs[i].querySelector('.dhr')||{value:'-'}).value
+        + '/' + rs[i].querySelector('.til').textContent);
+    return a.join('  '); }
+  function fire(el, v){ el.value = v; el.dispatchEvent(new Event('change', {bubbles:true})); }
+  function act(n){ var bs = document.querySelectorAll('#sheet button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  try {
+    log('처음', slots());
+    openDuty('벌당');
+    log('넣을값', document.getElementById('dutyT').value + ' / ' + document.getElementById('dutyH').value
+      + ' / ' + document.querySelector('#sheet .dsp.mt .til').textContent);
+    document.querySelectorAll('#dutySug button')[0].click();
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('두명', rows());
+    log('배치표', slots());
+    // 두번째 사람 근무를 3시간으로
+    fire(document.querySelectorAll('#sheet .dhr')[1], '3');
+    log('3시간', rows());
+    log('배치표2', slots());
+    // 시작 시각을 바꾸면 끝도 따라와야 한다
+    fire(document.querySelectorAll('#sheet .dtm')[1], '18:00');
+    log('18시', rows() + ' || ' + slots());
+    // 자정 넘김
+    fire(document.querySelectorAll('#sheet .dhr')[1], '8');
+    log('자정넘김', rows() + ' || ' + slots());
+    // 넣을 때 붙는 값만 바꿔도 '끝'이 갱신
+    fire(document.getElementById('dutyH'), '2');
+    log('넣을값갱신', document.querySelector('#sheet .dsp.mt .til').textContent);
+    // 시각 없이 시간만
+    fire(document.getElementById('dutyT'), '');
+    document.getElementById('dutyQ').value = '김홍구';
+    act('dutyadd').click();
+    log('시간만', rows() + ' || ' + slots());
+    // 설정
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var dt = document.querySelectorAll('#cfg [data-dtdef]'), dh = document.querySelectorAll('#cfg [data-dtdefh]');
+    log('설정칸', dt.length + '/' + dh.length + ' 당번=' + dt[0].value + ' ' + dh[0].value
+      + ' 흡연실=[' + dt[2].value + '][' + dh[2].value + ']');
+    fire(dt[2], '09:30'); fire(dh[2], '4');
+    closeCfg();
+    openDuty('흡연실 당번');
+    log('새기본', document.getElementById('dutyT').value + '/' + document.getElementById('dutyH').value);
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('흡연실', rows() + ' || ' + slots());
+    undo(); log('되돌림', slots());
+    daySave(); log('저장', document.getElementById('btnSave').textContent);
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

@@ -1,0 +1,84 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'\u25ce ':'\u2717 ')+k+': '+v); }
+  function wk(n){
+    var r=document.querySelector('#workTable [data-who="'+n+'"]');
+    if(!r) return '(\uc904 \uc5c6\uc74c)';
+    return [].slice.call(r.children).map(function(e){
+      var t=e.textContent.trim(); return t? e.className.replace(/\s+/g,'.')+'="'+t+'"':''; })
+      .filter(Boolean).join('  ');
+  }
+  function seatsOf(n){
+    var out=[];
+    DAY.forEach(function(p){ active(p).forEach(function(r,i){
+      if(r.n===n) out.push(p.name+' '+seatNoTx(p,i)+'\ubc88'); }); });
+    return out.join(' · ')||'\uc5c6\uc74c';
+  }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+    DUTYKEYS.forEach(function(k){ DUTY[k]=[]; });
+  }
+  try{
+    // ══ ① \ub2f9\ubc88\uc740 \uc21c\ubc88\uc5d0 \uc548 \uc120\ub2e4
+    reset();
+    var D=JONAMES.filter(function(n){ return !isBu3(n); })[3];
+    L('\u2605\u2460 \ub2f9\ubc88 \uc9c0\uc815 \uc804', D+' \uc21c\ubc88 \ud6c4\ubcf4? '+(inLineup(D,'day')?'\uc608':'\uc544\ub2c8\uc624'));
+    dutyToggle('\ub2f9\ubc88', D);
+    ok(hasDuty(D),'  \ub2f9\ubc88 \uc7a5\ubd80', hasDuty(D)?dutyMarks(D).join('/'):'\u2605\uc548 \ub4e4\uc5b4\uac10');
+    ok(!inLineup(D,'day'),'  \uc21c\ubc88 \ud6c4\ubcf4', inLineup(D,'day')?'\u2605\uc544\uc9c1 \ud6c4\ubcf4\ub2e4':'\ube60\uc84c\ub2e4 \u25ce');
+    ok(lineupPool('day').indexOf(D)<0,'  \ud480\uc5d0\uc11c', lineupPool('day').indexOf(D)<0?'\ube60\uc84c\ub2e4 \u25ce':'\u2605\uc788\ub2e4');
+    applyLineup(seonbal(), ['1','2']);
+    ok(seatsOf(D)==='\uc5c6\uc74c','  \uc21c\ubc88 \uc138\uc6b0\uae30 \ub4a4 \uc790\ub9ac', seatsOf(D));
+    L('  \uadfc\ubb34\ud45c \uc904', wk(D));
+
+    // ══ ② \uc790\ub9ac\uc5d0 \ubd99\uc740 \ub2f9\ubc88(role)\ub3c4 \uc548 \ube68\ub9b0\ub2e4
+    reset();
+    applyLineup(seonbal(), ['1']);
+    var R=active(part('1'))[4].n;
+    setRole('1',4,'\ub2f9\ubc88');
+    L('\u2605\u2461 '+R+' 1\ubd80 5\ubc88\uc5d0 \ub2f9\ubc88 role', dutyMarks(R).join('/')||'\u2605\uc5c6\uc74c');
+    ok(!inLineup(R,'day'),'  \uc21c\ubc88 \ud6c4\ubcf4', inLineup(R,'day')?'\u2605\uc544\uc9c1 \ud6c4\ubcf4':'\ube60\uc84c\ub2e4 \u25ce');
+    var was=seatsOf(R);
+    applyLineup(JONAMES.filter(function(n){return !isBu3(n);})[9], ['1']);
+    ok(seatsOf(R)===was,'  \ub2e4\uc2dc \uc138\uc6cc\ub3c4 \uadf8 \uc790\ub9ac', was+' \u2192 '+seatsOf(R));
+    ok(active(part('1'))[4].n===R,'  5\ubc88 \uce78 \uc784\uc790', active(part('1'))[4].n+' (\ub2f9\ubc88 \ub531\uc9c0\uac00 \ub0a8\uc5d0\uac8c \uc548 \uc62e\uaca8\uac00\uc57c)');
+
+    // ══ ③ 1,2 \ub294 \uc5c6\ub2e4
+    reset();
+    var A=JONAMES.filter(function(n){ return !isBu3(n); })[0];
+    seatPerson('1',0,A); seatPerson('2',0,A);
+    setView('work'); paint();
+    L('\u2605\u2462 1\ubd80\u00b72\ubd80\uc5d0 \ub2e4 \uc549\ud78c '+A, seatsOf(A));
+    ok(!tagOf(A),'  \ubc30\uc9c0', tagOf(A)?('\u2605'+tagOf(A)):'\uc5c6\uc74c \u25ce');
+    L('  \uadfc\ubb34\ud45c \uc904', wk(A));
+    ok(!/1,2/.test(wk(A)),'  "1,2" \ub77c\ub294 \ub9d0', /1,2/.test(wk(A))?'\u2605\uc544\uc9c1 \ub098\uc628\ub2e4':'\uc5c6\uc74c \u25ce');
+    ok(/1\ubd80\u00b72\ubd80/.test(wk(A)),'  \uc0c1\ud0dc', /1\ubd80\u00b72\ubd80/.test(wk(A))?'"1\ubd80\u00b72\ubd80" \u25ce':'\u2605\ub2e4\ub978 \ub9d0');
+    // 3\ubd80\uae4c\uc9c0 \uc549\ud788\uba74 54
+    seatPerson('3',0,A); paint();
+    ok(tagOf(A)==='54','  3\ubd80\uae4c\uc9c0 \uc549\ud788\uba74', tagOf(A)||'\u2605\uc5c6\uc74c');
+    // \uc800\uc7a5\ubcf8\uc5d0 \ub0a8\uc740 \uc61b '1,2' \ub294 \uac77\ud78c\ub2e4
+    reset();
+    var B=JONAMES.filter(function(n){ return !isBu3(n); })[1];
+    TAG[B]='1,2'; seatPerson('1',0,B); seatPerson('2',0,B);
+    reconcileDupTags(); paint();
+    ok(!tagOf(B),'  \uc800\uc7a5\ubcf8\uc758 \uc61b 1,2', tagOf(B)?('\u2605'+tagOf(B)):'\uac77\ud614\ub2e4 \u25ce');
+    // 2,3 \u00b7 1,3 \uc740 \uadf8\ub300\ub85c
+    reset();
+    var C=JONAMES.filter(function(n){ return !isBu3(n); })[2];
+    seatPerson('2',0,C); seatPerson('3',0,C); paint();
+    ok(tagOf(C)==='2,3','  2,3 \uc740 \uadf8\ub300\ub85c', tagOf(C)||'\u2605\uc5c6\uc74c');
+    reset();
+    var F=JONAMES.filter(function(n){ return !isBu3(n); })[2];
+    seatPerson('1',0,F); seatPerson('3',0,F); paint();
+    ok(tagOf(F)==='1,3','  1,3 \uc740 \uadf8\ub300\ub85c', tagOf(F)||'\u2605\uc5c6\uc74c');
+  }catch(err){ o.push('\ud130\uc9d0: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

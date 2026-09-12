@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function row(n){ return workRows().filter(function(x){ return x.n===n; })[0]; }
+  function T(){ var t=workTally();
+    return Object.keys(t).map(function(k){ return k+' '+t[k]; }).join(' · '); }
+  function drawn(n){
+    var b=[].slice.call(document.querySelectorAll('.jobd .wrow'))
+      .filter(function(x){ return x.getAttribute('data-who')===n; })[0];
+    return b ? b.textContent.replace(/\s+/g,' ').trim() : '(그 줄 없음)'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    L('걸기 전 셈', T());
+
+    var A=workRows().filter(function(r){ return !tagOf(r.n)&&r.cls==='w'; })[0].n;
+    var B=workRows().filter(function(r){ return !tagOf(r.n)&&r.cls==='w'; })[1].n;
+    setDayTag(B,'조출');
+    var C=workRows().filter(function(r){ return !tagOf(r.n)&&r.cls==='w'; })[2].n;
+    L('조출만 건 뒤 셈', T());
+
+    dutyToggle('당번', A);
+    dutyToggle('벌당', B);
+    (function(){ var f=false; DAY.forEach(function(p){ if(f) return;
+      active(p).forEach(function(r,i){ if(!f&&r.n===C){ setRole(p.key,i,'당번'); f=true; } }); }); })();
+    paint();
+    L('', '');
+    L('★배지 차례', '');
+    L('  '+A, '['+row(A).bts.join(' ')+'] · '+row(A).st);
+    L('  '+B, '['+row(B).bts.join(' ')+'] · '+row(B).st);
+    L('  '+C, '['+row(C).bts.join(' ')+'] · '+row(C).st);
+    L('  3부반+조출+당번 섞기', (function(){
+        var D=workRows().filter(function(r){ return isBu3(r.n)&&!tagOf(r.n); })[0];
+        if(!D) return '견줄 사람 없음';
+        setDayTag(D.n,'후출'); dutyToggle('당번', D.n); paint();
+        return D.n+' ['+row(D.n).bts.join(' ')+']'; })());
+    L('', '');
+    L('당번 건 뒤 셈', T());
+    L('  화면 '+B, drawn(B));
+    L('  화면 '+C, drawn(C));
+
+    // 떼면 되돌아가나
+    dutyToggle('당번', A); dutyToggle('벌당', B);
+    (function(){ var f=false; DAY.forEach(function(p){ if(f) return;
+      active(p).forEach(function(r,i){ if(!f&&r.n===C){ setRole(p.key,i,'당번'); f=true; } }); }); })();
+    paint();
+    L('', '');
+    L('★뗀 뒤', A+'['+row(A).bts.join(' ')+'] '+B+'['+row(B).bts.join(' ')+'] '+C+'['+row(C).bts.join(' ')+']');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

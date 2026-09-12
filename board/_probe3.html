@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out = [];
+  function log(k, v){ out.push(k + ': ' + v); }
+  function slots(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot');
+    for (var i = 0; i < ks.length; i++)
+      a.push(ks[i].querySelector('.k').className.replace('k ','') + ':' + ks[i].querySelector('.k').textContent
+        + '=' + ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push(rs[i].querySelector('.num').textContent + rs[i].querySelector('b').textContent);
+    return a.join(' '); }
+  var pid = 1;
+  function pe(type, el, x, y){
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true,
+      pointerId: pid, pointerType: 'mouse', clientX: x, clientY: y, button: 0, buttons: type === 'pointerup' ? 0 : 1 }));
+  }
+  // 손잡이를 쥐고 목표 줄 한가운데로 끌었다 놓는다
+  function drag(fromRow, toRow, below){
+    var g = fromRow.querySelector('[data-grip]');
+    var a = fromRow.getBoundingClientRect(), b = toRow.getBoundingClientRect();
+    var ty = below ? b.bottom - 2 : b.top + 2;
+    pe('pointerdown', g, a.left + 5, a.top + a.height / 2);
+    pe('pointermove', g, a.left + 5, ty);
+    pe('pointerup', g, a.left + 5, ty);
+  }
+  try {
+    log('처음', slots());
+    // 벌당에 세 명
+    openDuty('벌당');
+    for (var i = 0; i < 3; i++){ document.querySelectorAll('#dutySug button')[0].click(); openDuty('벌당'); }
+    log('세명', rows() + ' / 손잡이=' + document.querySelectorAll('#sheet .drow [data-grip]').length
+      + ' / 옛단추=' + document.querySelectorAll('#sheet [data-dutymv]').length);
+    // 1번을 3번 아래로 끌기
+    var rs = document.querySelectorAll('#sheet .drow');
+    drag(rs[0], rs[2], true);
+    log('1을맨아래로', rows());
+    // 3번(지금 맨 아래)을 맨 위로
+    rs = document.querySelectorAll('#sheet .drow');
+    drag(rs[2], rs[0], false);
+    log('맨아래를위로', rows());
+    log('배치표', slots());
+    // 배치표에서 칸 자체 끌기 — 흡연실을 맨 위로
+    var ss = document.querySelectorAll('#dutyBox .slot');
+    drag(ss[2], ss[0], false);
+    log('칸끌기', slots());
+    log('창열림', document.getElementById('sheet').className);  // 끌었을 때 창이 열리면 안 된다
+    // 설정에서도
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var cs = document.querySelectorAll('#cfg .crow[data-dtrow]');
+    log('설정줄', cs.length + ' / 손잡이=' + document.querySelectorAll('#cfg .crow[data-dtrow] [data-grip]').length
+      + ' / 옛단추=' + document.querySelectorAll('#cfg [data-dtmove]').length);
+    drag(cs[0], cs[2], true);
+    log('설정끌기', slots());
+    undo();
+    log('되돌림', slots());
+    log('기록', document.querySelectorAll('#logsec .li').length + '건 / ' +
+      (document.querySelector('#logsec .li span') || {textContent:'-'}).textContent);
+  } catch (e) { out.push('ERROR: ' + e.message); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

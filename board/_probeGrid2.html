@@ -1,0 +1,36 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function rows(pk){ var col=document.getElementById('col'+pk); if(!col) return [];
+    return [].slice.call(col.querySelectorAll('.brow:not(.spare) .tm'))
+      .map(function(e){ return e.textContent.replace('격자 밖','').trim(); }); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    var p=part('1');
+    var base = hm(mm(p.start)+18*GAP);
+    L('1부 기본 격자', p.start+'~'+base+' ('+ROWS+'줄)');
+    L('  지금 줄', rows('1').length+'줄 · 마지막 '+rows('1')[rows('1').length-1]);
+
+    // 격자 너머 두 팀(OUT/IN)을 넣는다 — 리버힐에서 팀이 늘어난 날
+    var t1 = hm(mm(p.start)+19*GAP), t2 = hm(mm(p.start)+20*GAP);
+    addTeam('1', t1, 'OUT'); addTeam('1', t1, 'IN');
+    addTeam('1', t2, 'OUT');
+    paint();
+    L('', ''); L('★'+t1+', '+t2+' 에 팀을 넣으니', rows('1').length+'줄 · 마지막 '+rows('1')[rows('1').length-1]);
+    L('   '+t1+' 줄', rows('1').indexOf(t1)>=0?'있음 ◎':'없음');
+    L('   '+t2+' 줄', rows('1').indexOf(t2)>=0?'있음 ◎':'없음');
+
+    // ★그 시각의 팀을 다 지운다
+    for (var i=p.tees.length-1;i>=0;i--) if (p.tees[i].time===t1) delTeam('1', i);
+    paint();
+    L('', ''); L('★'+t1+' 팀을 둘 다 지우니', rows('1').length+'줄');
+    L('   '+t1+' 줄', rows('1').indexOf(t1)>=0?'있음 ◎ (빈 칸)':'★사라짐 — 여기가 문제');
+    L('   '+t2+' 줄', rows('1').indexOf(t2)>=0?'있음 ◎':'★사라짐');
+    L('   보이는 줄', rows('1').join(' '));
+  }catch(e){ o.push('터짐 '+e.message+' @'+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

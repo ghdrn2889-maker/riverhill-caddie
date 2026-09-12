@@ -1,0 +1,104 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function ctOf(n){ var r=rowOf(n); return r? r.querySelector('.ct') : null; }
+function B(el){ if(!el) return null; var b=el.getBoundingClientRect();
+  return {x:Math.round(b.left),w:Math.round(b.width),h:Math.round(b.height),r:Math.round(b.right)}; }
+function S(el){ return el? getComputedStyle(el) : null; }
+function edge(cs){ return cs.borderTopWidth+' '+cs.borderTopStyle+' / '+cs.borderLeftStyle; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function noBg(cs){ var b=cs.backgroundColor;
+    return b==='rgba(0, 0, 0, 0)' || b==='transparent'; }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    var first = q('.wrow[data-who]'), col = first? first.parentNode : document.body;
+    var names = qa('.wrow[data-who]').filter(function(r){ return col.contains(r); })
+                  .map(function(r){ return r.getAttribute('data-who'); });
+    var has = names.filter(function(n){ return cartOf(n); });
+    var emp = names.filter(function(n){ return !cartOf(n); });
+    if (!emp.length){ setCart(has[0], 0); paint(); emp=[has[0]]; has=has.slice(1); }
+    L('첫 조', names.length+'명 · 카트 있음 '+has.length+' / 없음 '+emp.length);
+
+    // ── 갑. ★빈 칸도 '칸'으로 보이나
+    L('','★갑. 카트 없는 사람의 칸');
+    var ce = ctOf(emp[0]), se = S(ce), be = B(ce);
+    L('  '+emp[0], be.w+'×'+be.h+' @'+be.x);
+    L('  테두리', edge(se) + ' · ' + se.borderTopColor);
+    ok(parseFloat(se.borderTopWidth)>=1 && se.borderTopStyle!=='none',
+       '  ★사방 테두리가 있나', se.borderTopWidth+' '+se.borderTopStyle+' (눈에 보이는 칸)');
+    ok(se.borderTopStyle==='dashed', '  비었다는 표(점선)', se.borderTopStyle);
+    ok(noBg(se), '  바탕은 비었나', '"'+se.backgroundColor+'"');
+    ok(!ce.textContent.trim(), '  글자', '"'+ce.textContent.trim()+'" (공백 — 부탁하신 대로)');
+    // 찬 칸과 크기가 같아야 한다
+    var ch = ctOf(has[0]), sh = S(ch), bh = B(ch);
+    L('  '+has[0]+'(카트 '+cartOf(has[0])+')', bh.w+'×'+bh.h+' @'+bh.x
+      + ' · 테두리 '+edge(sh));
+    ok(Math.abs(be.x-bh.x)<=1 && Math.abs(be.w-bh.w)<=1 && be.h===bh.h,
+       '  찬 칸과 같은 크기·자리 (1px 반올림은 봐준다)',
+       '빈 '+be.w+'×'+be.h+'@'+be.x+' / 찬 '+bh.w+'×'+bh.h+'@'+bh.x);
+    ok(sh.borderTopStyle==='solid', '  찬 칸은 실선', sh.borderTopStyle);
+    // 줄마다 같은 자리인가
+    var xs = names.map(function(n){ return B(ctOf(n)).x; });
+    ok(Math.max.apply(null,xs)-Math.min.apply(null,xs)<=1, '  모든 줄이 같은 자리',
+       '어긋남 '+(Math.max.apply(null,xs)-Math.min.apply(null,xs))+'px · '+names.length+'줄');
+
+    // ── 을. ★고장 난 카트 — 배경이 없어야 한다
+    L('','★을. 고장 난 카트');
+    var c0 = cartOf(has[0]);
+    setCartBad(c0, true); paint();
+    var cb = ctOf(has[0]), sb = S(cb), bb = B(cb);
+    var chN = ctOf(has[1]), shN = S(chN), bhN = B(chN);   // 같은 시점의 보통 칸
+    L('  '+has[0]+' 카트 '+c0, bb.w+'×'+bb.h+' @'+bb.x);
+    L('  바탕', '"'+sb.backgroundColor+'"');
+    L('  글씨·테두리', sb.color+' / '+sb.borderTopColor+' '+sb.borderTopStyle);
+    ok(noBg(sb), '  ★배경이 없나', noBg(sb)? '없음 ◎ (벌어져 보이던 분홍 배경)':'★"'+sb.backgroundColor+'"');
+    ok(sb.color !== shN.color, '  빨간 글씨로 말하나', sb.color+' (보통은 '+shN.color+')');
+    ok(sb.borderTopColor !== shN.borderTopColor, '  빨간 테두리로도', sb.borderTopColor);
+    ok(bb.w===bhN.w && bb.h===bhN.h, '  ★칸이 안 벌어지나',
+       '고장 '+bb.w+'×'+bb.h+' / 보통 '+bhN.w+'×'+bhN.h);
+    setCartBad(c0, false); paint();
+
+    // ── 병. 빌린 카트도 배경 없이
+    L('','★병. 빌린 카트');
+    if (typeof LEND === 'object'){
+      LEND[has[1]] = 99; paint();
+      var cl = ctOf(has[1]), sl = S(cl), bl = B(cl);
+      L('  '+has[1], '바탕 "'+sl.backgroundColor+'" · 글씨 '+sl.color+' · 테두리 '+sl.borderTopColor);
+      ok(noBg(sl), '  배경이 없나', noBg(sl)?'없음 ◎':'★있음');
+      ok(sl.boxShadow==='none', '  옛 그림자', sl.boxShadow);
+      ok(bl.w===bh.w && bl.h===bh.h, '  칸 크기', bl.w+'×'+bl.h);
+      delete LEND[has[1]]; paint();
+    } else L('  (빌린 카트 장부 없음 — 건너뜀)', '');
+
+    // ── 정. 배지와 안 헷갈리나 — 배지는 차 있고 둥글다
+    L('','★정. 배지와 견주기');
+    ch = ctOf(has[0]); sh = S(ch); bh = B(ch);      // paint() 뒤라 다시 집는다
+    var wp = names.filter(function(n){ var r=rowOf(n);
+      return r && qa('.bt').filter(function(e){ return r.contains(e); }).length; })[0];
+    if (wp){
+      var pill = qa('.bt').filter(function(e){ return rowOf(wp).contains(e); })[0];
+      var sp = S(pill);
+      L('  배지', '바탕 "'+sp.backgroundColor+'" · 모서리 '+sp.borderRadius);
+      L('  카트 칸', '바탕 "'+sh.backgroundColor+'" · 모서리 '+sh.borderRadius);
+      ok(!noBg(sp) && noBg(sh), '  배지는 차 있고 칸은 비었나', '◎');
+      ok(parseFloat(sp.borderRadius) > parseFloat(sh.borderRadius),
+         '  배지는 둥글고 칸은 모난가', '배지 '+sp.borderRadius+' vs 칸 '+sh.borderRadius);
+      ok(B(pill).r <= B(ctOf(wp)).x, '  배지가 왼쪽인가', B(pill).r+' ≤ '+B(ctOf(wp)).x);
+    }
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

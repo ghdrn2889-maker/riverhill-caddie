@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function offRow(nm){ return qa('#swOut [data-swapoff]').filter(function(b){
+  return b.getAttribute('data-swapoff')===nm; })[0]; }
+function where(nm){ return partsOf(nm).map(function(k){
+  var p=part(k), a=active(p).map(function(r){return r.n;}), i=a.indexOf(nm);
+  return p.name+' '+(i+1)+'번 '+(p.tees[i]?p.tees[i].time+' '+p.tees[i].course:'대기');
+}).join(' + ') || '자리 없음'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+    var nm='정용만';
+    if (tagOf(nm)!=='조출') setDayTag(nm,'조출');
+    L('정용만', '배지 "'+tagOf(nm)+'" · '+where(nm));
+
+    // 1부에서 8:50 IN 칸 찾기
+    var p1=part('1'), i=-1;
+    for (var k=0;k<p1.tees.length;k++)
+      if (p1.tees[k].time==='8:50' && p1.tees[k].course==='IN') i=k;
+    L('8:50 IN 칸', i>=0 ? '1부 '+(i+1)+'번 · 지금 "'
+      + ((active(p1)[i]||{}).n || '비어 있음')+'"' : '못 찾음');
+    var was=(active(p1)[i]||{}).n||'';
+
+    openCell('1', i);
+    swQ=nm; drawSwapList();
+    tap(offRow(nm));
+    L('★넣은 뒤 정용만', where(nm));
+    L('  1부에 있나', partsOf(nm).indexOf('1')>=0 ? '◎ 1부':'✗ 1부가 아니다');
+    L('  2부로 갔나', partsOf(nm).indexOf('2')>=0 ? '★갔다 ✗':'안 갔다 ◎');
+    L('  밀려난 '+was, where(was));
+    L('    그 사람 2부로 갔나', partsOf(was).indexOf('2')>=0 ? '★갔다 ✗':'안 갔다 ◎');
+    L('  기록', LOG[0].msg);
+    var snap1 = where(nm);
+
+    // 순번 세우기를 눌러도 그대로인가
+    applyLineup(seonbal(), ['1','2']);
+    L('★순번 세우기 뒤', where(nm) + ' ' + (where(nm)===snap1 ? '◎ 그대로':'✗ 움직였다'));
+
+    // 팀을 지우면? (앞당겨지기)
+    delTeam('1', 0);
+    L('맨 앞 팀을 지우면', where(nm) + ' · 1부 티오프 '+part('1').tees.length
+      + ' ' + (partsOf(nm).indexOf('2')>=0 ? '★2부로 갔다 ✗':'2부로는 안 감 ◎'));
+    undo();
+    // 팀을 추가하면?
+    addTeam('1', '06:20', 'OUT');
+    L('맨 앞에 팀을 넣으면', where(nm)
+      + ' ' + (partsOf(nm).indexOf('2')>=0 ? '★2부로 갔다 ✗':'2부로는 안 감 ◎'));
+    undo();
+    L('되돌림', where(nm));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

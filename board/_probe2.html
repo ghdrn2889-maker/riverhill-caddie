@@ -1,0 +1,55 @@
+<div id="PROBE"></div>
+<script>
+(function(){
+  var out = [];
+  function log(k, v){ out.push(k + ': ' + v); }
+  function slots(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot');
+    for (var i = 0; i < ks.length; i++)
+      a.push(ks[i].querySelector('.k').textContent + '=' + ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push(rs[i].querySelector('.num').textContent + rs[i].querySelector('b').textContent);
+    return a.join(' '); }
+  function byAttr(sel, at, v){ var bs = document.querySelectorAll(sel);
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute(at) === v) return bs[i]; return null; }
+  try {
+    log('처음', slots());
+    // 벌당에 세 명 넣기
+    openDuty('벌당');
+    var sug = document.querySelectorAll('#dutySug button');
+    var n1 = sug[0].textContent.replace('오늘 없음','');
+    sug[0].click();
+    openDuty('벌당'); document.querySelectorAll('#dutySug button')[0].click();
+    openDuty('벌당'); document.querySelectorAll('#dutySug button')[0].click();
+    log('세명', rows());
+    // 1번과 2번 자리 바꾸기
+    byAttr('#sheet button', 'data-dutymv', '0:1').click();
+    log('1↔2', rows());
+    // 3번을 위로
+    byAttr('#sheet button', 'data-dutymv', '2:-1').click();
+    log('2↔3', rows());
+    log('맨위 위로막힘', byAttr('#sheet button','data-dutymv','0:-1').disabled
+      + ' / 맨아래 아래로막힘=' + byAttr('#sheet button','data-dutymv','2:1').disabled);
+    log('배치표', slots());
+    // 칸 자체를 앞으로
+    byAttr('#sheet button', 'data-dtmv', '-1').click();
+    log('칸앞으로', slots());
+    log('시트자리', document.querySelector('#sheet .dnote:last-of-type').textContent);
+    byAttr('#sheet button', 'data-dtmv', '1').click();
+    log('칸뒤로', slots());
+    // 설정 화면에서도
+    openCfg();
+    document.querySelector('[data-ctab="dt"]').click();
+    var mvs = document.querySelectorAll('#cfg [data-dtmove]');
+    log('설정버튼수', mvs.length + ' / 첫줄위로막힘=' + mvs[0].disabled);
+    byAttr('#cfg button', 'data-dtmove', '흡연실 당번:-1').click();
+    log('설정에서옮김', slots());
+    // 되돌리기
+    undo();
+    log('되돌림', slots());
+    log('저장', document.getElementById('btnSave').textContent + ' / ' + document.getElementById('sbW').textContent);
+  } catch (e) { out.push('ERROR: ' + e.message); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

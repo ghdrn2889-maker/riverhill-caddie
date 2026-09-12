@@ -1,0 +1,48 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function shape(){
+    return DAY.map(function(p){
+      var a=active(p), named=a.filter(function(r){ return r.n; }).length;
+      var wait=0; for(var i=p.tees.length;i<a.length;i++) if(a[i].n) wait++;
+      return p.name+' 팀'+p.tees.length+' 줄'+a.length+' 이름'+named+' 대기'+wait;
+    }).join(' | ');
+  }
+  function tail(pk,n){ var p=part(pk),a=active(p),s=[];
+    for(var i=Math.max(0,a.length-n);i<a.length;i++)
+      s.push(seatNo(p,i)+'.'+(a[i].n||'(빔)')+(i<p.tees.length?'':'*대기'));
+    return s.join(' '); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('board'); paint();
+    L('명부', JONAMES.length+'명 · 3부반 '+bu3List().length+'명');
+    L('순번 후보', '하우스 '+lineupPool('house').length+'명 · 3부반 '+lineupPool('bu3').length+'명');
+    L('티오프 자리', DAY.map(function(p){ return p.name+' '+p.tees.length; }).join(' + ')
+      + ' = ' + DAY.reduce(function(s,p){ return s+p.tees.length; },0));
+
+    // ★배치표를 통째로 비운다 — '자리는 비움'으로 내일 넘긴 것과 같은 상태
+    DAY.forEach(function(p){ p.roster = []; });
+    OFFDUTY = JONAMES.slice(); ABSFROM = {};
+    paint();
+    L('', ''); L('비운 뒤', shape());
+
+    // ★1·2부 순번 세우기
+    applyLineup(seonbal(), ['1','2']); paint();
+    L('', ''); L('★1·2부 순번 세운 뒤', shape());
+    L('  1부 후보 대비', '하우스 후보 '+lineupPool('house').length
+      +'명 · 1·2부 티오프 '+(part('1').tees.length+part('2').tees.length)+'자리');
+    L('  2부 꼬리', tail('2', 8));
+    L('  3부', shape().split('|')[2]);
+
+    // ★3부 순번 세우기
+    applyLineup(bu3Start(), ['3']); paint();
+    L('', ''); L('★3부까지 세운 뒤', shape());
+    L('  3부 꼬리', tail('3', 10));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

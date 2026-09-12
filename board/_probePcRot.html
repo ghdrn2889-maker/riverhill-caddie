@@ -1,0 +1,92 @@
+<div id="PROBE"></div>
+<script>
+var ERRS=[]; window.addEventListener('error',function(e){ERRS.push(e.message+' @'+e.lineno);});
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function cell(pk,i){ return q('#col'+pk+' .cell[data-i="'+i+'"]'); }
+function nm(pk,i){ var c=cell(pk,i); return c?c.getAttribute('data-nm'):'?'; }
+function seats(pk,n){ var o=[]; for(var i=0;i<n;i++) o.push(nm(pk,i)); return o; }
+function bar(){ var b=q('#banner'); return b.classList.contains('on')
+  ? q('#bnTx').textContent.replace(/\s+/g,' ').trim() : '(숨음)'; }
+function pgo(){ var g=q('#bnGo'); return (g && !g.hidden) ? g : null; }
+function act(n){ return qa('#sheet button').filter(function(b){return b.getAttribute('data-act')===n;})[0]; }
+setTimeout(function(){
+  var o=[]; function log(k,v){ o.push(k+': '+v); }
+  try{
+    var b0=seats('2',6);
+    log('처음 2부', b0.join(', '));
+    log('띠 처음', bar());
+
+    // ① 칸 누름 → 창 → 집기
+    tap(cell('2',0));
+    log('칸 창', q('#sheet').classList.contains('on')? q('#sheet .st').textContent : '안 열림(문제)');
+    var sw=act('swap'); log('  단추', sw?'"'+sw.textContent+'"':'없음(문제)');
+    tap(sw);
+    log('집음', '창 '+(q('#sheet').classList.contains('on')?'열림(문제)':'닫힘 ◎')
+      +' · 띠 "'+bar()+'" · 돌리기단추 '+(pgo()?'있음(문제)':'없음 ◎')
+      +' · 집힌칸 '+qa('#cols .cell.pick').length);
+
+    // ② 같은 부 근무자를 얹는다
+    tap(cell('2',1));
+    log('둘 집음', '"'+bar()+'" · 단추 "'+(pgo()?pgo().textContent:'없음(문제)')+'"');
+    tap(cell('2',2));
+    log('셋 집음', '"'+bar()+'"');
+    log('  번호표', qa('#cols .cell .tag.pkn').map(function(e){return e.textContent;}).join(','));
+
+    // ③ 돌린다
+    tap(pgo());
+    var b1=seats('2',6);
+    log('돌림', b1.join(', ')
+      + ((b1[1]===b0[0]&&b1[2]===b0[1]&&b1[0]===b0[2])?' ◎':' ✗'));
+    log('  기록', LOG[0].msg);
+    log('  띠', bar()+' · 집힌칸 '+qa('#cols .cell.pick').length);
+    undo();
+    log('  되돌림', seats('2',3).join(', ')+(seats('2',3).join()===b0.slice(0,3).join()?' ◎':' ✗'));
+
+    // ④ 둘만 — 예전처럼 맞바꾸기
+    tap(cell('2',0)); tap(act('swap')); tap(cell('2',3));
+    log('둘', '"'+bar()+'"');
+    tap(pgo());
+    var b2=seats('2',6);
+    log('맞바꿈', b2.join(', ')+((b2[0]===b0[3]&&b2[3]===b0[0])?' ◎':' ✗'));
+    undo();
+
+    // ⑤ 다시 눌러 빼기 · 그만두기
+    tap(cell('2',0)); tap(act('swap')); tap(cell('2',1)); tap(cell('2',1));
+    log('빼기', '"'+bar()+'"');
+    tap(q('#bnCancel'));
+    log('그만두기', bar()+' · 집힌칸 '+qa('#cols .cell.pick').length+' · '+q('#toast').textContent);
+
+    // ⑥ Esc 로도
+    tap(cell('2',0)); tap(act('swap'));
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    log('Esc', bar());
+
+    // ⑦ 끌기는 여전히 둘을 바로
+    var A=cell('2',0), B=cell('2',4);
+    function pe(t,el,x,y){ el.dispatchEvent(new PointerEvent(t,{bubbles:true,cancelable:true,
+      pointerId:1,pointerType:'mouse',clientX:x,clientY:y,button:0,buttons:t==='pointerup'?0:1})); }
+    function mid(el){ var r=el.getBoundingClientRect(); return [r.left+r.width/2,r.top+r.height/2]; }
+    var pA=mid(A), pB=mid(B);
+    pe('pointerdown',A,pA[0],pA[1]);
+    pe('pointermove',A,pA[0]+10,pA[1]+10);
+    pe('pointermove',A,pB[0],pB[1]);
+    pe('pointerup',A,pB[0],pB[1]);
+    var b3=seats('2',6);
+    log('끌기', b3.join(', ')+((b3[0]===b0[4]&&b3[4]===b0[0])?' ◎ 바로 바뀜':' ✗'));
+    log('  기록', LOG[0].msg);
+    undo();
+
+    // ⑧ 부를 넘는 짝은 여전히 막히나
+    tap(cell('2',0)); tap(act('swap'));
+    var C=q('#col3 .cell[data-i="1"]');
+    if (C){ tap(C); log('3부 얹음', '"'+bar()+'"'); tap(pgo());
+      log('  결과', q('#toast').textContent); }
+    pickClear(); paint();
+
+    log('errs', ERRS.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},600);
+</script>

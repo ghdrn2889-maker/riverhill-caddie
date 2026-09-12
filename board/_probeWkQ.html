@@ -1,0 +1,61 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function type(v){ var i=q('#wkQ'); i.focus(); i.value=v; i.dispatchEvent(new Event('input',{bubbles:true})); }
+function names(){ return qa('.wrow').map(function(b){ return b.getAttribute('data-who'); }); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('work');
+    L('찾기 칸', q('#wkQ') ? '맨 위에 있음 ◎' : '없음 ✗');
+    L('  자리', (function(){ var l=q('.lineup') || q('.wfil');
+      if (!l) return '견줄 것이 없음';
+      return q('#wkQ').getBoundingClientRect().top < l.getBoundingClientRect().top
+        ? '목록보다 위 ◎':'아래 ✗'; })());
+    var all = names().length;
+    L('처음', all + '줄');
+    // ★한글이 써지려면 입력칸이 안 새로 만들어져야 한다 — 조합 중에 칸이 바뀌면 글자가 날아간다
+    var node0 = q('#wkQ');
+    type('ㄱ'); type('기'); type('김');
+    L('★한글 조합 흉내(ㄱ→기→김)', '입력칸이 '
+      + (q('#wkQ') === node0 ? '그대로 ◎ (조합이 안 깨진다)' : '새로 만들어짐 ✗ (한글이 깨진다)')
+      + ' · 값 "' + q('#wkQ').value + '"');
+    L('"김" 침', names().length + '줄 · 전부 김씨인가 '
+      + (names().every(function(n){ return n.indexOf('김')>=0; }) ? '◎':'✗')
+      + ' · 깜빡이 ' + (document.activeElement.id==='wkQ' ? '그대로 ◎':'달아남 ✗'));
+    // 거르개와 같이 걸리나
+    tap(qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')==='w'; })[0]);
+    L('거르개 근무 + "김"', names().length + '줄 · 전부 근무인가 '
+      + (names().every(function(n){ var r=workRows().filter(function(x){return x.n===n;})[0];
+          return r && r.cls==='w'; }) ? '◎':'✗')
+      + ' · 전부 김씨 ' + (names().every(function(n){ return n.indexOf('김')>=0; }) ? '◎':'✗')
+      + ' · 찾던 말 "' + q('#wkQ').value + '"');
+    tap(qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')===''; })[0]);
+    // 지움
+    tap(q('.wsr .x'));
+    L('지움', names().length + '줄 ' + (names().length===all ? '◎ 원래대로':'✗')
+      + ' · 값 "' + q('#wkQ').value + '"');
+    // 없는 이름
+    type('없는사람');
+    L('없는 이름', names().length + '줄 · ' + (q('.empty') ? q('.empty').textContent : '안내 없음'));
+    type('');
+    // 한꺼번에 지정과 같이
+    tap(qa('[data-bulk]').filter(function(b){ return b.getAttribute('data-bulk')==='휴무'; })[0]);
+    type('김');
+    var n0 = names()[0];
+    tap(qa('.wrow')[0]);
+    L('찾아서 바로 지정', n0 + ' → "' + (tagOf(n0)||'근무') + '" ' + (tagOf(n0)==='휴무'?'◎':'✗')
+      + ' · 찾던 말 "' + q('#wkQ').value + '" ' + (q('#wkQ').value==='김' ? '◎ 그대로':'✗')
+      + ' · 그 줄 표시 ' + (qa('.wrow.bsel').length ? '◎':'✗'));
+    L('  휴무만 보기', (function(){
+        tap(qa('[data-wfil]').filter(function(b){ return b.getAttribute('data-wfil')==='r'; })[0]);
+        return names().length + '줄 — ' + names().join(' '); })());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

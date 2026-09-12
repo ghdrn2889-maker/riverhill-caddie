@@ -1,0 +1,104 @@
+<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function nm(el){ if(!el) return '창밖';
+    return el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+
+      (el.className&&typeof el.className==='string'?'.'+el.className.trim().split(/\s+/).slice(0,2).join('.'):''); }
+  function lab(el){
+    var t=(el.textContent||el.value||el.placeholder||'').replace(/\s+/g,' ').trim().slice(0,10);
+    return (t||nm(el));
+  }
+  function shown(el){
+    if (el.checkVisibility) return el.checkVisibility({checkVisibilityCSS:true, opacityProperty:true});
+    return !!el.offsetParent;
+  }
+  // 한가운데를 찍어 본다 — 안 찍히면 왜 안 찍히는지 말한다
+  function why(el){
+    var r=el.getBoundingClientRect();
+    if(r.width<1||r.height<1) return '크기0';
+    var x=r.left+r.width/2, y=r.top+r.height/2;
+    if(x<0||y<0||x>innerWidth||y>innerHeight) return '창밖';
+    var h=document.elementFromPoint(x,y);
+    if(!h) return '창밖';
+    if(h!==el && !el.contains(h) && !h.contains(el)) return '가림←'+nm(h);
+    return '';
+  }
+  // ★굴려서 나오면 괜찮다. 굴려도 안 나오면 그게 진짜 사라진 것이다
+  function unreach(root){
+    if(!root) return null;
+    var out=[], seen={}, benign=0;
+    var c=root.querySelectorAll('button,input,select,textarea,a[href]');
+    for(var i=0;i<c.length;i++){
+      var el=c[i];
+      if(el.disabled || !shown(el)) continue;
+      var w=why(el);
+      if(!w) continue;
+      if(w!=='크기0'){
+        try{ el.scrollIntoView({block:'center', inline:'center'}); }catch(e){ try{ el.scrollIntoView(); }catch(e2){} }
+        var w2=why(el);
+        if(!w2){ benign++; continue; }          // 굴리니 나왔다 — 괜찮다
+        w = w2 + '(굴려도 안 나옴)';
+      }
+      var k=lab(el)+'|'+w; if(!seen[k]){ seen[k]=1; out.push(lab(el)+'['+w+']'); }
+    }
+    out.benign = benign;
+    return out;
+  }
+  function chk(tag, sel){
+    var root = sel? document.querySelector(sel) : document.querySelector('.stage');
+    var u = unreach(root);
+    if(u===null){ L(tag, '못 엶'); return 0; }
+    L(tag, (u.length? '★'+u.length+'개 — '+u.slice(0,6).join(' ') : '다 닿음 ◎')
+      + (u.benign? ' (굴려서 나온 것 '+u.benign+'개)' : ''));
+    return u.length;
+  }
+  function shut(){ try{ closeSheet(); }catch(e){}
+    try{ closeDrawer(); }catch(e){} try{ closeCfg(); }catch(e){} try{ closeLog(); }catch(e){}
+    [].slice.call(document.querySelectorAll('.sheet.on,.drw.on')).forEach(function(x){x.classList.remove('on');});
+    var s=document.getElementById('scrim'); if(s) s.classList.remove('on'); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); drawKsz(); caughtSeen(); paint();
+    setKsz(1); setKsz(1);                       // 아주 크게로 올려 놓고 잰다
+    document.getElementById('toast').classList.remove('on');   // 알림은 곧 사라진다 — 빼고 잰다
+    L('창', innerWidth+'x'+innerHeight+' · 글씨 '+$('kszNow').textContent+' · --k '+getComputedStyle(document.documentElement).getPropertyValue('--k').trim());
+    var tot=0;
+    setView('board'); paint(); tot+=chk('배치표 바탕');
+    setView('work'); paint(); tot+=chk('근무표 바탕');
+    setView('board'); paint();
+
+    var f=document.getElementById('findQ');
+    f.value='김'; f.dispatchEvent(new Event('input',{bubbles:true}));
+    var fds=[].slice.call(document.querySelectorAll('.fdrop')).filter(shown);
+    if(fds.length){
+      var r=fds[0].getBoundingClientRect();
+      L('이름찾기 목록', Math.round(r.width)+'x'+Math.round(r.height)+' 바닥'+Math.round(r.bottom)+'/'+innerHeight
+        +' · 겹 '+getComputedStyle(fds[0]).zIndex);
+      tot+=chk('  └ 그 안 단추', '.fdrop');
+    } else L('이름찾기 목록','안 열림');
+    f.value=''; f.dispatchEvent(new Event('input',{bubbles:true}));
+
+    [['칸 창',function(){openCell('3',1);}],
+     ['끼워넣기',function(){openInsert('3',1);}],
+     ['티오프 시각',function(){openTeeTime('3',0);}],
+     ['팀 늘리기',function(){openAddTeam('3');}],
+     ['날짜 고르기',function(){openDayPick();}],
+     ['선발 고르기',function(){openSeonbalPick('seonbal');}]].forEach(function(p){
+      shut(); paint(); try{ p[1](); }catch(e){ L(p[0],'못 엶 '+e.message); return; }
+      tot+=chk(p[0], '#sheet'); });
+
+    shut(); paint(); openDrawer(); tot+=chk('순번·명단 서랍', '#drw');
+    shut(); paint(); openCfg();    tot+=chk('설정', '#cfg');
+    shut(); paint(); openLog();    tot+=chk('고침 기록', '#logdrw');
+    shut(); paint();
+    L('', '');
+    L('★굴려도 못 닿는 단추', tot + '개');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

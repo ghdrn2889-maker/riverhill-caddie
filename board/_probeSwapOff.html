@@ -1,0 +1,62 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function offRow(nm){ return qa('#swOut [data-swapoff]').filter(function(b){
+  return b.getAttribute('data-swapoff')===nm; })[0]; }
+function seatOf(pk,nm){ var a=active(part(pk)).map(function(r){return r.n;});
+  var i=a.indexOf(nm); return i<0?'없음':(i+1)+'번'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); applyLineup(seonbal(),['1','2']); applyLineup(bu3Start(),['3']);
+
+    // 1부에서 뺀다
+    var nm = active(part('1'))[9].n;
+    delFromPart('1', nm);
+    L('1부에서 뺌', nm + ' · 부 ' + (partsOf(nm).join(',')||'없음'));
+
+    // 2부 칸을 열어 그 사람을 찾는다
+    openCell('2', 3);
+    var was = active(part('2'))[3].n;
+    swQ = nm; drawSwapList();
+    L('2부 4번 칸에서 찾기', nm + ' '
+      + (offRow(nm) ? '★보임 ◎ — "' + offRow(nm).textContent.replace(/\s+/g,' ').trim() + '"'
+                    : '안 보임 ✗'));
+    tap(offRow(nm));
+    L('  눌렀더니', nm + ' 2부 ' + seatOf('2',nm) + ' '
+      + (seatOf('2',nm)==='4번' ? '◎ 들어감':'✗')
+      + ' · 밀려난 ' + was + ' → ' + (partsOf(was).join(',')||'자리 없음'));
+    L('  기록', LOG[0].msg);
+    undo();
+    L('  되돌리기', nm + ' 2부 ' + seatOf('2',nm) + ' · ' + was + ' 2부 ' + seatOf('2',was));
+
+    // 휴무인 사람도 되나
+    var r2 = active(part('1'))[12].n;
+    setAbsent(r2, '휴무');
+    openCell('2', 5); swQ = r2; drawSwapList();
+    L('휴무인 사람', r2 + ' ' + (offRow(r2) ? '보임 ◎':'안 보임 ✗'));
+    tap(offRow(r2));
+    L('  넣으면', r2 + ' 2부 ' + seatOf('2',r2) + ' · 배지 "' + (tagOf(r2)||'없음') + '" '
+      + (tagOf(r2) ? '✗ 아직 휴무':'◎ 근무로 바뀜'));
+    undo(); undo();
+
+    // 미배치 사람도
+    var un = workRows().filter(function(r){ return r.cls==='u'; })[0];
+    if (un){
+      openCell('3', 0); swQ = un.n; drawSwapList();
+      L('미배치인 사람', un.n + ' ' + (offRow(un.n) ? '보임 ◎':'안 보임 ✗'));
+    } else L('미배치인 사람', '지금 없음');
+
+    // 자리에 앉은 사람은 그대로 뜨나
+    openCell('2', 1); swQ = ''; drawSwapList();
+    L('안 찾을 때 목록', qa('#swOut .hd2').map(function(h){
+      return h.textContent.split(' · ')[0]; }).join(' | '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

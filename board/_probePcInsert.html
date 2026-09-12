@@ -1,0 +1,54 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function a1(){ return active(part('1')).map(function(r){ return r.n; }); }
+  function at(n){ var i=a1().indexOf(n); return i<0?'없음':seatNo(part('1'), i)+'번'; }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard(); savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen(); setView('board'); paint();
+
+    // 조출을 하나 만든다 — 자리가 비워진다
+    var who = a1()[10];
+    setDayTag(who, '조출');
+    L('조출', who + ' · 자리 ' + (partsOf(who).join('')||'없음(비워짐)'));
+
+    var i = 19;
+    openCell('1', i);
+    var btn = document.querySelector('#sheet [data-act="ins"]');
+    L('★칸 창 단추', btn ? '"' + btn.textContent + '" ◎' : '없음 ✗');
+    btn.click();
+    var sh = document.getElementById('sheet');
+    L('★창', sh.querySelector('.st') ? '"' + sh.querySelector('.st').textContent + '" ◎' : '✗');
+    var heads = Array.prototype.map.call(sh.querySelectorAll('#insOut .hd2'), function(x){
+      return x.textContent.replace(/\s+/g,' ').trim(); });
+    L('  묶음', heads.join(' / '));
+    var mine = sh.querySelector('#insOut button[data-insn="' + who + '"]');
+    L('★' + who + ' 나오나', mine ? '나온다 ◎ — "' + mine.textContent.replace(/\s+/g,' ').trim() + '"' : '✗');
+
+    // 한글 치는 칸이 안 죽나
+    var box0 = document.getElementById('insQ');
+    insQ = '김'; drawInsList();
+    L('  찾기 칸', document.getElementById('insQ') === box0 ? '그대로 ◎ (한글 됨)' : '새로 만들어짐 ✗');
+    L('  "김"으로', document.querySelectorAll('#insOut button[data-insn]').length + '명');
+    insQ = ''; drawInsList();
+
+    // 눌러 넣기
+    var N0 = a1().length, was20 = a1()[19];
+    document.querySelector('#insOut button[data-insn="' + who + '"]').click();
+    L('', '');
+    L('★넣은 뒤 ' + who, at(who) + (at(who)==='20번'?' ◎':' ✗'));
+    L('  20번에 있던 ' + was20, at(was20) + (at(was20)==='21번'?' ◎ 한 칸 밀림':' ✗'));
+    L('  1부 인원', N0 + ' → ' + a1().length + (a1().length===N0+1?' ◎':' ✗'));
+    L('  기록', LOG[0] ? LOG[0].msg : '없음');
+    L('  창', sh.classList.contains('on') ? '열림' : '닫힘 ◎');
+
+    // 순번 세우기가 안 건드리나
+    applyLineup(seonbal(), ['1','2']);
+    L('  ★순번 세운 뒤', at(who) + (at(who)==='20번'?' ◎ 그대로':' ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

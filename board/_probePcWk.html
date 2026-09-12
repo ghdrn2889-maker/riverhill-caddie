@@ -1,0 +1,27 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    setView('work');
+    var cols=qa('#workTable .jocol');
+    for (var g=0; g<JOCNT; g++){
+      var want=joMembers(g);
+      var got=cols[g]? Array.prototype.map.call(cols[g].querySelectorAll('.wrow .n'),function(e){return e.textContent;}) : [];
+      var same = want.length===got.length && want.every(function(n,i){return n===got[i];});
+      L(JOLABEL[g], (same?'원본과 같음 ◎ ':'다름 ✗ ')+got.length+'명'+(g===0?' · '+got.slice(0,9).join(', '):''));
+    }
+    L('칸 머리', qa('#workTable .johd').map(function(e){return e.textContent;}).join(' | '));
+    // 거르개
+    var f=qa('#workTable .wfil button')[1]; if(f) f.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    var c0=qa('#workTable .jocol')[0];
+    var got2=Array.prototype.map.call(c0.querySelectorAll('.wrow .n'),function(e){return e.textContent;});
+    var want2=joMembers(0).filter(function(n){return got2.indexOf(n)>=0;});
+    L('근무만', (want2.join()===got2.join()?'차례 유지 ◎ ':'흐트러짐 ✗ ')+got2.length+'명');
+    L('errs', E.join(' | ')||'none');
+  }catch(e){ o.push('ERROR: '+e.message+' | '+(e.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},600);
+</script>

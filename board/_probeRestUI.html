@@ -1,0 +1,67 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function tap(el){ if(!el) return false; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+function shot(){ return qa('#sheet .grp').map(function(g){
+  return g.querySelector('h4').textContent+'['+
+    Array.prototype.slice.call(g.querySelectorAll('.acts button')).map(function(b){
+      return b.textContent; }).join(',')+']'; }).join('  ||  '); }
+function H(){ return Math.round(q('#sheet').getBoundingClientRect().height); }
+function pos(){ return qa('#sheet .grp').map(function(g){
+  var r=g.getBoundingClientRect();
+  return g.querySelector('h4').textContent+'@'+Math.round(r.top); }).join(' / '); }
+function absPos(){ return qa('#sheet button[data-abs]').map(function(b){
+  return b.textContent+'@'+Math.round(b.getBoundingClientRect().left); }).join(' '); }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  try{
+    // 켤 때 그날의 구분이 지워지므로, 시험할 조출을 직접 붙인다
+    if (!JONAMES.filter(function(n){ return tagOf(n)==='조출'; }).length){
+      active(part('1')).map(function(r){return r.n;})
+        .filter(function(n){ return !tagOf(n); }).slice(0,3)
+        .forEach(function(n){ setDayTag(n, '조출'); });
+    }
+    setView('work');
+    var nm=active(part('1'))[5].n;
+    openPerson(nm);
+    L('휴무 전 · 창높이 '+H()+'px', shot());
+    var P0=pos(), A0=absPos();
+    L('  칸 세로 자리', P0);
+    L('  근태 단추', A0);
+    var rows0=workTally().rows.length;
+    var f0=qa('[data-wfil]').map(function(b){return b.textContent;}).join(' | ');
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='휴무';})[0]);
+    L('휴무 후 · 창높이 '+H()+'px', shot());
+    L('  칸 세로 자리', pos()+(pos()===P0?'  → 그대로 ◎':'  → 움직임 ✗'));
+    L('  근태 단추', absPos()+(absPos()===A0?'  → 그대로 ◎':'  → 움직임 ✗'));
+    L('  꺼진 칸', qa('#sheet button.dim').map(function(b){
+        return b.textContent+(b.disabled?'(못 누름)':'(눌림 ✗)'); }).join(' | ')||'없음(문제)');
+    tap(q('#sheet button[data-act="close"]')||q('#sheet .close'));
+    setView('work');
+    L('근무표 줄 수', rows0+' → '+workTally().rows.length);
+    L('  거르개 전', f0);
+    L('  거르개 후', qa('[data-wfil]').map(function(b){return b.textContent;}).join(' | '));
+    var r=workTally().rows.filter(function(x){return x.n===nm;})[0];
+    L('  그 사람 줄', r? r.st+'('+r.cls+') — 근무표에는 남아 있음':'사라짐 ★');
+
+    // 배지 있는 사람의 '근무' 단추 — 조출을 지우면 안 된다
+    var jc=JONAMES.filter(function(n){ return tagOf(n)==='조출'; })[0];
+    openPerson(jc);
+    var on0=qa('#sheet button[data-abs].on').map(function(b){return b.textContent;}).join(',');
+    L('조출인 사람', jc+' · 켜진 단추 "'+on0+'"');
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='';})[0]);
+    L('  근무를 눌러도', '배지 '+(tagOf(jc)==='조출'?'조출 그대로 ◎':'"'+tagOf(jc)+'"로 지워짐 ✗')
+      + ' · 알림 "'+q('#toast').textContent+'"');
+    // 휴무 → 근무 는 정상 동작해야
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='휴무';})[0]);
+    L('  휴무 붙임', tagOf(jc)+' · 자리 '+(partsOf(jc).join(',')||'없음'));
+    tap(qa('#sheet button[data-abs]').filter(function(b){return b.getAttribute('data-abs')==='';})[0]);
+    L('  다시 근무', '배지 "'+(tagOf(jc)||'없음')+'" · 자리 '+(partsOf(jc).join(',')||'없음')
+      + (tagOf(jc)==='조출'? ' → 조출이 되살아남 ◎':' → 조출 안 살아남 ✗'));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

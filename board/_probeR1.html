@@ -1,0 +1,43 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = []; window.addEventListener('error', function(e){ ERRS.push(e.message + ' @' + e.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+  function rows(){ return document.querySelectorAll('#drwBody .rrow'); }
+  function list(n){ var a = [], rs = rows();
+    for (var i = 0; i < Math.min(n || 8, rs.length); i++)
+      a.push(rs[i].querySelector('.rp').textContent + rs[i].querySelector('.rn').textContent);
+    return a.join(' '); }
+  function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+    pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+  function drag(f, to, below){
+    var g = f.querySelector('[data-grip]');
+    var a = f.getBoundingClientRect(), b = to.getBoundingClientRect();
+    var ty = below ? b.bottom - 2 : b.top + 2;
+    pe('pointerdown', g, a.left + 5, a.top + a.height / 2);
+    pe('pointermove', g, a.left + 5, ty);
+    pe('pointerup', g, a.left + 5, ty);
+  }
+  (async function(){
+    try {
+      openDrawer();
+      log('손잡이', document.querySelectorAll('#drwBody .rrow [data-grip]').length + '개 / 줄 '
+        + rows().length + '개');
+      log('처음', list(6));
+      // ① 5번째를 맨 위로
+      var rs = rows();
+      var nm = rs[4].querySelector('.rn').textContent;
+      drag(rs[4], rs[0], false);
+      await wait(40);
+      log('5번째 → 맨 위', list(6));
+      log('기록', (document.querySelector('#logsec .li span') || {textContent:'-'}).textContent);
+      // ② 배치표에도 반영됐나
+      var c0 = document.querySelector('#col' + drwPart + ' [data-pk][data-i]');
+      log('배치표 1번', c0 ? c0.getAttribute('data-nm') : '?');
+      log('errs', ERRS.join(' | ') || 'none');
+    } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+    document.getElementById('PROBE').textContent = out.join('  ;;  ');
+  })();
+})();
+</script>

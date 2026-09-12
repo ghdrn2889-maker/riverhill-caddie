@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    o.push('처음 켠 기준: ' + ROUNDMIN + '분 = ' + gapText(ROUNDMIN)
+      + ' ' + (ROUNDMIN === 270 ? '◎' : '✗'));
+    o.push('설정에 담기나: ' + (function(){
+      try{ var c = JSON.parse(localStorage.getItem('board.cfg.v3')||'{}');
+        return 'rmin=' + (c.rmin === undefined ? '아직 없음(기본값 씀)' : c.rmin); }
+      catch(e){ return '못 읽음'; } })());
+    cfgSave();
+    o.push('  저장 뒤: ' + (function(){
+      var c = JSON.parse(localStorage.getItem('board.cfg.v3')||'{}');
+      return 'rmin=' + c.rmin + ' ' + (c.rmin === 270 ? '◎' : '✗'); })());
+  }catch(e){ o.push('터짐 '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},900);
+</script>

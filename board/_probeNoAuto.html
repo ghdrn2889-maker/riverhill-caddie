@@ -1,0 +1,85 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seatOf(n){                       // 배치표에서 몇 번 자리에 앉았나
+    var out=[];
+    DAY.forEach(function(p){
+      var a=active(p);
+      a.forEach(function(r,i){
+        if(r.n!==n) return;
+        out.push(p.name+' '+(i+1)+'번'+(i<p.tees.length ? ' · '+p.tees[i].time+' 티오프' : ' · 대기'));
+      });
+    });
+    return out.join(' / ')||'없음';
+  }
+  function shape(pk){
+    var p=part(pk), a=active(p);
+    return '팀 '+p.tees.length+' · 명단 '+a.length
+      +' · 앉은 사람 '+a.slice(0,p.tees.length).filter(function(r){return r.n;}).length
+      +' · 빈 칸 '+a.slice(0,p.tees.length).filter(function(r){return !r.n;}).length
+      +' · 대기 '+Math.max(0,a.length-p.tees.length);
+  }
+  function reset(){
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+  }
+  try{
+    reset();
+    // 판을 통째로 비운다 — 홍구님이 아침에 보는 상태
+    DAY.forEach(function(p){ p.roster=[]; });
+    OFFDUTY=JONAMES.slice(); ABSFROM={};
+    L('★아침 상태 (팀만 있고 사람은 없다)','');
+    DAY.forEach(function(p){ L('  '+p.name, shape(p.key)); });
+
+    // ── 갑. 부에 넣어도 티오프를 안 뺏는다
+    var A=JONAMES[0];
+    o.push(''); L('★갑. '+A+'를 1부에 넣는다','');
+    addRow('1', A);
+    ok(/대기/.test(seatOf(A)),'  '+A+' 자리', seatOf(A));
+    L('  1부 모양', shape('1'));
+    L('  기록', LOG[0]?LOG[0].msg:'(없음)');
+
+    // ── 을. 여럿을 넣어도 마찬가지
+    o.push(''); L('★을. 넷을 더 넣는다','');
+    [1,2,3,4].forEach(function(i){ addRow('1', JONAMES[i]); });
+    var seated=active(part('1')).slice(0,part('1').tees.length).filter(function(r){return r.n;});
+    ok(seated.length===0,'  티오프를 차지한 사람', seated.length? '★'+seated.map(function(r){return r.n;}).join('·') : '없음');
+    L('  1부 모양', shape('1'));
+
+    // ── 병. 관리자가 손으로 앉히면 올라간다
+    o.push(''); L('★병. 관리자가 1번 티오프에 손으로 앉힌다','');
+    seatPerson("1", 0, A);
+    ok(/1번 · /.test(seatOf(A))&&!/대기/.test(seatOf(A)),'  '+A+' 자리', seatOf(A));
+    L('  1부 모양', shape('1'));
+
+    // ── 정. 순번 세우기는 그대로 채운다
+    reset();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={};
+    o.push(''); L('★정. 빈 판에서 순번 세우기','');
+    addRow('1', A);                                  // 대기에 하나 넣어 두고
+    applyLineup(seonbal(), ['1','2']);
+    var p1=part('1'), a1=active(p1);
+    var filled=a1.slice(0,p1.tees.length).filter(function(r){return r.n;}).length;
+    ok(filled===p1.tees.length,'  1부 티오프가 다 찼나', filled+'/'+p1.tees.length);
+    L('  1부 모양', shape('1'));
+    L('  앞 5명', a1.slice(0,5).map(function(r,i){return (i+1)+'.'+(r.n||'빈칸');}).join(' '));
+
+    // ── 무. 팀을 지우면 빈 줄이 대기로 안 흘러내린다
+    reset();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={};
+    o.push(''); L('★무. 넣은 뒤 팀을 지운다','');
+    addRow('2', A);
+    L('  지우기 전 2부', shape('2'));
+    delTeam('2', 0); delTeam('2', 0);
+    ok(active(part('2')).filter(function(r){return !r.n;}).length===0
+       || shape('2').indexOf('대기 1')>=0,'  지운 뒤 2부', shape('2'));
+    ok(/대기/.test(seatOf(A)),'  '+A+' 자리', seatOf(A));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

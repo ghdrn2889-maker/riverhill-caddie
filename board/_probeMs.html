@@ -1,0 +1,64 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function click(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+function slots(){ return qa('#staffBox .slot'); }
+function tmOf(b){ var e=b.querySelector('.tm2'); return e? e.textContent.trim() : '(칸 없음)'; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; bootLoad(); caughtSeen();
+    setStaff(2, '우겸조', '05:40'); setStaff(3, '허웅진', '12:30');
+    setView('work'); paint();
+
+    L('','★갑. 시각 적히나');
+    slots().forEach(function(b, i){ L('  ' + STAFF[i].k + ' ' + (STAFF[i].n||'(빈)'), '"' + tmOf(b) + '"'); });
+    ok(tmOf(slots()[0]) === '' && tmOf(slots()[1]) === '', '  ★대리·주임 시각', '둘 다 비었나');
+    ok(tmOf(slots()[2]) === '05:40', '  마샬은 남나', tmOf(slots()[2]));
+
+    L('','★을. 마샬 늘리기');
+    var n0 = marshalSlots();
+    var add = document.querySelector('#staffBox [data-msadd]');
+    L('  단추', add ? '"' + add.textContent.trim() + '"' : '★없음');
+    click(add); paint();
+    L('  늘린 뒤', marshalSlots() + '칸 (전 ' + n0 + ') · 마지막 ' + STAFF[STAFF.length-1].k
+      + ' "' + (STAFF[STAFF.length-1].n || '비어 있음') + '"');
+    ok(marshalSlots() === n0 + 1, '  ★한 칸 늘었나', n0 + ' → ' + marshalSlots());
+    ok(!STAFF[STAFF.length-1].n, '  새 칸은 비었나', '"' + STAFF[STAFF.length-1].n + '"');
+
+    L('','★병. 새 칸에 사람 넣기');
+    setStaff(STAFF.length-1, '김수룡', '09:00'); paint();
+    L('  넣은 뒤', STAFF.map(function(x,i){ var r=staffRole(i);
+      return x.k+' '+(x.n||'(빈)')+(r?'['+r.t+']':''); }).join(' | '));
+
+    L('','★정. 칸 없애기');
+    openSlot('staff', STAFF.length-1);
+    var del = document.querySelector('.sheet [data-act="msdel"]');
+    L('  서랍 단추', del ? '"' + del.textContent.trim() + '"' : '★없음');
+    var n1 = marshalSlots();
+    click(del); paint();
+    L('  없앤 뒤', marshalSlots() + '칸 (전 ' + n1 + ')');
+    ok(marshalSlots() === n1 - 1, '  ★한 칸 줄었나', n1 + ' → ' + marshalSlots());
+    ok(!STAFF.some(function(x){ return x.n === '김수룡'; }), '  그 사람도 빠졌나', '◎');
+    ok(tagOf('김수룡') !== '배치', '  배치 배지도 떨어졌나', '"' + (tagOf('김수룡')||'없음') + '"');
+
+    L('','★무. 대리 칸에는 없애기가 없나');
+    openSlot('staff', 0);
+    ok(!document.querySelector('.sheet [data-act="msdel"]'), '  대리 서랍',
+       document.querySelector('.sheet [data-act="msdel"]') ? '★있음' : '없음 ◎');
+    ok(!document.getElementById('slotTime'), '  대리 시각 칸', document.getElementById('slotTime')?'★있음':'없음 ◎');
+    click(document.querySelector('.sheet [data-act="close"]'));
+
+    L('','★바. 되돌리기');
+    var n2 = marshalSlots();
+    addMarshal(); paint();
+    undo(); paint();
+    ok(marshalSlots() === n2, '  늘린 것을 되돌리나', n2 + ' → ' + marshalSlots());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

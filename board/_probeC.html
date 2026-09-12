@@ -1,0 +1,62 @@
+<div id="PROBE"></div>
+<script>
+var ERRS = [];
+window.addEventListener('error', function(ev){ ERRS.push(ev.message + ' @' + ev.lineno); });
+(function(){
+  var out = []; function log(k, v){ out.push(k + ': ' + v); }
+  function slots(){ var a = [], ks = document.querySelectorAll('#dutyBox .slot');
+    for (var i = 0; i < ks.length; i++)
+      a.push(ks[i].querySelector('.k').textContent + '=' + ks[i].querySelector('.v').textContent);
+    return a.join(' , '); }
+  function rows(){ var a = [], rs = document.querySelectorAll('#sheet .drow');
+    for (var i = 0; i < rs.length; i++)
+      a.push(rs[i].querySelector('.num').textContent + rs[i].querySelector('b').textContent
+        + '@' + (rs[i].querySelector('.dtm') || {value:'-'}).value);
+    return a.join(' '); }
+  function pe(t, el, x, y){ el.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true,
+    pointerId:1, pointerType:'mouse', clientX:x, clientY:y, button:0, buttons: t === 'pointerup' ? 0 : 1})); }
+  function drag(f, to, below){ var g = f.querySelector('[data-grip]');
+    var a = f.getBoundingClientRect(), b = to.getBoundingClientRect();
+    var ty = below ? b.bottom - 2 : b.top + 2;
+    pe('pointerdown', g, a.left + 5, a.top + a.height / 2);
+    pe('pointermove', g, a.left + 5, ty); pe('pointerup', g, a.left + 5, ty); }
+  function act(n){ var bs = document.querySelectorAll('#sheet button');
+    for (var i = 0; i < bs.length; i++) if (bs[i].getAttribute('data-act') === n) return bs[i]; return null; }
+  try {
+    log('처음', slots());
+    openDuty('벌당');
+    log('기본시각', document.getElementById('dutyT').value);
+    document.querySelectorAll('#dutySug button')[0].click();
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('두명', rows());
+    var tm = document.querySelectorAll('#sheet .dtm')[1];
+    tm.value = '07:00'; tm.dispatchEvent(new Event('change', {bubbles:true}));
+    log('시각고침', rows());
+    log('배치표', slots());
+    var rs = document.querySelectorAll('#sheet .drow');
+    drag(rs[0], rs[1], true);
+    log('차례바꿈', rows() + ' || ' + slots());
+    document.getElementById('dutyT').value = '';
+    document.getElementById('dutyQ').value = '김홍구';
+    act('dutyadd').click();
+    log('시각없이', rows() + ' || ' + slots());
+    openCfg(); document.querySelector('[data-ctab="dt"]').click();
+    var d = document.querySelectorAll('#cfg [data-dtdef]');
+    log('설정칸', d.length + ' / ' + d[0].value + ' , ' + d[1].value + ' , [' + d[2].value + ']');
+    d[2].value = '09:30'; d[2].dispatchEvent(new Event('change', {bubbles:true}));
+    log('설정줄', (function(){ var e = document.querySelectorAll('#cfg .crow[data-dtrow] .lb');
+      return e[0].textContent + ' / ' + e[1].textContent; })());
+    closeCfg();
+    openDuty('흡연실 당번');
+    log('새기본', '[' + document.getElementById('dutyT').value + ']');
+    document.querySelectorAll('#dutySug button')[0].click();
+    log('흡연실', rows() + ' || ' + slots());
+    undo(); log('되돌림', slots());
+    daySave();
+    log('저장', document.getElementById('btnSave').textContent
+      + ' / ' + (localStorage.getItem('board.day.v3') || '').length + 'B');
+    log('errs', ERRS.join(' | ') || 'none');
+  } catch (e) { out.push('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = out.join('  ;;  ');
+})();
+</script>

@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[]; function L(s){ o.push(s); }
+  try{
+    localStorage.clear(); CARRY.seats = true; resetToBoard();
+    savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
+    bootLoad(); caughtSeen();
+    var w=JONAMES.filter(function(n){
+      return !tagOf(n) && partsOf(n).length===1 && partsOf(n)[0]!=='3'; })[0];
+    L('w='+w+' 자리='+partsOf(w).join(','));
+    var to = partsOf(w)[0]==='1' ? '2' : '1';
+    L('넣을 부='+to+' · 그 부 0번 임자='+((active(part(to))[0]||{}).n||'(없음)'));
+    var r = seatPerson(to, 0, w);
+    L('seatPerson 값='+r);
+    L('뒤 자리='+partsOf(w).join(',')+' 못='+(dupPinned(w)?'박힘':'없음'));
+    L('기록='+(LOG[0]?LOG[0].msg:'(없음)'));
+  }catch(e){ o.push('터짐: '+e.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

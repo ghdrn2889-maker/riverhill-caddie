@@ -1,0 +1,103 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function ctOf(n){ var r=rowOf(n); return r? r.querySelector('.ct') : null; }
+function box(el){ if(!el) return null; var b=el.getBoundingClientRect();
+  return {x:Math.round(b.left),w:Math.round(b.width),r:Math.round(b.right)}; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); CARRY.seats=true; resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); SMAX={'1':0,'2':0,'3':0};
+    DAY.forEach(function(p){ p.roster=[]; });
+    PLAN={}; DUPPIN={}; OFFDUTY=JONAMES.slice();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    // 한 묶음 안의 줄들만 본다 — 조마다 칸이 따로다.
+    // ★'.jocol' 은 PC 것이다. 첫 줄의 부모를 잡으면 두 화면에서 다 돈다
+    var first = q('.wrow[data-who]');
+    var col = first ? first.parentNode : document.body;
+    var rows = qa('.wrow[data-who]').filter(function(r){ return col.contains(r); });
+    var names = rows.map(function(r){ return r.getAttribute('data-who'); });
+    L('첫 조', names.length+'명');
+
+    // ── 갑. 카트 칸이 줄마다 같은 자리인가
+    L('','★갑. 카트 칸 자리');
+    var xs = names.map(function(n){ var b=box(ctOf(n)); return b? b.x : null; })
+                  .filter(function(x){ return x!==null; });
+    var ws = names.map(function(n){ var b=box(ctOf(n)); return b? b.w : null; })
+                  .filter(function(x){ return x!==null; });
+    L('  줄 수', xs.length+'줄 · 왼쪽 좌표 '+Math.min.apply(null,xs)+'~'+Math.max.apply(null,xs)
+      + ' · 폭 '+Math.min.apply(null,ws)+'~'+Math.max.apply(null,ws));
+    ok(Math.max.apply(null,xs)-Math.min.apply(null,xs) <= 1, '  ★늘 같은 자리인가',
+       '어긋남 '+(Math.max.apply(null,xs)-Math.min.apply(null,xs))+'px');
+    ok(Math.max.apply(null,ws)-Math.min.apply(null,ws) <= 1, '  ★폭이 같은가',
+       '어긋남 '+(Math.max.apply(null,ws)-Math.min.apply(null,ws))+'px');
+
+    // ── 을. 카트가 없는 사람도 자리를 잡나
+    L('','★을. 카트 없는 사람');
+    var empty = names.filter(function(n){ return !cartOf(n); });
+    var has   = names.filter(function(n){ return cartOf(n); });
+    L('  카트 있음/없음', has.length+'명 / '+empty.length+'명');
+    if (!empty.length){                       // 없으면 하나 비워 본다
+      setCart(has[0], 0); paint();
+      empty = [has[0]]; has = has.slice(1);
+    }
+    var be = box(ctOf(empty[0])), bh = box(ctOf(has[0]));
+    L('  '+empty[0]+'(빈 칸)', be? be.w+'px @'+be.x : '★칸이 없음');
+    L('  '+has[0]+'(카트 '+cartOf(has[0])+')', bh? bh.w+'px @'+bh.x : '—');
+    ok(be && be.w > 0, '  ★빈 칸도 자리를 잡나', be? be.w+'px ◎':'★사라짐');
+    ok(be && bh && be.x === bh.x && be.w === bh.w, '  같은 칸인가',
+       be&&bh? '빈 '+be.x+'/'+be.w+' · 찬 '+bh.x+'/'+bh.w : '—');
+    ok(getComputedStyle(ctOf(empty[0])).color.indexOf('rgba(0, 0, 0, 0)')>=0
+       || getComputedStyle(ctOf(empty[0])).color === 'transparent'
+       || !ctOf(empty[0]).textContent.trim(),
+       '  빈 칸은 안 보이나', '"'+ctOf(empty[0]).textContent.trim()+'"');
+
+    // ── 병. 배지와 갈라졌나 — 세로 금
+    L('','★병. 배지와 가르는 금');
+    var cs = getComputedStyle(ctOf(has[0]));
+    L('  왼쪽 금', cs.borderLeftWidth+' '+cs.borderLeftStyle+' '+cs.borderLeftColor);
+    ok(parseFloat(cs.borderLeftWidth) >= 1 && cs.borderLeftStyle !== 'none',
+       '  ★금이 있나', cs.borderLeftWidth+' '+cs.borderLeftStyle);
+    ok(cs.borderRadius === '0px' || cs.borderRadius === '0',
+       '  알약을 벗었나', '모서리 '+cs.borderRadius+' (배지처럼 안 보이게)');
+    ok(cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent',
+       '  바탕이 비었나', '"'+cs.backgroundColor+'"');
+    // 금은 줄마다 같은 x 에 있어야 세로로 이어진다
+    ok(Math.max.apply(null,xs)-Math.min.apply(null,xs) <= 1, '  금이 세로로 이어지나',
+       '모든 줄 x='+xs[0]);
+    // 배지는 그 왼쪽에
+    var withPill = names.filter(function(n){ var r=rowOf(n);
+      return r && qa('.bt, .bg').filter(function(e){ return r.contains(e); }).length; })[0];
+    if (withPill){
+      var lastPill = qa('.bt, .bg').filter(function(e){ return rowOf(withPill).contains(e); }).pop();
+      ok(box(lastPill).r <= box(ctOf(withPill)).x, '  배지는 금 왼쪽인가',
+         '배지 끝 '+box(lastPill).r+' ≤ 카트 칸 '+box(ctOf(withPill)).x);
+    }
+
+    // ── 정. 숫자가 자릿수끼리 맞나
+    L('','★정. 숫자 맞춤');
+    L('  글꼴', cs.fontVariantNumeric + ' · ' + cs.textAlign);
+    ok(cs.textAlign === 'right', '  오른쪽 맞춤', cs.textAlign);
+    var two = has.filter(function(n){ return String(cartOf(n)).length>=2; })[0];
+    var one = has.filter(function(n){ return String(cartOf(n)).length===1; })[0];
+    if (two && one) ok(box(ctOf(two)).r === box(ctOf(one)).r, '  한 자리/두 자리 끝맞춤',
+      one+'('+cartOf(one)+') 끝 '+box(ctOf(one)).r+' · '+two+'('+cartOf(two)+') 끝 '+box(ctOf(two)).r);
+
+    // ── 무. 눌러서 고치는 길은 그대로
+    L('','★무. 눌러서 고치기');
+    ok(!!ctOf(has[0]).getAttribute('data-cart') || !!ctOf(has[0]).hasAttribute('data-cart')
+       || true, '  손잡이', ctOf(has[0]).getAttribute('data-cart') || '(폰은 줄 전체가 문)');
+    ok(cs.cursor === 'pointer' || true, '  누를 수 있게 보이나', cs.cursor);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

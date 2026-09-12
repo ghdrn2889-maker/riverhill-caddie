@@ -1,0 +1,50 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function tap(el){ el.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint(); fit();
+
+    L('★한꺼번에 지정을 새 자리에서 눌러 본다','');
+    var box=document.querySelector('#railSum .wkbR .bulk');
+    L('  오른쪽 칸 안에 있나', box? '있음 ◎' : '★없음 — 구조가 틀어졌다');
+
+    var chips=[].slice.call(document.querySelectorAll('#railSum .wkbR .bulk .bch'));
+    L('  배지 단추', chips.map(function(c){return c.textContent.trim();}).join(' '));
+
+    var hu=chips.filter(function(c){return c.getAttribute('data-bulk')==='휴무';})[0];
+    L('  휴무 단추', hu? '찾음' : '★못 찾음');
+    tap(hu);
+    L('  누른 뒤 켜졌나', (bulkOn()&&bulkTag()==='휴무') ? '◎ 휴무 지정 중' : '★안 켜짐 '+bulkTag());
+    L('  아래 띠(bulkbar)', $('bulkbar').classList.contains('on') ? '◎ 떴다' : '★안 뜸');
+
+    // 이름을 눌러 붙인다
+    var row=document.querySelector('#workTable .wrow[data-who]');
+    var who=row&&row.getAttribute("data-who");
+    L('','');
+    L('★명단에서 이름 누르기', who||'(못 찾음)');
+    if(row){ tap(row); L('  '+who+' 배지', tagOf(who)==='휴무' ? '◎ 휴무' : '★'+(tagOf(who)||'없음')); }
+
+    // 저장
+    var sv=$('bulkbar').querySelector('[data-act="bkkeep"],[data-act="bksave"],button.go');
+    L('','');
+    L('★아래 띠 단추', [].slice.call($('bulkbar').querySelectorAll('button'))
+        .map(function(b){return b.textContent.trim()+'('+(b.getAttribute('data-act')||'')+')'
+          +(b.disabled?'·잠김':'');}).join(' · '));
+
+    // 확대해도 다 보이나 — 레일 바닥을 넘어가는 것이 있나
+    var rr=$('railSum').getBoundingClientRect();
+    var over=chips.filter(function(c){return c.getBoundingClientRect().bottom-rr.bottom>2;});
+    L('','');
+    L('레일 밖으로 밀린 배지 단추', over.length? '★'+over.length+'개' : '없음 ◎');
+    L('레일 속 굴림', $('railSum').scrollHeight-$('railSum').clientHeight>2
+      ? '★있음 '+($('railSum').scrollHeight-$('railSum').clientHeight)+'px 이 숨는다' : '없음 ◎');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>
