@@ -35,6 +35,111 @@ var CGTKEY = 'board.caught.v3';     // 그 알림은 읽을 때까지 남는다
 function lsGet(k){ try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsPut(k, v){ try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 function lsDel(k){ try { localStorage.removeItem(k); } catch (e) {} }
+
+// ══ 서버 창구 — 정본은 서버에 있다 ══════════════════════════════
+// ★이 화면은 두 자리에서 돈다.
+//   ① 파일 하나로 열었을 때(file://) — 서버가 없다. 여태처럼 브라우저에만 적는다.
+//   ② 경기과 방(http://…) — 정본은 서버다. 브라우저는 손에 든 사본일 뿐이다.
+// 그래서 여태 돌던 저장 길은 손대지 않고, 그 위에 '서버에도 올린다'를 얹었다.
+// 길을 갈아엎지 않아야 고칠 때마다 화면이 안 깨진다.
+var SRV = { on: false, sig: {}, clash: '', err: '' };
+
+function srvOn(){ return !!SRV.on; }
+// 날짜는 숫자 여덟 자리로만 주고받는다 — 주소에 한글을 넣으면 글자가 깨진다
+function dayKey(d){ var t = String(d || '').replace(/[^0-9]/g, ''); return t.length >= 8 ? t.slice(0, 8) : ''; }
+function dayLabel(k){ return k.slice(0, 4) + '년 ' + k.slice(4, 6) + '월 ' + k.slice(6, 8) + '일'; }
+function isoHM(s){
+  try { var d = new Date(s); if (isNaN(d.getTime())) return '';
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); } catch (e) { return ''; }
+}
+function srvReq(method, p, payload, done){
+  try {
+    var x = new XMLHttpRequest();
+    x.open(method, p, true);
+    x.timeout = 8000;
+    if (payload) x.setRequestHeader('Content-Type', 'application/json');
+    x.onreadystatechange = function(){
+      if (x.readyState !== 4) return;
+      var o = null; try { o = JSON.parse(x.responseText || 'null'); } catch (e) {}
+      done(x.status, o);
+    };
+    x.ontimeout = function(){ done(0, null); };
+    x.onerror   = function(){ done(0, null); };
+    x.send(payload ? JSON.stringify(payload) : null);
+  } catch (e) { done(0, null); }
+}
+
+// ★켤 때 — 서버가 있으면 서버 것을 먼저 브라우저 칸에 심고 나서 여느 때처럼 켠다.
+//   서버가 없으면(파일로 열었을 때) 곧바로 여느 때처럼 켠다. 시간차도 안 생긴다
+function srvBoot(done){
+  if (!/^https?:$/.test(location.protocol)) { SRV.on = false; done(); return; }
+  srvReq('GET', 'api/days', null, function(st, o){
+    if (st !== 200 || !o || !o.ok) { SRV.on = false; done(); return; }   // 서버가 아니면 그냥 브라우저로
+    SRV.on = true;
+    var days = (o.days || []).slice(0, 120), i = 0, got = 0;
+    srvReq('GET', 'api/cfg', null, function(st2, c){
+      if (st2 === 200 && c && c.ok && c.s) lsPut(CFGKEY, c.s);
+      step();
+    });
+    function step(){
+      if (i >= days.length){
+        var cur = lsGet(CURKEY);
+        if ((!cur || !lsGet(DAYPFX + cur)) && days.length) lsPut(CURKEY, days[0].label || dayLabel(days[0].key));
+        done();
+        return;
+      }
+      var d = days[i++];
+      srvReq('GET', 'api/day/' + d.key, null, function(st3, r){
+        if (st3 === 200 && r && r.ok && r.s){
+          var lab = r.label || dayLabel(d.key);
+          lsPut(DAYPFX + lab, JSON.stringify({ v: r.v || '', sv: r.sv || SCHEMA, at: isoHM(r.at), s: r.s }));
+          dayIndexPut(lab, isoHM(r.at));
+          SRV.sig[lab] = r.sig || '';
+          got++;
+        }
+        step();
+      });
+    }
+  });
+}
+
+// ★올리기 — 브라우저 칸에 적은 뒤 그대로 서버에도 보낸다.
+//   판본 검사(base): 내가 읽어 간 뒤 딴 자리에서 고쳤으면 서버가 막는다.
+//   막히면 브라우저 것은 그대로 남는다 — 잃는 것은 없고, 한 번 더 누르면 덮는다
+function srvPutDay(d){
+  if (!SRV.on) return;
+  var raw = lsGet(DAYPFX + d); if (!raw) return;
+  var o; try { o = JSON.parse(raw); } catch (e) { return; }
+  var k = dayKey(d); if (!k) return;
+  var body = { v: o.v || '', sv: o.sv || SCHEMA, s: o.s, label: d };
+  var force = (SRV.clash === d);
+  if (!force && SRV.sig[d] !== undefined) body.base = SRV.sig[d];
+  srvReq('PUT', 'api/day/' + k, body, function(st, r){
+    if (st === 200 && r && r.ok){
+      SRV.sig[d] = r.sig || ''; SRV.err = '';
+      if (force) { SRV.clash = ''; toast(d + ' — 딴 자리 것을 덮었습니다(옛 판은 서버가 보관합니다)'); }
+      return;
+    }
+    if (st === 409){
+      SRV.clash = d;
+      toast('★그새 딴 자리에서 ' + d + ' 을(를) 고쳤습니다 — 서버에 안 올렸습니다. '
+        + '한 번 더 저장을 누르면 이 화면 것으로 덮습니다');
+      return;
+    }
+    SRV.err = d;
+    toast('서버에 못 올렸습니다 — 이 브라우저에는 남아 있습니다. 잠시 뒤 다시 저장해 보십시오');
+  });
+}
+function srvPutCfg(){
+  if (!SRV.on) return;
+  var raw = lsGet(CFGKEY); if (!raw) return;
+  srvReq('PUT', 'api/cfg', { sv: SCHEMA, s: raw }, function(){});
+}
+function srvDelDay(d){
+  if (!SRV.on) return;
+  var k = dayKey(d); if (!k) return;
+  srvReq('DELETE', 'api/day/' + k, null, function(){ delete SRV.sig[d]; });
+}
 // ★저장본 한 장을 지금 모양까지 끌어올린다.
 //   돌아오는 값은 { s: 글, from: 몇 번 모양이었나, lifted: 올렸나 } — 못 읽으면 null.
 //   ★못 읽어도 지우지 않는다. 원본은 제자리에 그대로 둔다
@@ -88,6 +193,7 @@ function dayDrop(d){
   delete ix[d];
   lsPut(IDXKEY, JSON.stringify(ix));
   lsDel(DAYPFX + d); lsDel(DRFPFX + d);
+  srvDelDay(d);           // 서버에서도 치운다(버리지 않고 옮겨 둔다)
   lsDel(BAKPFX + d);      // ★사람이 지우라고 한 날이다 — 밀어 둔 사본도 같이 걷는다(이름이 든 글이다)
 }
 // 초안 — 고칠 때마다. 저장본은 안 건드린다
@@ -107,6 +213,7 @@ function daySaveQuiet(){
   if (!lsPut(DAYPFX + DATE, JSON.stringify({ v: BUILD, sv: SCHEMA, at: at, s: state() }))) return '';
   dayIndexPut(DATE, at);
   draftDrop();
+  srvPutDay(DATE);          // ★정본은 서버다
   return at;
 }
 function daySave(){
@@ -166,6 +273,7 @@ function cfgSave(){
       course: COURSE, courses: COURSES, gap: GAP, rows: ROWS, smax: SMAX,
       carry: CARRY, rmin: ROUNDMIN
     }));
+    srvPutCfg();                        // ★설정도 서버가 정본이다
     return true;
   } catch (e) { return false; }   // 사생활 보호 창·용량 초과 — 부른 쪽이 알아야 한다
 }

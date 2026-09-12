@@ -2080,11 +2080,15 @@ window.addEventListener('popstate', function(){
 $('hDate').addEventListener('click', openDayPick);   // 날짜를 누르면 다른 날로
 
 // ── 켜기 ────────────────────────────────────
-bootLoad();
-try {
-  var c0 = localStorage.getItem('board.cur'); if (c0 && part(c0).key === c0) cur = c0;
-  var v0 = localStorage.getItem('board.mview');
-  if (v0 === 'work' || v0 === 'board' || v0 === 'duty') VIEW = v0;
-} catch (e) { /* 기본은 2부 배치표 */ }
-paint();
-if (PENDING) openPending();          // ★안 누르고 닫은 고침이 있으면 켜자마자 묻는다
+// ★서버가 있으면 서버 것을 먼저 가져온 뒤에 켜다.
+//   파일 하나로 열었을 때는 그 자리에서 곳바로 켜진다 — 시간차도 안 생긴다
+srvBoot(function(){
+  bootLoad();
+  try {
+    var c0 = localStorage.getItem('board.cur'); if (c0 && part(c0).key === c0) cur = c0;
+    var v0 = localStorage.getItem('board.mview');
+    if (v0 === 'work' || v0 === 'board' || v0 === 'duty') VIEW = v0;
+  } catch (e) { /* 기본은 2부 배치표 */ }
+  paint();
+  if (PENDING) openPending();          // ★안 누르고 닫은 고침이 있으면 켜자마자 묻는다
+});

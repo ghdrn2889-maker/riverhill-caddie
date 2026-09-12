@@ -21,8 +21,10 @@ const DATA = process.env.BOARD_DATA || path.join(ROOT, 'data');
 const PAGE = process.env.BOARD_PAGE || path.join(ROOT, 'public', 'index.html');
 const DAYS = path.join(DATA, 'days');
 const TRASH = path.join(DATA, 'trash');       // ★지운 것도 한동안 둔다 — 실수는 되돌릴 수 있어야 한다
+const PREV = path.join(DATA, 'prev');         // ★덮기 전의 옛 판 — 둘이 동시에 짜다 한쪽을 덮어도 되찾을 수 있게
+const KEEPPREV = Number(process.env.BOARD_KEEPPREV || 10);
 
-for (const d of [DATA, DAYS, TRASH]) fs.mkdirSync(d, { recursive: true });
+for (const d of [DATA, DAYS, TRASH, PREV]) fs.mkdirSync(d, { recursive: true });
 
 const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
 // ★날짜는 숫자 여덟 자리로만 주고받는다(20260912).
@@ -41,6 +43,17 @@ const sendJSON = (res, code, o) => send(res, code, JSON.stringify(o));
 const dayFile = (k) => path.join(DAYS, k + '.json');
 function readDay(d) {
   try { return JSON.parse(fs.readFileSync(dayFile(d), 'utf-8')); } catch (e) { return null; }
+}
+// ★덮기 전에 옛 판을 한 장 남긴다. 몇 장만 두고 오래된 것은 걷는다
+function keepPrev(k, old) {
+  if (!old || !old.s) return;
+  try {
+    fs.writeFileSync(path.join(PREV, k + '.' + Date.now() + '.json'), JSON.stringify(old), 'utf-8');
+    const mine = fs.readdirSync(PREV).filter((f) => f.startsWith(k + '.')).sort();
+    for (const f of mine.slice(0, Math.max(0, mine.length - KEEPPREV))) {
+      fs.unlinkSync(path.join(PREV, f));
+    }
+  } catch (e) { log('옛 판 보관 실패', k, e.message); }
 }
 // ★적다 만 파일이 남지 않게 — 임시로 쓰고 한 번에 갈아 끼운다
 function writeDay(d, rec) {
@@ -124,6 +137,7 @@ const server = http.createServer(async (req, res) => {
         label: String(inb.label || ''),          // 사람이 읽는 날짜 — '2026년 09월 12일'
         at: new Date().toISOString(), by: who,
       };
+      if (old && old.s !== rec.s) keepPrev(d, old);   // ★덮는 순간 옛 판을 남긴다
       writeDay(d, rec);
       log('저장', d, (inb.s.length / 1024).toFixed(0) + 'KB', who);
       return sendJSON(res, 200, { ok: true, at: rec.at, sig: sig(rec.s) });
