@@ -23,6 +23,7 @@ const DAYS = path.join(DATA, 'days');
 const TRASH = path.join(DATA, 'trash');       // ★지운 것도 한동안 둔다 — 실수는 되돌릴 수 있어야 한다
 const PREV = path.join(DATA, 'prev');         // ★덮기 전의 옛 판 — 둘이 동시에 짜다 한쪽을 덮어도 되찾을 수 있게
 const KEEPPREV = Number(process.env.BOARD_KEEPPREV || 10);
+const BASE = (process.env.BOARD_BASE || '').replace(/\/+$/, '');   // 밖에서 보이는 앞길 (예: /board)
 
 for (const d of [DATA, DAYS, TRASH, PREV]) fs.mkdirSync(d, { recursive: true });
 
@@ -89,94 +90,174 @@ function body(req) {
   });
 }
 
-// ══ 문지기 ═══════════════════════════════════════════════════
-// ★배치표는 앱 로그인을 '빌려' 쓴다. 앱과 합치지 않는다.
-//   같은 주소 밑(…/board)에 서므로 앱 로그인 쿠키가 이쪽으로도 온다.
-//   그 쿠키를 들고 앱에 "이 사람 누구요?" 한 줄만 묻는다. 앱 데이터는 안 본다.
-//   앱이 안 서 있거나 열쇠가 안 맞으면 아무도 못 들어온다 — 열어 두느니 닫는다.
-const APP = process.env.BOARD_APP || 'http://127.0.0.1:3000';
-const BRIDGE = process.env.BOARD_BRIDGE_KEY || '';
-const BASE = (process.env.BOARD_BASE || '').replace(/\/+$/, '');   // 밖에서 보이는 앞길 (예: /board)
-const ALLOW = String(process.env.BOARD_ALLOW_ROLES || 'admin,ops').split(',').map((s) => s.trim()).filter(Boolean);
-const OPEN = process.env.BOARD_OPEN === '1';        // ★집 안에서만 쓰던 때로 돌리는 비상 스위치
-const seen = new Map();                             // 쿠키 → { at, who } 짧게 기억한다(앱에 매번 안 묻게)
-const SEEN_MS = 30 * 1000;
+// ══ 문 — 리버힐 전용 입장 코드 ═══════════════════════════════
+// ★배치표는 제 문을 가진다. 앱 로그인을 안 빌린다 — 앱과 이 프로그램은 따로다.
+//   경기과 분들은 캐디가 아니다. 캐디 앱 회원으로 만들 까닭이 없다.
+//
+//   관리자가 사람마다 다른 코드를 하나씩 발급한다. 한 번 넣으면 그 기기가 기억한다.
+//   코드마다 이름표가 붙어서, 배치표에 '누가 저장했는지'가 남는다.
+//   그만두거나 잃어버리면 그 사람 코드만 거둔다 — 남은 사람은 그대로 쓴다.
+const PASSF = path.join(DATA, 'passes.json');     // 발급한 코드들
+const SESSF = path.join(DATA, 'sessions.json');   // 들어와 있는 기기들
+const SESS_DAYS = Number(process.env.BOARD_SESS_DAYS || 60);
+const OPEN = process.env.BOARD_OPEN === '1';      // 문을 걷어 두는 비상 스위치(집 안에서만 쓸 때)
+const FAIL = new Map();                           // 어디서 몇 번 틀렸나 — 찍어 맞히기 막기
 
-function cookieOf(req) {
+const readJSON = (f, dflt) => { try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch (e) { return dflt; } };
+function writeJSON(f, o) { const t = f + '.tmp'; fs.writeFileSync(t, JSON.stringify(o, null, 1), 'utf-8'); fs.renameSync(t, f); }
+const passes = () => readJSON(PASSF, []);
+const sessions = () => readJSON(SESSF, {});
+
+// 헷갈리는 글자(0 O 1 I)는 뺀다 — 사람이 받아 적는 코드다
+const ABC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+function newCode() {
+  const pick = (n) => Array.from(crypto.randomBytes(n)).map((b) => ABC[b % ABC.length]).join('');
+  return 'RH-' + pick(4) + '-' + pick(4);
+}
+const normCode = (v) => String(v || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+// ── 코드 발급·회수 (관리자가 명령으로 쓴다)
+function passAdd(name, role) {
+  const list = passes();
+  const rec = { code: newCode(), name: String(name || '이름없음'), role: role || 'ops',
+                made: new Date().toISOString(), seen: '', uses: 0, off: false };
+  list.push(rec); writeJSON(PASSF, list);
+  return rec;
+}
+function passOff(code) {
+  const list = passes(), c = normCode(code);
+  let hit = null;
+  for (const p of list) if (normCode(p.code) === c) { p.off = true; hit = p; }
+  if (hit) {
+    writeJSON(PASSF, list);
+    const ss = sessions(); let n = 0;                  // ★거두면 그 사람 기기도 같이 나간다
+    for (const k of Object.keys(ss)) if (normCode(ss[k].code) === c) { delete ss[k]; n++; }
+    writeJSON(SESSF, ss);
+    hit._kicked = n;
+  }
+  return hit;
+}
+
+// ── 들어와 있는 기기
+function sessNew(pass, ua) {
+  const ss = sessions(), tok = crypto.randomBytes(24).toString('base64url');
+  ss[tok] = { code: pass.code, name: pass.name, role: pass.role,
+              at: new Date().toISOString(), ua: String(ua || '').slice(0, 120) };
+  for (const k of Object.keys(ss)) {                   // 오래된 것은 걷는다
+    const age = Date.now() - new Date(ss[k].at).getTime();
+    if (!(age < SESS_DAYS * 864e5)) delete ss[k];
+  }
+  writeJSON(SESSF, ss);
+  return tok;
+}
+function sessWho(tok) {
+  if (!tok) return null;
+  const ss = sessions(), r = ss[tok];
+  if (!r) return null;
+  const live = passes().find((p) => normCode(p.code) === normCode(r.code) && !p.off);
+  if (!live) return null;                              // 코드가 거둬졌으면 그 기기도 끝이다
+  return { name: live.name, role: live.role, code: live.code };
+}
+const cookieOf = (req, k) => {
   const h = req.headers.cookie || '';
-  const m = h.match(/(?:^|;\s*)rh_sess=([^;]+)/);
+  const m = h.match(new RegExp('(?:^|;\s*)' + k + '=([^;]+)'));
   return m ? m[1] : '';
-}
-function askApp(tok) {
-  return new Promise((done) => {
-    const now = Date.now(), had = seen.get(tok);
-    if (had && now - had.at < SEEN_MS) return done(had.who);
-    const r = http.request(APP + '/api/board/who', {
-      method: 'GET', timeout: 4000,
-      headers: { 'Cookie': 'rh_sess=' + tok, 'X-Board-Key': BRIDGE },
-    }, (rs) => {
-      let b = '';
-      rs.on('data', (c) => { b += c; });
-      rs.on('end', () => {
-        let who = null;
-        try { const o = JSON.parse(b); if (o && o.ok) who = o; } catch (e) { /* 앱이 이상한 답을 주면 못 들어온다 */ }
-        seen.set(tok, { at: now, who });
-        if (seen.size > 500) seen.clear();
-        done(who);
-      });
-    });
-    r.on('error', () => done(null));
-    r.on('timeout', () => { r.destroy(); done(null); });
-    r.end();
-  });
-}
-function page(title, msg, btn) {
+};
+
+// ── 화면
+function page(title, inner) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title><style>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
  :root{color-scheme:light dark}
  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-      font:16px/1.7 -apple-system,'Malgun Gothic',sans-serif;background:#f4f6f8;color:#1d2733}
- .box{max-width:420px;padding:34px 30px;background:#fff;border:1.5px solid #d4dbe3;border-radius:14px;text-align:center}
- h1{margin:0 0 14px;font-size:20px}
- p{margin:0 0 22px;color:#4d5c6b;white-space:pre-line}
- a.go{display:inline-block;padding:13px 30px;background:#2f6db5;color:#fff;text-decoration:none;border-radius:9px;font-weight:700}
+      font:16px/1.7 -apple-system,'Malgun Gothic',sans-serif;background:#eef1f5;color:#1d2733}
+ .box{width:min(94vw,400px);padding:32px 28px;background:#fff;border:1.5px solid #d4dbe3;border-radius:14px;text-align:center}
+ h1{margin:0 0 8px;font-size:20px}
+ .sub{margin:0 0 22px;color:#5d6b7a;font-size:14px;white-space:pre-line}
+ input{width:100%;box-sizing:border-box;padding:14px;font:700 20px/1.2 ui-monospace,Consolas,monospace;
+       text-align:center;letter-spacing:2px;border:1.5px solid #c3ccd6;border-radius:9px;background:#fbfcfd;color:inherit}
+ button{margin-top:14px;width:100%;padding:14px;background:#2f6db5;color:#fff;border:0;border-radius:9px;
+        font:700 16px/1 inherit;cursor:pointer}
+ .bad{margin:14px 0 0;color:#b3261e;font-size:14px;white-space:pre-line}
  @media(prefers-color-scheme:dark){body{background:#161a1f;color:#e7edf3}
-  .box{background:#1e242b;border-color:#39424d}p{color:#a9b6c3}}
-</style></head><body><div class="box"><h1>${title}</h1><p>${msg}</p>${btn}</div></body></html>`;
+  .box{background:#1e242b;border-color:#39424d}.sub{color:#a9b6c3}
+  input{background:#171c22;border-color:#414b57}}
+</style></head><body><div class="box">${inner}</div></body></html>`;
 }
-const loginPage = (backTo) => page('경기과 배치표',
-  '리버힐 계정으로 로그인하셔야 볼 수 있습니다.\n캐디분들 실명이 들어 있어 문을 걸어 두었습니다.',
-  `<a class="go" href="/api/auth/google?back=${encodeURIComponent(backTo)}">로그인하기</a>`);
-const denyPage = (r) => page('들어올 수 없습니다',
-  `로그인은 되었는데 배치표를 볼 수 있는 등급이 아닙니다.\n(지금 등급: ${r || '없음'})\n경기과로 등록해 달라고 관리자에게 말씀하십시오.`,
-  '<a class="go" href="/">앱으로</a>');
-const downPage = () => page('잠시 뒤에 다시',
-  '신분을 확인해 주는 앱이 지금 응답하지 않습니다.\n잠시 뒤 새로고침해 주십시오.', '');
+const gatePage = (bad) => page('경기과 배치표', `<h1>경기과 배치표</h1>
+<p class="sub">입장 코드를 넣으십시오.
+캐디분들 실명이 들어 있어 문을 걸어 두었습니다.</p>
+<form method="POST" action="${BASE}/gate">
+ <input name="code" placeholder="RH-XXXX-XXXX" autocomplete="off" autocapitalize="characters" autofocus>
+ <button type="submit">들어가기</button>
+</form>${bad ? `<p class="bad">${bad}</p>` : ''}`);
+const downPage = (m) => page('잠시 뒤에 다시', `<h1>잠시 뒤에 다시</h1><p class="sub">${m}</p>`);
 
-// 들여보내도 되는 사람인가 — 안 되면 보여 줄 화면을 돌려준다
-async function guard(req, res) {
-  if (OPEN) return true;                                  // 집 안에서만 쓰던 때로 돌리는 스위치
-  if (!BRIDGE) { send(res, 503, downPage(), 'text/html; charset=utf-8'); return false; }
-  const tok = cookieOf(req);
-  const backTo = (BASE || '') + '/';
-  if (!tok) { send(res, 401, loginPage(backTo), 'text/html; charset=utf-8'); return false; }
-  const who = await askApp(tok);
-  if (!who) { send(res, 503, downPage(), 'text/html; charset=utf-8'); return false; }
-  if (!who.authed) { send(res, 401, loginPage(backTo), 'text/html; charset=utf-8'); return false; }
-  if (who.status !== 'active' || ALLOW.indexOf(who.role) < 0) {
-    send(res, 403, denyPage(who.role), 'text/html; charset=utf-8'); return false;
-  }
-  req._who = who;
-  return true;
+// ── 찍어 맞히기 막기
+function failNote(ip) {
+  const r = FAIL.get(ip) || { n: 0, till: 0 };
+  //  ★처음 세 번은 봐준다 — 손으로 받아 적는 코드라 오타가 난다.
+  //    그리고 밖으로 난 길을 타고 오면 여러 사람이 한 주소로 보일 수 있다.
+  //    그 뒤로만 점점 느려진다(1초 4초 9초 …), 아무리 길어도 2분
+  r.n++;
+  const over = Math.max(0, r.n - 3);
+  r.till = Date.now() + Math.min(120e3, over * over * 1000);
+  FAIL.set(ip, r);
+  if (FAIL.size > 2000) FAIL.clear();
+  return r;
 }
+function failLeft(ip) {
+  const r = FAIL.get(ip); if (!r) return 0;
+  const left = r.till - Date.now();
+  return left > 0 ? Math.ceil(left / 1000) : 0;
+}
+const ipOf = (req) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  || req.socket.remoteAddress || '?';
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname.replace(/\/+$/, '') || '/';
   try {
-    if (!(await guard(req, res))) return;     // ★여기를 못 지나면 아무것도 안 보인다
-    const who = (req._who && ('회원 ' + req._who.id)) || '경기과';
+    // ── 문: 코드 넣는 화면
+    if (p === BASE + '/gate' || p === '/gate') {
+      if (req.method === 'GET') return send(res, 200, gatePage(''), 'text/html; charset=utf-8');
+      if (req.method === 'POST') {
+        const ip = ipOf(req);
+        const wait = failLeft(ip);
+        if (wait) return send(res, 429, gatePage(`너무 여러 번 틀렸습니다.\n${wait}초 뒤에 다시 해 주십시오.`), 'text/html; charset=utf-8');
+        const raw = await body(req);
+        const got = normCode(new URLSearchParams(raw).get('code') || '');
+        const hit = passes().find((x) => normCode(x.code) === got && !x.off);
+        if (!got || !hit) { failNote(ip); return send(res, 401, gatePage('그런 코드가 없습니다.'), 'text/html; charset=utf-8'); }
+        FAIL.delete(ip);
+        const list = passes();
+        for (const x of list) if (normCode(x.code) === got) { x.uses = (x.uses || 0) + 1; x.seen = new Date().toISOString(); }
+        writeJSON(PASSF, list);
+        const tok = sessNew(hit, req.headers['user-agent']);
+        log('들어옴', hit.name, hit.code, ip);
+        res.writeHead(302, {
+          'Set-Cookie': `bpass=${tok}; Path=${BASE || '/'}; Max-Age=${SESS_DAYS * 86400}; HttpOnly; SameSite=Lax`
+            + (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''),
+          'Location': (BASE || '') + '/',
+        });
+        return res.end();
+      }
+    }
+    // ── 나가기
+    if (p === BASE + '/out' || p === '/out') {
+      const tok = cookieOf(req, 'bpass');
+      if (tok) { const ss = sessions(); delete ss[tok]; writeJSON(SESSF, ss); }
+      res.writeHead(302, { 'Set-Cookie': `bpass=; Path=${BASE || '/'}; Max-Age=0`, 'Location': (BASE || '') + '/gate' });
+      return res.end();
+    }
+
+    // ── ★여기를 못 지나면 아무것도 안 보인다
+    const me = OPEN ? { name: '경기과', role: 'ops', code: '' } : sessWho(cookieOf(req, 'bpass'));
+    if (!me) {
+      if (p.indexOf('/api/') >= 0) return sendJSON(res, 401, { ok: false, error: '입장 코드가 필요합니다' });
+      return send(res, 401, gatePage(''), 'text/html; charset=utf-8');
+    }
+    const who = me.name;
     // ── 화면
     if (req.method === 'GET' && (p === '/' || p === '/board')) {
       let html;

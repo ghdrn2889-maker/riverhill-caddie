@@ -11,27 +11,6 @@ import { seedTesterData } from './testerseed.mjs';
 
 const COOKIE = 'rh_sess';
 
-// ★로그인 뒤 돌아갈 자리 — 배치표 방처럼 '앱 밖의 딴 프로그램'이 앱 로그인을 빌려 쓸 때 쓴다.
-//   아무 데나 보내 주면 '열린 되돌림' 구멍이 된다(남의 주소를 우리 로그인으로 꾸밀 수 있다).
-//   같은 주소 밑의 정해진 길만 허락한다. back 이 없으면 여태와 똑같이 돈다
-const BACK_OK = String(process.env.LOGIN_BACK_OK || '/board').split(',').map((s) => s.trim()).filter(Boolean);
-function safeBack(v) {
-  const s = String(v || '');
-  if (!s || s[0] !== '/' || s.startsWith('//')) return '';
-  // 역슬래시(92)나 줄바꿈(10·13)이 섞여 있으면 버린다 — 주소를 꾸며 남의 자리로 보내는 수법이다
-  for (let i2 = 0; i2 < s.length; i2++) { const c = s.charCodeAt(i2); if (c === 92 || c === 10 || c === 13) return ''; }
-  return BACK_OK.some((p) => s === p || s.startsWith(p + '/') || s.startsWith(p + '?')) ? s : '';
-}
-// state 한 줄에 돌아갈 자리를 얹어 보낸다 — 표(oauth_states)를 안 건드리려고 이렇게 한다
-function packState(state, back) { return back ? state + '~' + Buffer.from(back, 'utf-8').toString('base64url') : state; }
-function unpackState(v) {
-  const s = String(v || ''), i = s.indexOf('~');
-  if (i < 0) return { state: s, back: '' };
-  let back = '';
-  try { back = Buffer.from(s.slice(i + 1), 'base64url').toString('utf-8'); } catch (e) { back = ''; }
-  return { state: s.slice(0, i), back: safeBack(back) };
-}
-
 export function naverConfigured() {
   return !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
 }
@@ -110,7 +89,7 @@ function callbackURL(req) {
 
 export function beginNaverLogin(req, res) {
   if (!authConfigured()) return res.status(503).json({ error: '네이버 로그인이 아직 설정되지 않았습니다(.env)' });
-  const state = packState(newOAuthState(), safeBack(req.query.back));
+  const state = newOAuthState();
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.NAVER_CLIENT_ID,
@@ -126,9 +105,8 @@ export function beginNaverLogin(req, res) {
 export async function naverCallback(req, res) {
   try {
     if (!authConfigured()) return res.status(503).send('네이버 로그인 미설정');
-    const { code } = req.query;
-    const { state: stateOnly, back } = unpackState(req.query.state);
-    if (!code || !consumeOAuthState(stateOnly).ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
+    const { code, state } = req.query;
+    if (!code || !consumeOAuthState(state).ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰
     const tokenParams = new URLSearchParams({
@@ -161,7 +139,7 @@ export async function naverCallback(req, res) {
 
     // 온보딩 필요 여부: board_name(실명) 비어있으면 가입 완성 화면으로.
     //  ?new=1 = '방금 로그인함' 마커 — 미완료 가입자가 앱을 닫았다 다시 열면(마커 없음) 자동 로그아웃하기 위함.
-    res.redirect(back || '/?new=1');
+    res.redirect('/?new=1');
   } catch (e) {
     console.error('naverCallback 오류:', e.message);
     res.status(500).send('로그인 처리 중 오류가 발생했습니다.');
@@ -194,7 +172,7 @@ function googleCallbackURL(req) {
 export function beginGoogleLogin(req, res) {
   if (!googleConfigured()) return res.status(503).json({ error: '구글 로그인이 아직 설정되지 않았습니다(.env)' });
   // ★설치형 PWA는 ?h=<nonce> 로 핸드오프를 건다 → state에 연결(콜백에서 이 nonce에 완료 기록).
-  const state = packState(newOAuthState(req.query.h ? String(req.query.h) : null), safeBack(req.query.back));
+  const state = newOAuthState(req.query.h ? String(req.query.h) : null);
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -210,9 +188,8 @@ export function beginGoogleLogin(req, res) {
 export async function googleCallback(req, res) {
   try {
     if (!googleConfigured()) return res.status(503).send('구글 로그인 미설정');
-    const { code } = req.query;
-    const { state: stateOnly, back } = unpackState(req.query.state);
-    const stx = consumeOAuthState(stateOnly);
+    const { code, state } = req.query;
+    const stx = consumeOAuthState(state);
     if (!code || !stx.ok) return res.status(400).send('로그인 요청이 유효하지 않습니다(state 불일치). 다시 시도해주세요.');
 
     // 1) 코드 → 액세스 토큰(폼 인코딩 POST)
@@ -250,7 +227,7 @@ export async function googleCallback(req, res) {
       return res.send(handoffDonePage());
     }
     // ?new=1 = '방금 로그인함' 마커(미완료 가입자 재방문 시 자동 로그아웃 판별용).
-    res.redirect(back || '/?new=1');
+    res.redirect('/?new=1');
   } catch (e) {
     console.error('googleCallback 오류:', e.message);
     res.status(500).send('로그인 처리 중 오류가 발생했습니다.');

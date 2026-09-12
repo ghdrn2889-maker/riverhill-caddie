@@ -319,8 +319,7 @@ app.post('/api/telemetry', requireAuth, (req, res) => {
 // ★/work-income — 바깥 회계 앱이 부르는 창구. 세션 쿠키가 아니라 전용 열쇠로
 //  핸들러 안에서 스스로 인증한다(쿠키는 SameSite=Lax라 다른 출처에서 안 실린다).
 //  열쇠 발급/회수(/work-income/token)는 이 목록 밖이라 로그인이 있어야 한다 — 그게 맞다.
-const OPEN_API = ['/config', '/health', '/ingest', '/ingest-image', '/simulate', '/auth', '/me', '/logout', '/duty',
-  '/board/who'];   // ★배치표 방이 '이 사람 누구요?' 만 묻는 창구 — 자기 신분만 돌려준다
+const OPEN_API = ['/config', '/health', '/ingest', '/ingest-image', '/simulate', '/auth', '/me', '/logout', '/duty'];
 app.use('/api', (req, res, next) => {
   const p = req.path;
   // ★정확히 이 한 경로만 열린다 — OPEN_API에 넣으면 startsWith 때문에
@@ -349,24 +348,6 @@ app.use('/project', express.static(path.join(ROOT_DIR, 'hub'), {
 app.get('/project', (req, res) => res.redirect('/project/PROJECT.md'));
 
 // PWA 가 구독할 때 필요한 공개키
-// ★배치표 방(따로 도는 딴 프로그램)이 쓰는 신분 창구.
-//   배치표는 앱 코드를 안 부르고 앱 데이터도 안 본다. 오직 이 한 줄만 묻는다 —
-//   "지금 이 쿠키를 들고 온 사람이 누구고, 들여보내도 되는 등급인가".
-//   ★자기 신분만 돌려준다. 남의 것은 한 글자도 안 나간다.
-//   열쇠(BOARD_BRIDGE_KEY)를 맞춰야 답한다 — 우리 배치표 서버만 쓰라고 건 자물쇠다.
-app.get('/api/board/who', (req, res) => {
-  const want = String(process.env.BOARD_BRIDGE_KEY || '');
-  if (!want || req.headers['x-board-key'] !== want) {
-    return res.status(403).json({ ok: false, error: '열쇠가 다릅니다' });
-  }
-  res.set('Cache-Control', 'no-store');
-  if (!req.user) return res.json({ ok: true, authed: false });
-  res.json({
-    ok: true, authed: true,
-    id: req.user.id, role: req.user.role || '', status: req.user.status || '',
-  });
-});
-
 app.get('/api/config', (req, res) => {
   res.json({ vapidPublicKey: process.env.VAPID_PUBLIC_KEY });
 });
