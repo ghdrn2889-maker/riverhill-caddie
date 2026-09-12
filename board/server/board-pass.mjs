@@ -27,11 +27,12 @@ if (cmd === 'add') {
   const name = rest.join(' ').trim();
   if (!name) { console.log('  쓰는 법: board-pass.mjs add "박주임"'); process.exit(1); }
   const list = rd(PASSF, []);
-  const rec = { code: 'RH-' + pick(4) + '-' + pick(4), name, role: 'ops',
+  const role = process.env.BOARD_PASS_ROLE === 'admin' ? 'admin' : 'ops';
+  const rec = { code: 'RH-' + pick(4) + '-' + pick(4), name, role,
                 made: new Date().toISOString(), seen: '', uses: 0, off: false };
   list.push(rec); wr(PASSF, list);
   console.log('');
-  console.log('  ' + rec.name + ' 님 입장 코드');
+  console.log('  ' + rec.name + ' 님 입장 코드' + (rec.role === 'admin' ? ' (관리자)' : ''));
   console.log('  ┌────────────────┐');
   console.log('  │  ' + rec.code + '  │');
   console.log('  └────────────────┘');

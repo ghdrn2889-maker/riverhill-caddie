@@ -165,7 +165,10 @@ const cookieOf = (req, k) => {
 };
 
 // ── 화면
-function page(title, inner) {
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+function page(title, inner, more) {
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
  :root{color-scheme:light dark}
@@ -182,6 +185,7 @@ function page(title, inner) {
  @media(prefers-color-scheme:dark){body{background:#161a1f;color:#e7edf3}
   .box{background:#1e242b;border-color:#39424d}.sub{color:#a9b6c3}
   input{background:#171c22;border-color:#414b57}}
+${more || ''}
 </style></head><body><div class="box">${inner}</div></body></html>`;
 }
 const gatePage = (bad) => page('경기과 배치표', `<h1>경기과 배치표</h1>
@@ -191,6 +195,68 @@ const gatePage = (bad) => page('경기과 배치표', `<h1>경기과 배치표</
  <input name="code" placeholder="RH-XXXX-XXXX" autocomplete="off" autocapitalize="characters" autofocus>
  <button type="submit">들어가기</button>
 </form>${bad ? `<p class="bad">${bad}</p>` : ''}`);
+// ── 코드 관리 화면 — 관리자 코드로만 보인다
+//   ★코드가 새면 급하다. 그때 나(만든 사람)를 찾아야만 막을 수 있으면 막을 수 없는 것과 같다.
+//   그래서 경기과 관리자가 스스로 거두고 다시 뽑을 수 있어야 한다.
+function keysPage(me, msg, fresh) {
+  const list = passes(), ss = sessions();
+  const row = (x) => {
+    const dev = Object.values(ss).filter((v) => normCode(v.code) === normCode(x.code)).length;
+    const on = !x.off;
+    return `<tr class="${on ? '' : 'off'}">
+      <td class="c">${esc(x.code)}</td>
+      <td>${esc(x.name)}${x.role === 'admin' ? ' <span class="tag">관리</span>' : ''}</td>
+      <td class="n">${on ? (dev + '대') : '거둠'}</td>
+      <td class="n">${x.seen ? esc(String(x.seen).slice(5, 16).replace('T', ' ')) : '—'}</td>
+      <td class="a">${on ? `
+        <form method="POST"><input type="hidden" name="act" value="renew"><input type="hidden" name="code" value="${esc(x.code)}">
+          <button class="b2" onclick="return confirm('${esc(x.name)} 님 코드를 새로 뽑습니다.\n옛 코드는 그 자리에서 못 쓰게 됩니다.')">다시 뽑기</button></form>
+        <form method="POST"><input type="hidden" name="act" value="off"><input type="hidden" name="code" value="${esc(x.code)}">
+          <button class="b3" onclick="return confirm('${esc(x.name)} 님 코드를 거둡니다.\n쓰던 기기도 같이 나갑니다.')">거두기</button></form>` : ''}</td></tr>`;
+  };
+  return page('입장 코드 관리', `<h1 style="margin-bottom:6px">입장 코드</h1>
+<p class="sub">코드가 새거나 잃어버렸으면 <b>다시 뽑기</b>를 누르십시오.
+옛 코드는 그 자리에서 못 쓰게 되고, 쓰던 기기도 나갑니다.</p>
+${fresh ? `<div class="fresh"><div class="fn">${esc(fresh.name)} 님 새 코드</div><div class="fc">${esc(fresh.code)}</div>
+  <div class="fw">이 화면을 벗어나면 다시 안 보여 줍니다. 그 분에게만 알려 주십시오.</div></div>` : ''}
+${msg ? `<p class="ok">${esc(msg)}</p>` : ''}
+<table><tr><th>코드</th><th>이름</th><th>기기</th><th>마지막</th><th></th></tr>
+${list.map(row).join('')}</table>
+<form method="POST" class="add">
+  <input name="name" placeholder="새로 줄 사람 이름" autocomplete="off">
+  <input type="hidden" name="act" value="add">
+  <button class="b1">코드 만들기</button>
+</form>
+<form method="POST" style="margin-top:18px">
+  <input type="hidden" name="act" value="kickall">
+  <button class="b3" onclick="return confirm('지금 들어와 있는 기기를 모두 내보냅니다.\n코드는 그대로라 다시 넣으면 들어옵니다.')">기기 모두 내보내기</button>
+</form>
+<p class="sub" style="margin:18px 0 0">지금 ${esc(me.name)} 님으로 보고 있습니다 · <a href="${BASE}/">배치표로</a></p>`, `
+ .box{width:min(96vw,720px);text-align:left}
+ table{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:14px}
+ th{text-align:left;padding:8px 6px;border-bottom:1.5px solid #d4dbe3;color:#5d6b7a;font-size:12px}
+ td{padding:9px 6px;border-bottom:1px solid #e7ebf0;vertical-align:middle}
+ td.c{font:700 15px ui-monospace,Consolas,monospace;letter-spacing:.5px}
+ td.n{color:#5d6b7a;white-space:nowrap}
+ td.a{white-space:nowrap;text-align:right}
+ tr.off td{opacity:.42;text-decoration:line-through}
+ .tag{font-size:11px;background:#e3ecf7;color:#2f6db5;padding:1px 6px;border-radius:20px;text-decoration:none}
+ form{display:inline-block;margin:0}
+ button{width:auto;margin:0 0 0 5px;padding:7px 12px;font-size:13px}
+ .b2{background:#5b6b7d}.b3{background:#a33}.b1{background:#2f6db5}
+ .add{display:flex;gap:8px;width:100%}
+ .add input{flex:1;text-align:left;letter-spacing:0;font:15px inherit;padding:11px}
+ .add button{margin:0;padding:11px 18px;font-size:15px}
+ .fresh{margin:6px 0 16px;padding:16px;background:#eef6ff;border:1.5px solid #9cc4ec;border-radius:11px;text-align:center}
+ .fn{font-size:13px;color:#2f6db5}
+ .fc{font:800 26px/1.4 ui-monospace,Consolas,monospace;letter-spacing:2px}
+ .fw{font-size:12px;color:#5d6b7a}
+ .ok{margin:0 0 12px;color:#1d6b3f;font-size:14px}
+ a{color:#2f6db5}
+ @media(prefers-color-scheme:dark){th{border-color:#39424d;color:#a9b6c3}td{border-color:#2a323b}
+  .fresh{background:#17293d;border-color:#2f5f92}.tag{background:#22364d}}`);
+}
+
 const downPage = (m) => page('잠시 뒤에 다시', `<h1>잠시 뒤에 다시</h1><p class="sub">${m}</p>`);
 
 // ── 찍어 맞히기 막기
@@ -258,6 +324,44 @@ const server = http.createServer(async (req, res) => {
       return send(res, 401, gatePage(''), 'text/html; charset=utf-8');
     }
     const who = me.name;
+
+    // ── 코드 관리 — 관리자 코드로만
+    if (p === BASE + '/keys' || p === '/keys') {
+      if (me.role !== 'admin') return send(res, 403, page('관리자만',
+        '<h1>관리자만</h1><p class="sub">입장 코드를 관리할 수 있는 코드가 아닙니다.</p>'),
+        'text/html; charset=utf-8');
+      if (req.method === 'GET') return send(res, 200, keysPage(me, '', null), 'text/html; charset=utf-8');
+      if (req.method === 'POST') {
+        const f = new URLSearchParams(await body(req));
+        const act = f.get('act'), code = normCode(f.get('code') || '');
+        let msg = '', fresh = null;
+        if (act === 'add') {
+          const nm = String(f.get('name') || '').trim().slice(0, 20);
+          if (!nm) msg = '이름을 적으십시오';
+          else { fresh = passAdd(nm, 'ops'); log('코드 발급', nm, fresh.code, '(' + me.name + ')'); }
+        } else if (act === 'off') {
+          const gone = passOff(code);
+          if (gone) { msg = gone.name + ' 님 코드를 거뒀습니다 · 쓰던 기기 ' + (gone._kicked || 0) + '대도 나갔습니다';
+            log('코드 거둠', gone.name, code, '(' + me.name + ')'); }
+        } else if (act === 'renew') {
+          // ★다시 뽑기 = 옛 것을 거두고 같은 이름으로 새로 준다.
+          //   코드를 사람이 정하게 두지 않는다 — 생일·전화번호를 넣게 되고 그건 찍어 맞힌다
+          const old = passes().find((x) => normCode(x.code) === code);
+          if (old) {
+            const gone = passOff(code);
+            fresh = passAdd(old.name, old.role);
+            msg = old.name + ' 님 코드를 새로 뽑았습니다 · 옛 코드로 쓰던 기기 ' + ((gone && gone._kicked) || 0) + '대는 나갔습니다';
+            log('코드 다시 뽑음', old.name, code, '→', fresh.code, '(' + me.name + ')');
+          }
+        } else if (act === 'kickall') {
+          const n = Object.keys(sessions()).length;
+          writeJSON(SESSF, {});
+          msg = '들어와 있던 기기 ' + n + '대를 모두 내보냈습니다 · 코드는 그대로입니다';
+          log('기기 모두 내보냄', n, '(' + me.name + ')');
+        }
+        return send(res, 200, keysPage(me, msg, fresh), 'text/html; charset=utf-8');
+      }
+    }
     // ── 화면
     if (req.method === 'GET' && (p === '/' || p === '/board')) {
       let html;
