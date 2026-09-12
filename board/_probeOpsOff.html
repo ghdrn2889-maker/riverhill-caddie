@@ -1,0 +1,21 @@
+<div id="PROBE"></div>
+<script>
+// 근무표에서 휴무를 찍은 하루치 — 김홍구를 휴무로
+setTimeout(function(){
+  var o = [];
+  try{
+    localStorage.clear(); resetToBoard(); DATE = BOARD.date;
+    bootLoad();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    // 근무표의 그 단추와 같은 길
+    setAbsent('김홍구', '휴무');
+    paint();
+    var seen = [];
+    DAY.forEach(function(p){ p.roster.forEach(function(r){ if (r.n === '김홍구') seen.push(p.key + '부'); }); });
+    o.push('ORIG:김홍구 배지=' + tagOf('김홍구') + ' · 자리=' + (seen.join(',') || '없음')
+      + ' · 제외인원에 있나=' + (OFFDUTY.indexOf('김홍구') >= 0));
+    o.push('DUMP:' + state());
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 1400);
+</script>

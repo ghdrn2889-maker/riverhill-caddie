@@ -165,6 +165,9 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     try { fs.appendFileSync(path.join(DATA_DIR, 'admin-corrections.jsonl'), JSON.stringify(line) + '\n'); } catch (e) { console.error('교정로그 실패:', e.message); }
   }
   const rosterNk = new Set(roster.map(nkey).filter(Boolean));
+  // 보낸 쪽이 근태를 못 박아 말한 사람들 — 값이 비었으면 '풀어라'라는 말이므로 그것도 말한 것이다
+  const dutyOf = new Map(Object.entries(dutySet || {}).map(([n, d]) => [nkey(n), String(d || '')]).filter(([k]) => k));
+  const dutyStated = new Set(dutyOf.keys());
   const diffPositions = new Set(cellDiffs.map((d) => Number(d.pos)));   // 관리자가 실제 손댄 순번
   const dk = dayKey(v.dateLabel || lb.dateLabel || '');
   const movedTo = new Map((Array.isArray(movedOut) ? movedOut : [])
@@ -187,7 +190,11 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
       continue;
     }
     // 이 배치표에 없는 휴무자(다른 근태로 쉬는 사람)는 건드리지 않음 — 배치표에 이름이 있으면 재계산.
-    if (today.status === 'off' && !rosterNk.has(nkey(m.board_name))) continue;
+    // ★다만 근태를 '이 사람은 무엇이다'라고 못 박아 보냈으면 그것은 건드려야 한다.
+    //  실측: 경기과 근무표에서 휴무 → 휴가로 바꿔도 앱 화면은 계속 '휴무'였다.
+    //  한 번 쉬는 사람이 되면 이 줄에서 되돌아가 다시는 안 봤기 때문이다.
+    //  쉬는 사람을 함부로 안 건드리는 뜻은 그대로 두고, 말해 준 사람만 예외로 둔다.
+    if (today.status === 'off' && !rosterNk.has(nkey(m.board_name)) && !dutyStated.has(nkey(m.board_name))) continue;
     const member = { name: m.board_name, part: String(m.part || 3), commuteMin: Number(m.commute_min) };
     let next;
     // ★잠금은 '자동 재판독이 관리자 교정을 덮지 못하게' 하는 장치다. 관리자 본인의 다음 교정까지
@@ -207,6 +214,15 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
       next = applyVerdict(base, mout.rawVerdict, lb.article, { name: m.board_name, part: String(m.part || 3) }).next;
     } catch (e) { console.error(`배치표교정 재계산 오류(회원 ${m.id}):`, e.message); continue; }
     const isOff = next.status === 'off';   // 근태칸(crewDuty) 휴무/병가 → interpretForMember가 이미 off로 확정
+    // ★사람이 못 박아 준 근태는 그 말 그대로 쓴다.
+    //  판독 쪽에는 '한 번 확정된 병가·휴가는 이어받는' 보호가 걸려 있다 —
+    //  사진이 흐려 병가를 휴무로 잘못 읽는 일이 있어서 넣은 것이다.
+    //  그런데 그 보호가 사람이 고른 것에도 걸려서, 경기과가 병가를 휴무로 되돌려도
+    //  화면은 계속 병가였다(실측). 사람이 고른 것에 오독 보호는 필요 없다.
+    if (isOff) {
+      const _d = dutyOf.get(nkey(m.board_name));
+      if (_d) next.offType = /병가/.test(_d) ? 'sick' : /휴가|연차|반차|월차/.test(_d) ? 'vacation' : 'off';
+    }
     const pos = Number(next.myPosition) || 0;
     if (!isOff && pos > 0 && cutLine > 0) {
       next.cutLine = cutLine;
