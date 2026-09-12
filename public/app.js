@@ -783,7 +783,9 @@ function renderDutyHero(d, off) {
   const ph = dutyPhaseNow(d, dayOff);
   // 나머지 화면과 같은 말을 쓴다(오늘·내일·모레) — 여기만 '오늘'로 굳으면 내일 당번이 오늘 일처럼 읽힌다.
   const dayW = dayOff <= 0 ? '오늘' : dayOff === 1 ? '내일' : dayOff === 2 ? '모레' : `${dayOff}일 뒤`;
-  const label = `${d.part}부 ${d.kind}`;
+  // 경기과가 부를 안 적는 당번도 있다(당번 상자에는 부 칸이 없다).
+  //  그럴 때 그대로 붙이면 '부 당번'이 된다 — 서버가 이미 맞게 지어 내려준 이름을 쓴다.
+  const label = d.label || `${d.part}부 ${d.kind}`;
   stopOffTitle();
   // ★hero-off 제거 — 휴무 전용 스타일(#heroTitle 18px·응원문구 배치·제목 로테이션)이 당번 보드를 덮어쓴다.
   //  당번인 사람은 배치표상 '휴무'로 잡혀 있을 수 있어(순번 근무가 아니므로) 이 클래스가 붙어 있다.

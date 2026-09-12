@@ -10,6 +10,11 @@ import { setDayDuty } from './journal.mjs';
 
 export const DUTY_KINDS = ['당번', '벌당'];
 
+// ── 시각 계산 ──
+const toMin = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1]) * 60 + Number(m[2])) : null; };
+const pad2 = (n) => String(n).padStart(2, '0');
+const fromMin = (min) => { const m = ((min % 1440) + 1440) % 1440; return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`; };
+
 const FILE = 'duty.json';
 const KEEP_DAYS = 30;              // 지난 당번은 한 달만 들고 있는다(일지가 영구 기록을 갖는다)
 
@@ -41,7 +46,8 @@ export function loadDuty(userId, dateISO) {
 }
 // by: 'admin'(모니터 수동) | 'board'(하단 배정표 자동판독).
 //  ★admin이 넣은 값은 그날 자동판독이 덮지 못한다 — 안 그러면 수동 교정이 90초 뒤 배치표 재판독에 지워진다.
-export function saveDuty(userId, date, kind, part, by = 'admin') {
+// extra: { start, hours } — 경기과 프로그램이 정한 실제 시각. 없으면 고정 시간표를 쓴다.
+export function saveDuty(userId, date, kind, part, by = 'admin', extra = null) {
   const k = String(kind || '').trim(), p = String(part || '').replace(/[^123]/g, '');
   const d = String(date || '');
   if (!d) return null;                                      // 날짜 없는 저장은 받지 않는다
@@ -53,6 +59,10 @@ export function saveDuty(userId, date, kind, part, by = 'admin') {
     return null;
   }
   const rec = { kind: k, part: p, by, at: Date.now() };
+  // ★시각은 정해 준 쪽이 임자다. 고정 시간표는 아무도 안 알려 줄 때 쓰는 자리지,
+  //  알려 준 것을 덮는 자리가 아니다 — 경기과가 7시라 했는데 표가 15시라 하면 사람이 늦는다.
+  if (extra && extra.start) rec.start = String(extra.start);
+  if (extra && Number(extra.hours) > 0) rec.hours = Number(extra.hours);
   all[d] = rec;
   saveAll(userId, all);
   // ★근무 기록에도 남긴다 — 히어로에만 뜨고 일지에 안 남으면 그날 일한 사실이 사라진다.
@@ -64,17 +74,20 @@ export function dutyDates(userId) {
   const all = loadAll(userId);
   return Object.keys(all).filter((d) => all[d] && all[d].kind).sort();
 }
-// 그날 이 회원의 당번이 '관리자 확정'인가 — 자동판독이 건너뛸지 판단.
-export function isAdminSet(userId, dateISO) {
+// 그날 이 회원의 당번을 '사람이 못 박았나' — 자동판독이 건너뛸지 판단.
+//  admin = 관리자가 모니터에서 손으로, ops = 경기과 프로그램에서.
+//  둘 다 사람이 보고 정한 것이라 사진 판독이 덮으면 안 된다.
+export const FIRM_BY = ['admin', 'ops'];
+export function isFirmSet(userId, dateISO) {
   const d = loadDuty(userId, dateISO);
-  return !!(d && d.by === 'admin');
+  return !!(d && FIRM_BY.includes(d.by));
 }
 // 회원 화면에 내려줄 형태 — 시각·근무시간을 고정 시간표에서 채워 반환. 없으면 null.
 //  ★이름은 'ForToday'지만 날짜를 받는다 — 화면이 내일 배치표를 보고 있으면 내일 당번을 물어야 한다.
 export function dutyForToday(userId, dateISO) {
   const d = loadDuty(userId, dateISO);
   if (!d) return null;
-  const s = dutySummary(d.kind, d.part);
+  const s = dutySummary(d.kind, d.part, d);
   return { kind: s.kind, part: s.part, start: s.start, end: s.end, hours: s.hours, label: s.label };
 }
 
@@ -102,10 +115,6 @@ export function dutyInfo(kind, part) {
   return (row && k && p && row[p]) ? { kind: k, part: p, start: row[p].start, hours: row[p].hours } : null;
 }
 
-// ── 시각 계산 ──
-const toMin = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (Number(m[1]) * 60 + Number(m[2])) : null; };
-const pad2 = (n) => String(n).padStart(2, '0');
-const fromMin = (min) => { const m = ((min % 1440) + 1440) % 1440; return `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`; };
 
 // 종료 시각 = 시작 + 근무시간. (실제 조합은 모두 자정 전 종료: 당번 18:00/22:00, 벌당 19:20/23:00)
 export function dutyEnd(kind, part) {
@@ -119,25 +128,35 @@ export function dutyEnd(kind, part) {
 //   during(근무 중) = 카트 차고 보드(그 안에서 일하는 중)
 //   done(종료)      = 평소 상태로 복귀(당번 보드 내림)
 //  nowMin(자정부터 분)을 주입할 수 있어 테스트·시뮬레이션이 쉽다.
-export function dutyPhase(kind, part, nowMin) {
-  const i = dutyInfo(kind, part); if (!i) return 'before';
-  const s = toMin(i.start); if (s == null) return 'before';
-  const e = s + i.hours * 60;
+export function dutyPhase(kind, part, nowMin, over = null) {
+  const g = dutySummary(kind, part, over);
+  const s = toMin(g.start); if (s == null || !(Number(g.hours) > 0)) return 'before';
+  const e = s + Number(g.hours) * 60;
   const n = Number.isFinite(nowMin) ? nowMin : (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   if (n < s) return 'before';
   return n < e ? 'during' : 'done';
 }
 
-// 회원 표시용 요약 — {kind, part, start, hours, label, sub}. 시간표에 없는 조합도 역할은 표시(시각만 비움).
-export function dutySummary(kind, part) {
-  const k = normKind(kind) || String(kind || '').trim();
+// 시작 시각 + 근무 시간 → 끝 시각
+function endFrom(start, hours) {
+  const s = toMin(start); if (s == null || !(Number(hours) > 0)) return '';
+  return fromMin(s + Number(hours) * 60);
+}
+// 회원 표시용 요약 — {kind, part, start, end, hours, label, sub}.
+//  over = { start, hours } : 경기과가 정한 실제 시각. 있으면 고정 시간표보다 앞선다.
+//  시간표에도 없고 알려 준 것도 없으면 역할만 보여 주고 시각은 비운다.
+export function dutySummary(kind, part, over = null) {
+  // ★이름은 적힌 그대로 쓴다. 경기과는 당번 칸을 새로 만들 수 있다('락커 당번' 같은).
+  //  여태는 '당번'이 들어간 이름을 모두 '당번'으로 뭉갰다 — 그러면 경기과가 지은 이름이 사라지고
+  //  회원은 무슨 당번인지 모른다. 뭉개는 것은 고정 시간표를 찾을 때만 한다(dutyInfo 안에서).
+  const k = String(kind || '').trim() || normKind(kind);
   const p = partNum(part);
   const info = dutyInfo(k, p);
-  if (info) {
-    const end = dutyEnd(k, p);
-    return { ...info, end, label: `${info.part}부 ${info.kind}`, sub: `${info.start} 출근 · ${info.hours}시간` };
-  }
-  return { kind: k, part: p, start: '', end: '', hours: null, label: p ? `${p}부 ${k}` : k, sub: '' };
+  const start = (over && over.start) ? String(over.start) : (info ? info.start : '');
+  const hours = (over && Number(over.hours) > 0) ? Number(over.hours) : (info ? info.hours : null);
+  return { kind: k, part: p, start, end: endFrom(start, hours), hours,
+    label: p ? `${p}부 ${k}` : k,
+    sub: start ? `${start} 출근${Number(hours) > 0 ? ` · ${hours}시간` : ''}` : '' };
 }
 
 // 배치표 하단 섹션 한 줄에서 {name, part, kind} 추출 — "홍길동 1부 당번 11:00 ~ (7시간)" 형태.

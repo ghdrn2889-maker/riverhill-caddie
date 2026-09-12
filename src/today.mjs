@@ -54,6 +54,7 @@ function syncJournal(s, userId, part, opts = null) {
       offType: s.offType || null,
       part: String(part || '3'),
       dutyFirm: !!(opts && opts.dutyFirm),   // 사람이 못 박은 근태 — 옛 병가·휴가를 붙들지 말라는 말
+      dutyRest: !!(opts && opts.dutyRest),   // 그중에서도 '오늘 이 사람은 쉰다'고 못 박은 것
       // ★이 부 자리를 대바로 남에게 넘겼다는 표식. 카드는 '미상'으로 비워지는데,
       //  일지가 그걸 '아직 모르겠다'로 읽으면 넘긴 부의 옛 근무가 그대로 남아 두 탕이 된다.
       swappedOut: !!s._swappedOut,

@@ -88,6 +88,43 @@ export function translateOps(state) {
     dutySet[n] = (!onBoard.has(n) && ABSTYPES.includes(t)) ? t : '';
   }
   for (const pd of Object.values(out.parts)) { pd.dutySet = dutySet; delete pd.seated; }
+  out.duties = readDuties(o);
+  return out;
+}
+
+// ── 당번 ───────────────────────────────────────────────────
+// ★당번은 순번 근무와 별개 축이다. 경기과는 두 자리에서 정한다:
+//   ① 당번 상자(duty) — '당번'·'벌당'·'흡연실 당번'… 칸마다 이름과 시각을 적는다.
+//      경기과가 칸 자체를 새로 만들 수도 있다(골프장마다 다르다). 부는 안 적는다.
+//   ② 배치표 칸의 역할(role) — 그 사람 자리에서 바로 지정한다. 이쪽은 어느 부인지가 분명하다.
+//  ★시각은 경기과가 정한 것을 그대로 들고 간다.
+//   앱에는 '3부 당번은 15시' 같은 고정 시간표가 있는데, 그건 아무도 안 알려 줄 때 쓰는 값이다.
+//   경기과가 7시라고 적어 놓았는데 표가 15시라고 우기면 그 사람은 여덟 시간 늦는다.
+function readDuties(o) {
+  const box = o.duty || {};
+  const def = o.ddef || {};
+  const keys = (o.dkeys && o.dkeys.length) ? o.dkeys : Object.keys(box);
+  const defOf = (k) => { const d = def[k]; return (d && typeof d === 'object') ? d : { t: (typeof d === 'string' ? d : ''), h: 0 }; };
+  const out = [];
+  const put = (name, kind, part, start, hours) => {
+    const nm = bare(name), kd = String(kind || '').trim();
+    if (!nm || !kd) return;
+    const at = out.findIndex((x) => x.name === nm && x.kind === kd);
+    const rec = { name: nm, kind: kd, part: String(part || ''), start: String(start || ''), hours: Number(hours) || 0 };
+    // 같은 사람 같은 당번이 두 자리에서 나오면 부를 아는 쪽을 남긴다 — 그쪽이 더 많이 말한다
+    if (at < 0) out.push(rec); else if (!out[at].part && rec.part) out[at] = rec;
+  };
+  for (const k of keys) {
+    const d0 = defOf(k);
+    for (const x of (box[k] || [])) put(x && x.n, k, '', (x && x.t) || d0.t, (x && x.h) || d0.h);
+  }
+  for (const p of (o.day || [])) {
+    for (const r of (p.roster || [])) {
+      if (!r || !r.role || r.off) continue;
+      const d0 = defOf(r.role);
+      put(r.n, r.role, p.key, d0.t, d0.h);
+    }
+  }
   return out;
 }
 

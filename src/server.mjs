@@ -1742,7 +1742,7 @@ async function applyDutyList(article, boardISO = '') {
     const nm = key(m.board_name || m.name);
     if (!nm) continue;
     // ★관리자가 모니터에서 확정한 값은 그날 자동판독이 건드리지 않는다(수동 교정이 재판독에 지워지던 문제).
-    if (dutyMod.isAdminSet(m.id, today)) continue;
+    if (dutyMod.isFirmSet(m.id, today)) continue;
     const hit = byName.get(nm);
     const cur = dutyMod.loadDuty(m.id, today);
     if (hit) {

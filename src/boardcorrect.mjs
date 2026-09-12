@@ -243,7 +243,9 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
     const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
     // 사람이 못 박은 근태면 근무 일지에도 그 말 그대로 적힌다 — 카드와 일지가 딴말하면 안 된다
-    saveToday(next, m.id, '3', { dutyFirm: dutyOf.has(nkey(m.board_name)) }); updated++;
+    const _dv = dutyOf.get(nkey(m.board_name)) || '';
+    saveToday(next, m.id, '3', { dutyFirm: dutyOf.has(nkey(m.board_name)),
+      dutyRest: /휴무|휴가|병가|격리|연차|반차|월차/.test(_dv) }); updated++;
     if (notify) {
       const cm = correctionMsg(`${member.part}부`, m.board_name, { wasWait, wasOff, wasWork, nowWork, nowSpare, nowOff, pos, oldTee: today.teeTime || '', newTee: next.teeTime || '' });
       if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });

@@ -1,0 +1,30 @@
+<div id="PROBE"></div>
+<script>
+// 경기과가 당번을 찍은 하루치 — 당번 상자 두 칸 + 배치표 칸의 역할 + 새로 만든 당번
+setTimeout(function(){
+  var o = [];
+  try{
+    localStorage.clear(); resetToBoard(); DATE = BOARD.date;
+    bootLoad();
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    // ① 당번 상자 — 있는 칸에 넣는다
+    dutyToggle('당번', '김홍구');
+    dutyToggle('벌당', '연승준');
+    // ② 경기과가 칸을 새로 만든다 — 골프장마다 다르다
+    dtAddWith('락커 당번', '9:30', 4);
+    dutyToggle('락커 당번', '조하빈');
+    // ③ 배치표 칸에서 바로 역할을 준다(이쪽은 부를 안다)
+    var p3 = part('3'), a = active(p3), ix = -1;
+    for (var i=0;i<a.length;i++) if (a[i].n === '홍준표') { ix = i; break; }
+    if (ix >= 0) setRole('3', ix, '당번');
+    paint();
+    o.push('ORIG:당번칸=' + DUTYKEYS.join('/') );
+    DUTYKEYS.forEach(function(k){
+      o.push('  ' + k + ' → ' + JSON.stringify(DUTY[k]) + ' 기본 ' + JSON.stringify(DUTYDEF[k]));
+    });
+    o.push('  홍준표 역할=' + (ix>=0 ? (active(part('3'))[ix].role||'-') : '못 찾음'));
+    o.push('DUMP:' + state());
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 1400);
+</script>

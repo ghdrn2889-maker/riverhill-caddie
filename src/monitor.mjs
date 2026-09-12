@@ -899,14 +899,40 @@ app.post('/api/ops-board', gate, async (req, res) => {
     } catch (e) { done.push({ part, seeded, error: e.message }); }
   }
 
+  // ── 당번 ── 순번 근무와 별개 축이라 부 반영이 끝난 뒤 하루치로 한 번 붙인다.
+  //  ★경기과가 찍은 것만 경기과가 푼다. 사진에서 읽은 것·관리자가 손으로 넣은 것은 안 건드린다 —
+  //   경기과가 당번 상자를 아직 안 쓰는 날에 남의 것을 쓸어버리면 안 된다.
+  //  ★앱은 사람마다 그날 당번 한 자리만 든다. 경기과가 둘을 걸어 두었으면 부를 아는 쪽이 간다.
+  const duty = { set: [], off: [] };
+  try {
+    const mine = new Map();
+    for (const d of (t.duties || [])) { const k = nkey(d.name); if (k && !mine.has(k)) mine.set(k, d); }
+    for (const m of activeMembers()) {
+      const k = nkey(m.board_name);
+      const hit = mine.get(k);
+      const cur = dutyMod.loadDuty(m.id, t.dateISO);
+      if (hit) {
+        if (cur && cur.by === 'ops' && cur.kind === hit.kind && String(cur.part || '') === String(hit.part || '')
+            && String(cur.start || '') === String(hit.start || '')) continue;          // 그대로다
+        dutyMod.saveDuty(m.id, t.dateISO, hit.kind, hit.part, 'ops', { start: hit.start, hours: hit.hours });
+        duty.set.push(`${m.board_name} ${hit.part ? hit.part + '부 ' : ''}${hit.kind}${hit.start ? ' ' + hit.start : ''}`);
+      } else if (cur && cur.by === 'ops') {
+        dutyMod.saveDuty(m.id, t.dateISO, '', '', 'ops');
+        duty.off.push(m.board_name);
+      }
+    }
+  } catch (e) { console.error('[경기과] 당번 반영 오류:', e.message); }
+
   const okParts = done.filter((d) => d.updated !== undefined);
   const bad = done.filter((d) => d.error);
-  markOps({ at: Date.now(), by, dateLabel: t.dateLabel, dateISO: t.dateISO, parts: done });
-  logOps({ at: Date.now(), by, dateLabel: t.dateLabel, parts: done });
+  markOps({ at: Date.now(), by, dateLabel: t.dateLabel, dateISO: t.dateISO, parts: done, duty });
+  logOps({ at: Date.now(), by, dateLabel: t.dateLabel, parts: done, duty });
   console.log(`🏳 [경기과] ${t.dateLabel} 받음(${by}) — `
     + (okParts.map((d) => `${d.part}부 ${d.rows}명·커트 ${d.cut}·회원 ${d.updated}명`).join(' / ') || '반영된 부 없음')
+    + (duty.set.length ? ` · 당번 ${duty.set.join(', ')}` : '')
+    + (duty.off.length ? ` · 당번 푼 사람 ${duty.off.join(', ')}` : '')
     + (bad.length ? ` · 실패 ${bad.map((d) => `${d.part}부(${d.error})`).join(', ')}` : '') + ' · 알림 없음');
-  res.json({ ok: bad.length === 0, dateLabel: t.dateLabel, parts: done, notified: false });
+  res.json({ ok: bad.length === 0, dateLabel: t.dateLabel, parts: done, duty, notified: false });
 });
 
 // 경기과 프로그램이 마지막으로 보낸 것 — 잘 오고 있나 눈으로 볼 수 있게

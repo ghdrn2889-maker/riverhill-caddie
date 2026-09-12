@@ -49,6 +49,11 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
   const rounds = { ...(prev.rounds || {}) };
   if (swappedOut) delete rounds[part];      // 넘긴 부는 그날의 내 라운드가 아니다
   else rounds[part] = { part, kind, status: info.status || '', teeTime: info.teeTime || '', course: info.course || '', myPosition: info.myPosition ?? null };
+  // ★사람이 '오늘 이 사람은 쉰다'고 못 박으면 그날은 통째로 쉬는 날이다.
+  //  다른 부에 남아 있던 옛 근무 자국은 그날의 사실이 아니다 — 같이 거둔다.
+  //  실측: 카드는 세 부 모두 병가인데 일지만 '근무'였다. 2부 라운드가 옛 값 그대로 남아
+  //  '어느 라운드든 work면 work'에 걸렸기 때문이다. 사람이 말한 것에는 옛 자국이 못 이긴다.
+  if (info.dutyRest && kind === 'off') for (const k2 of Object.keys(rounds)) if (k2 !== part) delete rounds[k2];
   // 넘기고 나니 남은 라운드가 없다 = 그날 내 근무가 통째로 사라진 것. 메모·기분만 남기고 기록은 지운다.
   if (swappedOut && !Object.keys(rounds).length) {
     if (prev.memo != null || prev.mood != null) {
