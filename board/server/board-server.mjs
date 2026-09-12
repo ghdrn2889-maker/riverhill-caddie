@@ -89,12 +89,94 @@ function body(req) {
   });
 }
 
+// ══ 문지기 ═══════════════════════════════════════════════════
+// ★배치표는 앱 로그인을 '빌려' 쓴다. 앱과 합치지 않는다.
+//   같은 주소 밑(…/board)에 서므로 앱 로그인 쿠키가 이쪽으로도 온다.
+//   그 쿠키를 들고 앱에 "이 사람 누구요?" 한 줄만 묻는다. 앱 데이터는 안 본다.
+//   앱이 안 서 있거나 열쇠가 안 맞으면 아무도 못 들어온다 — 열어 두느니 닫는다.
+const APP = process.env.BOARD_APP || 'http://127.0.0.1:3000';
+const BRIDGE = process.env.BOARD_BRIDGE_KEY || '';
+const BASE = (process.env.BOARD_BASE || '').replace(/\/+$/, '');   // 밖에서 보이는 앞길 (예: /board)
+const ALLOW = String(process.env.BOARD_ALLOW_ROLES || 'admin,ops').split(',').map((s) => s.trim()).filter(Boolean);
+const OPEN = process.env.BOARD_OPEN === '1';        // ★집 안에서만 쓰던 때로 돌리는 비상 스위치
+const seen = new Map();                             // 쿠키 → { at, who } 짧게 기억한다(앱에 매번 안 묻게)
+const SEEN_MS = 30 * 1000;
+
+function cookieOf(req) {
+  const h = req.headers.cookie || '';
+  const m = h.match(/(?:^|;\s*)rh_sess=([^;]+)/);
+  return m ? m[1] : '';
+}
+function askApp(tok) {
+  return new Promise((done) => {
+    const now = Date.now(), had = seen.get(tok);
+    if (had && now - had.at < SEEN_MS) return done(had.who);
+    const r = http.request(APP + '/api/board/who', {
+      method: 'GET', timeout: 4000,
+      headers: { 'Cookie': 'rh_sess=' + tok, 'X-Board-Key': BRIDGE },
+    }, (rs) => {
+      let b = '';
+      rs.on('data', (c) => { b += c; });
+      rs.on('end', () => {
+        let who = null;
+        try { const o = JSON.parse(b); if (o && o.ok) who = o; } catch (e) { /* 앱이 이상한 답을 주면 못 들어온다 */ }
+        seen.set(tok, { at: now, who });
+        if (seen.size > 500) seen.clear();
+        done(who);
+      });
+    });
+    r.on('error', () => done(null));
+    r.on('timeout', () => { r.destroy(); done(null); });
+    r.end();
+  });
+}
+function page(title, msg, btn) {
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title><style>
+ :root{color-scheme:light dark}
+ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      font:16px/1.7 -apple-system,'Malgun Gothic',sans-serif;background:#f4f6f8;color:#1d2733}
+ .box{max-width:420px;padding:34px 30px;background:#fff;border:1.5px solid #d4dbe3;border-radius:14px;text-align:center}
+ h1{margin:0 0 14px;font-size:20px}
+ p{margin:0 0 22px;color:#4d5c6b;white-space:pre-line}
+ a.go{display:inline-block;padding:13px 30px;background:#2f6db5;color:#fff;text-decoration:none;border-radius:9px;font-weight:700}
+ @media(prefers-color-scheme:dark){body{background:#161a1f;color:#e7edf3}
+  .box{background:#1e242b;border-color:#39424d}p{color:#a9b6c3}}
+</style></head><body><div class="box"><h1>${title}</h1><p>${msg}</p>${btn}</div></body></html>`;
+}
+const loginPage = (backTo) => page('경기과 배치표',
+  '리버힐 계정으로 로그인하셔야 볼 수 있습니다.\n캐디분들 실명이 들어 있어 문을 걸어 두었습니다.',
+  `<a class="go" href="/api/auth/google?back=${encodeURIComponent(backTo)}">로그인하기</a>`);
+const denyPage = (r) => page('들어올 수 없습니다',
+  `로그인은 되었는데 배치표를 볼 수 있는 등급이 아닙니다.\n(지금 등급: ${r || '없음'})\n경기과로 등록해 달라고 관리자에게 말씀하십시오.`,
+  '<a class="go" href="/">앱으로</a>');
+const downPage = () => page('잠시 뒤에 다시',
+  '신분을 확인해 주는 앱이 지금 응답하지 않습니다.\n잠시 뒤 새로고침해 주십시오.', '');
+
+// 들여보내도 되는 사람인가 — 안 되면 보여 줄 화면을 돌려준다
+async function guard(req, res) {
+  if (OPEN) return true;                                  // 집 안에서만 쓰던 때로 돌리는 스위치
+  if (!BRIDGE) { send(res, 503, downPage(), 'text/html; charset=utf-8'); return false; }
+  const tok = cookieOf(req);
+  const backTo = (BASE || '') + '/';
+  if (!tok) { send(res, 401, loginPage(backTo), 'text/html; charset=utf-8'); return false; }
+  const who = await askApp(tok);
+  if (!who) { send(res, 503, downPage(), 'text/html; charset=utf-8'); return false; }
+  if (!who.authed) { send(res, 401, loginPage(backTo), 'text/html; charset=utf-8'); return false; }
+  if (who.status !== 'active' || ALLOW.indexOf(who.role) < 0) {
+    send(res, 403, denyPage(who.role), 'text/html; charset=utf-8'); return false;
+  }
+  req._who = who;
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname.replace(/\/+$/, '') || '/';
-  const who = '경기과';                      // ★신분 확인은 다음 단계에서 앱 창구로 잇는다
-
   try {
+    if (!(await guard(req, res))) return;     // ★여기를 못 지나면 아무것도 안 보인다
+    const who = (req._who && ('회원 ' + req._who.id)) || '경기과';
     // ── 화면
     if (req.method === 'GET' && (p === '/' || p === '/board')) {
       let html;
