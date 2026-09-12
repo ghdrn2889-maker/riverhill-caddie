@@ -75,8 +75,12 @@ export function recordDayStatus(dateISO, info = {}, userId = 1) {
     : Object.values(rounds).find((r) => r.kind === 'work' && r.teeTime) || null;
   const workCount = Object.values(rounds).filter((r) => r.kind === 'work').length;
   // 휴무 vs 휴가 vs 병가: off일 때만 offType 보관(sick/vacation 신호 우선, 없으면 이전 값·기본 off).
+  // ★옛 병가·휴가를 붙드는 것은 사진 판독이 흐려 '휴무'로 강등할 때를 막으려는 것이다.
+  //  사람이 '이 사람은 휴무다'라고 못 박아 준 것에는 그 보호가 필요 없다 —
+  //  그러면 카드는 휴무인데 일지만 휴가로 남아 둘이 딴말을 한다(실측).
   const offType = overall === 'off'
-    ? (info.offType === 'sick' ? 'sick' : info.offType === 'vacation' ? 'vacation' : (prev.offType || 'off'))
+    ? (info.offType === 'sick' ? 'sick' : info.offType === 'vacation' ? 'vacation'
+      : (info.dutyFirm ? 'off' : (prev.offType || 'off')))
     : null;
   j[dateISO] = {
     date: dateISO,

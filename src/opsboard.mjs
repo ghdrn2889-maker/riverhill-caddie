@@ -66,10 +66,11 @@ export function translateOps(state) {
   }
 
   // ── 근태 한 장 ── (세 부를 다 보고 나서 만든다)
-  // ★말하지 않는 것과 '풀어라'는 다르다. 그래서 두 가지만 싣는다:
-  //   ① 경기과가 근태를 붙였고 오늘 어느 부에도 안 선 사람 → 그 근태
-  //   ② 오늘 어느 부든 자리에 선 사람 → 빈 값(=풀어라)
-  //   그 밖의 사람은 아예 안 싣는다 — 경기과 프로그램이 모르는 사람의 근태를 지우면 안 된다.
+  // ★말하지 않는 것과 '풀어라'는 다르다. 그래서 경기과 명부에 있는 사람은 모두 싣는다 —
+  //   근태가 붙은 사람은 그 근태를, 나머지는 빈 값(=풀어라)을.
+  //   말 안 하고 두면 붙일 때만 닿고 뗄 때는 안 닿는다. 실측: 병가를 찍었다 풀었는데
+  //   앱에 병가가 그대로 남은 사람이 열둘 중 일곱이었다 — 명단에도 안 서 있어 아무도 말해 주지 않았다.
+  //   경기과 명부 밖 사람은 여전히 안 싣는다(경기과가 모르는 사람의 근태를 지우면 안 된다).
   //
   // ★자리가 근태를 이긴다. 배지는 남아 있는데 자리에 서 있는 사람이 실제로 나온다 —
   //  경기과 프로그램의 근무표도 그렇게 읽는다(자리가 있으면 '근무'). 배지만 보고 휴무로 보내면
@@ -78,9 +79,14 @@ export function translateOps(state) {
   //  그래서 한 장을 만들어 세 부에 똑같이 보낸다.
   const onBoard = new Set();
   for (const pd of Object.values(out.parts)) for (const n of pd.seated) onBoard.add(n);
+  const tagOf = {};
+  for (const [n, t] of Object.entries(TAG)) { const b = bare(n); if (b) tagOf[b] = t; }
+  const known = new Set([...(o.jonames || []).map(bare), ...Object.keys(tagOf), ...onBoard].filter(Boolean));
   const dutySet = {};
-  for (const [n, t] of Object.entries(TAG)) { const b = bare(n); if (ABSTYPES.includes(t) && !onBoard.has(b)) dutySet[b] = t; }
-  for (const n of onBoard) dutySet[n] = '';
+  for (const n of known) {
+    const t = tagOf[n] || '';
+    dutySet[n] = (!onBoard.has(n) && ABSTYPES.includes(t)) ? t : '';
+  }
   for (const pd of Object.values(out.parts)) { pd.dutySet = dutySet; delete pd.seated; }
   return out;
 }

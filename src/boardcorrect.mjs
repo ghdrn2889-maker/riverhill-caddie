@@ -219,9 +219,11 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     //  사진이 흐려 병가를 휴무로 잘못 읽는 일이 있어서 넣은 것이다.
     //  그런데 그 보호가 사람이 고른 것에도 걸려서, 경기과가 병가를 휴무로 되돌려도
     //  화면은 계속 병가였다(실측). 사람이 고른 것에 오독 보호는 필요 없다.
-    if (isOff) {
+    //  ★'근태 없음'도 말한 것이다 — 빈 값은 '풀어라'라는 뜻이다.
+    //   값이 있을 때만 고치면 붙일 때는 닿고 뗄 때는 안 닿는다(실측: 병가를 풀었는데 열둘 중 일곱이 병가로 남았다).
+    if (isOff && dutyOf.has(nkey(m.board_name))) {
       const _d = dutyOf.get(nkey(m.board_name));
-      if (_d) next.offType = /병가/.test(_d) ? 'sick' : /휴가|연차|반차|월차/.test(_d) ? 'vacation' : 'off';
+      next.offType = /병가/.test(_d) ? 'sick' : /휴가|연차|반차|월차/.test(_d) ? 'vacation' : 'off';
     }
     const pos = Number(next.myPosition) || 0;
     if (!isOff && pos > 0 && cutLine > 0) {
@@ -240,7 +242,8 @@ export function correctPart3({ rows, interns = [], allInterns = null, cutLine = 
     next.updatedAt = Date.now();
     const wasWait = ['spare', 'waiting', 'near'].includes(today.status), wasWork = ['work', 'assigned', 'your_turn'].includes(today.status), wasOff = today.status === 'off';
     const nowWork = ['work', 'assigned', 'your_turn'].includes(next.status), nowSpare = ['spare', 'waiting', 'near'].includes(next.status), nowOff = next.status === 'off';
-    saveToday(next, m.id); updated++;
+    // 사람이 못 박은 근태면 근무 일지에도 그 말 그대로 적힌다 — 카드와 일지가 딴말하면 안 된다
+    saveToday(next, m.id, '3', { dutyFirm: dutyOf.has(nkey(m.board_name)) }); updated++;
     if (notify) {
       const cm = correctionMsg(`${member.part}부`, m.board_name, { wasWait, wasOff, wasWork, nowWork, nowSpare, nowOff, pos, oldTee: today.teeTime || '', newTee: next.teeTime || '' });
       if (cm) pending.push({ id: m.id, name: m.board_name, title: cm.title, body: cm.body });

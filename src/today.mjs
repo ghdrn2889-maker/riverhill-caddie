@@ -29,15 +29,16 @@ export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, 
 //
 //  카드를 쓰는 자리마다 일지 호출을 따라 붙이면 새 자리가 생길 때마다 또 샌다(실제로 일곱 군데였다).
 //  그래서 길목 하나에서 함께 쓴다.
-export function saveToday(s, userId = 1, part = '3') {
+// opts.dutyFirm: 이 근태는 사람이 못 박은 것이다(사진 판독이 아니다). 일지가 옛 값을 붙들지 않게 알려 준다.
+export function saveToday(s, userId = 1, part = '3', opts = null) {
   saveUserJSON(userId, fileFor(part), s);
-  syncJournal(s, userId, part);
+  syncJournal(s, userId, part, opts);
 }
 
 // 카드 한 장을 일지의 그 날 그 부 라운드로 옮긴다.
 //  ★일지는 부수 기록이다 — 여기서 실패해도 카드 저장을 되돌리지 않는다(카드가 먼저 저장된 이유).
 //  ★상태가 '미상'이면 journal이 알아서 기록하지 않는다(확정 상태만 일지에 남는다).
-function syncJournal(s, userId, part) {
+function syncJournal(s, userId, part, opts = null) {
   try {
     if (!s || !s.status) return;
     const iso = labelToISO(s.date || '');
@@ -52,6 +53,7 @@ function syncJournal(s, userId, part) {
       prevPosition: s.prevPosition ?? null,
       offType: s.offType || null,
       part: String(part || '3'),
+      dutyFirm: !!(opts && opts.dutyFirm),   // 사람이 못 박은 근태 — 옛 병가·휴가를 붙들지 말라는 말
       // ★이 부 자리를 대바로 남에게 넘겼다는 표식. 카드는 '미상'으로 비워지는데,
       //  일지가 그걸 '아직 모르겠다'로 읽으면 넘긴 부의 옛 근무가 그대로 남아 두 탕이 된다.
       swappedOut: !!s._swappedOut,
