@@ -1,0 +1,28 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    ok(srvOn(), '서버 모드인가', srvOn()? '예 — 정본은 서버' : '★아니오');
+    L('오늘', DATE);
+    L('서버에서 받아 온 날', Object.keys(SRV.sig).join(' ') || '(아직 없음)');
+    var p = part('1');
+    L('1부', active(p).length + '줄 · ' + active(p).slice(0,3).map(function(r){return r.n||'(빈)';}).join(' '));
+    var n0 = active(p).length;
+    addRow('1', addablePool('1')[0]);
+    daySave();
+    L('저장 눌렀음', n0 + '줄 → ' + active(p).length + '줄');
+    setTimeout(function(){
+      ok(!!SRV.sig[DATE], '서버가 판본 도장을 줬나', SRV.sig[DATE] ? SRV.sig[DATE] : '★못 받음');
+      ok(!SRV.clash, '막힌 것', SRV.clash || '없음');
+      ok(!SRV.err, '실패한 것', SRV.err || '없음');
+      document.getElementById('PROBE').textContent = o.join('\n') + '\nerrs: ' + (E.length? E.join(' | '):'none');
+    }, 2500);
+  }catch(err){
+    o.push('터짐: '+err.message);
+    document.getElementById('PROBE').textContent=o.join('\n');
+  }
+},2000);
+</script>
