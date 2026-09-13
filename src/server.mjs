@@ -2028,6 +2028,30 @@ async function kakaoUpdateMinorTick() {
   }
 }
 
+// ── 옛 배치표 판독 끄기 스위치 ──────────────────────────────────────────
+//  ★경기과 프로그램이 배치표를 직접 들고 오면, 사진 판독은 정본을 덮을 상대가 된다.
+//   그래서 통째로 쉬게 하는 스위치를 둔다 — push-disabled 와 같은 모양이다.
+//   켜는 법: data/board-read-off 파일을 만든다(또는 env BOARD_READ_OFF=1).
+//   끄는 법: 그 파일을 지운다. 둘 다 재시작 없이 바로 듣는다.
+//  쉬는 것: 글 판독(notifyForArticle) · 주기 재판독 · 카카오/티스캐너 관측 ·
+//            부 날짜 엇갈림 감시 · 끝점 검사. 전부 사진 판독을 받침으로 사는 것들이다.
+//  그대로 도는 것: 경기과 문(/api/ops-board) · 회원 화면 · 정산 · 근무 일지 ·
+//            시간표 알림(이미 받은 배치표 기준) · 카페 감시 자체(판독만 안 한다)
+function boardReadOff() {
+  if (['1', 'true', 'yes'].includes(String(process.env.BOARD_READ_OFF || '').toLowerCase())) return 'BOARD_READ_OFF';
+  try { return fs.existsSync(path.join(DATA_DIR, 'board-read-off')) ? 'board-read-off 파일' : ''; } catch { return ''; }
+}
+let _offSaidAt = 0;
+function boardReadOffSay(what) {                 // 매 틱마다 적지 않는다 — 10분에 한 번만
+  const why = boardReadOff();
+  if (!why) return '';
+  if (Date.now() - _offSaidAt > 10 * 60 * 1000) {
+    _offSaidAt = Date.now();
+    console.log(`⏸ [옛 배치표 판독 꺼짐(${why})] ${what} — 경기과 프로그램이 보내는 배치표만 받습니다`);
+  }
+  return why;
+}
+
 // ── 카카오 보조 · 1·2부 관측(그 부를 이번에 판독하지 않은 날) ────────
 //  판독 경로를 안 탄 부는 store에 있는 마지막 판독으로 재기만 한다. 여기서는 절대 얹지 않는다.
 async function observeMinorKakao(dateISO) {
@@ -2063,6 +2087,12 @@ async function observeMinorKakao(dateISO) {
 }
 
 async function notifyForArticle(full, result = {}, opts = {}) {
+  // ★스위치가 꺼져 있으면 여기서 끝난다.
+  //   빈 것을 돌려줘야 크롤러가 봤다고 넣고 다시 안 매달린다
+  if (boardReadOff()) {
+    boardReadOffSay(`#${full && full.id} ${String((full && full.subject) || '').slice(0, 24)}`);
+    return {};
+  }
   const primary = envMember(); // 1번 회원(김홍구)
   // ★가배치 예고 수집 — 카페 글·댓글도 같은 입구를 쓴다("내일가배치입니다 비가용67명…" 실측 8/16).
   //  배치표 그림엔 가배치 표시가 없으므로, 이 말이 유일한 단서다.
@@ -3305,6 +3335,7 @@ startCrawler({
 const BOARD_RECHECK_MS = Number(process.env.BOARD_RECHECK_MS ?? 90000);
 let recheckBusy = false;
 async function recheckBoard() {
+  if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   if (recheckBusy) return;                                 // 재판독이 아직 진행 중이면 이번 틱은 건너뜀
   if (!boardWatch || !boardWatch.id) return;
   const h = new Date().getHours();
@@ -3333,6 +3364,7 @@ async function recheckBoard() {
 // ── 1·2부 단독 배치표 재확인 루프: 부별 감시(partBoardWatch)를 돌며 같은 글 이미지 교체(수정본)를 잡는다 ──
 //  3부는 위 recheckBoard(단일 boardWatch)가 담당. 여기선 1·2부 각각의 최신 단독 배치표 이미지를 지문 비교.
 async function recheckPartBoards() {
+  if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   if (recheckBusy) return;                                 // 3부 재판독 진행 중이면 이번 틱은 건너뜀
   const h = new Date().getHours();
   const aStart = Number(process.env.ACTIVE_START_HOUR ?? 12);
@@ -3366,6 +3398,7 @@ async function recheckPartBoards() {
 const KAKAO_TICK_MS = Number(process.env.KAKAO_TICK_MS || 5 * 60 * 1000);
 if (kakaoOn()) {
   const kakaoTick = () => {
+    if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
     const h = new Date().getHours();
     // 예약은 배치표 나오기 전 낮~밤에 몰린다. 새벽엔 굳이 두드리지 않는다.
     if (h < 7 || h >= 24) return;
@@ -3392,6 +3425,7 @@ if (kakaoOn()) {
   //   (실증: 8/18의 실제 27팀이 전부 '한 번도 판매중으로 못 본 칸'이었다 — 2일 전에야 보기 시작해서다.)
   //   요청은 시간당 9건 — Crawl-delay 1.5초를 지키고도 부담이 없다.
   const kakaoFarTick = () => {
+    if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
     const h = new Date().getHours();
     if (h < 7 || h >= 24) return;
     kakaoGolfTick({ from: 3, days: 12 }).catch((e) => console.error('[카카오골프/먼날]', e.message));
@@ -3408,6 +3442,7 @@ if (kakaoOn()) {
   //  그 날짜 배치표가 lastboard에 있는 동안만 잴 수 있고, 저녁이면 다음 날 배치표가 그 자리를 가져간다.
   //  그래서 '하루가 끝난 뒤 한 번'이 아니라 계속 재고, 마지막 기록이 그날의 성적이 된다.
   const scoreTick = () => {
+    if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
     const now = new Date(), t = new Date(); t.setDate(t.getDate() + 1);
     const y = (x) => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`;
     for (const d of [y(now), y(t)]) { try { recordKakaoScore(d, { labelToISO: worklog.labelToISO }); } catch (e) { console.error('[카카오채점]', e.message); } }
@@ -3416,7 +3451,7 @@ if (kakaoOn()) {
   setInterval(scoreTick, 60 * 60 * 1000);
   console.log('📊 카카오 채점: 1시간 간격 — node tools/kakaoscore.mjs --log 로 설정 변화와 함께 확인');
 
-  const benchTick = () => { try { sampleBoards({ labelToISO: worklog.labelToISO }); } catch (e) { console.error('[대조표본]', e.message); } };
+  const benchTick = () => { if (boardReadOff()) return; try { sampleBoards({ labelToISO: worklog.labelToISO }); } catch (e) { console.error('[대조표본]', e.message); } };
   setTimeout(benchTick, 25000);
   setInterval(benchTick, 60 * 1000);
   console.log('📏 카카오 대조 표본: 1분 간격 — node tools/kakaobench.mjs 로 확인');
@@ -3424,6 +3459,11 @@ if (kakaoOn()) {
 
 setInterval(() => { recheckBoard().catch(() => {}).then(() => recheckPartBoards().catch(() => {})); }, BOARD_RECHECK_MS);
 console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격(활성 시간대, 3부+1·2부 이미지 변경 시에만 재판독)`);
+// ★켜질 때 한 번 — 지금 사진 판독을 하는지 말아 둔다. 로그를 보고 헷짚은 곳 안 찾게
+{ const _off = boardReadOff();
+  console.log(_off
+    ? `⏸ 옛 배치표 판독: 꺼짐(${_off}) — 경기과 프로그램이 보내는 배치표만 받습니다`
+    : '✅ 옛 배치표 판독: 켜짐 — 끄려면 data/board-read-off 파일을 만드십시오(재시작 불필요)'); }
 
 // ── 부 날짜 엇갈림 감시 ──────────────────────────────────────────────────
 //  ★3부(lastboard)와 1·2부(board-parts-store)는 저장 시점이 다르다(rememberBoard 뒤에 setBoardPart).
@@ -3432,6 +3472,7 @@ console.log(`🔁 배치표 재확인 루프: ${BOARD_RECHECK_MS / 1000}s 간격
 //   갈라지는 걸 막을 수는 없다(단독 부-배치표는 그 부만 갱신하는 게 옳다). 모르는 걸 막는다.
 const PARTS_DATE_CHECK_MS = Number(process.env.PARTS_DATE_CHECK_MS || 10 * 60 * 1000);
 function checkPartsDateSkew() {
+  if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   try {
     const parts = buildBoardsView({ labelToISO: worklog.labelToISO });
     const stale = parts.filter((b) => b.stale);
@@ -3467,6 +3508,7 @@ function reflectedBoardKeys() {
   return [...keys];
 }
 async function checkBoardPending() {
+  if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   try {
     const r = await checkPending(reflectedBoardKeys());
     if (r.alerted) console.warn(`📵 [끝점검사] 반영 안 된 배치표 ${r.alerted}건 → 관리자 알림 발송(대기 ${r.pending}건)`);
