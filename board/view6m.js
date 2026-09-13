@@ -1028,7 +1028,6 @@ function drawInsList(){
   $('insOut').innerHTML = out || '<div class="empty">'
     + (q ? esc(q) + ' — 오늘 명단에 없습니다' : '넣을 사람이 없습니다') + '</div>';
 }
-var bkFrom = 1;                       // ★창을 다시 그려도 친 숫자는 남아 있어야 한다
 function bulkActHTML(){
   var L = bulkPicked(), n = L.length;
   function btns(list){
@@ -1071,17 +1070,6 @@ function bulkActHTML(){
                + ' 자리 빼기</button>'; }).join('')
          + '</div>' : '')
     + '</div>'
-    + '<div class="grp"><h4>배치표에 한꺼번에 앉히기</h4>'
-    + '<div class="fld" style="align-items:center">'
-    + '<input id="bkFrom" class="tf" inputmode="numeric" style="flex:0 0 110px;max-width:110px" '
-    + 'value="' + esc(String(bkFrom)) + '" placeholder="1">'
-    + '<span style="font-weight:800;color:var(--dim)">번부터 앉힙니다</span></div>'
-    + '<div style="height:8px"></div>'
-    + btns(parts.map(function(p){ return ['s|' + p.k, p.name + '에 앉히기']; }))
-    + '<div class="dnote" style="margin-top:9px">고른 사람이 <b>적은 번호부터 차례로</b> 앉고 '
-    + '<b>뒤가 한 칸씩 밀립니다</b> — 아무도 자리를 잃지 않습니다. 차례는 조 편성이 정합니다.<br>'
-    + '<b>조출·중복 근무를 먼저 여기 앉히고</b>, 그 다음 순번 세우기를 누르십시오 — '
-    + '배지가 붙어 있으면 순번 세우기가 이 자리를 안 건드립니다.</div></div>'
     + '<div class="grp"><h4>선택</h4>'
     + '<div class="acts"><button data-bkdo="clear">선택 모두 풀기</button></div></div>';
 }
@@ -1859,12 +1847,6 @@ $('sheet').addEventListener('click', function(e){
   var bkd = b.getAttribute('data-bkdo');
   if (bkd){
     if (bkd === 'clear'){ bulkPickClear(); paint(); openBulkAct(); return; }
-    if (bkd.charAt(0) === 's'){                    // 배치표에 N번부터 앉히기
-      var fe = $('bkFrom');
-      if (fe) bkFrom = Math.max(1, Math.floor(Number(fe.value) || 1));
-      seatMany(bkd.slice(2), bkFrom, bulkPicked());
-      paint(); openBulkAct(); return;
-    }
     if (bkd.charAt(0) === 'p'){                    // ★부 지정 — 배치표는 안 건드린다
       bulkApplyPlan(bkd.slice(2), bkd.charAt(1) === '+');
       paint(); openBulkAct(); return;
