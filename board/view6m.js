@@ -1155,7 +1155,7 @@ function seatsGrp(nm, seats, act){
       return '<button class="dim" disabled>' + (k ? esc(part(k).name) + ' · ' : '') + why + '</button>';
     }).join('');
   }
-  return '<div class="grp"><h4>오늘 어디 있나</h4><div class="acts">' + body + '</div>'
+  return '<div class="grp"><h4>오늘 근무</h4><div class="acts">' + body + '</div>'
     + '<div class="dnote">' + (seats.length
         ? '자리를 누르면 <b>배치표의 그 칸으로 갑니다.</b>'
         : '오늘 자리가 없습니다. 아래에서 넣으십시오.')
@@ -1200,61 +1200,64 @@ function dayTagGrp(nm){
                 + '— 되돌리기 한 번으로 돌아옵니다.'))
     + '</div></div>';
 }
-// ★근태도 네 칸을 못 박는다. '근무'가 생겼다 없어졌다 하면 단추가 한 칸씩 밀린다
-function absGrp(nm, hasSeat){
-  var ab = tagOf(nm), isA = isAbs(ab);
-  return '<div class="grp"><h4>오늘 근태</h4>'
+// ★그날의 구분과 근태는 한 칸(TAG)을 나눠 쓴다 — 그래서 화면에서도 한 묶음이다.
+//   칸 수는 못 박는다. '근무'가 생겼다 없어졌다 하면 단추가 한 칸씩 밀린다
+function stateGrp(nm, hasSeat){
+  var t = tagOf(nm), isA = isAbs(t), t0 = dayMark(nm);
+  var none = !t0 && !isA;                      // 아무것도 안 붙은 것이 그대로 '근무'이다
+  function btn(attr, v, label, on){
+    return '<button data-' + attr + '="' + esc(v) + '"' + (on ? ' class="on"' : '') + '>'
+      + esc(label) + '</button>';
+  }
+  return '<div class="grp"><h4>상태</h4>'
     + '<div class="acts fix" style="grid-template-columns:repeat(4,minmax(0,1fr))">'
-    + [''].concat(ABSTYPES).map(function(t){
-        var on = t ? (ab === t) : !isA;
-        return '<button data-abs="' + esc(t) + '"' + (on ? ' class="on"' : '') + '>'
-          + (t || '근무') + '</button>'; }).join('')
+    // ★'근무'는 붙은 것을 떼는 자리다 — 쉬고 있었으면 자리를 돌려주고,
+    //   그날의 구분이었으면 구분만 둔다. 두 기계가 다르니 누를 부를지를 여기서 가른다
+    + btn(isA ? 'abs' : 'dtag', '', '근무', none)
+    + DAYTAGS.map(function(x){ return btn('dtag', x, x, t0 === x); }).join('')
+    + '</div><div style="height:8px"></div>'
+    + '<div class="acts fix" style="grid-template-columns:repeat(4,minmax(0,1fr))">'
+    + ABSTYPES.map(function(x){ return btn('abs', x, x, t === x); }).join('')
     + '</div><div class="dnote">'
-    + (hasSeat
-        ? '휴무·휴가·병가를 누르면 <b>선 자리를 비우고</b> 뒤 순번이 당겨집니다. '
-          + '되돌리기 한 번으로 그대로 돌아옵니다.'
-        : (isA ? '<b>근무</b>를 누르면 있던 부의 <b>대기 뒤로</b> 돌아옵니다. '
-                 + '되돌리기 한 번으로 다시 쉬는 상태가 됩니다.'
-               : '오늘 배치표에 자리가 없지만 <b>쉬는 것은 아닙니다</b> — '
-                 + '아직 안 넣은 것이라 가용에 듭니다.'))
-    + '</div></div>';
+    + (t0 === '찾근'
+       ? '<b>찾근</b>은 본인이 <b>원하는 순번을 골라 옵니다</b> — '
+         + '그래서 순번 세우기가 안 세우고 배치표 자리에서도 내려와 있습니다.<br>'
+       : '')
+    + (isA
+       ? '<b>근무</b>를 누르면 있던 부의 <b>대기 뒤로</b> 돌아옵니다.'
+       : '조출·후출·정출·찾근을 붙이면 <b>순번 세우기에서 빠지고 배치표 자리에서도 내려옵니다</b> '
+         + '— 어디에 놓을지는 사람이 정합니다.'
+         + (hasSeat ? ' 휴무·휴가·병가는 <b>선 자리를 비우고</b> 뒤 순번이 당겨집니다.' : ''))
+    + ' 되돌리기 한 번으로 그대로 돌아옵니다.</div></div>';
 }
-// 한 부만 넣고 뺀다 — 대바는 두 사람을 맞바꾸는 일이고, 이건 한 사람을 넣거나 빼는 일이다
+// 한 부만 넣고 뻐다 — 대바는 두 사람을 맞바꾸는 일이고, 이건 한 사람을 넣거나 빼는 일이다
 function partMoveHTML(nm){
   if (!DAY.length) return '';
-  // ★부 차례 그대로 한 부에 한 단추. 있으면 빼기, 없으면 넣기 —
-  // 누른 뒤에도 그 부의 단추는 그 자리에 그대로 있다.
-  // (빼기끼리 앞에 모으면, 1부를 뺀 순간 2부가 그 자리로 당겨져 손가락이 헛다리를 짚는다)
-  var inS = {};
-  partsOf(nm).forEach(function(k){ inS[k] = 1; });
-  return '<div class="grp"><h4>오늘 어느 부에서 근무하나</h4>'
+  // ★한 부에 한 칸. 이름만 적고, 그 부에서 일하면 그 부 색으로 찬다 —
+  //   한꺼번에 바꾸기 창과 같은 모양이다.
+  //   누른 뒤에도 그 부의 칸은 그 자리에 그대로 있다
+  return '<div class="grp"><h4>부 선택</h4>'
     + '<div class="acts pm" style="grid-template-columns:repeat(' + DAY.length + ',minmax(0,1fr))">'
     + DAY.map(function(p){
         // ★누르면 '오늘 이 부에서 일한다'가 켜지고 꺼진다(PLAN).
         //   배치표 명단은 안 건드린다 — 대기에도 순번이 이어져 붙어서,
         //   여기서 줄을 만들면 관리자가 짜 놓은 순번이 흔들린다.
         //   자리는 배치표에서 빈 칸을 눌러 앉힌다
-        var on = inPlan(nm, p.key), sat = inS[p.key];
-        return '<button class="' + (on ? 'on' : '') + '" data-pln="' + p.key + '">'
-          + '<b>' + esc(p.name) + '</b><span>'
-          + (sat ? '배치표에 있음' : (on ? '근무' : '안 함')) + '</span></button>'; }).join('')
+        var on = inPlan(nm, p.key);
+        return '<button class="pk' + esc(p.key) + (on ? ' on' : '')
+          + '" data-pln="' + esc(p.key) + '">'
+          + '<b>' + esc(p.name) + '</b></button>'; }).join('')
     + '</div>'
-    // ★배치표에 실제로 앉아 있는 자리는 따로 보여 준다 — 여기서만 자리를 뺀다
+    // ★배치표에 실제로 앉아 있는 자리는 따로 보여 준다 — 여기서만 자리를 미는다
     + (partsOf(nm).length
-       ? '<div class="dnote" style="margin-bottom:8px">배치표 자리 — '
+       ? '<div class="dnote" style="margin:9px 0 8px">배치표 자리 — '
          + partsOf(nm).map(function(k){ return '<b>' + esc(part(k).name) + '</b>'; }).join(' · ')
          + '</div><div class="acts">'
          + partsOf(nm).map(function(k){
              return '<button class="warn" data-prm="' + k + '">' + esc(part(k).name)
                + ' 자리 빼기</button>'; }).join('')
          + '</div>' : '')
-    + '<div class="dnote">여기서 정하는 것은 <b>오늘 어느 부에서 근무하나</b>입니다 — '
-    + '<b>배치표에는 아무 일도 안 일어납니다.</b> 자리는 배치표에서 빈 칸을 누르고 '
-    + '이름을 치면 그 순번에 앉습니다.<br>'
-    + '<b>자리 빼기</b>를 누르면 <b>뒤 순번이 당겨집니다.</b> '
-    + '어느 부에도 자리가 없으면 <b>미배치</b>가 됩니다 '
-    + '— 쉬는 것이 아니라 <b>아직 안 앉힌 것</b>이라 가용에 그대로 듭니다. '
-    + '되돌리기 한 번으로 그대로 돌아옵니다.</div></div>';
+    + '</div>';
 }
 // 사람 하나 — 오늘 어디 있나. 근무표에서 이름을 누르면 여기로 온다
 // ── 카트 ────────────────────────────────────
@@ -1361,8 +1364,7 @@ function openPerson(nm){
   h += cartGrp(nm);
   h += partMoveHTML(nm);
   h += bu3Grp(nm);
-  h += dayTagGrp(nm);
-  h += absGrp(nm, seats.length);
+  h += stateGrp(nm, seats.length);
   h += '<button class="close" data-act="close">닫기</button>';
   openSheet(h, 'person', { person: nm });
 }
