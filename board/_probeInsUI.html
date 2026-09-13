@@ -1,0 +1,63 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function sh(){ return document.getElementById('sheet'); }
+  function grp(t){ return [].slice.call(sh().querySelectorAll('.grp')).filter(function(g){
+    var h=g.querySelector('h4'); return h && h.textContent.trim()===t; })[0]||null; }
+  function heads(){ return [].slice.call(sh().querySelectorAll('.grp h4'))
+    .map(function(h){ return h.textContent.trim(); }); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var pk='1', a=active(part(pk)), i=2;
+    L('연 칸', part(pk).name+' '+(i+1)+'번 · '+(a[i]?a[i].n:'(빔)'));
+    openCell(pk, i);
+
+    L('','★갑. 묶음 이름이 무슨 일인지 말하나');
+    L('  머리말', heads().join(' / '));
+    ok(heads().some(function(h){ return /^\d+번에 캐디 끼워 넣기$/.test(h); }),
+       "  'N번에 캐디 넣기'", heads().filter(function(h){ return /캐디 끼워 넣기/.test(h); })[0]||'★없음');
+    ok(heads().indexOf('순번 중간에 끼워 넣기')<0, '  옛 이름', '없음 ◎');
+
+    var g = [].slice.call(sh().querySelectorAll('.grp')).filter(function(x){
+      var h=x.querySelector('h4'); return h && /캐디 끼워 넣기/.test(h.textContent); })[0];
+    L('  단추', g.querySelector('button').textContent.trim());
+    ok(/\d+번에 끼워 넣을 캐디 고르기/.test(g.querySelector('button').textContent), '  단추 글', g.querySelector('button').textContent.trim());
+
+    L('','★을. 밑에 긴 설명은 없다');
+    ok(!g.querySelector('.dnote'), '  설명 줄', g.querySelector('.dnote')?'★남음':'없음 ◎');
+    L('  묶음 글', g.textContent.replace(/\s+/g,' ').trim());
+    ok(!/한 칸씩 뒤로|자리를 잃는 사람/.test(g.textContent), '  옛 문구', '없음 ◎');
+
+    L('','★정. 고르는 창도 무슨 일인지 말하나');
+    openCell(pk, i);
+    tap([].slice.call(sh().querySelectorAll('button[data-act="ins"]'))[0]);
+    L('  창 제목', (sh().querySelector('.st')||{}).textContent||'(없음)');
+    ok(/\d+번에 끼워 넣을 캐디 고르기/.test((sh().querySelector('.st')||{}).textContent||''),
+       '  제목', (sh().querySelector('.st')||{}).textContent||'★없음');
+    ok(!!sh().querySelector('#insQ'), '  이름 찾는 칸', '있음');
+
+    L('','★무. 실제로 밀리나');
+    var before = active(part(pk)).map(function(r){ return r?r.n:''; }).slice(i, i+3);
+    var who = JONAMES.filter(function(n){ return !partsOf(n).length; })[0];
+    insertAt(pk, i, who); paint();
+    var after = active(part(pk)).map(function(r){ return r?r.n:''; }).slice(i, i+4);
+    L('  전', before.join(' | '));
+    L('  후', after.join(' | '));
+    ok(after[0]===who && after[1]===before[0] && after[2]===before[1],
+       '  고른 사람이 그 번호로', after.slice(0,3).join(' | '));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

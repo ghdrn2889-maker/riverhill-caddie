@@ -774,12 +774,10 @@ function openCell(pk, i){
     + '<div class="fld"><input id="swQ" autocomplete="off" placeholder="이름으로 찾기"></div></div>'
     + '<div class="lst inswap" id="swOut"></div>'
 
-    + '<div class="grp"><h4>순번 중간에 끼워 넣기</h4>'
+    // ★자리 번호가 제목에 있고 단추가 할 일을 말한다 — 밑에 또 풀어 적지 않는다
+    + '<div class="grp"><h4>' + (i + 1) + '번에 캐디 끼워 넣기</h4>'
     + '<div class="acts"><button data-act="ins" class="go" style="flex:1">'
-    + '여기(' + (i + 1) + '번)에 끼워 넣기</button></div>'
-    + '<div class="dnote" style="margin-top:9px">고른 사람이 <b>' + (i + 1) + '번</b>이 되고 '
-    + '<b>뒤가 한 칸씩 밀립니다.</b> 위의 맞바꾸기는 둘이 자리를 주고받아 아무도 안 밀립니다 — '
-    + '<b>조출·중복 근무</b>를 제자리에 못 박을 때는 이쪽입니다.</div></div>'
+    + (i + 1) + '번에 끼워 넣을 캐디 고르기</button></div></div>'
 
     + (function(){
         // ★조출·후출·중복 근무를 배지별로 묶어 여기부터 앉힌다 — 이름을 하나씩 안 골라도 된다.
@@ -970,10 +968,10 @@ function openInsert(pk, i){
   openSheet('<div class="grab"></div>'
     + '<div class="k">' + esc(p.name) + ' · 순번 ' + (i + 1) + '번'
     + (t ? ' · ' + t.time + ' ' + esc(cname(t.course)) : ' · 대기') + '</div>'
-    + '<div class="st">여기에 끼워 넣기</div>'
+    + '<div class="st">' + (i + 1) + '번에 끼워 넣을 캐디 고르기</div>'
     + '<div class="sub">고른 사람이 <b>' + (i + 1) + '번</b>이 되고 '
-    + '<b>여기부터 뒤가 한 칸씩 밀립니다.</b> 맞바꾸기가 아닙니다 — 아무도 자리를 잃지 않습니다.</div>'
-    + '<div class="grp" style="padding-bottom:4px"><h4>누구를 넣을까요</h4>'
+    + '<b>여기부터 뒤가 한 칸씩 밀립니다.</b> 자리를 바꾸는 것이 아닙니다 — 아무도 자리를 잃지 않습니다.</div>'
+    + '<div class="grp" style="padding-bottom:4px"><h4>명부에서 찾기</h4>'
     + '<div class="fld"><input id="insQ" autocomplete="off" placeholder="이름으로 찾기"></div>'
     + '<div class="dnote" style="margin-top:9px">조출·중복 근무처럼 <b>배지가 붙은 사람</b>은 '
     + '순번 세우기가 안 건드립니다 — 여기 넣어 두면 그 자리에 그대로 있습니다.</div></div>'
