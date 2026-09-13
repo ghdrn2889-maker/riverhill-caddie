@@ -1625,10 +1625,7 @@ function bulkActHTML(){
              return '<button class="warn" data-bkdo="-' + esc(p.k) + '">' + esc(p.name)
                + ' 자리 빼기</button>'; }).join('')
          + '</div>' : '')
-    + '<div class="dnote" style="margin-top:9px"><b>지정은 배치표를 안 건드립니다</b> \u2014 '
-    + '오늘 어느 부에서 일하는지만 적어 둡니다. 자리는 아래의 '
-    + '<b>배치표에 한꺼번에 앉히기</b>나 배치표 빈 칸에서 잡습니다.<br>'
-    + '<b>중복 근무는 배지가 아닙니다</b> \u2014 두 부에 <b>자리</b>가 있으면 그것이 중복 근무입니다.</div></div>'
+    + '</div>'
     + '<div class="grp"><h4>배치표에 한꺼번에 앉히기</h4>'
     + '<div class="fld" style="align-items:center">'
     + '<input id="bkFrom" class="tf" inputmode="numeric" style="flex:0 0 110px;max-width:110px" '
