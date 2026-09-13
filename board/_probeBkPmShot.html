@@ -1,0 +1,25 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); ABSFROM={}; PLAN={};
+    var P=JONAMES.slice(0,5);
+    bulkStart(PICKTAG); P.forEach(function(n){ bulkTap(n); });
+    P.forEach(function(n){ setPlan(n,'1',true); });      // 1부 전원 — 켜짐
+    setPlan(P[0],'2',true); setPlan(P[1],'2',true);      // 2부 둘만 — 반만
+    seatMany('3', 1, [P[0], P[2]]);                      // 3부 배치표 둘
+    paint(); openBulkAct();
+    var sh=document.getElementById('sheet');
+    var gs=[].slice.call(sh.querySelectorAll('.grp'));
+    var g=gs.filter(function(x){ var h=x.querySelector('h4');
+      return h && h.textContent.trim()==='오늘 어느 부에서 근무하나'; })[0];
+    if(g) g.scrollIntoView();
+    o.push('고른 사람: '+P.join(' · '));
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

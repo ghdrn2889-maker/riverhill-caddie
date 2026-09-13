@@ -1037,7 +1037,8 @@ function bulkActHTML(){
   }
   var parts = DAY.map(function(p){
     var innn = L.filter(function(nm){ return partsOf(nm).indexOf(p.key) >= 0; }).length;
-    return { k: p.key, name: p.name, inn: innn };
+    var pln = L.filter(function(nm){ return inPlan(nm, p.key); }).length;
+    return { k: p.key, name: p.name, inn: innn, pln: pln };
   });
   return '<div class="grab"></div><div class="k">선택한 ' + n + '명</div>'
     + '<div class="st">한꺼번에 바꾸기</div>'
@@ -1050,12 +1051,27 @@ function bulkActHTML(){
     + '<div class="dnote" style="margin-top:9px">조출\u00b7후출\u00b7정출\u00b7찾근을 붙이면 '
     + '<b>어제 자리에서 내려옵니다</b> \u2014 순번은 경기과가 정한다는 뜻입니다.</div></div>'
     + '<div class="grp"><h4>오늘 어느 부에서 근무하나</h4>'
-    + btns(parts.map(function(p){ return ['p+' + p.k, p.name + ' 근무로 지정']; }))
-    + '<div style="height:8px"></div>'
-    + btns(parts.map(function(p){ return ['p-' + p.k, p.name + ' 지정 뗌']; }))
-    + '<div style="height:8px"></div>'
-    + btns(parts.filter(function(p){ return p.inn; }).map(function(p){
-        return ['-' + p.k, p.name + ' 배치표 자리 빼기 (' + p.inn + '명)']; }))
+    // ★한 부에 한 칸 — 누르면 켜지고 다시 누르면 꺼진다.
+    //   단추 아홉 개를 줄 세우던 것을 세 칸으로 줄였다 — 사람 하나를 볼 때와 같은 모양이다
+    + '<div class="acts pm" style="grid-template-columns:repeat(' + DAY.length + ',minmax(0,1fr))">'
+    + parts.map(function(p){
+        var all = n > 0 && p.pln === n, some = p.pln > 0 && !all;
+        return '<button class="' + (all ? 'on' : (some ? 'half' : ''))
+          + '" data-bkdo="' + (all ? 'p-' : 'p+') + esc(p.k) + '">'
+          + '<b>' + esc(p.name) + '</b><span>'
+          + (all ? '모두 근무' : some ? p.pln + '명 근무' : '안 함') + '</span>'
+          + (p.inn ? '<span>배치표 ' + p.inn + '명</span>' : '') + '</button>'; }).join('')
+    + '</div>'
+    // 배치표 자리를 빼는 것은 지정과 다른 일이라 따로 놓는다
+    + (parts.some(function(p){ return p.inn; })
+       ? '<div class="dnote" style="margin:9px 0 8px">배치표 자리 — '
+         + parts.filter(function(p){ return p.inn; }).map(function(p){
+             return '<b>' + esc(p.name) + '</b> ' + p.inn + '명'; }).join(' · ')
+         + '</div><div class="acts">'
+         + parts.filter(function(p){ return p.inn; }).map(function(p){
+             return '<button class="warn" data-bkdo="-' + esc(p.k) + '">' + esc(p.name)
+               + ' 자리 빼기</button>'; }).join('')
+         + '</div>' : '')
     + '<div class="dnote" style="margin-top:9px"><b>지정은 배치표를 안 건드립니다</b> \u2014 '
     + '오늘 어느 부에서 일하는지만 적어 둡니다. 자리는 아래의 '
     + '<b>배치표에 한꺼번에 앉히기</b>나 배치표 빈 칸에서 잡습니다.<br>'
