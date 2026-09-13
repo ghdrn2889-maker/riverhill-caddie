@@ -42,9 +42,11 @@ function workedPartsOf(rounds) {
     .map(([p]) => p);
 }
 // 그날 근무한 부 배열 — 수동 보정(dayParts) 우선, 없으면 일지의 '근무' 라운드, 그것도 없으면 기본부(3부).
-//  ★당번·벌당인 날만은 기본부를 가정하지 않는다(관리자 확인 2026-08-21).
-//   당번·벌당은 그 자체로 무보수다. 그 사람에게 캐디피가 붙는 건 '가용이 모자라 대신 나가 뛰었을 때'뿐이고,
+//  ★당번인 날만은 기본부를 가정하지 않는다(관리자 확인 2026-08-21).
+//   당번 그 자체에는 캐디피가 없다. 붙는 건 '실제로 나가 뛰었을 때'뿐이고,
 //   나갔다면 반드시 그 부 배치표 순번에 이름이 올라간다. 뛴 부가 없다는 건 안 나갔다는 뜻이다.
+//   ★그래서 흡연실 당번처럼 순번에 같이 서는 당번도 여기서 저절로 맞는다 —
+//    그 사람은 순번에 이름이 있으니 뛴 부가 잡히고 캐디피가 붙는다. 규칙을 더 만들 필요가 없다.
 //   여기서 기본 3부를 가정하면 순번에 이름도 없는 사람에게 15만원이 잡힌다.
 //   (수동 보정 dayParts는 그대로 이긴다 — 판독이 놓친 걸 사람이 넣는 길이라 막으면 안 된다.)
 function partsForDay(day, d) {
@@ -105,7 +107,10 @@ export function summary({ year, month } = {}, userId = 1) {
   const done = all.filter((x) => wd.isWorkDone(x));                      // 근무 확정(당번 포함) — 모든 화면이 세는 숫자
   const worked = all.filter((x) => wd.isWorkDone(x) && wd.isPayable(x)); // 그중 캐디피가 붙는 날 → 수익 산정 대상
   const upcoming = all.filter((x) => wd.isUpcomingWork(x) && wd.isPayable(x)); // 예정·진행 중(미반영)
-  const dutyDays = all.filter((x) => wd.hasDuty(x));                     // 당번·벌당(무보수) 일수
+  // 당번인데 캐디피가 안 붙은 날 — 발밑에 '왜 금액에 없는지'를 적는 자리라 돈이 붙은 날은 안 센다.
+  //  ★흡연실 당번처럼 순번에 같이 서는 당번이 생겼다. 그 사람은 당번을 서면서 라운드도 뛰고
+  //   그날 캐디피가 잡힌다. 그것까지 '무보수'라 적으면 금액에 든 날을 안 들었다고 말하는 셈이다.
+  const dutyDays = all.filter((x) => wd.hasDuty(x) && !(wd.isWorkDone(x) && wd.isPayable(x)));
   const pending = [];                                                    // 일지엔 '확인 대기' 개념 없음(확정만 기록)
 
   const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1') }, 2: { days: 0, amount: 0, fee: feeOf('2') }, 3: { days: 0, amount: 0, fee: feeOf('3') } };
