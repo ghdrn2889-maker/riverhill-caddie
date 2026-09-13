@@ -41,7 +41,8 @@
   --cbg:#d9e8c3; --cbgi:#3d5a1f;  /* 병가 — 녹차색(사진) */
   --cdu:#f2c718; --cdui:#3a2c00;  /* 당번 — 노랑(사진) */
   --cbz:#ffd9b3; --cbzi:#8f3f00;  /* 배치 — 옅은 주황(당번과 한 집안) */
-  --p1:#b4566e; --p2:#3580a8; --p3:#7d52b8;  /* 부 머리 띠 — 1부 장미 · 2부 강물 · 3부 보라(흰 글씨) */
+  --p1:#b4566e; --p2:#3580a8; --p3:#7d52b8;
+  --p1s:#f6e7eb; --p2s:#e4eef5; --p3s:#eee8f7;  /* 옥게 — 고른 사람 중 일부만 그 부일 때 */  /* 부 머리 띠 — 1부 장미 · 2부 강물 · 3부 보라(흰 글씨) */
   --cet:#eaeef2; --ceti:#5a6874;
   --cin:#fdf3c9; --cini:#8a6a09;
 }
@@ -1128,6 +1129,16 @@ body.celldrag .cell{cursor:grabbing}
 .sheet .acts.pm button.warn span{color:var(--no)}
 /* 반만 켜진 칸 — 고른 사람 중 일부만 그 부에 지정돼 있다 */
 .sheet .acts.pm button.half{border-color:var(--go);color:var(--go-d)}
+/* 부 선택 칸 — 그 부에서 일하면 그 부 색으로 찬다 */
+.sheet .acts.pm button.pk1.on{background:var(--p1);border-color:var(--p1);color:#fff}
+.sheet .acts.pm button.pk2.on{background:var(--p2);border-color:var(--p2);color:#fff}
+.sheet .acts.pm button.pk3.on{background:var(--p3);border-color:var(--p3);color:#fff}
+.sheet .acts.pm button.pk1.on span,.sheet .acts.pm button.pk2.on span,
+.sheet .acts.pm button.pk3.on span{color:#fff}
+/* 고른 사람 중 일부만 — 같은 색을 옥게 */
+.sheet .acts.pm button.pk1.half{background:var(--p1s);border-color:var(--p1);color:var(--p1)}
+.sheet .acts.pm button.pk2.half{background:var(--p2s);border-color:var(--p2);color:var(--p2)}
+.sheet .acts.pm button.pk3.half{background:var(--p3s);border-color:var(--p3);color:var(--p3)}
 </style>
 </head>
 <body>

@@ -9,18 +9,18 @@ setTimeout(function(){
   function grp(){
     var gs=[].slice.call(document.querySelectorAll('#sheet .grp'));
     return gs.filter(function(g){ var h=g.querySelector('h4');
-      return h && h.textContent.trim()==='오늘 어느 부에서 근무하나'; })[0] || null;
+      return h && h.textContent.trim()==='부 선택'; })[0] || null;
   }
   function tabs(){ var g=grp(); if(!g) return [];
     return [].slice.call(g.querySelectorAll('.acts.pm button')); }
-  function txt(b){ return b.querySelector('b').textContent.trim()+'|'
-    + [].slice.call(b.querySelectorAll('span')).map(function(s){return s.textContent.trim();}).join('/')
-    + '|' + (b.className||'-') + '|' + b.getAttribute('data-bkdo'); }
+  function txt(b){ return b.textContent.trim()+'|'+(b.className||'-')
+    +'|'+b.getAttribute('data-bkdo'); }
+  function bg(b){ var c=getComputedStyle(b); return c.backgroundColor+' / 글씨 '+c.color; }
   function warns(){ var g=grp(); if(!g) return [];
     return [].slice.call(g.querySelectorAll('.acts button.warn')).map(function(b){
       return b.textContent.trim()+'@'+b.getAttribute('data-bkdo'); }); }
   function tabBy(name){ return tabs().filter(function(b){
-    return b.querySelector('b').textContent.trim()===name; })[0]; }
+    return b.textContent.trim()===name; })[0]; }
   try{
     localStorage.clear(); resetToBoard(); DATE=BOARD.date;
     savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
@@ -34,43 +34,54 @@ setTimeout(function(){
     seatMany('3', 1, [A]);               // 3부 배치표에 한 명
     paint(); openBulkAct();
 
-    L('','★갑. 칸이 부마다 하나인가');
+    L('','★갑. 머리말과 칸');
+    ok(!!grp(), '  머리말 "부 선택"', grp()? '있음' : '★없음');
     ok(tabs().length===DAY.length, '  칸 수', tabs().length+'개 / 부 '+DAY.length+'개');
-    tabs().forEach(function(b){ L('  '+txt(b).split('|')[0], txt(b)); });
+    ok(tabs().every(function(b){ return /^\d+부$/.test(b.textContent.trim()); }),
+       '  칸 글은 이름뿐', tabs().map(function(b){ return b.textContent.trim(); }).join(' '));
+    ok(!/안 함|근무|배치표 \d+명/.test(tabs().map(function(b){return b.textContent;}).join('')),
+       '  옛 문구 없음', '◎');
+    ok(tabs().every(function(b){ return b.querySelectorAll('span').length===0; }),
+       '  작은 줄 없음', '◎');
 
-    L('','★을. 켜짐·반만·꺼짐');
-    var t1=tabBy(part('1').name), t2=tabBy(part('2').name), t3=tabBy(part('3').name);
-    ok(t1.className==='half' && /1명 근무/.test(t1.textContent), '  1부 반만 켜짐', txt(t1));
-    ok(t2.className==='' && /안 함/.test(t2.textContent), '  2부 꺼짐', txt(t2));
-    ok(/배치표 1명/.test(t3.textContent), '  3부 배치표 수', txt(t3));
+    L('','★을. 꺼진 칸은 흰 바탕');
+    var t2=tabBy(part('2').name);
+    ok(t2.className==='pk2', '  2부 꺼짐', txt(t2));
+    L('  2부 바탕', bg(t2));
+    ok(/rgb\(255, 255, 255\)/.test(bg(t2)), '  흰 바탕인가', bg(t2));
 
-    L('','★병. 누르면 켜진다 — 셋 다 1부로');
-    tap(t1);
-    t1=tabBy(part('1').name);
-    ok(t1.className==='on' && /모두 근무/.test(t1.textContent), '  1부 모두 켜짐', txt(t1));
-    ok(t1.getAttribute('data-bkdo')==='p-1', '  다음에 누르면 뗀다', t1.getAttribute('data-bkdo'));
+    L('','★병. 일부만 — 옅은 그 부 색');
+    var t1=tabBy(part('1').name);
+    ok(t1.className==='pk1 half', '  1부 반만', txt(t1));
+    L('  1부 바탕', bg(t1));
+
+    L('','★정. 누르면 그 부 색으로 찬다');
+    tap(t1); t1=tabBy(part('1').name);
+    ok(t1.className==='pk1 on', '  1부 켜짐', txt(t1));
+    L('  1부 바탕', bg(t1));
+    ok(/rgb\(180, 86, 110\)/.test(bg(t1)), '  1부 장미색', bg(t1));
+    ok(/글씨 rgb\(255, 255, 255\)/.test(bg(t1)), '  흰 글씨', bg(t1));
     ok([A,B,C].every(function(n){ return inPlan(n,'1'); }), '  기계 쪽 PLAN',
        [A,B,C].map(function(n){ return n+':'+planOf(n).join(''); }).join(' '));
 
-    L('','★정. 다시 누르면 꺼진다');
-    tap(tabBy(part('1').name));
-    t1=tabBy(part('1').name);
-    ok(t1.className==='' && /안 함/.test(t1.textContent), '  1부 꺼짐', txt(t1));
+    L('','★무. 2부·3부도 제 색으로');
+    tap(tabBy(part('2').name)); tap(tabBy(part('3').name));
+    L('  2부 바탕', bg(tabBy(part('2').name)));
+    L('  3부 바탕', bg(tabBy(part('3').name)));
+    ok(/rgb\(53, 128, 168\)/.test(bg(tabBy(part('2').name))), '  2부 강물색', bg(tabBy(part('2').name)));
+    ok(/rgb\(125, 82, 184\)/.test(bg(tabBy(part('3').name))), '  3부 보라색', bg(tabBy(part('3').name)));
+
+    L('','★기. 다시 누르면 꺼진다');
+    tap(tabBy(part('1').name)); t1=tabBy(part('1').name);
+    ok(t1.className==='pk1' && /rgb\(255, 255, 255\)/.test(bg(t1)), '  1부 흰 바탕으로', txt(t1)+' · '+bg(t1));
     ok([A,B,C].every(function(n){ return !inPlan(n,'1'); }), '  기계 쪽 PLAN',
        [A,B,C].map(function(n){ return n+':'+(planOf(n).join('')||'-'); }).join(' '));
 
-    L('','★무. 자리 빼기는 따로 — 배치표에 있는 부만');
-    L('  자리 빼기 단추', warns().join(' / ')||'(없음)');
+    L('','★경. 자리 빼기는 그대로 따로');
     ok(warns().length===1 && /자리 빼기@-3/.test(warns()[0]), '  3부만 뜬다', warns().join(' / '));
-    ok(!/\(1명\)/.test(grp().textContent), '  옛 "(1명)" 안 붙는다', '◎');
-    ok(/배치표 자리 —/.test(grp().textContent), '  자리 안내 줄', '있음');
     tap(grp().querySelector('.acts button.warn'));
     ok(partsOf(A).indexOf('3')<0, '  누르면 자리가 빠진다', partsOf(A).join(',')||'(없음)');
     ok(warns().length===0, '  단추도 사라진다', warns().join(' / ')||'(없음)');
-
-    L('','★기. 옛 단추가 안 남았나');
-    ok(!/근무로 지정|지정 뗌/.test(grp().textContent), '  옛 아홉 단추', '없음 ◎');
-    L('  칸 글', tabs().map(function(b){ return txt(b); }).join('  '));
   }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
   o.push('errs: '+(E.length?E.join(' | '):'none'));
   document.getElementById('PROBE').textContent=o.join('\n');

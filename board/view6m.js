@@ -1050,17 +1050,15 @@ function bulkActHTML(){
     + btns(DAYTAGS.map(function(x){ return ['t|' + x, x]; }))
     + '<div class="dnote" style="margin-top:9px">조출\u00b7후출\u00b7정출\u00b7찾근을 붙이면 '
     + '<b>어제 자리에서 내려옵니다</b> \u2014 순번은 경기과가 정한다는 뜻입니다.</div></div>'
-    + '<div class="grp"><h4>오늘 어느 부에서 근무하나</h4>'
-    // ★한 부에 한 칸 — 누르면 켜지고 다시 누르면 꺼진다.
-    //   단추 아홉 개를 줄 세우던 것을 세 칸으로 줄였다 — 사람 하나를 볼 때와 같은 모양이다
+    + '<div class="grp"><h4>부 선택</h4>'
+    // ★한 부에 한 칸. 이름만 적고, 그 부에서 일하면 그 부 색으로 찬다 —
+    //   글로 상태를 적어 두면 칸마다 글이 달라져 줄이 지저분해진다
     + '<div class="acts pm" style="grid-template-columns:repeat(' + DAY.length + ',minmax(0,1fr))">'
     + parts.map(function(p){
         var all = n > 0 && p.pln === n, some = p.pln > 0 && !all;
-        return '<button class="' + (all ? 'on' : (some ? 'half' : ''))
+        return '<button class="pk' + esc(p.k) + (all ? ' on' : (some ? ' half' : ''))
           + '" data-bkdo="' + (all ? 'p-' : 'p+') + esc(p.k) + '">'
-          + '<b>' + esc(p.name) + '</b><span>'
-          + (all ? '모두 근무' : some ? p.pln + '명 근무' : '안 함') + '</span>'
-          + (p.inn ? '<span>배치표 ' + p.inn + '명</span>' : '') + '</button>'; }).join('')
+          + '<b>' + esc(p.name) + '</b></button>'; }).join('')
     + '</div>'
     // 배치표 자리를 빼는 것은 지정과 다른 일이라 따로 놓는다
     + (parts.some(function(p){ return p.inn; })

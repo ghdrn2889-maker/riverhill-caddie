@@ -16,6 +16,9 @@
    ══════════════════════════════════════════════════════════ */
 :root{
   --paper:#eef1f5; --card:#fff; --ink:#111820; --sub:#4d5966; --dim:#7d8894;
+  /* 부 색 — 1부 장미 · 2부 강물 · 3부 보라(PC와 한 벌) */
+  --p1:#b4566e; --p2:#3580a8; --p3:#7d52b8;
+  --p1s:#f6e7eb; --p2s:#e4eef5; --p3s:#eee8f7;
   --line:#c9d1da; --line2:#e6eaef;
   --go:#14549c; --go-d:#0f4680; --goSoft:#e8f0fa;
   --no:#a33b3b; --noSoft:#fbecec;
@@ -588,6 +591,16 @@ button,input{font-family:inherit;letter-spacing:inherit;color:inherit}
 .sheet .acts.pm button.warn span{color:var(--no)}
 /* 반만 켜진 칸 — 고른 사람 중 일부만 그 부에 지정돼 있다 */
 .sheet .acts.pm button.half{border-color:var(--go);color:var(--go-d)}
+/* 부 선택 칸 — 그 부에서 일하면 그 부 색으로 찬다 */
+.sheet .acts.pm button.pk1.on{background:var(--p1);border-color:var(--p1);color:#fff}
+.sheet .acts.pm button.pk2.on{background:var(--p2);border-color:var(--p2);color:#fff}
+.sheet .acts.pm button.pk3.on{background:var(--p3);border-color:var(--p3);color:#fff}
+.sheet .acts.pm button.pk1.on span,.sheet .acts.pm button.pk2.on span,
+.sheet .acts.pm button.pk3.on span{color:#fff}
+/* 고른 사람 중 일부만 — 같은 색을 옥게 */
+.sheet .acts.pm button.pk1.half{background:var(--p1s);border-color:var(--p1);color:var(--p1)}
+.sheet .acts.pm button.pk2.half{background:var(--p2s);border-color:var(--p2);color:var(--p2)}
+.sheet .acts.pm button.pk3.half{background:var(--p3s);border-color:var(--p3);color:var(--p3)}
 .sheet .acts button.go{border-color:var(--swap);background:var(--swapSoft);color:var(--swap)}
 .sheet .acts.two{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .sheet .acts.two button{justify-content:center;text-align:center}
