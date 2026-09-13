@@ -1,0 +1,67 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function S(n){ return '자리['+(partsOf(n).join(',')||'-')+'] 지정['+(planOf(n).join(',')||'-')
+    +'] 배지['+(tagOf(n)||'-')+'] 못['+(dupPinned(n)?'O':'-')+'] 근무표['+wkBadges(n).join('/')+']'; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    // 1부에만 서 있고 배지가 없는 사람을 고른다
+    var who = JONAMES.filter(function(n){
+      return partsOf(n).join(',')==='1' && !tagOf(n) && !isBu3(n); })[0];
+    L('고른 사람', who + '  ' + S(who));
+
+    L('','★갑. 3부로 지정하면');
+    setPlan(who, '3', true); reconcileDupTags(); paint();
+    L('  '+who, S(who));
+    ok(tagOf(who)==='1,3', "  배지 '1,3' 이 붙나", tagOf(who)||'(없음)');
+
+    L('','★을. 지정을 다시 떼면 — 여기가 문제');
+    setPlan(who, '3', false); reconcileDupTags(); paint();
+    L('  '+who, S(who));
+    ok(!tagOf(who), "  배지가 떨어지나", tagOf(who)||'(없음)');
+    ok(!dupPinned(who), "  못도 빠지나", dupPinned(who)?'★남음':'빠짐');
+
+    L('','★병. 한꺼번에 바꾸기로 해도 같은가');
+    var w2 = JONAMES.filter(function(n){
+      return partsOf(n).join(',')==='1' && !tagOf(n) && !isBu3(n); })[1];
+    L('  '+w2, S(w2));
+    bulkStart(PICKTAG); bulkTap(w2);
+    bulkApplyPlan('3', true);  reconcileDupTags(); paint();
+    L('  3부 켠 뒤', S(w2));
+    bulkApplyPlan('3', false); reconcileDupTags(); paint();
+    L('  다시 끈 뒤', S(w2));
+    ok(!tagOf(w2), "  배지가 떨어지나", tagOf(w2)||'(없음)');
+
+    L('','★정. 자리가 아예 없는 사람은 어떤가 (지금 규칙이 노린 경우)');
+    var w3 = JONAMES.filter(function(n){ return !partsOf(n).length && !tagOf(n) && !isBu3(n); })[0];
+    if (w3){
+      setPlan(w3,'1',true); setPlan(w3,'3',true); reconcileDupTags();
+      L('  '+w3+' 둘 다 지정', S(w3));
+      setPlan(w3,'3',false); reconcileDupTags();
+      L('  3부만 떼면', S(w3));
+    } else L('  ', '그런 사람 없음');
+
+    L('','★무. 진짜 두 자리에 선 사람은 그대로인가');
+    var w4 = JONAMES.filter(function(n){ return partsOf(n).join(',')==='1' && !tagOf(n) && !isBu3(n); })[2];
+    seatMany('3', 1, [w4]); reconcileDupTags();
+    L('  '+w4+' 1부·3부 둘 다 앉음', S(w4));
+    ok(tagOf(w4)==='1,3' && dupPinned(w4), "  배지와 못이 다 붙나", S(w4));
+    L('','★기. 그 중 3부 자리를 빼면');
+    delFromPart('3', w4); reconcileDupTags(); paint();
+    L('  '+w4, S(w4));
+    ok(partsOf(w4).join(',')==='1', "  자리는 1부만", partsOf(w4).join(',')||'-');
+    ok(!tagOf(w4) && !dupPinned(w4), "  배지도 못도 같이 빠진다", S(w4));
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>
