@@ -1,0 +1,15 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); setView('work'); paint();
+    var idx=-1; STAFF.forEach(function(x,i){ if (x.k==='마샬' && idx<0) idx=i; });
+    openSlot('staff', idx);
+    o.push('마샬 칸 '+idx+'번');
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

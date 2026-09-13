@@ -1170,14 +1170,6 @@ function openSlot(kind, key){
   var isStaff = (kind === 'staff');
   var cu = isStaff ? STAFF[key].n : (DUTY[key] || '');
   var ttl = isStaff ? (STAFF[key].k + (STAFF[key].sub ? '(' + STAFF[key].sub + ')' : '')) : key;
-  var cands;
-  if (isStaff){
-    cands = MARSHALS.filter(function(n){ return n !== cu; });
-  } else {
-    var seen = {}; cands = [];
-    DAY.forEach(function(p){ active(p).forEach(function(r){
-      if (!seen[r.n] && r.n !== cu) { seen[r.n] = 1; cands.push(r.n); } }); });
-  }
   $('sheet').innerHTML = '<div class="grab"></div>'
     + '<div class="k">' + (isStaff ? '오늘 경기과' : '오늘 당번') + '</div>'
     + '<div class="st">' + esc(ttl) + '</div>'
@@ -1197,9 +1189,6 @@ function openSlot(kind, key){
     + (isStaff && STAFF[key].k === '마샬'
        ? timeInput('id="slotTime" class="tf"', STAFF[key].t || '7:00', ' style="flex:0 0 118px"') : '')
     + '<button data-act="slotsave">넣기</button></div>'
-    + '<div class="sug">' + (cands.length
-        ? cands.map(function(n){ return '<button data-n="' + esc(n) + '">' + esc(n) + '</button>'; }).join('')
-        : '<span style="font-size:12.5px;color:#8b96a2;font-weight:760">후보가 없습니다</span>') + '</div>'
     + '<div class="acts" style="margin-top:12px"><button data-act="slotclear" class="warn">비우기</button>'
     + (isStaff && STAFF[key].k === '마샬'
        ? '<button data-act="msdel" class="warn">이 칸 없애기</button>' : '')
