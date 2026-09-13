@@ -89,6 +89,7 @@ setTimeout(function(){
     ok(!/한꾸번에 앉히기|에 앉히기|번부터 앉힙니다/.test(sh.textContent),
        '  그 묶음 글', '없음 ◎');
     ok(!sh.querySelector('[data-bkdo^="s|"]'), '  그 단추', '없음 ◎');
+    ok(!sh.querySelector('[data-bkdo="clear"]'), '  선택 모두 풀기', '없음 ◎');
     L('  남은 머리말', [].slice.call(sh.querySelectorAll('.grp h4'))
       .map(function(h){ return h.textContent.trim(); }).join(' / '));
   }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }

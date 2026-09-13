@@ -1622,9 +1622,7 @@ function bulkActHTML(){
              return '<button class="warn" data-bkdo="-' + esc(p.k) + '">' + esc(p.name)
                + ' 자리 빼기</button>'; }).join('')
          + '</div>' : '')
-    + '</div>'
-    + '<div class="grp"><h4>선택</h4>'
-    + '<div class="acts"><button data-bkdo="clear">선택 모두 풀기</button></div></div>';
+    + '</div>';
 }
 function openBulkAct(){
   sheetFor = { kind: 'bulkact' };
@@ -2285,7 +2283,6 @@ $('sheet').addEventListener('click', function(e){
   if (!b) return;
   var bkd = b.getAttribute('data-bkdo');
   if (bkd){
-    if (bkd === 'clear'){ bulkPickClear(); paint(); openBulkAct(); return; }
     if (bkd.charAt(0) === 'p'){                    // ★부 지정 — 배치표는 안 건드린다
       bulkApplyPlan(bkd.slice(2), bkd.charAt(1) === '+');
       paint(); openBulkAct(); return;
