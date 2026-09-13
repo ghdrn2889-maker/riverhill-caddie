@@ -37,6 +37,9 @@ setTimeout(function(){
     ok(acts().indexOf('결근 처리')>=0 && acts().indexOf('이 부에서 빼기')>=0,
        '  결근·빼기는 그대로', acts().join(' / '));
     ok(!!sh().querySelector('#shName'), '  이름 고치는 칸', '있음');
+    ok(heads().indexOf('매칭 캐디')>=0, "  묶음 이름 '매칭 캐디'", heads()[0]);
+    ok(heads().indexOf('이 사람')<0, '  옛 이름', '없음 ◎');
+    ok(!/결근<\/b>은 명단에|명단에서 아예 뻐니다/.test(sh().innerHTML), '  옛 설명 문구', '없음 ◎');
 
     L('','★을. 이름 고치기는 그대로 도나');
     var was = a[i].n;

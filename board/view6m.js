@@ -816,7 +816,7 @@ function openCell(pk, i){
                  })()
           + '</div>';
       })()
-    + '<div class="grp"><h4>이 사람</h4>'
+    + '<div class="grp"><h4>매칭 캐디</h4>'
     + '<div class="fld"><input id="shName" value="' + (r ? esc(r.n) : '') + '" autocomplete="off" placeholder="이름">'
     + '<button data-act="name">고치기</button></div>'
     + '<div class="acts" style="margin-top:10px">'
@@ -843,10 +843,8 @@ function openCell(pk, i){
          + '</div>')
     + '</div>'
     + (isItn(r) ? '' : (r ? dayTagGrp(r.n) : '')) + '<div class="grp">'
-    + '<div class="dnote">이름 고치기는 <b>판독이 틀렸을 때</b> 씁니다. 사람이 바뀐 것이면 그 칸을 비우고 다시 앉히십시오.<br>'
-    + '<b>결근</b>은 명단에 이름을 남기고 자리만 뺍니다. '
-    + '<b>이 자리 비우기</b>는 <b>순번은 그대로 두고</b> 사람만 뺍니다 — 그 칸에 다른 사람을 '
-    + '끌어다 놓을 수 있습니다. <b>이 부에서 빼기</b>는 명단에서 아예 뺍니다 — 뒤 순번이 당겨집니다.</div>'
+    + '<div class="dnote">이름 고치기는 <b>판독이 틀렸을 때</b> 씁니다. 사람이 바뀐 것이면 그 칸을 비우고 다시 앉히십시오.'
+    + '</div>'
     + '</div>';
 
   if (t){

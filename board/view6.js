@@ -650,7 +650,7 @@ function openCell(pk, i){
     // ★빈 칸은 앉히는 자리다 — 이름을 치면 명부에서 찾아 그 순번에 앉힌다.
     //   사람이 앉은 칸에서의 '바꾸기'는 이름 글자만 고치는 것이다 — 판독이 틀렸을 때 쓴다
     + ((r && r.n)
-      ? '<div class="grp"><h4>이 사람</h4>'
+      ? '<div class="grp"><h4>매칭 캐디</h4>'
         + '<div class="fld"><input id="shName" value="' + esc(r.n) + '" autocomplete="off" placeholder="이름">'
         + '<button data-act="name">바꾸기</button></div>'
         + '<div class="acts" style="margin-top:11px">'
@@ -658,8 +658,7 @@ function openCell(pk, i){
         + '<button data-act="off" class="warn">결근 처리</button>'
         + '<button data-act="prmhere" class="warn">이 부에서 빼기</button>'
         + '</div>'
-        + '<div class="dnote"><b>결근</b>은 명단에 이름을 남기고 자리만 뺍니다. '
-        + '<b>이 부에서 빼기</b>는 명단에서 아예 뺍니다 — 뒤 순번이 당겨집니다.</div></div>'
+        + '</div>'
       : '<div class="grp"><h4>여기(' + seatNoTx(p, i) + '번)에 앉히기</h4>'
         + '<div class="fld"><input id="seatQ" autocomplete="off" '
         + 'placeholder="이름을 치십시오 — 두 글자만 쳐도 됩니다"><button data-act="seatgo">앉히기</button></div>'
