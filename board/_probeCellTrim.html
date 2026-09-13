@@ -1,0 +1,81 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function tap(el){ if(!el) return false;
+    el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true; }
+  function sh(){ return document.getElementById('sheet'); }
+  function heads(){ return [].slice.call(sh().querySelectorAll('.grp h4'))
+    .map(function(h){ return h.textContent.trim(); }); }
+  function acts(){ return [].slice.call(sh().querySelectorAll('button[data-act]'))
+    .map(function(b){ return b.textContent.trim(); }); }
+  var PC0 = (typeof pickSet === 'function');
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('board'); paint();
+
+    var pk='1', a=active(part(pk)), i=0;
+    while (i<a.length && !(a[i] && a[i].n)) i++;
+    L('연 칸', part(pk).name+' '+(i+1)+'번 · '+(a[i]?a[i].n:'(빔)'));
+    openCell(pk, i);
+
+    L('','★갑. 사람이 앉은 칸');
+    L('  묶음', heads().join(' / '));
+    L('  단추', acts().join(' / '));
+    ok(!sh().querySelector('.sug'), '  추천 이름 줄', sh().querySelector('.sug')?'★남음':'없음 ◎');
+    ok(!sh().querySelector('[data-n]'), '  추천 이름 단추', sh().querySelectorAll('[data-n]').length+'개');
+    ok(acts().indexOf('다른 자리와 바꾸기')<0, '  옛 이름', '없음 ◎');
+    ok(!PC0 || acts().indexOf('대기 바꿈')>=0, '  대기 바꿈 단추',
+       PC0 ? '있음 ◎' : '폰은 끌기로 바꿈');
+    ok(acts().indexOf('당번')<0 && acts().indexOf('벌당')<0, '  당번·벌당', '없음 ◎');
+    ok(acts().indexOf('결근 처리')>=0 && acts().indexOf('이 부에서 빼기')>=0,
+       '  결근·빼기는 그대로', acts().join(' / '));
+    ok(!!sh().querySelector('#shName'), '  이름 고치는 칸', '있음');
+
+    L('','★을. 이름 고치기는 그대로 도나');
+    var was = a[i].n;
+    sh().querySelector('#shName').value = was + '님';
+    tap(sh().querySelector('[data-act="name"]'));
+    var now = active(part(pk))[i];
+    ok(now && now.n === was+'님', '  이름이 바뀌나', (now?now.n:'?'));
+    undo(); paint();
+    ok(active(part(pk))[i].n === was, '  되돌리기', active(part(pk))[i].n);
+
+    L('','★병. 빈 칸');
+    var pk2='1', j=0;
+    part(pk2).roster[riOf(pk2, j)].n = '';    // 한 칸을 비워 본다
+    paint(); openCell(pk2, j);
+    L('  묶음', heads().join(' / '));
+    L('  단추', acts().join(' / '));
+    ok(acts().indexOf('다른 자리와 바꾸기')<0, '  옛 이름', '없음 ◎');
+    ok(!PC0 || acts().indexOf('대기 바꿈')>=0, '  대기 바꿈 단추',
+       PC0 ? '있음 ◎' : '폰은 끌기로 바꿈');
+    var PC = (typeof pickSet === 'function');   // PC 화면에만 있는 띄
+    ok(!PC || !!sh().querySelector('#seatQ'), '  앉히기 칸', PC ? '있음' : '폰은 다른 길');
+    ok(!PC || acts().indexOf('앉히기')>=0, '  앉히기 단추', PC ? '있음' : '폰은 다른 길');
+
+    L('','★무. 대기 바꿈을 누르면 집기가 켜지나');
+    if (PC){
+      openCell(pk, i);
+      tap([].slice.call(sh().querySelectorAll('button[data-act]')).filter(function(b){
+        return b.textContent.trim()==='대기 바꿈'; })[0]);
+      ok(pickList.length===1, '  한 사람을 집었나', pickList.length+'명');
+      L('  띄 글', (document.getElementById('bnTx')||{}).textContent||'(없음)');
+      pickClear(); paint();
+    }
+    L('','★정. 기계 쪽은 그대로 있나 (딴 데서 쓴다)');
+    ok(typeof setRole === 'function', '  setRole', '있음');
+    ok(typeof pickSet === 'function' || !PC, '  pickSet(대바 기계)',
+       typeof pickSet === 'function' ? '있음' : '폰은 끌기로 바꿈');
+    ok(typeof dutyToggle === 'function', '  당번 상자 쪽', '있음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

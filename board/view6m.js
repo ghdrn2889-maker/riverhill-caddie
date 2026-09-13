@@ -165,7 +165,7 @@ function boardHTML(p){
   h += '<button class="addrow" data-addteam="' + p.key + '">+ 팀 추가</button>'
     + '<button class="addrow" data-act="padd" data-pk="' + p.key + '">+ 대기에 넣기</button>'
     + '<div class="note">칸을 <b>꾹 눌러 끌면</b> 두 사람을 바로 바꿉니다. '
-    + '셋 넷이 한 바퀴 돌 때는 칸을 누르고 <b>다른 자리와 바꾸기</b>를 고르십시오.</div>';
+    + '</div>';
   return h;
 }
 
@@ -820,8 +820,6 @@ function openCell(pk, i){
     + '<div class="fld"><input id="shName" value="' + (r ? esc(r.n) : '') + '" autocomplete="off" placeholder="이름">'
     + '<button data-act="name">고치기</button></div>'
     + '<div class="acts" style="margin-top:10px">'
-    + '<button data-act="role" data-v="당번" class="' + (r && r.role === '당번' ? 'on' : '') + '">당번</button>'
-    + '<button data-act="role" data-v="벌당" class="' + (r && r.role === '벌당' ? 'on' : '') + '">벌당</button>'
     + '<button data-act="off" class="warn">결근 처리</button>'
     + '<button data-act="seatclr" class="warn">이 자리 비우기</button>'
     + '<button data-act="prmhere" class="warn">이 부에서 빼기</button>'
@@ -845,7 +843,7 @@ function openCell(pk, i){
          + '</div>')
     + '</div>'
     + (isItn(r) ? '' : (r ? dayTagGrp(r.n) : '')) + '<div class="grp">'
-    + '<div class="dnote">이름 고치기는 <b>판독이 틀렸을 때</b> 씁니다. 사람이 바뀐 것이면 위에서 맞바꾸십시오.<br>'
+    + '<div class="dnote">이름 고치기는 <b>판독이 틀렸을 때</b> 씁니다. 사람이 바뀐 것이면 그 칸을 비우고 다시 앉히십시오.<br>'
     + '<b>결근</b>은 명단에 이름을 남기고 자리만 뺍니다. '
     + '<b>이 자리 비우기</b>는 <b>순번은 그대로 두고</b> 사람만 뺍니다 — 그 칸에 다른 사람을 '
     + '끌어다 놓을 수 있습니다. <b>이 부에서 빼기</b>는 명단에서 아예 뺍니다 — 뒤 순번이 당겨집니다.</div>'
@@ -1170,7 +1168,7 @@ function bu3Grp(nm){
     + '<button data-bu3="1"' + (on ? ' class="on"' : '') + '>3부반</button>'
     + '</div><div class="dnote">'
     + (on ? '<b>3부반</b>입니다 — 순번 세우기에서 <b>3부에만</b> 섭니다. '
-            + '1·2부에는 배지가 없어도 안 들어갑니다. 중복 근무나 대바로 1·2부를 뛰는 것은 그대로 됩니다.'
+            + '1·2부에는 배지가 없어도 안 들어갑니다. 중복 근무나 대기 바꿈으로 1·2부를 뛰는 것은 그대로 됩니다.'
           : '<b>하우스 캐디</b>입니다 — 순번 세우기에서 1·2부에 섭니다.')
     + ' 이 값은 <b>날이 바뀌어도 안 풀립니다.</b></div></div>';
 }
@@ -2031,7 +2029,6 @@ $('sheet').addEventListener('click', function(e){
 
   if (act === 'pick') { pickStart(pk, i); return; }
   if (act === 'name') { setName(pk, i, ($('shName').value || '').trim()); closeSheet(); return; }
-  if (act === 'role') { setRole(pk, i, b.getAttribute('data-v')); openCell(pk, i); return; }
   if (act === 'off')  { setOff(pk, riOf(pk, i), true); closeSheet(); return; }
   if (act === 'seatclr'){ clearSeat(pk, i); closeSheet(); paint(); return; }
   if (act === 'prmhere'){

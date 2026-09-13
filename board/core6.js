@@ -2732,11 +2732,11 @@ function swapRef(A, B){
   if (A.offName && B.pk) { var t0 = A; A = B; B = t0; }
   if (!A.pk) return;
   if (A.pk && B.pk && A.pk === B.pk && A.ri === B.ri){
-    toast('같은 자리입니다 — 대바를 못 합니다');    // 본인하고는 바꿀 것이 없다
+    toast('같은 자리입니다 — 대기 바꿈을 못 합니다');    // 본인하고는 바꿀 것이 없다
     return;
   }
   var why = dupReason(A, B);
-  if (why) { toast(why + ' — 대바를 못 합니다'); return; }
+  if (why) { toast(why + ' — 대기 바꿈을 못 합니다'); return; }
   var before = whereMap(); snap();
   if (A.pk && B.pk){
     var pa = part(A.pk), pb = part(B.pk);

@@ -640,17 +640,6 @@ function openTeeTime(pk, i){
 function openCell(pk, i){
   var p = part(pk), a = active(p), r = a[i], t = p.tees[i];
   sheetFor = { pk: pk, i: i };
-  var here = {}, sug = '';
-  DAY.forEach(function(q){
-    var aq = active(q);
-    for (var j = q.tees.length; j < aq.length; j++){
-      if (q.key === pk && j === i) continue;
-      if (here[aq[j].n]) continue;
-      here[aq[j].n] = 1;
-      sug += '<button data-n="' + esc(aq[j].n) + '">'
-        + (q.key !== pk ? '<i>' + q.name + '</i>' : '') + esc(aq[j].n) + '</button>';
-    }
-  });
   var h = '<div class="grab"></div>'
     + '<div class="k">' + p.name + ' · '
     + (isItn(r) ? '인턴 칸' : '순번 ' + seatNoTx(p, i) + '번')
@@ -658,20 +647,14 @@ function openCell(pk, i){
     + '<div class="st">' + ((r && r.n) ? esc(r.n) : '비어 있음') + '</div>'
     + '<div class="sub">' + (t ? '이 자리는 ' + t.time + '에 ' + t.course + '으로 나갑니다' : '티오프가 없는 대기 자리입니다') + '</div>'
 
-    // ★빈 칸에는 '바꾸기'가 아니라 '앉히기'다.
-    //   바꾸기는 글자를 칸에 그대로 써 넣을 뿐이라 명부에 없는 이름도 들어가고,
-    //   그 사람이 있던 자리에서 안 빠지고 근태도 안 풀린다.
-    //   빈 자리는 앉히는 자리다 — 이름을 치면 명부에서 찾아 그 순번에 앉힌다.
-    //   사람이 앉아 있는 칸은 그대로 둔다. 거기서는 '바꾸기'가 제 뜻이 있다
+    // ★빈 칸은 앉히는 자리다 — 이름을 치면 명부에서 찾아 그 순번에 앉힌다.
+    //   사람이 앉은 칸에서의 '바꾸기'는 이름 글자만 고치는 것이다 — 판독이 틀렸을 때 쓴다
     + ((r && r.n)
       ? '<div class="grp"><h4>이 사람</h4>'
         + '<div class="fld"><input id="shName" value="' + esc(r.n) + '" autocomplete="off" placeholder="이름">'
         + '<button data-act="name">바꾸기</button></div>'
-        + '<div class="sug">' + (sug || '<span style="font-size:12.5px;color:#8b96a2;font-weight:760">대기 중인 캐디가 없습니다</span>') + '</div>'
         + '<div class="acts" style="margin-top:11px">'
-        + '<button data-act="swap">다른 자리와 바꾸기</button>'
-        + '<button data-act="role" data-v="당번" class="' + (r && r.role === '당번' ? 'on' : '') + '">당번</button>'
-        + '<button data-act="role" data-v="벌당" class="' + (r && r.role === '벌당' ? 'on' : '') + '">벌당</button>'
+        + '<button data-act="swap">대기 바꿈</button>'
         + '<button data-act="off" class="warn">결근 처리</button>'
         + '<button data-act="prmhere" class="warn">이 부에서 빼기</button>'
         + '</div>'
@@ -682,7 +665,8 @@ function openCell(pk, i){
         + 'placeholder="이름을 치십시오 — 두 글자만 쳐도 됩니다"><button data-act="seatgo">앉히기</button></div>'
         + '<div class="lst inswap" id="seatOut"></div>'
         + '<div class="acts" style="margin-top:11px">'
-        + '<button data-act="swap">다른 자리와 바꾸기</button></div>'
+        + '<button data-act="swap">대기 바꿈</button>'
+        + '</div>'
         + '<div class="dnote">이름을 치면 <b>명부에서 찾아</b> 이 순번에 앉힙니다 — '
         + '뒤 순번은 <b>안 밀립니다.</b> 쉬는 배지가 붙어 있으면 앉는 순간 근무로 돌아옵니다. '
         + '되돌리기(Ctrl+Z) 한 번으로 그대로 돌아옵니다.</div></div>')
@@ -1214,7 +1198,7 @@ function seatsGrp(nm, seats){
   }
   return '<div class="grp"><h4>오늘 근무</h4><div class="sgw">' + body + '</div>'
     + '<div class="dnote">' + (seats.length
-        ? '자리를 누르면 <b>거기로 갑니다.</b> 대바 중이면 그 자리와 바꿉니다.'
+        ? '자리를 누르면 <b>거기로 갑니다.</b> 대기 바꿈 중이면 그 자리와 바꿉니다.'
         : '오늘 자리가 없습니다. 아래 <b>부 선택</b>에서 고르십시오.')
     + '</div></div>';
 }
@@ -1227,7 +1211,7 @@ function bu3Grp(nm){
     + '<button data-bu3="1"' + (on ? ' class="on"' : '') + '>3부반</button>'
     + '</div><div class="dnote">'
     + (on ? '<b>3부반</b>입니다 — 순번 세우기에서 <b>3부에만</b> 섭니다. '
-            + '1·2부에는 배지가 없어도 안 들어갑니다. 중복 근무나 대바로 1·2부를 뛰는 것은 그대로 됩니다.'
+            + '1·2부에는 배지가 없어도 안 들어갑니다. 중복 근무나 대기 바꿈으로 1·2부를 뛰는 것은 그대로 됩니다.'
           : '<b>하우스 캐디</b>입니다 — 순번 세우기에서 1·2부에 섭니다.')
     + ' 이 값은 <b>날이 바뀌어도 안 풀립니다.</b></div></div>';
 }
@@ -1898,7 +1882,7 @@ function openCarry(){
   $('sheet').classList.add('on');
 }
 
-// 대바 상대 고르기 · 이름 찾기 — 사람 단위로만 나온다(두 부 근무도 한 덩어리)
+// 대기 바꿈 상대 고르기 · 이름 찾기 — 사람 단위로만 나온다(두 부 근무도 한 덩어리)
 var pkFilter = '';
 function pickerList(q){
   q = (q || '').trim();
@@ -1940,7 +1924,7 @@ function pickerList(q){
 function openPicker(){
   sheetFor = { picker: true };
   $('sheet').innerHTML = '<div class="grab"></div>'
-    + '<div class="k">' + (pick ? '대바 상대 고르기' : '이름 찾기') + '</div>'
+    + '<div class="k">' + (pick ? '대기 바꿈 상대 고르기' : '이름 찾기') + '</div>'
     + '<div class="st">' + (pick ? esc(pick.nm) + '와(과) 바꿀 사람' : '누구를 찾으십니까') + '</div>'
     + '<div class="sub">'
     + (pick ? '부를 가리지 않습니다. <b>오늘 쉬는 사람</b>도 됩니다.<br>'
@@ -2013,7 +1997,7 @@ function drawDrawer(){
 function openDrawer(){ drwOpen = true; drwPart = cur; drawDrawer(); $('scrim').classList.add('on'); $('drw').classList.add('on'); }
 function closeDrawer(){ drwOpen = false; $('scrim').classList.remove('on'); $('drw').classList.remove('on'); }
 
-// 검색 결과 한 줄을 눌렀을 때 — 대바 중이면 바꾸고, 아니면 그 자리로 간다
+// 검색 결과 한 줄을 눌렀을 때 — 대기 바꿈 중이면 바꾸고, 아니면 그 자리로 간다
 function rerenderLists(){
   var d = $('findDrop'), fq2 = $('findQ');
   if (d && !d.hidden && fq2) d.innerHTML = pickerList(fq2.value);
@@ -2137,7 +2121,7 @@ function dragEnd(){
   if (!d.on) return;
   cdragBlock = 1;                               // 놓은 자리에서 창이 딸려 열리지 않게
   setTimeout(function(){ cdragBlock = 0; }, 0);
-  if (d.why) { toast(d.why + ' — 대바를 못 합니다'); return; }
+  if (d.why) { toast(d.why + ' — 대기 바꿈을 못 합니다'); return; }
   if (!d.tref) { toast('놓을 자리를 못 찾았습니다'); return; }
   rotateSeats([{ pk: d.ref.pk, ri: d.ref.ri }, { pk: d.tref.pk, ri: d.tref.ri }]);
   paint();
@@ -2465,12 +2449,12 @@ $('sheet').addEventListener('click', function(e){
     closeSheet(); return;
   }
   if (act === 'name') { setName(pk, i, $('shName').value.trim()); closeSheet(); return; }
+  // ★두이면 맞바꾸고 셋 넷이면 한 바퀴 돌린다 — 끌기는 둘까지만 된다
   if (act === 'swap') {
     var r = active(part(pk))[i];
     pickSet(pk, riOf(pk, i), r ? r.n : '');
     closeSheet(); paint(); return;
   }
-  if (act === 'role') { setRole(pk, i, b.getAttribute('data-v')); closeSheet(); return; }
   if (act === 'off') {
     var p = part(pk), r2 = active(p)[i];
     setOff(pk, p.roster.indexOf(r2), true); closeSheet(); return;
