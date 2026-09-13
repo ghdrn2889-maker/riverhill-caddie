@@ -417,7 +417,10 @@ function paint(){
     + '</div>';
 
   // ── 아래: 당번 — 종류는 설정에서, 사람은 여기서 누르면 바뀐다
-  $('dutyBox').innerHTML = '<h5>당번 <span class="hint">누르면 사람 · 끌면 차례</span></h5><div class="slots">'
+  // ★당번 종류·성격은 여기서 바로 연다 — 쓰는 자리 옆에 있어야 찾는다.
+  //   문은 그대로 하나다(설정의 그 칸). 두 벌로 만들면 둘이 조용히 갈라진다.
+  $('dutyBox').innerHTML = '<h5>당번 <span class="hint">누르면 사람 · 끌면 차례</span>'
+    + '<button class="msb" data-dtcfg="1">당번 종류</button></h5><div class="slots">'
     + DUTYKEYS.map(function(k){
         var who = dutyList(k);
         return '<button class="slot dslot" data-slot-duty="' + esc(k) + '" data-key="' + esc(k) + '">'
@@ -2579,6 +2582,7 @@ $('staffBox').addEventListener('click', function(e){
 });
 $('dutyBox').addEventListener('click', function(e){
   if (sortBlock) return;                       // 끌고 난 직후엔 창을 열지 않는다
+  if (e.target.closest('[data-dtcfg]')) { cfgTab = 'dt'; openCfg(); return; }
   var b = e.target.closest('[data-slot-duty]');
   if (b) openDuty(b.getAttribute('data-slot-duty'));
 });

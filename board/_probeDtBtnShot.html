@@ -1,0 +1,19 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); resetToBoard(); bootLoad();
+    dutyToggle('당번','정용호'); dutyToggle('흡연실 당번','김동윤');
+    setView('work'); paint();
+    var box=document.getElementById('dutyBox');
+    box.scrollIntoView({block:'center'});
+    var b=box.querySelector('[data-dtcfg]');
+    var rb=box.getBoundingClientRect(), bb=b.getBoundingClientRect();
+    o.push('상자 ' + Math.round(rb.left)+','+Math.round(rb.top)+' ~ '+Math.round(rb.right)+','+Math.round(rb.bottom));
+    o.push('단추 ' + Math.round(bb.left)+','+Math.round(bb.top)+' ~ '+Math.round(bb.right)+','+Math.round(bb.bottom));
+    o.push('오른쪽 여백 ' + Math.round(rb.right-bb.right) + 'px · 제목줄 차이 ' + Math.round(bb.top - box.querySelector('h5').getBoundingClientRect().top) + 'px');
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>

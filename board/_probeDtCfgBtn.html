@@ -1,0 +1,33 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); bootLoad(); paint();
+    var box = document.getElementById('dutyBox');
+    var btn = box.querySelector('[data-dtcfg]');
+    ok(!!btn, '당번 상자에 단추가 있나', btn ? '"'+btn.textContent.trim()+'"' : '★없음');
+    // 우상단인가 — 상자 오른쪽 끝에 붙었나
+    var rb = box.getBoundingClientRect(), bb = btn.getBoundingClientRect();
+    var h5 = box.querySelector('h5').getBoundingClientRect();
+    ok(rb.right - bb.right < 14, '  오른쪽 끝에 붙었나', '상자오른쪽 '+Math.round(rb.right)+' · 단추오른쪽 '+Math.round(bb.right));
+    ok(Math.abs(bb.top - h5.top) < 14, '  제목 줄에 있나', '제목위 '+Math.round(h5.top)+' · 단추위 '+Math.round(bb.top));
+    // 눌러 보기
+    ok(!document.getElementById('cfg').classList.contains('on'), '  누르기 전 설정은 닫혀 있나', '닫힘');
+    btn.click();
+    ok(document.getElementById('cfg').classList.contains('on'), '★누르면 열리나', document.getElementById('cfg').className);
+    ok(cfgTab === 'dt', '★당번 종류 칸으로 바로 가나', cfgTab);
+    var rows = document.querySelectorAll('[data-dtrow]');
+    ok(rows.length === DUTYKEYS.length, '  당번 줄이 다 보이나', rows.length + '개 / ' + DUTYKEYS.length);
+    ok(!!document.getElementById('dtNew'), '  종류 넣는 칸이 있나', document.getElementById('dtNew') ? '있음' : '★없음');
+    ok(document.querySelectorAll('[data-dtwork]').length === DUTYKEYS.length, '  성격 고르개가 줄마다 있나',
+       document.querySelectorAll('[data-dtwork]').length + '개');
+    // 자리 단추가 잘못 열리지 않나 — 단추를 눌렀는데 사람 고르는 창이 뜨면 안 된다
+    ok(!document.getElementById('sheet').classList.contains('on'), '  사람 고르는 창은 안 뜨나',
+       document.getElementById('sheet').className.indexOf('on')<0 ? '안 뜸' : '★떴음');
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1300);
+</script>
