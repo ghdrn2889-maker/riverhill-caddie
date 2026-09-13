@@ -2801,17 +2801,27 @@ function drawCfg(){
       h += '<div class="crow" data-dtrow="1" data-key="' + esc(k) + '">'
         + '<span class="grip" data-grip="1"></span>'
         + '<input type="text" class="gr" data-dtname="' + esc(k) + '" value="' + esc(k) + '">'
-        + '<span class="fl"><em>시작</em>'
+        + '<span class="fl"><em>근무</em><select class="gr dtw" data-dtwork="' + esc(k) + '">'
+        + DUTYWORK.map(function(w){
+            return '<option value="' + w + '"' + (defOf(k).w === w ? ' selected' : '') + '>'
+              + esc(DUTYWTX[w]) + '</option>'; }).join('')
+        + '</select></span>'
+        + '<span class="fl"' + (defOf(k).w === 'in' ? ' style="opacity:.45"' : '') + '><em>시작</em>'
         + timeInput('class="dtm" data-dtdef="' + esc(k) + '"', defOf(k).t) + '</span>'
-        + '<span class="fl"><em>근무</em><input type="number" class="dhr" data-dtdefh="' + esc(k) + '" value="'
+        + '<span class="fl"' + (defOf(k).w === 'in' ? ' style="opacity:.45"' : '') + '><em>서는</em><input type="number" class="dhr" data-dtdefh="' + esc(k) + '" value="'
         + (defOf(k).h || '') + '" min="0" max="24" step="0.5"><em>시간</em></span>'
         + '<span class="lb">' + esc(dutyLabel(k) || '지정 없음') + '</span>'
         + '<button class="x" data-dtdel="' + esc(k) + '">지움</button></div>';
     });
     h += '<div class="crow"><input type="text" class="gr" id="dtNew" placeholder="예: 그늘집 당번">'
       + '<button class="x" data-dtadd="1" style="color:var(--go);border-color:#a9c6e6">넣기</button></div>'
-      + '<div class="cnote">누가 설지는 배치표 아래에서 누르면 고칩니다. 여기서는 <b>당번의 종류</b>와 '
-      + '<b>기본 시각·근무 시간</b>을 정합니다 — <b>배치표에서 당번 칸을 눌렀을 때 나오는 그 값</b>이라 '
+      + '<div class="cnote"><b>근무</b>가 그 당번의 성격입니다 — '
+      + '<b>순번에 같이</b>는 그날 근무가 확정되는 당번입니다(순번 세우기가 자리를 줍니다). '
+      + '<b>상황 따라</b>는 순번에서는 빼고, 적은 시각과 안 겹치는 라운드가 남아 있으면 가용으로 둡니다. '
+      + '<b>근무 안 함</b>은 그날 캐디 근무를 안 하는 당번입니다. '
+      + '시각·서는 시간은 <b>상황 따라</b>와 <b>근무 안 함</b>에서만 뜻이 있습니다.<br>'
+      + '누가 설지는 배치표 아래에서 누르면 고칩니다. 여기서는 <b>당번의 종류</b>와 '
+      + '<b>기본 시각·서는 시간</b>을 정합니다 — <b>배치표에서 당번 칸을 눌렀을 때 나오는 그 값</b>이라 '
       + '어느 쪽에서 고쳐도 같이 바뀝니다. 이미 서 있는 사람은 그대로 두고, 당번 창의 '
       + '<b>모두 이 값으로</b>를 눌러야 한꺼번에 바뀝니다.<br>'
       + '<b>왼쪽 손잡이를 끌면</b> 배치표에 뜨는 차례가 바뀝니다.</div></div>';
@@ -2926,6 +2936,7 @@ $('cfg').addEventListener('change', function(e){
     joName(ji, el.value.trim() || (ji + 1) + '조'); return; }
   if (el.hasAttribute('data-sttitle')) { stTitle(Number(el.getAttribute('data-sttitle')), el.value.trim() || '자리'); return; }
   if (el.hasAttribute('data-dtname')) { dtName(el.getAttribute('data-dtname'), el.value.trim()); return; }
+  if (el.hasAttribute('data-dtwork')) { setDutyWork(el.getAttribute('data-dtwork'), el.value); return; }
   if (el.hasAttribute('data-dtdef')) { setDutyDef(el.getAttribute('data-dtdef'), readTime(el)); return; }
   if (el.hasAttribute('data-dtdefh')) { setDutyDefHour(el.getAttribute('data-dtdefh'), el.value); return; }
   if (el.hasAttribute('data-pname')) { setPartName(el.getAttribute('data-pname'), el.value); return; }

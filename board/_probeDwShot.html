@@ -1,0 +1,20 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); resetToBoard(); bootLoad();
+    dtAddWith('그늘집 당번','10:00',3);
+    cfgTab='dt'; openCfg();
+    var rows = Array.prototype.slice.call(document.querySelectorAll('[data-dtrow]'));
+    o.push('당번 줄 ' + rows.length + '개');
+    rows.forEach(function(r){
+      var k = r.getAttribute('data-key');
+      var sel = r.querySelector('[data-dtwork]');
+      o.push('  ' + k + ' → 고르개=' + (sel ? sel.value + ' (' + sel.options.length + '개)' : '★없음')
+        + ' · 시각칸 흐림=' + (r.querySelectorAll('.fl')[1].getAttribute('style')||'아님'));
+    });
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1200);
+</script>

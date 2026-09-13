@@ -1,0 +1,19 @@
+<div id="PROBE"></div>
+<script>
+setTimeout(function(){
+  var o=[];
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    bootLoad();
+    DUTY['당번']=[]; DUTY['벌당']=[]; DUTY['흡연실 당번']=[];
+    dutyToggle('흡연실 당번','김홍구');     // 근무도 하는 당번
+    dutyToggle('당번','연승준');            // 상황 따라
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+    var s=[]; DAY.forEach(function(p){ active(p).forEach(function(r,i){ if(r.n==='김홍구') s.push(p.key+'부 '+seatNoTx(p,i)+' '+(p.tees[i]?p.tees[i].time:'대기')); }); });
+    o.push('ORIG:김홍구 자리=' + (s.join(',')||'없음') + ' · 흡연실 당번=' + (dutyAt('흡연실 당번','김홍구')>=0));
+    o.push('DUMP:' + state());
+  }catch(err){ o.push('터짐: '+err.message); }
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

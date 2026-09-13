@@ -1,0 +1,74 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+function q(s){ return document.querySelector(s); }
+function qa(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function rowOf(n){ return qa('.wrow[data-who]').filter(function(b){ return b.getAttribute('data-who')===n; })[0]; }
+function stOf(n){ var r=rowOf(n); if(!r) return '(줄 없음)'; var e=r.querySelector('.st'); return e? e.textContent.trim() : '(상태칸 없음)'; }
+function badges(n){ var r=rowOf(n); if(!r) return []; return qa('.bt,.bg').filter(function(e){return r.contains(e);}).map(function(e){return e.textContent.trim();}); }
+function seatsOf(n){ var out=[]; DAY.forEach(function(p){ active(p).forEach(function(r,i){ if(r.n===n) out.push(p.key+'부 '+seatNoTx(p,i)); }); }); return out; }
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad();
+
+    L('','★갑. 당번 종류마다 성격이 따로 있나');
+    DUTYKEYS.forEach(function(k){ var d=defOf(k);
+      L('  '+k, DUTYWTX[d.w]+' · 시작 '+(d.t||'없음')+' · '+(d.h?d.h+'시간':'시간 없음')); });
+    ok(dutyW('흡연실 당번')==='in', '  흡연실 당번은 순번에 같이', DUTYWTX[dutyW('흡연실 당번')]);
+    ok(dutyW('당번')==='may' && dutyW('벌당')==='may', '  당번·벌당은 상황 따라',
+       DUTYWTX[dutyW('당번')]+' / '+DUTYWTX[dutyW('벌당')]);
+
+    L('','★을. 흡연실 당번 — 순번에 들어가나');
+    var A='김동윤', B='한지홍', C='남재권';
+    DUTY['당번']=[]; DUTY['벌당']=[]; DUTY['흡연실 당번']=[];
+    dutyToggle('흡연실 당번', A); dutyToggle('당번', B); dutyToggle('벌당', C);
+    ok(inLineup(A,'bu3')===true, '  흡연실 당번이 순번 후보에 드나', String(inLineup(A,'bu3')));
+    ok(inLineup(B,'bu3')===false && inLineup(C,'bu3')===false, '  당번·벌당은 여전히 빠지나',
+       '당번 '+inLineup(B,'bu3')+' / 벌당 '+inLineup(C,'bu3'));
+    ok(whyNoLineup(A)==='', '  흡연실 당번은 못 서는 까닭이 없나', JSON.stringify(whyNoLineup(A)));
+    ok(whyNoLineup(B)!=='', '  당번은 까닭이 있나', JSON.stringify(whyNoLineup(B)));
+
+    L('','★병. 순번을 세우면 자리를 받나');
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+    L('  '+A+' 자리', seatsOf(A).join(',')||'없음');
+    ok(seatsOf(A).length>0, '  흡연실 당번이 자리를 받았나', seatsOf(A).join(',')||'★못 받음');
+    ok(seatsOf(B).length===0 && seatsOf(C).length===0, '  당번·벌당은 안 앉았나',
+       (seatsOf(B).join(',')||'없음')+' / '+(seatsOf(C).join(',')||'없음'));
+
+    L('','★정. 근무표에 뭐라고 뜨나');
+    L('  '+A, stOf(A)+'  배지['+badges(A).join('][')+']');
+    L('  '+B, stOf(B)+'  배지['+badges(B).join('][')+']');
+    L('  '+C, stOf(C)+'  배지['+badges(C).join('][')+']');
+    ok(stOf(A).indexOf('부')>=0 && stOf(A).indexOf('흡연실')<0, '  흡연실 당번은 근무로', stOf(A));
+    ok(badges(A).indexOf('흡연실 당번')>=0, '  그래도 배지는 붙나', badges(A).join(' '));
+    ok(absCls(absOf(A))==='w' || absCls(absOf(A))==='u', '  셈에서 가용 쪽인가', absOf(A)+' / '+absCls(absOf(A)));
+
+    L('','★무. 성격을 바꾸면 곧바로 따라오나');
+    setDutyWork('흡연실 당번','no'); paint();
+    ok(inLineup(A,'bu3')===false, '  근무 안 함으로 바꾸면 순번에서 빠지나', String(inLineup(A,'bu3')));
+    ok(absCls(absOf(A))==='o', '  그 밖으로 가나', absOf(A)+' / '+absCls(absOf(A)));
+    setDutyWork('당번','in'); paint();
+    ok(inLineup(B,'bu3')===true, '  당번을 순번에 같이로 바꾸면 드나', String(inLineup(B,'bu3')));
+    setDutyWork('흡연실 당번','in'); setDutyWork('당번','may'); paint();
+
+    L('','★기. 시각·시간은 상황 따라에서만 뜻이 있나');
+    L('  '+A+' 묶인 시간(흡연실·in)', JSON.stringify(dutyBusy(A)));
+    ok(dutyBusy(A).length===0, '  순번에 같이 = 아무 시간도 안 묶는다', JSON.stringify(dutyBusy(A)));
+    L('  '+B+' 묶인 시간(당번 7:00 5시간)', JSON.stringify(dutyBusy(B)));
+    ok(dutyBusy(B).length===1 && dutyBusy(B)[0][0]===420, '  당번은 적은 시각만 묶는다', JSON.stringify(dutyBusy(B)));
+
+    L('','★경. 옛 저장본(성격이 없던 판)을 읽으면');
+    DUTYDEF = { '당번': { t:'7:00', h:5 }, '벌당': { t:'13:00', h:5 }, '흡연실 당번': { t:'', h:0 }, '헌 당번': { t:'', h:0 } };
+    ok(dutyW('당번')==='may', '  시각이 있던 것 → 상황 따라', DUTYWTX[dutyW('당번')]);
+    ok(dutyW('헌 당번')==='no', '  시각이 없던 것 → 근무 안 함(옛 뜻 그대로)', DUTYWTX[dutyW('헌 당번')]);
+    ok(dutyW('흡연실 당번')==='in', '  흡연실 당번만 순번에 같이로 채움', DUTYWTX[dutyW('흡연실 당번')]);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length? E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1400);
+</script>

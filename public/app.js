@@ -915,7 +915,12 @@ function renderToday(t) {
   // ★예전엔 dayOffset<=0(오늘)일 때만 그렸다. 서버가 오늘 당번만 내려보내던 시절의 빗장인데,
   //  저녁엔 화면이 내일 배치표를 보고 있어서 내일 당번이 어느 날에도 못 떴다(2026-08-23 홍준표 2부 당번).
   //  이제 서버가 '화면이 보는 날짜'의 당번을 내려준다 → 빗장을 풀고 말(오늘·내일)만 맞춘다.
-  if (t && t.duty && renderDutyHero(t.duty, t.dayOffset)) { renderRoundsStack(null); return; }
+  // ★다만 그날 라운드가 있는 사람은 덮지 않는다 — 일하는 사람에게는 티오프가 먼저다.
+  //  흡연실 당번처럼 '순번에 같이 세우는' 당번이 생기면서 당번과 근무가 한 사람에게 겹친다.
+  //  그때 히어로를 당번 보드로 덮으면 그 사람은 제 티오프를 아예 못 본다.
+  //  당번은 배지와 라운드 카드로 말한다(아래 일반 그리기가 그걸 한다).
+  const _hasRound = Array.isArray(t && t.rounds) && t.rounds.some((r) => r && (r.kind === 'work' || r.kind === 'spare'));
+  if (t && t.duty && !_hasRound && renderDutyHero(t.duty, t.dayOffset)) { renderRoundsStack(null); return; }
   $('todayHero').classList.remove('duty-live', 'duty-on');
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
@@ -4751,7 +4756,8 @@ async function main() {
   //  (시계는 당번 것, 그림은 휴무 것으로 섞이던 원인). 대신 당번 보드를 갱신해 시계도 최신으로 유지한다.
   setInterval(() => {
     tickDate(); refreshSky();
-    if (lastToday && lastToday.duty && renderDutyHero(lastToday.duty, lastToday.dayOffset)) { /* 당번 보드 유지·시계 갱신 */ }
+    const _lr = Array.isArray(lastToday && lastToday.rounds) && lastToday.rounds.some((r) => r && (r.kind === 'work' || r.kind === 'spare'));
+    if (lastToday && lastToday.duty && !_lr && renderDutyHero(lastToday.duty, lastToday.dayOffset)) { /* 당번 보드 유지·시계 갱신 */ }
     else if (lastToday) renderBoard(lastToday);
     if (document.body.classList.contains('on-board')) applyBoardSky();
   }, 20000);

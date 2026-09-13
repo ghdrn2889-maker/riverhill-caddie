@@ -141,7 +141,19 @@ var DUTYKEYS = ['당번','벌당','흡연실 당번'];
 // 한 자리 = { 이름, 시각 }. 같은 당번이라도 7시 서는 사람과 13시 서는 사람이 따로다
 var DUTY = { '당번': [{ n: '정용호', t: '7:00' }], '벌당': [], '흡연실 당번': [] };
 // 새로 넣을 때 딸려 오는 값 — 시작 시각과 근무 시간. 골프장마다 다르니 설정에서 고친다
-var DUTYDEF = { '당번': { t: '7:00', h: 5 }, '벌당': { t: '13:00', h: 5 }, '흡연실 당번': { t: '', h: 0 } };
+// ★당번마다 성격이 다르다 — 시각·시간만으로는 못 담는다.
+//   w='in'  순번에 같이 세운다. 그날 근무가 확정되는 당번이다(흡연실 당번).
+//           시간에 안 묶이고, 순번 세우기가 자리를 준다. 당번 배지는 그대로 붙는다.
+//   w='may' 상황 따라. 순번 세우기에서는 빼고, 적힌 시각만 묶는다 —
+//           안 겹치는 라운드가 남아 있으면 아직 일할 수 있는 사람(미배치·가용)이다.
+//   w='no'  그날 캐디 근무는 없다. 시각과 무관하게 하루를 잡는다.
+//   ★여태는 이 셋이 '시각이 있나 없나' 하나로 뭉개져 있었다. 그래서 시각을 안 적는
+//    흡연실 당번이 하루 종일 묶인 것으로 읽혀 근무에서 통째로 빠졌다 — 실제와 정반대였다.
+var DUTYWORK = ['in', 'may', 'no'];
+var DUTYWTX = { 'in': '순번에 같이', 'may': '상황 따라', 'no': '근무 안 함' };
+var DUTYDEF = { '당번': { t: '7:00', h: 5, w: 'may' },
+                '벌당': { t: '13:00', h: 5, w: 'may' },
+                '흡연실 당번': { t: '', h: 0, w: 'in' } };
 var wkFilter = '';
 
 // 지정 카트 — 사람에게 붙는다. 없는 사람은 있는 사람 것을 빌려 탄다
@@ -564,20 +576,23 @@ function hasDuty(n){ return dutyMarks(n).length > 0; }
 //   모르면 넉넉히 잡는 쪽이 안전하다
 function dutyBusy(n){
   var out = [];
-  function put(t, h){
-    if (!t) { out.push([0, 1440]); return; }
+  // w: 그 당번의 근무 성격. 'in' 은 아무 시간도 안 묶는다 — 근무를 같이 하는 당번이다.
+  //    'no' 는 시각이 적혀 있어도 하루를 잡는다 — 그날 근무를 안 하는 당번이다.
+  function put(w, t, h){
+    if (w === 'in') return;
+    if (w === 'no' || !t) { out.push([0, 1440]); return; }
     var a = mm(t);
     out.push([a, h > 0 ? a + Math.round(h * 60) : 1440]);
   }
   DUTYKEYS.forEach(function(k){
     var i = dutyAt(k, n); if (i < 0) return;
     var x = dutyList(k)[i] || {};
-    put(x.t || '', Number(x.h) || 0);
+    put(dutyW(k), x.t || '', Number(x.h) || 0);
   });
   DAY.forEach(function(p){ p.roster.forEach(function(r){
     if (r.n !== n || !r.role) return;
     var d = defOf(r.role);
-    put(d.t || '', Number(d.h) || 0);
+    put(d.w, d.t || '', Number(d.h) || 0);
   }); });
   return out;
 }
@@ -615,8 +630,12 @@ function absOf(n){
   //      배지가 하나뿐이라 당번이 조출에 밀리는 일이 있는데, 셈까지 밀리면 안 된다.
   //   ② 그러고도 안 겹치는 라운드가 남아 있으면 아직 일할 수 있는 사람이다 —
   //      13시부터 서는 벌당이 아침 라운드까지 막지는 않는다.
-  if (hasDuty(n) && (!t || seatTag(t) || isDutyTag(t)))
-    return canRound(n) ? (seatTag(t) ? t : '미배치') : dutyMarks(n)[0];
+  //   ③ 순번에 같이 세우는 당번(흡연실 당번 등)은 아무것도 안 민다 — 그 사람은 오늘 근무한다.
+  //   ④ 소속 배지(3부반·선발)는 '오늘 무엇을 한다'는 말이 아니다 — 당번이 이긴다.
+  //      여태는 소속이 당번을 가려서, 3부반인 사람은 당번을 서도 근무표가 늘 '미배치'였다.
+  //      명부가 거의 다 3부반이라 '근무 안 함' 당번이 화면에 아예 안 드러났다.
+  if (blockDuty(n) && (!t || seatTag(t) || isDutyTag(t) || ownTag(t)))
+    return canRound(n) ? (seatTag(t) ? t : '미배치') : blockMarks(n)[0];
   return t || '미배치';
 }
 // ★배지에 두 갈래가 있다.
@@ -990,7 +1009,7 @@ function dupReason(A, B){
 function dtAdd(v){ v = (v || '').trim() || '새 당번';
   if (DUTYKEYS.indexOf(v) >= 0) { toast('이미 있는 당번입니다'); return; }
   cfgChange('당번 종류 추가 · ' + v, function(){
-    DUTYKEYS.push(v); DUTY[v] = []; DUTYDEF[v] = { t: '', h: 0 }; }); }
+    DUTYKEYS.push(v); DUTY[v] = []; DUTYDEF[v] = { t: '', h: 0, w: 'may' }; }); }
 function dtDel(k){ cfgChange('당번 종류 지움 · ' + k, function(){
   DUTYKEYS.splice(DUTYKEYS.indexOf(k), 1);
   delete DUTY[k]; delete DUTYDEF[k]; delete DUTYCOLOR[k]; }); }
@@ -1009,6 +1028,13 @@ function setDutyDef(k, t){
   cfgChange(k + ' 기본 시각 ' + (d.t || '없음') + ' → ' + (t || '없음'),
     function(){ defOf(k).t = t; });
 }
+// 그 당번을 서면 그날 근무를 어떻게 보나 — 순번에 같이 / 상황 따라 / 근무 안 함
+function setDutyWork(k, w){
+  if (DUTYWORK.indexOf(w) < 0) return;
+  var d = defOf(k);
+  if (d.w === w) return;
+  cfgChange(k + ' 근무 ' + DUTYWTX[d.w] + ' → ' + DUTYWTX[w], function(){ defOf(k).w = w; });
+}
 // 설정에서 기본값을 고쳐도 이미 서 있는 사람은 저절로 안 바뀐다 —
 // 사람마다 7시·13시로 갈라 둔 것을 설정 한 번에 지워 버리면 안 되기 때문이다.
 // 대신 '모두 맞추기'로 한 번에 밀어 넣을 수 있게 한다.
@@ -1026,7 +1052,7 @@ function dtAddWith(name, t, h){
   if (DUTYKEYS.indexOf(nm) >= 0) { toast('이미 있는 당번입니다'); return false; }
   var nt = t || '', nh = hrNum(h);
   cfgChange('당번 종류 추가 · ' + nm + (nt || nh ? ' (' + dutySpan({ t: nt, h: nh }) + ')' : ''),
-    function(){ DUTYKEYS.push(nm); DUTY[nm] = []; DUTYDEF[nm] = { t: nt, h: nh }; });
+    function(){ DUTYKEYS.push(nm); DUTY[nm] = []; DUTYDEF[nm] = { t: nt, h: nh, w: 'may' }; });
   return true;
 }
 // 이름과 기본 시간표를 한 번에 고친다
@@ -1056,13 +1082,33 @@ function dutyAt(k, n){
   return -1;
 }
 // 기본값 — 옛 저장본은 시각 문자열 하나였다. 읽을 때 모양을 맞춘다
+// 성격을 안 적던 판에서 올라온 값을 채울 때 쓰는 씨앗.
+// ★이름으로 찍는 것은 여기 한 줄뿐이고, 한 번 채우면 설정에 남아 손으로 바꿀 수 있다.
+//   리버힐에서 흡연실 당번은 그날 근무가 확정되는 당번이라 옛 값의 뜻('시각 없음=하루 종일')과 다르다.
+var DUTYWSEED = { '흡연실 당번': 'in' };
 function defOf(k){
   var d = DUTYDEF[k];
   if (typeof d === 'string') d = { t: d, h: 0 };
   if (!d || typeof d !== 'object') d = { t: '', h: 0 };
+  // 옛 값의 뜻을 그대로 옮긴다 — 시각이 있으면 '상황 따라', 없으면 하루를 잡던 것이니 '근무 안 함'
+  if (DUTYWORK.indexOf(d.w) < 0) d.w = DUTYWSEED[k] || (d.t ? 'may' : 'no');
   DUTYDEF[k] = d;
   return d;
 }
+// 그 당번의 근무 성격
+function dutyW(k){ return defOf(k).w; }
+// 그 사람이 선 당번 가운데 '근무를 막는' 것들 — 순번에 같이 세우는 당번(in)은 안 막는다
+function blockMarks(n){
+  var out = [];
+  if (!n) return out;
+  DUTYKEYS.forEach(function(k){ if (dutyW(k) !== 'in' && dutyAt(k, n) >= 0) out.push(dutyBadge(k)); });
+  DAY.forEach(function(p){ p.roster.forEach(function(r){
+    if (r.n === n && r.role && dutyW(r.role) !== 'in') {
+      var v = dutyBadge(r.role); if (out.indexOf(v) < 0) out.push(v);
+    } }); });
+  return out;
+}
+function blockDuty(n){ return blockMarks(n).length > 0; }
 function hrNum(v){ var n = Number(v); return (isFinite(n) && n > 0) ? Math.min(24, n) : 0; }
 function hrText(h){ return (Math.round(h * 10) / 10) + '시간'; }
 // 몇 시에 시작해 몇 시간 서면 몇 시에 끝나나 — 자정을 넘겨도 맞게 돈다
@@ -1719,7 +1765,7 @@ function workRows(){
       //   배지와 같은 말이 되면 줄에 한 번만 나온다(그리는 쪽이 겹치면 지운다)
       // ★배지와 같은 말을 넣는다 — 그리는 쪽이 겹치는 것을 지워 배지 하나만 남는다.
       //   여태는 배지가 '흡연실 당번', 상태가 '당번 중'이라 한 줄에 두 번 적혔다
-      else if (cls === 'o') st = (hasDuty(nm) && !canRound(nm)) ? (dutyMarks(nm)[0] || '당번')
+      else if (cls === 'o') st = (blockDuty(nm) && !canRound(nm)) ? (blockMarks(nm)[0] || '당번')
         : (offBoardTag(t0) ? t0 : '자리 없음');
       else st = absOf(nm);
     }
@@ -2265,7 +2311,9 @@ function inLineup(n, kind){
   //   ① 당번인 사람이 순번에 빨려 들어가 라운드를 받고
   //   ② 당번 딱지는 '자리'에 붙어 있어서, 그 자리에 앉은 딴 사람에게 옮겨 붙는다.
   //   필요하면 관리자가 손으로 앉힌다 — 배지와 같은 규칙이다
-  if (hasDuty(n)) return false;
+  //   ★다만 '순번에 같이 세우는' 당번은 뺀다는 말이 안 된다. 그 사람은 오늘 근무한다 —
+  //    빼 버리면 근무가 확정된 사람이 자리를 못 받는다.
+  if (blockDuty(n)) return false;
   // ★손으로 만든 중복 근무는 관리자가 정한 것이다 — 기계가 흩지 않는다.
   //   여태는 '2,3' 같은 배지가 이 못 노릇을 했는데, 1·2부 짝은 배지가 없다
   if (dupPinned(n)) return false;
@@ -2273,7 +2321,7 @@ function inLineup(n, kind){
 }
 // 순번에 왜 못 서는지 한마디로. 배지가 먼저고, 없으면 당번이다
 function whyNoLineup(n){
-  return dayMark(n) || (hasDuty(n) ? (dutyFull(n) || '당번') : '')
+  return dayMark(n) || (blockDuty(n) ? (dutyFull(n) || '당번') : '')
     || (dupPinned(n) ? (dupNow(n) ? dupNow(n) + ' 중복 근무' : dupPinText(n) + ' 두 자리') : '');
 }
 // 오늘 설 수 있는 사람 — 그 무리에 들고 배지가 없으면 다 후보다.
