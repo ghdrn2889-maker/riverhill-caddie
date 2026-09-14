@@ -1647,11 +1647,11 @@ function noticeBoxHTML(){
 function lineupBarHTML(){
   return lineupBar1('선발', seonbal(), '여기부터 조를 돌며 1부·2부가 섭니다',
       'lnpick', 'lnrun', '선발 고르기', '1·2부 순번 세우기')
-    + lineupBar1('3부 시작', bu3Start(), '여기부터 3부끼리 돕니다',
-      'ln3pick', 'ln3run', '3부 시작 고르기', '3부 순번 세우기')
+    + lineupBar1('3부 선발', bu3Start(), '여기부터 3부끼리 돕니다',
+      'ln3pick', 'ln3run', '3부 선발 고르기', '3부 순번 세우기')
     + '<div class="lnbar"><span class="lk">내일</span>'
     + '<span class="lv">' + esc(nextDateLabel(DATE)) + '</span>'
-    + '<span class="lw">오늘을 바탕으로 내일을 세웁니다 · 3부 시작은 저절로 정해집니다</span>'
+    + '<span class="lw">오늘을 바탕으로 내일을 세웁니다 · 3부 선발은 저절로 정해집니다</span>'
     + '<button class="nd" data-act="nday">내일로 넘기기</button></div>'
     + caughtBar()
     + driftBar();
@@ -1684,7 +1684,7 @@ function openSeonbalPick(kind){
   var b3 = (sbKind === 'bu3');
   sheetFor = { kind: 'seonbal' };
   $('sheet').innerHTML = '<div class="grab"></div><div class="k">순번 세우기</div>'
-    + '<div class="st">' + (b3 ? '3부 시작 고르기' : '선발 고르기') + '</div>'
+    + '<div class="st">' + (b3 ? '3부 선발 고르기' : '선발 고르기') + '</div>'
     + '<div class="sub">고른 사람의 <b>조 자리부터</b> 조를 돌며(4조 다음은 1조) '
     + (b3 ? '<b>3부</b>가 차례로 섭니다. 3부 배지를 단 사람끼리만 돕니다.'
           : '1부와 2부가 차례로 섭니다. 배지가 붙은 사람은 후보에서 빠집니다.') + '</div>'
@@ -1721,13 +1721,13 @@ function openLineupPreview(pks){
   pks = pks || ['1', '2'];
   var b3 = (pks.length === 1 && pks[0] === '3');
   var sb = b3 ? bu3Start() : seonbal();
-  if (!sb) { toast(b3 ? '3부 시작을 먼저 고르십시오' : '선발을 먼저 고르십시오'); return; }
+  if (!sb) { toast(b3 ? '3부 선발을 먼저 고르십시오' : '선발을 먼저 고르십시오'); return; }
   var plan = lineupPlan(sb, pks);
   if (!plan) { toast('조 편성이 없어 순번을 못 세웁니다'); return; }
   var chg = plan.slots.filter(function(x){ return x.from !== x.to; });
   sheetFor = { kind: 'lineup', pks: pks };
   $('sheet').innerHTML = '<div class="grab"></div><div class="k">'
-    + (b3 ? '3부 시작 ' : '선발 ') + esc(sb) + '</div>'
+    + (b3 ? '3부 선발 ' : '선발 ') + esc(sb) + '</div>'
     + '<div class="st">' + (b3 ? '3부 순번 세우기' : '순번 세우기') + '</div>'
     + '<div class="sub">세우는 자리 ' + plan.slots.length + '개 중 <b>' + chg.length + '개</b>가 바뀝니다 · '
     + '배지가 붙은 ' + plan.fixed.map(function(f){ return part(f.pk).name + ' ' + f.n; }).join('·')

@@ -1,0 +1,65 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  // ★script 안 글자까지 세면 프로브 자신의 글자가 잡힌다 — 보이는 글만
+  function body(){ return document.body.innerText || ''; }
+  function sh(){ return document.getElementById('sheet'); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    if (typeof setView === 'function') setView('work');
+    paint();
+
+    L('','★갑. 순번 줄(화면 위) — 이름표');
+    var tx = body();
+    ok(tx.indexOf('3부 시작') < 0, '  옛 이름 \'3부 시작\'', '없음');
+    var btn = document.querySelector('[data-act="ln3pick"]');
+    L('  3부 고르기 단추', btn ? btn.textContent : '(이 화면엔 없음)');
+    if (btn) ok(btn.textContent.indexOf('3부 선발 고르기') >= 0 || btn.textContent.indexOf('3부') >= 0,
+       '  단추 이름', btn.textContent);
+
+    L('','★을. 고르기 창을 연다');
+    openSeonbalPick('bu3');
+    var s1 = sh().textContent || '';
+    ok(s1.indexOf('3부 선발 고르기') >= 0, '  창 제목', '3부 선발 고르기');
+    ok(s1.indexOf('3부 시작') < 0, '  옛 이름', '없음');
+    closeSheet();
+
+    L('','★병. 1·2부 창은 그대로 \'선발 고르기\'');
+    openSeonbalPick('house');
+    var s2 = sh().textContent || '';
+    ok(s2.indexOf('선발 고르기') >= 0 && s2.indexOf('3부 선발') < 0, '  창 제목', '선발 고르기');
+    closeSheet();
+
+    L('','★정. 안 골랐을 때 뜨는 알림');
+    var was3 = bu3Start();
+    setBu3Start('');
+    if (typeof openLineup === 'function') openLineup(['3']);
+    else if (typeof ln3run === 'function') ln3run();
+    var t = document.getElementById('toast');
+    L('  알림', t ? (t.textContent || '(빔)') : '(없음)');
+    ok(!t || t.textContent.indexOf('3부 시작') < 0, '  알림에 옛 이름 없음', t ? t.textContent : '-');
+    setBu3Start(was3);
+
+    L('','★무. 기록에 적히는 말');
+    var who = bu3List()[3] || bu3List()[0];
+    setBu3Start(who);
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+    ok(((LOG[0]||{}).msg||'').indexOf('3부 선발') >= 0, '  새 이름으로 적힌다', (LOG[0]||{}).msg || '-');
+
+    L('','★기. 내일로 넘기기 확인 창의 줄');
+    var cl = carryLines(carryPlan ? carryPlan() : carrySee());
+    var l3 = cl.filter(function(x){ return x[0].indexOf('3부') >= 0; })[0];
+    L('  줄 이름', l3 ? l3[0] : '(못 찾음)');
+    ok(l3 && l3[0] === '3부 선발', '  새 이름', l3 ? l3[0] : '-');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

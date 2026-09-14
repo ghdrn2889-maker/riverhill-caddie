@@ -2348,7 +2348,7 @@ function setBu3Start(n){
   var b = whereMap(); snap();
   var was = SB3;
   SB3 = n;
-  commit('3부 시작 ' + (was ? was + ' → ' : '') + (n || '없음')
+  commit('3부 선발 ' + (was ? was + ' → ' : '') + (n || '없음')
     + (n ? ' · 아직 자리는 그대로입니다 — 3부 순번 세우기를 누르십시오' : ''), b);
   return true;
 }
@@ -2443,7 +2443,7 @@ function applyLineup(startName, pks){
     if (partsOf(n).length) return;
     if (OFFDUTY.indexOf(n) < 0) { OFFDUTY.push(n); lost++; }
   });
-  commit((lineupKind(pks) === 'bu3' ? '3부 시작 ' : '선발 ') + startName
+  commit((lineupKind(pks) === 'bu3' ? '3부 선발 ' : '선발 ') + startName
     + (off ? '(못 섬) → ' + real : '') + '부터 순번 세움 · '
     + pks.map(function(k){ return part(k).name; }).join('·')
     + ' ' + plan.moved + '자리 바뀜'
@@ -2634,7 +2634,7 @@ function carryLines(c){
   L.push(['오늘 캐디 상태',
     '휴무 ' + c.abs['휴무'] + ' · 휴가 ' + c.abs['휴가'] + ' · 병가 ' + c.abs['병가']
     + ' · 결근 ' + c.off + '  |  중복 근무 ' + c.dup + ' · 3부 ' + c.b3 + '명']);
-  L.push(['3부 시작', c.last3
+  L.push(['3부 선발', c.last3
     ? c.last3 + ' 다음인 ' + (c.sb3 || '없음') + ' — 오늘 3부에서 ' + c.last3 + '까지 일했습니다'
     : (c.sb3 || '없음') + ' — 오늘 3부에서 일한 사람이 없어 그대로 둡니다']);
   L.push(['1·2부 선발', (c.sb || '없음') + ' — 오늘 것 그대로입니다. 내일 선발은 직접 고르십시오']);
