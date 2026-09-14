@@ -59,8 +59,8 @@ setTimeout(function(){
     setCapNo(pk, wl+1);
     p = part(pk);
     L('  ' + (wl+1) + '번까지로 줄임', '한도 ' + spareCap(pk) + ' · 대기 인원 ' + spareNow(p) + ' · 줄 ' + drawnRows(p));
-    ok(drawnRows(p) === spareNow(p), '  서 있는 사람은 그대로 서 있다', drawnRows(p) + '줄 · ' + spareNow(p) + '명');
-    ok(((LOG[0]||{}).msg||'').indexOf('남습니다') >= 0, '  기록이 남는 줄을 말한다', (LOG[0]||{}).msg || '(없음)');
+    ok(drawnRows(p) === spareCap(pk), '  줄이 한도까지로 준다', drawnRows(p) + '줄 · 한도 ' + spareCap(pk));
+    ok(((LOG[0]||{}).msg||'').indexOf('미배치로 갑니다') >= 0, '  기록이 밀려난 사람을 말한다', (LOG[0]||{}).msg || '(없음)');
 
     L('','★경. 사용자의 그 일 — 50번까지 깔고 사람을 앉혔다가 45번으로 줄인다');
     DAY.forEach(function(q){ q.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; TAG={};
@@ -76,8 +76,8 @@ setTimeout(function(){
     p = part(pk);
     L('  45번까지로 줄임', '한도 ' + spareCap(pk) + ' · 끝번 ' + spareLastNo(p)
       + ' · 명단 ' + active(p).length + '줄 · 그려지는 줄 ' + drawnRows(p));
-    ok(active(p).length < 50, '  ★빈 줄이 걷혔다(50줄 → 줄었나)', active(p).length + '줄');
-    ok(partsOf(who).indexOf(pk) >= 0, '  앉힌 사람은 그대로 있다', who + ' → ' + partsOf(who).join(','));
+    ok(drawnRows(p) === spareCap(pk), '  ★그려지는 대기 줄 = 한도', drawnRows(p) + '줄 · 한도 ' + spareCap(pk));
+    ok(partsOf(who).indexOf(pk) < 0 && !isAbs(tagOf(who)), '  한도 밖 사람은 미배치로(쉬는 것 아님)', who + ' → ' + (partsOf(who).join(',') || '미배치'));
     L('  기록', (LOG[0]||{}).msg || '(없음)');
 
     L('','★신. 아무도 안 앉았으면 딱 45번까지로 준다');

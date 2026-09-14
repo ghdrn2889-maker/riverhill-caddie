@@ -1,0 +1,71 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function spareRows(p){ return Math.max(0, active(p).length - p.tees.length); }
+  function drawnRows(p){ return Math.max(spareRows(p), spareCap(p.key)); }
+  function tail(p){
+    var a = active(p), s = [];
+    for (var i = p.tees.length; i < a.length; i++)
+      s.push((i+1) + (a[i].n ? ':' + a[i].n : ':빈줄'));
+    return s.join(' ');
+  }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    var pk='1', p=part(pk);
+    L('1부 팀', p.tees.length + '팀 · 명부 ' + JONAMES.length + '명');
+
+    L('','★갑. 대기 50번까지 깔고 순번을 세운다 — 실제로 쓰는 차례');
+    setCapNo(pk, 50);
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    p = part(pk); paint();
+    L('  깔기 50번', '한도 ' + spareCap(pk) + ' · 끝번 ' + spareLastNo(p));
+    L('  명단', active(p).length + '줄 · 대기 줄 ' + spareRows(p) + ' · 그려지는 줄 ' + drawnRows(p));
+    L('  대기 칸 속', tail(p));
+    L('  대기 인원', spareNow(p) + '명');
+
+    L('','★을. 45번까지로 줄인다');
+    setCapNo(pk, 45);
+    p = part(pk);
+    L('  줄인 뒤', '한도 ' + spareCap(pk) + ' · 끝번 ' + spareLastNo(p)
+      + ' · 명단 ' + active(p).length + '줄 · 그려지는 줄 ' + drawnRows(p));
+    L('  대기 칸 속', tail(p));
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+    L('  ★화면에 남는 마지막 번호', (p.tees.length + drawnRows(p)) + '번');
+    L('','★임. 되돌리기 한 번이면 다섯 명이 그대로 돌아온다');
+    var gone = (LOG[0]||{}).msg || '';
+    undo();
+    p = part(pk);
+    ok(spareCap(pk) === 15, '  한도 돌아옴', spareCap(pk) + ' · 끝번 ' + spareLastNo(p));
+    ok(active(p).length === 50, '  명단 돌아옴', active(p).length + '줄');
+    ok(tail(p).indexOf('50:') >= 0, '  50번 사람 돌아옴', tail(p).split(' ').slice(-1)[0]);
+    redo();
+    p = part(pk);
+    ok(active(p).length === 45, '  다시 하기도 된다', active(p).length + '줄');
+
+    L('','★계. 밀려난 사람은 미배치다 — 쉬는 것이 아니다');
+    var out5 = ['문태익','정용호','김주희','우겸조','윤형수'];
+    var okk = 0, note = [];
+    out5.forEach(function(nm){
+      var inPart = partsOf(nm).length, ab = isAbs(tagOf(nm));
+      note.push(nm + '(' + (inPart ? '부' + partsOf(nm).join(',') : '미배치') + (ab ? '·근태' : '') + ')');
+      if (!ab) okk++;
+    });
+    ok(okk === 5, '  근태가 붙은 사람은 없다', note.join(' '));
+
+    L('','★신. 한도를 다시 늘리면 자리가 다시 깔린다');
+    setCapNo(pk, 50);
+    p = part(pk);
+    ok(spareLastNo(p) === 50, '  끝번', spareLastNo(p) + '번까지');
+    ok(drawnRows(p) === 15, '  그려지는 줄', drawnRows(p) + '줄');
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

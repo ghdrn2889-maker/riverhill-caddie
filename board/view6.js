@@ -2681,12 +2681,37 @@ function setGap(v){ v = Math.max(3, Math.min(20, Number(v) || GAP));
 function setRows(v){ v = Math.max(4, Math.min(40, Number(v) || ROWS));
   cfgChange('격자 줄 수 ' + ROWS + ' → ' + v, function(){ ROWS = v; }); }
 // ★한도를 줄이면 깔아 둔 자리도 같이 줄어야 한다 — 글자만 바뀌고 칸이 50번까지
-//   그대로 서 있으면 줄인 것이 아니다. 사람이 안 선 빈 줄은 여기서 걷는다.
-//   사람이 선 줄은 못 걷는다 — 몇 줄이 남는지 미리 세어 말해 준다
-function capLeftOver(p, v){
-  var a = active(p), keep = p.tees.length + v, left = 0;
-  for (var i = keep; i < a.length; i++) if (a[i].n || a[i].itn) left++;
-  return left;
+//   그대로 서 있으면 줄인 것이 아니다.
+//   한도 밖에 선 사람은 미배치로 보낸다 — 순번 세우기가 한도 밖을 안 세우고
+//   미배치로 남기는 것과 같은 잣대다. 미배치는 쉬는 것이 아니라 '아직 자리를 안 준 것'이고,
+//   되돌리기 한 번이면 그대로 돌아온다
+function capOverNames(p, v){
+  if (!v) return [];
+  var a = active(p), keep = p.tees.length + v, out = [];
+  for (var i = keep; i < a.length; i++) if (a[i].n) out.push(a[i].n);
+  return out;
+}
+function capCut(p, v){
+  trimBlanks(p);                                 // 빈 줄부터 걷는다 — 뒷사람이 당겨 온다
+  if (!v) return [];
+  var out = [];
+  for (;;){
+    var a = active(p);
+    if (a.length <= p.tees.length + v) break;
+    var r = a[a.length - 1], j = p.roster.indexOf(r);
+    if (j < 0) break;
+    p.roster.splice(j, 1);
+    if (r.n) out.unshift(r.n);
+  }
+  out.forEach(function(nm){
+    if (!partsOf(nm).length && OFFDUTY.indexOf(nm) < 0) OFFDUTY.push(nm);
+  });
+  return out;
+}
+function capOutTx(names){
+  if (!names.length) return '';
+  var who = names.slice(0, 3).join(' · ') + (names.length > 3 ? ' 외 ' + (names.length - 3) + '명' : '');
+  return ' · 한도 밖 ' + names.length + '명은 미배치로 갑니다(' + who + ')';
 }
 // ★대기는 '몇 번 순번까지'로 정한다 — 0이면 제한 없음
 function setCapNo(pk, no){
@@ -2694,13 +2719,13 @@ function setCapNo(pk, no){
   var v = setSpareLastNo(p, no);
   if (spareCap(pk) === v) return;
   var nowNo = v ? workLastNo(p) + v : 0;
-  var left = v ? capLeftOver(p, v) : 0;
+  var out = capOverNames(p, v);
   cfgChange(p.name + ' 대기 ' + (was ? was + '번까지' : '제한 없음')
     + ' → ' + (v ? nowNo + '번까지' : '제한 없음')
-    + ' · 순번 세우기가 여기서 끊습니다'
-    + (left ? ' · 한도 뒤에 ' + left + '명이 서 있어 그 줄은 남습니다' : ''), function(){
+    + ' · 순번 세우기가 여기서 끊습니다' + capOutTx(out), function(){
     SMAX[pk] = v;
-    trimBlanks(p);                     // 빈 줄까지 걷어야 자리가 정말 줄어든다
+    capCut(p, v);                                // 자리도 같이 줄인다
+    attTouch([pk]);
   });
 }
 function setStart(pk, v){ var p = part(pk);
