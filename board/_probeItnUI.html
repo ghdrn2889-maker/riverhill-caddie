@@ -1,0 +1,57 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function sh(){ return document.getElementById('sheet'); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    L('','★갑. 인턴이 아닌 칸 — 단추 이름과 색');
+    openCell('1', 4);
+    var b = sh().querySelector('[data-act="itnon"]');
+    ok(!!b, '  단추가 있다', b ? b.textContent : '없음');
+    ok(b && b.textContent === '인턴 배치하기', '  이름', b ? b.textContent : '-');
+    ok(b && b.className.indexOf('itn') >= 0, '  인턴 표딱지', b ? (b.className || '(없음)') : '-');
+    var cs = b ? getComputedStyle(b) : null;
+    L('  바탕색', cs ? cs.backgroundColor : '-');
+    L('  글자색', cs ? cs.color : '-');
+    ok(cs && cs.backgroundColor === 'rgb(253, 243, 201)', '  ★배치표 인턴색(#fdf3c9)과 같다', cs ? cs.backgroundColor : '-');
+
+    L('','★을. 없앤 문구가 안 보인다');
+    var tx = sh().textContent || '';
+    ok(tx.indexOf('티오프는 차지하되 순번은 안 씁니다') < 0, '  \'티오프는 차지하되…\'', '없음');
+    ok(tx.indexOf('총원·가용에도 안 듭니다') < 0, '  \'총원·가용에도 안 듭니다\'', '없음');
+    ok(tx.indexOf('아무도 자리를 잃지 않습니다') < 0, '  \'아무도 자리를 잃지 않습니다\'', '없음');
+    ok(tx.indexOf('한 칸 뒤 티오프로 갑니다') < 0, '  \'…는 5번 그대로 한 칸 뒤…\'', '없음');
+    ok(tx.indexOf('여기에 인턴 끼워 넣기') < 0, '  옛 단추 이름', '없음');
+
+    L('','★병. 눌러서 인턴이 실제로 들어간다');
+    var n0 = active(part('1')).length;
+    var box = document.getElementById('itnName'); if (box) box.value = '박연습';
+    b.click();
+    var a1 = active(part('1'));
+    var itn = a1.filter(function(r){ return isItn(r); });
+    ok(itn.length === 1, '  인턴 칸이 생겼다', itn.length + '칸 · ' + (itn[0]||{}).n);
+    ok(a1.length === n0 + 1, '  명단 한 줄 늘었다', n0 + ' → ' + a1.length);
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★정. 인턴 칸을 열면 풀기가 있다');
+    var at = a1.map(function(r){ return isItn(r); }).indexOf(true);
+    openCell('1', at);
+    ok(!!sh().querySelector('[data-act="itnoff"]'), '  인턴 풀기 단추', '있음');
+    ok(!sh().querySelector('[data-act="itnon"]'), '  넣기 단추는 없다', '없음');
+    closeSheet();
+    undo();
+    ok(active(part('1')).filter(function(r){ return isItn(r); }).length === 0, '  되돌리기로 인턴 사라짐', '◎');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

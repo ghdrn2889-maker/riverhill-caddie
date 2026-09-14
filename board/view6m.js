@@ -819,13 +819,8 @@ function openCell(pk, i){
          + '티오프는 차지하지만 <b>순번을 안 씁니다.</b> 풀면 이 칸이 없어지고 '
          + '뒤 캐디가 <b>한 칸씩 앞 티오프로</b> 옵니다 \u2014 번호는 그대로입니다.</div>'
        : '<div class="fld"><input id="itnName" value="" autocomplete="off" placeholder="인턴 이름 (비우면 그냥 인턴)">'
-         + '<button data-act="itnon">여기에 인턴 끼워 넣기</button></div>'
-         + '<div class="dnote" style="margin-top:9px">인턴은 <b>티오프는 차지하되 순번은 안 씁니다.</b> '
-         + '조 편성 명단 밖 사람이라 <b>총원\u00b7가용에도 안 듭니다.</b><br>'
-         + '여기에 <b>끼워 넣습니다</b> \u2014 뒤 캐디들은 한 칸씩 <b>뒤 티오프로</b> 가고 '
-         + '<b>번호는 그대로입니다.</b>'
-         + (r && r.n ? '<br>지금 이 칸의 <b>' + esc(r.n) + '</b>은(는) 자리를 안 잃습니다.' : '')
-         + '</div>')
+         + '<button data-act="itnon" class="itn">인턴 배치하기</button></div>'
+       )
     + '</div>'
     + (isItn(r) ? '' : (r ? dayTagGrp(r.n) : '')) + '<div class="grp">'
     + '<div class="dnote">이름 고치기는 <b>판독이 틀렸을 때</b> 씁니다. 사람이 바뀐 것이면 그 칸을 비우고 다시 앉히십시오.'

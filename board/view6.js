@@ -716,15 +716,10 @@ function openCell(pk, i){
          + '<div class="dnote">이 칸은 <b>인턴</b>입니다 — 티오프는 차지하지만 '
          + '<b>순번을 안 씁니다.</b> 풀면 이 칸이 없어지고 뒤 캐디가 '
          + '<b>한 칸씩 앞 티오프로</b> 옵니다 — 캐디 번호는 그대로입니다.</div>'
+       // ★단추 색이 배치표의 인턴 칸과 같다 — 무엇을 만드는 단추인지 색이 말한다
        : '<div class="fld"><input id="itnName" value="" autocomplete="off" placeholder="인턴 이름 (비우면 그냥 인턴)">'
-         + '<button data-act="itnon">여기에 인턴 끼워 넣기</button></div>'
-         + '<div class="dnote">인턴은 <b>티오프는 차지하되 순번은 안 씁니다.</b> '
-         + '조 편성 명단 밖 사람이라 <b>총원·가용에도 안 듭니다.</b><br>'
-         + '여기에 <b>끼워 넣습니다</b> — 뒤 캐디들은 한 칸씩 <b>뒤 티오프로</b> 가고 '
-         + '<b>번호는 그대로입니다.</b> 아무도 자리를 잃지 않습니다.'
-         + (r && r.n && !isItn(r) ? '<br>지금 이 칸의 <b>' + esc(r.n) + '</b>은(는) '
-             + '<b>' + seatNoTx(p, i) + '번 그대로</b> 한 칸 뒤 티오프로 갑니다.' : '')
-         + '</div>')
+         + '<button data-act="itnon" class="itn">인턴 배치하기</button></div>'
+       )
     + '</div>'
     + (isItn(r) ? '' : (r ? dayTagGrp(r.n) : ''));
 
