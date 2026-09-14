@@ -7,6 +7,7 @@ setTimeout(function(){
   try{
     localStorage.clear(); CARRY.seats = true; resetToBoard();   /* 옛 전제: 처음 배치표 그대로 */ savedSig=null; PENDING=null; CAUGHT=null; DATE=BOARD.date;
     bootLoad(); caughtSeen(); setView('work');
+    var abs0 = absN();                 // 본보기에 원래 쉬는 사람
 
     // 하우스 캐디 · 1·2부에 앉아 있는 사람만 골라 쉬게 한다
     var seed = JONAMES.filter(function(n){
@@ -38,14 +39,15 @@ setTimeout(function(){
     applyLineup(seonbal(), ['1','2']);
     var got = seed.filter(function(n){ return partsOf(n).length; });
     L('  ▶ 세운 뒤', got.length + '/8명 자리 받음 '
-      + (got.length ? '◎ ' + got.slice(0,4).join(',') : '✗ 아무도 안 섰다'));
+      + (got.length === 0 ? '◎ 쉬는 사람은 안 세운다(새 규칙)'
+                          : '✗ 쉬는데 섯다: ' + got.slice(0,4).join(',')));
     L('  STACK', STACK.length + ' (세우기가 ' + (STACK.length > stack0+1 ? '쌓음':'안 쌓음') + ')');
 
     // ── 되돌리기
     var need = STACK.length - stack0;
     for (var i=0; i<need; i++) undo();
     L('되돌리기 ' + need + '번', DATE + ' · 근태 ' + absN() + '명 '
-      + (DATE === d0 && absN() === 8 ? '◎ 통째로 돌아옴' : '✗'));
+      + (DATE === d0 && absN() === abs0 + 8 ? '◎ 통째로 돌아옴' : '✗'));
   }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
   o.push('errs: '+(E.length? E.join(' | '):'none'));
   document.getElementById('PROBE').textContent=o.join('\n');

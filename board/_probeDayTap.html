@@ -11,8 +11,11 @@ setTimeout(function(){
     L('머리 날짜 누름', q('#sheet .st')? q('#sheet .st').textContent+' ◎':'(안 열림 ✗)');
     L('  줄', Array.prototype.slice.call(document.querySelectorAll('#sheet [data-daygo]'))
         .map(function(b){return b.textContent.replace(/\s+/g,' ').trim();}).join(' | '));
-    L('  내일 만들기 단추', document.querySelector('#sheet [data-act="nday"]')?
-        '"'+document.querySelector('#sheet [data-act="nday"]').textContent+'" ◎':'없음 ✗');
+    // ★수동 넘기기는 없어졌다 — 날은 저절로 간다
+    L('  넘기기 단추', document.querySelector('#sheet [data-act="nday"]')?
+        '✗ 아직 있다' : '없음 ◎');
+    L('  이 날의 구분 비우기', document.querySelector('#sheet [data-act="wipemk"]')?
+        '있음 ◎' : '✗ 사라졌다');
   }catch(err){ o.push('터짐: '+err.message); }
   o.push('errs: '+(E.length? E.join(' | '):'none'));
   document.getElementById('PROBE').textContent=o.join('\n');
