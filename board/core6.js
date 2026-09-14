@@ -419,13 +419,14 @@ function reconcileDupTags(){
 // 중복 근무(54h·2,3)와 조출·후출 같은 구분은 그날 경기과가 정하는 것이라
 // 날을 넘기면 지워야 한다 — 안 그러면 어제 것이 오늘 자리를 거짓으로 말한다.
 //
-// ★근태는 기본으로 안 들고 간다. 어제 쉰 사람이 오늘도 쉬는 것이 아니다 —
-//   재 보니 11명이 전원 그대로 넘어와, 경기팀은 11번을 풀고 다시 지정해야 했다.
-//   빈 판에서 시작하고 '한꺼번에 지정'으로 오늘 것을 넣는 편이 손이 덜 간다.
+// ★근태(휴무·휴가·병가)는 반드시 그대로 들고 간다 — 고를 수 없는 규칙이다.
+//   날은 사람이 안 눌러도 간다. 그때 경기과가 적어 둔 '쉬는 사람'이 사라지면
+//   판이 저 혼자 바뀐 꼴이 된다 — 그것이 가장 무서운 일이다.
+//   오늘 나오는 사람은 근태를 '근무'로 되돌리면 된다 — 떼는 것은 사람이 한다.
 // 소속(3부반) 씨앗은 늘 남긴다 — 설정에 사는 값이라 지우면 되살릴 길이 없다
 // tees: 어제 티오프표를 들고 갈지. 기본은 들고 간다 — 62팀을 손으로 다시 넣는 것은 벌이다.
 // 다만 그것이 '예약'이 아니라 '어제 것'이라는 사실은 창에 또렷이 적는다
-var CARRY = { abs: false, leave: true, role: true, ln3: true, seats: false, tees: true,
+var CARRY = { abs: true, leave: true, role: true, ln3: true, seats: false, tees: true,
   grid: true,                        // ★팀을 비워도 시간대는 들고 간다
   staff: false };                    // 경기과 마샬 — 날마다 바뀌니 기본은 안 들고 간다
 function carryOpt(k){ return !!CARRY[k]; }
@@ -433,10 +434,8 @@ function setCarryOpt(k, v){ CARRY[k] = !!v; cfgSave(); }
 function keepOnCarry(t, o){
   o = o || CARRY;
   if (t === '3부') return true;
-  // ★휴무와 휴가·병가는 성질이 다르다.
-  //   휴무는 그날 하루짜리라 안 물려주고, 휴가·병가는 여러 날 이어지니 물려준다
-  if (t === '휴무') return !!o.abs;
-  if (isAbs(t)) return !!o.leave;
+  // ★휴무·휴가·병가 셋 다 그대로 간다 — 여기가 그 규칙이 사는 곳이다
+  if (isAbs(t)) return true;
   if (t === '당번' || t === '벌당') return false;   // ★당번은 그날치다 — 늘 비운다
   if (t === '선발') return !!o.role;
   return false;
@@ -2611,8 +2610,7 @@ function carryToDate(target, quiet){
   if (!c.opt.seats) msg += ' · 자리는 비움(빈 배치표로 시작)';
   msg += c.opt.tees ? ' · 팀은 어제 것 그대로'
     : (c.opt.grid ? ' · 팀은 비우고 시간대만 그대로' : ' · 팀도 비움');
-  if (!c.opt.abs) msg += ' · 휴무는 안 가져옴';
-  if (!c.opt.leave) msg += ' · 휴가·병가도 안 가져옴';
+  msg += ' · 휴무·휴가·병가는 그대로';
   if (dutyGone) msg += ' · 당번 ' + dutyGone + '자리 비움';
   if (msGone) msg += ' · 경기과 마샬 ' + msGone + '자리 비움(내일 다시 넣으십시오)';
   if (msM) msg += ' · 경기과 마샬' + msM;

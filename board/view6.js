@@ -1649,10 +1649,6 @@ function lineupBarHTML(){
       'lnpick', 'lnrun', '선발 고르기', '1·2부 순번 세우기')
     + lineupBar1('3부 선발', bu3Start(), '여기부터 3부끼리 돕니다',
       'ln3pick', 'ln3run', '3부 선발 고르기', '3부 순번 세우기')
-    + '<div class="lnbar"><span class="lk">내일</span>'
-    + '<span class="lv">' + esc(nextDateLabel(DATE)) + '</span>'
-    + '<span class="lw">오늘을 바탕으로 내일을 세웁니다 · 3부 선발은 저절로 정해집니다</span>'
-    + '<button class="nd" data-act="nday">내일로 넘기기</button></div>'
     + caughtBar()
     + driftBar();
 }
@@ -1663,7 +1659,7 @@ function caughtBar(){
   return '<div class="lnbar newd"><span class="lk">새 날</span>'
     + '<span class="lv">' + esc(c.to) + '</span>'
     + '<span class="lw">' + esc(c.from) + ' 것을 이어받아 만들었습니다 · 순번은 아직 안 세웠습니다'
-    + (c.abs ? '' : ' · 근태는 안 가져왔습니다') + '</span>'
+    + ' · 휴무·휴가·병가는 그대로입니다' + '</span>'
     + '<button data-act="daypick">지난 날 보기</button>'
     + '<button data-act="cgtseen">알겠습니다</button></div>';
 }
@@ -1763,8 +1759,7 @@ function openDayPick(){
     + '<div class="grp"><h4>저장된 날</h4><div class="acts">'
     + (rows || '<span style="font-size:12.5px;color:#8b96a2;font-weight:760">저장된 날이 없습니다</span>')
     + '</div></div>'
-    + '<div class="grp"><h4>새로 만들기</h4><div class="acts">'
-    + '<button data-act="nday">' + esc(nextDateLabel(DATE)) + ' 만들기</button>'
+    + '<div class="grp"><h4>이 날 손질</h4><div class="acts">'
     + '<button data-act="wipemk" class="warn">이 날의 구분 비우기</button></div>'
     + '<div class="dnote">비우기는 <b>그날의 배치</b>를 지웁니다 — 구분(중복 근무·조출·후출)과 '
     + '<b>두 부에 겹쳐 선 자리</b>. 근태·선발·당번·3부반 소속은 그대로 둡니다.</div></div>'
@@ -1787,68 +1782,6 @@ function openPending(){
   $('sheet').classList.add('on');
 }
 
-// 내일로 넘기기 — 되돌릴 수 있다는 말을 먼저 하고, 캐디 상태를 보여 준 뒤 묻는다
-// 무엇을 들고 갈지 — 두 화면이 같은 칸을 쓴다
-function carryOptsHTML(c){
-  var row = function(k, name, sub){
-    var on = carryOpt(k);
-    return '<button class="copt' + (on ? ' on' : '') + '" data-copt="' + k + '">'
-      + '<span class="cx">' + (on ? '\u2713' : '') + '</span>'
-      + '<span class="cn">' + esc(name) + '<i>' + esc(sub) + '</i></span>'
-      + '<span class="cs">' + (on ? '가져감' : '안 가져감') + '</span></button>';
-  };
-  return '<div class="grp"><h4>무엇을 들고 갈까요</h4>'
-    + row('tees', '팀 (티오프 시각표)',
-        c.teams.map(function(x){ return x.name + ' ' + x.n + '팀'; }).join(' · ')
-        + ' — 어제 것입니다. 예약처에서 온 것이 아닙니다')
-    + row('grid', '티오프 시간대 (팀 없이 칸만)',
-        '팀을 안 가져갈 때만 들어립니다 — 어제와 같은 시각 칸이 빈 채로 서 있습니다')
-    + row('seats', '자리 (누가 어느 자리에)',
-        '켜면 순번 세우기를 안 눌러도 어제 사람이 그대로 앉아 있습니다')
-    + row('abs', '휴무', c.abs['휴무'] + '명 — 그날 하루짜리라 안 가져오는 것이 기본입니다')
-    + row('leave', '휴가 · 병가', '휴가 ' + c.abs['휴가'] + ' · 병가 ' + c.abs['병가']
-        + '명 — 여러 날 이어지므로 가져옵니다')
-    + row('role', '선발', '선발 ' + (c.sb || '없음')
-        + ' — 당번·벌당은 그날치라 언제나 비웁니다')
-    + row('staff', '경기과 마샬', (c.ms.length ? '오늘 ' + c.ms.join('·') : '오늘 없음')
-        + ' — 날마다 바뀌니 비우는 것이 기본입니다. 대리·주임은 그대로 둡니다')
-    + row('ln3', '3부 순번을 저절로 세우기', carryOpt('seats')
-        ? (c.sb3 ? '★넘기는 순간 ' + c.sb3 + '부터 3부에 이름이 찹니다' : '시작할 사람이 없습니다')
-        : '자리를 비우면 안 세웁니다 — 넘긴 뒤 직접 누르십시오')
-    + '<div class="dnote"><b>팀과 자리를 다 끄면</b> 내일은 <b>정말 빈 판</b>입니다 — 팀도 사람도 없습니다.<br>'
-    + '<b>자리만 끄면</b> 팀(티오프)은 그대로 오고 사람만 비웁니다. 그래야 팀을 넣어도 '
-    + '뒤에서 스페어가 안 올라오고, 원하는 사람만 놓은 뒤 <b>순번 세우기</b>로 채웁니다.<br>'
-    + '<b>3부 순번을 저절로 세우기</b>는 자리를 가져올 때만 돕니다 — 켜져 있으면 '
-    + '순번 세우기를 안 눌러도 3부에 이름이 차 있습니다.<br>'
-    + '<b>휴무</b>를 안 가져오면 내일은 그 사람들이 <b>근무</b>로 시작합니다 — '
-    + '오늘 쉰 사람을 지우고 다시 넣을 일이 없습니다. '
-    + '내일 쉴 사람은 근무표의 <b>한꺼번에 지정</b>으로 넣으십시오.<br>'
-    + '<b>경기과 마샬</b>을 안 가져오면 내일 마샬 칸이 비어 있습니다 — '
-    + '거기 넣는 캐디가 곧 그날의 <b>배치</b>입니다. 따로 지정하지 않습니다.</div></div>';
-}
-function openCarry(){
-  var c = carryPlan();
-  sheetFor = { kind: 'nday' };
-  $('sheet').innerHTML = '<div class="grab"></div>'
-    + '<div class="k">' + esc(DATE) + ' → ' + esc(c.date) + '</div>'
-    + '<div class="st">내일 준비</div>'
-    + '<div class="sub">아래 <b>캐디 상태를 먼저 확인</b>하십시오. '
-    + '내일 달라질 사람은 넘긴 뒤에 고치고 <b>순번 세우기</b>를 다시 누르셔도 됩니다.</div>'
-    + carryOptsHTML(c)
-    + '<div class="grp"><h4>오늘 상태</h4><div class="crl">'
-    + carryLines(c).map(function(x){
-        return '<div class="cr"><span class="ck">' + esc(x[0]) + '</span>'
-          + '<span class="cv">' + esc(x[1]) + '</span></div>'; }).join('')
-    + '</div></div>'
-    + '<div class="calmbox"><b>언제든 이전으로 되돌릴 수 있습니다.</b> '
-    + '<b>되돌리기</b>나 Ctrl+Z 를 누르면 넘기기 직전으로 돌아갑니다. '
-    + '저장을 누르기 전이라면 새로고침만 해도 됩니다.</div>'
-    + '<div class="acts two" style="margin:14px 14px 0">'
-    + '<button data-act="ndayyes" class="on">내일로 넘깁니다</button>'
-    + '<button data-act="close">먼저 고치겠습니다</button></div>';
-  $('scrim').classList.add('on');
-  $('sheet').classList.add('on');
-}
 
 // 대기 바꿈 상대 고르기 · 이름 찾기 — 사람 단위로만 나온다(두 부 근무도 한 덩어리)
 var pkFilter = '';
@@ -2111,7 +2044,6 @@ function railClick(e){
     if (!ds) toast('시작할 사람이 없습니다');
     else { applyLineup(ds, driftPks()); paint(); }
   }
-  else if (a === 'nday') openCarry();
   else if (a === 'lnpick') openSeonbalPick('house');
   else if (a === 'ln3pick') openSeonbalPick('bu3');
   else if (a === 'lnrun') openLineupPreview(['1', '2']);
@@ -2249,19 +2181,11 @@ $('sheet').addEventListener('click', function(e){
   if (b.getAttribute('data-act') === 'delcadyes' && sheetFor && sheetFor.person){
     var dn = sheetFor.person; closeSheet(); delCaddie(dn); paint(); return;
   }
-  var cop = b.getAttribute('data-copt');
-  if (cop){ setCarryOpt(cop, !carryOpt(cop)); openCarry(); return; }
   // ★시트 안 단추는 시트 듣개가 받는다 — railSum 듣개는 시트에 안 닿는다
   if (b.getAttribute('data-act') === 'wipemk'){ closeSheet(); wipeDayMarks(); paint(); return; }
-  if (b.getAttribute('data-act') === 'nday'){ openCarry(); return; }
   if (b.getAttribute('data-act') === 'drfyes'){ closeSheet(); draftResume(); return; }
   if (b.getAttribute('data-act') === 'drfno'){ closeSheet(); draftDiscard(); return; }
   if (b.hasAttribute('data-daygo')){ var dgo = b.getAttribute('data-daygo'); closeSheet(); daySwitch(dgo); return; }
-  if (b.getAttribute('data-act') === 'ndayyes'){
-    closeSheet(); carryToNextDay(); paint();
-    toast('내일로 넘겼습니다 · 되돌리려면 되돌리기');
-    return;
-  }
   var sbn = b.getAttribute('data-sb');
   if (sbn){
     if (sbKind === 'bu3') setBu3Start(sbn); else setSeonbal(sbn);

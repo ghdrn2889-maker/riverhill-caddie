@@ -1,0 +1,50 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function seen(){ return document.body.innerText || ''; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    if (typeof setView === 'function') setView('work');
+    paint();
+
+    L('','★갑. 수동 넘기기 단추가 어디에도 없다');
+    ok(!document.querySelector('[data-act="nday"]'), '  화면의 넘기기 단추', '없음');
+    ok(seen().indexOf('내일로 넘기기') < 0, '  \'내일로 넘기기\' 글자', '없음');
+    ok(typeof openCarry === 'undefined', '  넘기기 확인 창(openCarry)', '없어짐');
+    ok(typeof carryOptsHTML === 'undefined', '  무엇을 들고 갈까 고르개', '없어짐');
+
+    L('','★을. 날짜 고르개에도 만들기가 없다');
+    openDayPick();
+    var sh = document.getElementById('sheet');
+    ok(!sh.querySelector('[data-act="nday"]'), '  만들기 단추', '없음');
+    ok((sh.textContent||'').indexOf('만들기') < 0, '  \'만들기\' 글자', '없음');
+    ok(!!sh.querySelector('[data-act="wipemk"]'), '  구분 비우기는 남아 있다', '있음');
+    closeSheet();
+
+    L('','★병. 저절로 넘기는 길은 살아 있다');
+    ok(typeof catchUpToday === 'function', '  catchUpToday', '있음');
+    ok(typeof carryToDate === 'function', '  carryToDate', '있음');
+    var was = DATE, to = nextDateLabel(DATE);
+    carryToDate(to, true);
+    ok(DATE === to, '  넘어갔다', was + ' → ' + DATE);
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★정. 새 날 알림이 무엇을 들고 왔는지 말한다');
+    CAUGHT = { from: was, to: to };
+    paint();
+    var tx = seen();
+    var i = tx.indexOf('배치표를 새로 만들었습니다');
+    if (i < 0) i = tx.indexOf('이어받아');
+    L('  알림 줄', i >= 0 ? tx.slice(Math.max(0,i-40), i+110).replace(/\n/g,' ') : '(못 찾음)');
+    ok(tx.indexOf('휴무·휴가·병가는') >= 0, '  근태를 그대로 들고 왔다고 적는다', '◎');
+    ok(tx.indexOf('근태는 안 가져왔습니다') < 0, '  옛 문구', '없음');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

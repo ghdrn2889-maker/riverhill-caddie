@@ -293,10 +293,10 @@ function cfgLoad(){
     if (o.jomap) { JOMAP = o.jomap; JOLABEL = o.jolab || JOLABEL; JOCNT = o.jocnt || JOCNT; }
     if (o.bu3set) BU3SET = o.bu3set;   // ★소속은 설정 쪽이 이긴다 — 날이 바뀌어도 그대로다
     if (o.jonames && o.jonames.length) JONAMES = o.jonames;   // ★명부도 마찬가지
-    if (o.carry) CARRY = { abs: !!o.carry.abs, role: !!o.carry.role, ln3: !!o.carry.ln3,
+    // ★근태는 설정에 뭐가 적혀 있든 늘 들고 간다 — 고를 수 없는 규칙이다.
+    //   예전 설정에 '안 가져감'이 저장돼 있어도 그것은 이제 안 듣는다
+    if (o.carry) CARRY = { abs: true, leave: true, role: !!o.carry.role, ln3: !!o.carry.ln3,
       seats: !!o.carry.seats,
-      // 옛 설정에는 없던 값 — 없으면 여러 날 가는 것이니 '가져간다'
-      leave: ('leave' in o.carry) ? !!o.carry.leave : true,
       // 마샬은 그날치다 — 옛 설정에도 '안 가져간다'를 기본으로 준다
       staff: ('staff' in o.carry) ? !!o.carry.staff : false,
       // 옛 설정에는 없던 값 — 없으면 지금까지 하던 대로 '들고 간다'

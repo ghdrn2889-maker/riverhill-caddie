@@ -1,0 +1,71 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function absCount(){
+    var c = { 휴무:0, 휴가:0, 병가:0 };
+    JONAMES.forEach(function(n){ var t = tagOf(n); if (t in c) c[t]++; });
+    return c;
+  }
+  function absTx(){ var c = absCount(); return '휴무 ' + c['휴무'] + ' · 휴가 ' + c['휴가'] + ' · 병가 ' + c['병가']; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    L('','★갑. 오늘 근태를 적어 둔다');
+    var pool = JONAMES.filter(function(n){ return !tagOf(n); });
+    var off = { 휴무: pool.slice(0,5), 휴가: pool.slice(5,8), 병가: pool.slice(8,10) };
+    Object.keys(off).forEach(function(k){ off[k].forEach(function(n){ setAbsent(n, k); }); });
+    L('  오늘', absTx());
+    L('  휴무', off['휴무'].join(' · '));
+    L('  휴가', off['휴가'].join(' · '));
+    L('  병가', off['병가'].join(' · '));
+    var was = absCount();
+    var seats0 = DAY.map(function(p){ return active(p).length; }).join('/');
+
+    L('','★을. 날이 저절로 넘어간다 — 사람이 아무것도 안 누른다');
+    var from = DATE, to = nextDateLabel(DATE);
+    carryToDate(to, true);                 // catchUpToday 가 부르는 바로 그 길
+    L('  날', from + ' → ' + DATE);
+    L('  넘어온 뒤', absTx());
+    ok(absCount()['휴무'] === was['휴무'], '  ★휴무 그대로', was['휴무'] + ' → ' + absCount()['휴무'] + '명');
+    ok(absCount()['휴가'] === was['휴가'], '  ★휴가 그대로', was['휴가'] + ' → ' + absCount()['휴가'] + '명');
+    ok(absCount()['병가'] === was['병가'], '  ★병가 그대로', was['병가'] + ' → ' + absCount()['병가'] + '명');
+    var lost = [];
+    Object.keys(off).forEach(function(k){ off[k].forEach(function(n){ if (tagOf(n) !== k) lost.push(n + '(' + k + '→' + (tagOf(n)||'없음') + ')'); }); });
+    ok(lost.length === 0, '  한 사람도 안 잃었다', lost.join(' ') || '없음');
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★병. 쉬는 사람은 자리에 안 선다');
+    var stand = [];
+    DAY.forEach(function(p){ active(p).forEach(function(r){ if (isAbs(tagOf(r.n))) stand.push(p.name + ' ' + r.n); }); });
+    ok(stand.length === 0, '  배치표에 쉬는 사람 없음', stand.join(' · ') || '없음');
+    L('  명단 줄 수', seats0 + ' → ' + DAY.map(function(p){ return active(p).length; }).join('/'));
+
+    L('','★정. 순번을 세워도 안 불려 나온다');
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    var stand2 = [];
+    DAY.forEach(function(p){ active(p).forEach(function(r){ if (isAbs(tagOf(r.n))) stand2.push(p.name + ' ' + r.n); }); });
+    ok(stand2.length === 0, '  세운 뒤에도 없음', stand2.join(' · ') || '없음');
+    ok(absCount()['휴무'] === was['휴무'], '  휴무 그대로', absCount()['휴무'] + '명');
+
+    L('','★무. 오늘 나오는 사람은 근무로 되돌리면 된다');
+    var one = off['휴무'][0];
+    setAbsent(one, '');
+    ok(!isAbs(tagOf(one)), '  ' + one + ' 근무로', tagOf(one) || '근무');
+    ok(partsOf(one).length > 0 || OFFDUTY.indexOf(one) >= 0, '  근무표에 보인다',
+       partsOf(one).join(',') || '미배치');
+
+    L('','★기. 그날치는 여전히 안 들고 간다');
+    L('  구분(조출·후출·중복)', JONAMES.filter(function(n){ var t=dayMark(n); return t && !isAbs(t); }).length + '명');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>
