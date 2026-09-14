@@ -1,0 +1,69 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView('work'); paint();
+
+    L('경기과 칸', STAFF.map(function(x,i){
+      return i+':'+x.k+(x.sub?'('+x.sub+')':'')+'['+(x.n||'빔')+']'; }).join('  '));
+
+    L('','★갑. 칸마다 캐디를 넣어 본다 — 배지가 붙나');
+    var pool = JONAMES.filter(function(n){ return !tagOf(n) && hasCaddie(n); });
+    STAFF.forEach(function(x, idx){
+      var who = pool[idx];
+      if (!who) return;
+      var was = STAFF[idx].n;
+      setStaff(idx, who, '');
+      var t = tagOf(who);
+      ok(t === '배치', '  ' + x.k + (x.sub?'('+x.sub+')':'') + ' 칸 ← ' + who,
+         '배지 [' + (t || '없음') + ']' + (t==='배치' ? '' : '  ★안 붙음'));
+      setStaff(idx, was, '');
+    });
+
+    L('','★을. 왜 갈리나 — 기계가 세는 이름');
+    L('  marshalNames()', marshalNames().join(' · ') || '(없음)');
+    L('  칸 종류', STAFF.map(function(x){ return x.k; }).join(' / '));
+
+    L('','★병. 명부 밖 이름을 넣으면');
+    var m = -1; STAFF.forEach(function(x,i){ if (x.k==='마샬' && m<0) m=i; });
+    setStaff(m, '홍길동아무개', '');
+    ok(tagOf('홍길동아무개') !== '배치', '  명부 밖은 배지 없음(제 뜻)', tagOf('홍길동아무개')||'없음');
+    setStaff(m, '', '');
+
+    L('','★정. 이미 다른 배지가 붙은 사람을 넣으면');
+    var w2 = JONAMES.filter(function(n){ return hasCaddie(n) && !tagOf(n); })[0];
+    setDayTag(w2, '조출');
+    setStaff(m, w2, '');
+    L('  '+w2, '배지 [' + (tagOf(w2)||'없음') + ']');
+    ok(tagOf(w2) === '조출', '  남의 배지는 안 덮는다(제 뜻)', tagOf(w2));
+    setStaff(m, '', ''); setDayTag(w2, '');
+
+    L('','★무. 날 넘길 때 — 칸이 어떻게 비나');
+    var boss = STAFF[0].n, chief = STAFF[1].n;     // 원래 사람(경기과 직원)
+    var cad = JONAMES.filter(function(n){ return hasCaddie(n) && !tagOf(n); })[0];
+    setStaff(2, JONAMES.filter(function(n){ return hasCaddie(n) && !tagOf(n); })[1], '');
+    setStaff(0, cad, '');                          // 대리 칸에 캐디를 대신 세운다
+    L('  넘기기 전', STAFF.map(function(x){ return x.k+'['+(x.n||'빈')+']'; }).join(' '));
+    var gone = clearMarshals();
+    L('  넘기기 뒤', STAFF.map(function(x){ return x.k+'['+(x.n||'빈')+']'; }).join(' ') + '  (비운 칸 '+gone+')');
+    ok(!STAFF[0].n, '  대리 칸의 캐디는 비운다', STAFF[0].n||'비었음 ◎');
+    ok(!STAFF[2].n, '  마샤 칸도 비운다', STAFF[2].n||'비었음 ◎');
+    STAFF[0].n = boss; STAFF[1].n = chief;
+    L('  직원 이름은', '돌려놓음 — ' + boss + ' / ' + chief);
+    setStaff(0, boss, '');
+    ok(tagOf(boss) !== '배치', '  직원은 배지가 안 붙는다', tagOf(boss)||'없음 ◎');
+    var g2 = clearMarshals();
+    ok(STAFF[0].n === boss, '  직원 이름은 날이 바떈다고 안 비운다', STAFF[0].n);
+  }catch(err){ o.push('터짐: '+err.message+' @'+(err.stack||'').split('\n')[1]); }
+  o.push('errs: '+(E.length?E.join(' | '):'none'));
+  document.getElementById('PROBE').textContent=o.join('\n');
+},1500);
+</script>

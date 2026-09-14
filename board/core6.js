@@ -1342,8 +1342,11 @@ var STAFFTAG = '배치';
 function marshalNames(){
   var out = [];
   STAFF.forEach(function(x){
-    // 경기팀장·주임은 캐디가 아니라 근무표에 없다 — 명부에 있는 사람만 센다
-    if (x.k === '마샬' && x.n && hasCaddie(x.n) && out.indexOf(x.n) < 0) out.push(x.n);
+    // ★칸 이름이 아니라 '명부에 있는 사람이냐'로 가른다.
+    //   경기팀장·주임은 캐디가 아니라 hasCaddie 에서 저절로 걸린다 —
+    //   그 자리에 캐디가 대신 서면 그날은 그 사람도 경기과에서 일하는 것이니 '배치'다.
+    //   예전엔 k==='마샬' 만 세어서, 대리·주임 칸에 넣은 캐디에게는 배지가 안 붙었다
+    if (x.n && hasCaddie(x.n) && out.indexOf(x.n) < 0) out.push(x.n);
   });
   return out;
 }
@@ -1387,7 +1390,13 @@ function reconcileStaff(){ return syncStaffTag([], marshalNames()); }
 //   자리만 비우면 된다. 배지는 clearDayMarks 가 이미 떼 갔다
 function clearMarshals(){
   var n = 0;
-  STAFF.forEach(function(x){ if (x.k === '마샬' && x.n) { x.n = ''; n++; } });
+  // ★마샬 칸은 통째로 비운다. 대리·주임 칸은 거의 안 바뀌니 그대로 두되,
+  //   거기 캐디가 대신 서 있었다면 그건 그날치라 같이 비운다 —
+  //   안 비우면 다음 날에도 '배치'가 다시 붙어 그 사람이 근무에서 빠진다
+  STAFF.forEach(function(x){
+    if (!x.n) return;
+    if (x.k === '마샬' || hasCaddie(x.n)) { x.n = ''; n++; }
+  });
   return n;
 }
 // 경기과 자리를 건드리는 길은 모두 여기를 지난다 — 자리와 배지가 갈라지지 않게
