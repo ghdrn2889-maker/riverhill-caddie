@@ -783,35 +783,13 @@ function openCell(pk, i){
         // ★조출·후출·중복 근무를 배지별로 묶어 여기부터 앉힌다 — 이름을 하나씩 안 골라도 된다.
         // ★부를 사람이 없어도 칸은 남긴다 — 사라지면 없는 기능이 된다
         var gs = isItn(r) ? [] : seatGroups(pk);
-        var tt = 0;
-        gs.forEach(function(x){ tt += x.names.length; });
         return '<div class="grp"><h4>여기(' + seatNoTx(p, i) + '번)부터 한꺼번에 앉히기</h4>'
           + (gs.length
              ? '<div class="acts">' + gs.map(function(x){
                  return '<button class="go" data-sg="' + esc(pk + '|' + i + '|' + x.key) + '">'
                    + esc(x.label) + ' ' + x.names.length + '명</button>'; }).join('') + '</div>'
-               + '<div class="dnote" style="margin-top:9px">누르면 그 사람들이 <b>'
-               + seatNoTx(p, i) + '번부터 차례로 앉고 뒤가 그만큼 밀립니다</b> — '
-               + '아무도 자리를 잃지 않습니다. 차례는 조 편성이 정합니다.<br>'
-               + '그 다음 <b>순번 세우기</b>를 누르면 나머지가 사이를 채우고, '
-               + '여기 앉힌 자리는 안 건드립니다.</div>'
-             : '<div class="dnote">지금 부를 사람이 없습니다. 여기 모이는 사람은 둘입니다 — '
-               + '<b>조출·후출</b> 배지를 달았는데 <b>아직 어느 부에도 자리가 없는 사람</b>, '
-               + '그리고 <b>54h·2,3·1,3</b> 같은 중복 근무 표시를 달았는데 '
-               + '<b>' + esc(p.name) + '에 아직 자리가 없는 사람</b>.<br>'
-               + '배지는 <b>근무표 → 캐디 선택 → 한꺼번에 바꾸기</b>에서 답니다.</div>')
-               + (function(){
-                   // ★안 부른 사람이 있으면 까닭을 적는다
-                   var w = seatGroupsWhy(pk), ln = [];
-                   function nm(L){ return L.slice(0, 3).join('·') + (L.length > 3 ? ' 외 ' + (L.length - 3) + '명' : ''); }
-                   if (w.otherOnly.length) ln.push('<b>' + nm(w.otherOnly) + '</b>은(는) 다른 부에만 자리가 있습니다 — '
-                     + '여기 넣으면 중복 근무가 되므로, 위의 <b>끼워 넣기</b>로 하나씩 넣으십시오');
-                   if (w.otherPart.length) ln.push('<b>' + nm(w.otherPart) + '</b>의 중복 표시('
-                     + esc(w.otherPart.map(function(x){ return dayMark(x); }).filter(function(v, k, A){ return A.indexOf(v) === k; }).join('·'))
-                     + ')는 ' + esc(p.name) + '가 아닙니다');
-                   if (w.rest.length) ln.push('<b>' + nm(w.rest) + '</b>은(는) 쉬는 날입니다');
-                   return ln.length ? '<div class="dnote" style="margin-top:9px">' + ln.join('<br>') + '</div>' : '';
-                 })()
+             : '<div class="dnote">지금 부를 사람이 없습니다 — <b>조출·후출</b>이나 '
+               + '<b>54h·2,3</b> 같은 중복 근무 표시를 단 사람이 여기 모입니다.</div>')
           + '</div>';
       })()
     + '<div class="grp"><h4>매칭 캐디</h4>'

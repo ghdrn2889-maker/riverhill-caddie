@@ -2117,40 +2117,11 @@ function seatGroups(pk){
     else if (ps.length && ps.indexOf(pk) < 0) return; // 다른 부에만 있다
     add(m, n);
   });
-  // ★다른 부에만 자리가 있는 사람 — 여기 앉히면 중복 근무가 된다.
-  //   여태는 "소리 없이 중복이 된다"며 통째로 뺐다. 그 바람에
-  //   '4번부터 2·3부 뛸 사람들을 줄줄이 앉히기'가 아예 막혔다 —
-  //   묶음이 비어 있으니 아무도 안 앉고, 그러면 순번 세우기가 그 자리를 채워 버린다.
-  //   빈 칸 창은 이미 '여기 앉히면 중복 근무입니다'라고 적고 부른다.
-  //   묶음도 이름에 그 말을 달고 부른다 — 소리 없이가 아니라 소리 내서
-  DAY.forEach(function(q){
-    if (q.key === pk) return;
-    allPeople().forEach(function(n){
-      if (isAbs(tagOf(n))) return;
-      if (dayMark(n)) return;                            // 배지 있는 사람은 제 묶음이 있다
-      var ps2 = partsOf(n);
-      if (ps2.length !== 1 || ps2[0] !== q.key) return;   // 딱 그 부에만 있다
-      add(q.name + '→중복', n);
-    });
-  });
+  // ★다른 부에만 자리가 있는 사람은 안 부른다 — 여기 앉히면 중복 근무가 된다.
+  //   한때 '2부→중복' 같은 묶음을 내어 줄줄이 앉힐 수 있게 했는데,
+  //   그러면 그날 중복 근무가 아닌 그 부 사람이 통째로 후보에 올라왔다.
+  //   중복 근무는 사람이 하나씩 고를 일이다 — 끼워 넣기로 넣는다
   return g;
-}
-// ★안 부른 사람과 그 까닭 — 화면이 이걸 말해야 사람이 다음 손을 안다
-function seatGroupsWhy(pk){
-  var why = { rest: [], otherOnly: [], hereAlready: [], otherPart: [] };
-  allPeople().forEach(function(n){
-    var m = seatGroupMark(n);
-    if (!m) return;
-    if (isAbs(tagOf(n))) { why.rest.push(n); return; }
-    var ps = partsOf(n);
-    if (isDupTag(m)){
-      var dp = dupParts(m);
-      if (dp.length && dp.indexOf(pk) < 0) why.otherPart.push(n);
-      return;
-    }
-    if (ps.length && ps.indexOf(pk) < 0) why.otherOnly.push(n);
-  });
-  return why;
 }
 function seatGroupNames(pk, key){
   var g = seatGroups(pk), hit = null;

@@ -1,0 +1,62 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function sheetTx(){ return (document.getElementById('sheet')||{}).textContent || ''; }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    L('','★갑. 3부 칸 창을 연다 — 어떤 묶음이 뜨나');
+    var gs = seatGroups('3');
+    L('  묶음', gs.length ? gs.map(function(x){ return x.label + ' ' + x.names.length + '명'; }).join(' / ') : '(없음)');
+    var bad = gs.filter(function(x){ return x.key.indexOf('→') >= 0; });
+    ok(bad.length === 0, '  ★부→중복 묶음은 없다', bad.length ? bad.map(function(x){return x.label;}).join(',') : '없음');
+
+    L('','★을. 1·2부 칸에서도 같다');
+    ['1','2'].forEach(function(pk){
+      var g2 = seatGroups(pk);
+      var b2 = g2.filter(function(x){ return x.key.indexOf('→') >= 0; });
+      ok(b2.length === 0, '  ' + part(pk).name + ' 묶음', (g2.map(function(x){ return x.label; }).join(' / ') || '(없음)'));
+    });
+
+    L('','★병. 남아야 할 묶음은 남는다 — 조출·후출·중복 표시');
+    var who = JONAMES.filter(function(n){ return !tagOf(n); }).slice(0, 3);
+    setDayTag(who[0], '조출'); setDayTag(who[1], '후출');
+    var g3 = seatGroups('3');
+    L('  묶음', g3.map(function(x){ return x.label + ' ' + x.names.length + '명'; }).join(' / ') || '(없음)');
+    ok(g3.some(function(x){ return x.key === '조출'; }), '  조출 묶음', '있음');
+    ok(g3.some(function(x){ return x.key === '후출'; }), '  후출 묶음', '있음');
+
+    L('','★정. 창에 뜨는 글 — 없앤 문구가 안 보여야 한다');
+    openCell('3', 4);
+    var tx = sheetTx();
+    L('  한꺼번에 앉히기 칸', tx.indexOf('부터 한꺼번에 앉히기') >= 0 ? '있음' : '★없음');
+    ok(tx.indexOf('차례로 앉고 뒤가 그만큼 밀립니다') < 0, '  \'차례로 앉고 뒤가 밀립니다\'', '없음');
+    ok(tx.indexOf('차례는 조 편성이 정합니다') < 0, '  \'차례는 조 편성이 정합니다\'', '없음');
+    ok(tx.indexOf('중복 표시') < 0, '  \'…의 중복 표시(…)는 3부가 아닙니다\'', '없음');
+    ok(tx.indexOf('다른 부에만 자리가 있습니다') < 0, '  \'다른 부에만 자리가 있습니다\'', '없음');
+    ok(tx.indexOf('쉬는 날입니다') < 0, '  \'쉬는 날입니다\'', '없음');
+    ok(tx.indexOf('→중복') < 0, '  \'→중복\' 단추', '없음');
+    closeSheet();
+
+    L('','★무. 단추는 그대로 듣는다 — 조출 묶음을 앉혀 본다');
+    var before = active(part('3')).map(function(r){ return r.n; }).join(',');
+    var n0 = seatGroupNames('3', '조출').length;
+    L('  조출 인원', n0 + '명');
+    seatGroup('3', 4, '조출', 0);
+    var after = active(part('3')).map(function(r){ return r.n; }).join(',');
+    ok(before !== after, '  앉혔다', (LOG[0]||{}).msg || '(기록 없음)');
+    undo();
+    ok(active(part('3')).map(function(r){ return r.n; }).join(',') === before, '  되돌리기로 원래대로', '◎');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>
