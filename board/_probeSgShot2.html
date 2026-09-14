@@ -1,0 +1,26 @@
+<script>
+setTimeout(function(){
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    var pool = JONAMES.filter(function(n){ return !tagOf(n); });
+    var give = [['54',2], ['1,3',3], ['2,3',7], ['조출',2]], at = 0;
+    give.forEach(function(g){
+      for (var k = 0; k < g[1]; k++){
+        var nm = pool[at];
+        if (g[0] === '조출') DAY.forEach(function(q){
+          for (var z = q.roster.length - 1; z >= 0; z--) if (q.roster[z].n === nm) q.roster.splice(z, 1); });
+        TAG[nm] = g[0]; at++;
+      }
+    });
+    paint();
+    openCell('3', 4);
+    var sh = document.getElementById('sheet');
+    var g = sh.querySelector('.sgrid');
+    if (g) sh.scrollTop = Math.max(0, g.parentNode.offsetTop - sh.offsetTop - 8);
+  }catch(e){ document.body.textContent = '터짐: ' + e.message; }
+}, 700);
+</script>

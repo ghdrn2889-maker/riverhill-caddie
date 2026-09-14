@@ -2091,6 +2091,23 @@ function dupParts(t){
   var m = String(t || '').match(/\d/g) || [];
   return m.filter(function(d){ return d === '1' || d === '2' || d === '3'; });
 }
+// ★묶음 이름이 말하는 부 — '1,3'은 1부와 3부, '54'는 그날 있는 부 전부.
+//   화면이 이 부 색으로 띠를 그어 '무엇이 몇 명인지'를 글 없이 말한다
+function sgParts(key){
+  if (!isDupTag(key)) return [];
+  var d = dupParts(key);
+  if (d.length) return d;
+  return DAY.map(function(q){ return q.key; });
+}
+// 그 묶음을 사람 말로 — '1부 · 3부'
+function sgSub(key){
+  var d = sgParts(key);
+  if (!d.length) return '';
+  return d.map(function(k){ var q = part(k); return q && q.key === k ? q.name : k + '부'; }).join(' · ');
+}
+// ★차례를 못 박는다 — 54가 먼저, 그 다음 두 부짜리, 그날의 구분은 뒤.
+//   사람이 늘 같은 자리에서 같은 단추를 찾게 한다
+function sgRank(k){ return !isDupTag(k) ? 2 : (sgParts(k).length >= 3 ? 0 : 1); }
 function seatGroups(pk){
   var g = [], ix = {};
   function add(key, n){
@@ -2121,6 +2138,7 @@ function seatGroups(pk){
   //   한때 '2부→중복' 같은 묶음을 내어 줄줄이 앉힐 수 있게 했는데,
   //   그러면 그날 중복 근무가 아닌 그 부 사람이 통째로 후보에 올라왔다.
   //   중복 근무는 사람이 하나씩 고를 일이다 — 끼워 넣기로 넣는다
+  g.sort(function(x, y){ return sgRank(x.key) - sgRank(y.key) || x.key.localeCompare(y.key, 'ko'); });
   return g;
 }
 function seatGroupNames(pk, key){

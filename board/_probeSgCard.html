@@ -1,0 +1,81 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    // 중복 표시를 손으로 달아 둔다 — 54 둘 · 1,3 셋 · 2,3 넷 · 조출 둘
+    var pool = JONAMES.filter(function(n){ return !tagOf(n); });
+    var give = [['54',2], ['1,3',3], ['2,3',4], ['조출',2]], at = 0, put = {};
+    give.forEach(function(g){
+      put[g[0]] = [];
+      for (var k = 0; k < g[1]; k++){
+        var nm0 = pool[at];
+        // 조출·후출은 '아직 자리 없는 사람'이 불리는 묶음이다
+        if (g[0] === '조출') DAY.forEach(function(q){
+          for (var z = q.roster.length - 1; z >= 0; z--) if (q.roster[z].n === nm0) q.roster.splice(z, 1); });
+        TAG[nm0] = g[0]; put[g[0]].push(nm0); at++;
+      }
+    });
+    L('달아 둔 표시', give.map(function(g){ return g[0] + ' ' + g[1] + '명'; }).join(' · '));
+
+    L('','★갑. 묶음과 그 차례');
+    var gs = seatGroups('3');
+    L('  차례', gs.map(function(x){ return x.label + '(' + x.names.length + ')'; }).join(' → '));
+    ok(gs[0] && gs[0].key === '54', '  54가 맨 앞', gs[0] ? gs[0].label : '(없음)');
+    ok(gs.length >= 4, '  묶음 수', gs.length + '개');
+
+    L('','★을. 띠가 말하는 부');
+    ['54','1,3','2,3','조출'].forEach(function(k){
+      L('  ' + k, '부 [' + (sgParts(k).join(',') || '없음') + '] · 밑글 [' + (sgSub(k) || '(없음)') + ']');
+    });
+    ok(sgParts('54').length === 3, '  54는 세 부', sgParts('54').join(','));
+    ok(sgParts('1,3').join(',') === '1,3', '  1,3은 1부·3부', sgParts('1,3').join(','));
+    ok(sgParts('2,3').join(',') === '2,3', '  2,3은 2부·3부', sgParts('2,3').join(','));
+    ok(sgParts('조출').length === 0, '  조출은 부가 없다', '띠 회색');
+
+    L('','★병. 칸 창을 열어 실제로 그려진 것을 본다');
+    openCell('3', 4);
+    var sh = document.getElementById('sheet');
+    var tx = sh.textContent || '';
+    ok(tx.indexOf('중복근무 차례대로 나열하기') >= 0, '  제목', '중복근무 차례대로 나열하기');
+    ok(tx.indexOf('부터 한꺼번에 앉히기') < 0, '  옛 제목', '없음');
+    var cards = sh.querySelectorAll('.sgrid button');
+    L('  칸 수', cards.length + '개');
+    [].forEach.call(cards, function(b){
+      var bars = b.querySelectorAll('.sgbar i');
+      var cls = [].map.call(bars, function(x){ return x.className; }).join('+');
+      L('   · ' + (b.querySelector('.sgk b')||{}).textContent
+        + ' / ' + (b.querySelector('.sgk span')||{}).textContent
+        + ' / ' + (b.querySelector('.sgn')||{}).textContent
+        + ' / 띠 ' + cls, b.getAttribute('data-sg'));
+    });
+    var c54 = cards[0];
+    ok(c54 && c54.querySelectorAll('.sgbar i').length === 3, '  54 칸의 띠 조각', c54 ? c54.querySelectorAll('.sgbar i').length + '조각' : '-');
+    ok(!!(c54 && c54.querySelector('.sgn')), '  사람 수가 따로 큰 글씨', (c54.querySelector('.sgn')||{}).textContent);
+
+    L('','★정. 눌렀을 때 — 시작 고르기 창으로 간다(예전과 같다)');
+    var before = active(part('3')).map(function(r){ return r.n; }).join(',');
+    cards[2].click();
+    var tx2 = (document.getElementById('sheet').textContent || '');
+    ok(sheetFor && sheetFor.kind === 'seatgo', '  시작 고르기 창', (sheetFor||{}).kind + ' · ' + ((sheetFor||{}).key||''));
+    var go = document.querySelector('[data-act="sggo"]');
+    ok(!!go, '  앉히기 단추', go ? go.textContent.slice(0, 30) : '없음');
+    if (go) go.click();
+    var after = active(part('3')).map(function(r){ return r.n; }).join(',');
+    ok(before !== after, '  앉았다', (LOG[0]||{}).msg || '(기록 없음)');
+    undo();
+    ok(active(part('3')).map(function(r){ return r.n; }).join(',') === before, '  되돌리기', '◎');
+  }catch(err){ o.push('✗ 터짐: ' + err.message + ' @' + (err.lineNumber||'')); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

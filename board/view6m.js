@@ -783,13 +783,22 @@ function openCell(pk, i){
         // ★조출·후출·중복 근무를 배지별로 묶어 여기부터 앉힌다 — 이름을 하나씩 안 골라도 된다.
         // ★부를 사람이 없어도 칸은 남긴다 — 사라지면 없는 기능이 된다
         var gs = isItn(r) ? [] : seatGroups(pk);
-        return '<div class="grp"><h4>여기(' + seatNoTx(p, i) + '번)부터 한꺼번에 앉히기</h4>'
+        // ★무엇이 몇 명인지를 글이 아니라 칸이 말한다 —
+        //   왼쪽 띄는 그 부 색이고(54는 세 부 다), 오른쪽은 사람 수다
+        return '<div class="grp"><h4>중복근무 차례대로 나열하기</h4>'
           + (gs.length
-             ? '<div class="acts">' + gs.map(function(x){
-                 return '<button class="go" data-sg="' + esc(pk + '|' + i + '|' + x.key) + '">'
-                   + esc(x.label) + ' ' + x.names.length + '명</button>'; }).join('') + '</div>'
-             : '<div class="dnote">지금 부를 사람이 없습니다 — <b>조출·후출</b>이나 '
-               + '<b>54h·2,3</b> 같은 중복 근무 표시를 단 사람이 여기 모입니다.</div>')
+             ? '<div class="sgrid">' + gs.map(function(x){
+                 var ps = sgParts(x.key);
+                 return '<button data-sg="' + esc(pk + '|' + i + '|' + x.key) + '">'
+                   + '<span class="sgbar">' + (ps.length
+                       ? ps.map(function(k){ return '<i class="d' + esc(k) + '"></i>'; }).join('')
+                       : '<i class="d0"></i>') + '</span>'
+                   + '<span class="sgk"><b>' + esc(x.label) + '</b>'
+                   + '<span>' + esc(sgSub(x.key) || '그날의 구분') + '</span></span>'
+                   + '<span class="sgn num">' + x.names.length + '<em>명</em></span>'
+                   + '</button>'; }).join('') + '</div>'
+             : '<div class="dnote">지금 부를 사람이 없습니다 — <b>54·1,3·2,3</b> 같은 '
+               + '중복 근무 표시나 <b>조출·후출</b>을 단 사람이 여기 모입니다.</div>')
           + '</div>';
       })()
     + '<div class="grp"><h4>매칭 캐디</h4>'
