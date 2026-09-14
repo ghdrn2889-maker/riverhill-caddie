@@ -1,0 +1,59 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen(); paint();
+
+    L('','★갑. 옛 데모 알림이 없다');
+    ok(typeof openSheet2 === 'function', '  새 창 그리개', typeof openSheet2);
+    var src = String($('btnApply').outerHTML);
+    L('  단추', src.replace(/\s+/g,' ').slice(0,60));
+
+    L('','★을. 서버 없이 열었을 때 — 사실대로 말한다');
+    ok(!srvOn(), '  서버 붙음?', srvOn() ? '붙음' : '아님(파일로 열림)');
+    $('btnApply').click();
+    var tx = (document.getElementById('sheet').textContent || '');
+    L('  창', tx.replace(/\s+/g,' ').slice(0, 120));
+    ok(tx.indexOf('데모') < 0, '  \'데모입니다\'', '없음');
+    ok(tx.indexOf('서버 없이') >= 0, '  서버 없이 열렸다고 말한다', '◎');
+    closeSheet();
+
+    L('','★병. 서버가 있을 때 — 마지막으로 보낸 것을 보여 준다');
+    SRV.on = true;
+    var asked = null;
+    var realReq = srvReq;
+    srvReq = function(m, p, b, done){
+      asked = m + ' ' + p;
+      done(200, { ok: true, days: 3, wait: 20,
+        app: { at: '2026-09-14T12:40:00.000Z', day: '20260914', ok: true, note: '3부 19명(회원 12) · 당번 김하늘 흡연실 당번' } });
+    };
+    $('btnApply').click();
+    srvReq = realReq;
+    ok(asked === 'GET ok', '  서버에 묻는다', asked);
+    var t2 = (document.getElementById('sheet').textContent || '');
+    L('  창', t2.replace(/\s+/g,' ').slice(0, 190));
+    ok(t2.indexOf('20초') >= 0, '  기다리는 시간을 서버에서 받아 적는다', '◎');
+    ok(t2.indexOf('2026년 09월 14일') >= 0, '  보낸 날', '◎');
+    ok(t2.indexOf('갔습니다') >= 0, '  갔다고 말한다', '◎');
+    ok(t2.indexOf('흡연실 당번') >= 0, '  당번까지 같이 갔다', '◎');
+    closeSheet();
+
+    L('','★정. 못 갔을 때는 못 갔다고');
+    SRV.on = true;
+    srvReq = function(m, p, b, done){ done(200, { ok: true, days: 3, wait: 20,
+      app: { at: '2026-09-14T12:41:00.000Z', day: '20260914', ok: false, note: '앱이 안 받습니다(연결 끊김)' } }); };
+    $('btnApply').click();
+    srvReq = realReq;
+    var t3 = (document.getElementById('sheet').textContent || '');
+    ok(t3.indexOf('못 갔습니다') >= 0, '  못 갔다고 말한다', t3.replace(/\s+/g,' ').slice(60, 150));
+    closeSheet(); SRV.on = false;
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

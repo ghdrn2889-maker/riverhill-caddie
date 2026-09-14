@@ -901,6 +901,32 @@ function notOnBoard(s) {
   const found = roster.some((nm) => norm(nm) === mn) || roster.some((nm) => nameLooseEq(nm, owner));
   return !found;
 }
+// ── 근무와 겹치는 당번 띠 ──────────────────────────────────────
+//  ★흡연실 당번처럼 '순번에 같이 세우는' 당번은 그날 근무를 나간다. 그래서 당번 보드로
+//   히어로를 덮지 않고(그러면 제 티오프를 못 본다) 제목 밑에 띠 하나로만 말한다.
+//  ★시각은 경기과가 적어 준 것만 쓴다. 안 적었으면 시각 자리를 통째로 비운다 —
+//   고정 시간표로 지어내면 그 사람이 엉뚱한 시각에 나온다.
+const SMOKE_SVG = '<svg class="smkico" viewBox="0 0 24 24" aria-hidden="true">'
+  + '<rect x="2" y="14.5" width="13" height="4" rx="1.4"/>'
+  + '<rect x="16.4" y="14.5" width="2.2" height="4" rx="1"/>'
+  + '<rect x="20" y="14.5" width="2" height="4" rx="1"/>'
+  + '<path class="wv" d="M8 10.6c2.1-1.1 2.1-2.6 0-3.7S5.9 4.3 8 3.2"/>'
+  + '<path class="wv" d="M13 10.6c2.1-1.1 2.1-2.6 0-3.7s-2.1-2.6 0-3.7"/></svg>';
+const DUTY_SVG = '<svg class="smkico" viewBox="0 0 24 24" aria-hidden="true">'
+  + '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/>'
+  + '<circle cx="12" cy="12" r="3.2"/></svg>';
+function dutyIcon(kind) { return /흡연/.test(String(kind || '')) ? SMOKE_SVG : DUTY_SVG; }
+function renderDutyBanner(d) {
+  const el = $('dutyBanner'); if (!el) return;
+  if (!d || !d.kind) { el.hidden = true; el.innerHTML = ''; return; }
+  // 경기과가 시각을 적었을 때만 시각을 쓴다. 끝 시각은 근무시간까지 적었을 때만 나온다.
+  const when = d.start ? esc(d.start) + (d.end ? '~' + esc(d.end) : '~') : '';
+  el.innerHTML = dutyIcon(d.kind)
+    + '<span class="tx"><b class="t1">' + esc(d.label || d.kind) + '</b>'
+    + '<span class="t2">근무는 그대로 나갑니다</span></span>'
+    + (when ? '<span class="tm">' + when + '</span>' : '');
+  el.hidden = false;
+}
 function renderToday(t) {
   if (_holdHomeAnim) { hideSplash(); }   // 스플래시만 내리고 등장 모션은 보류(홈 오브젝트는 home-prep로 숨겨둠)
   else if (!_heroEntered) {
@@ -920,8 +946,10 @@ function renderToday(t) {
   //  그때 히어로를 당번 보드로 덮으면 그 사람은 제 티오프를 아예 못 본다.
   //  당번은 배지와 라운드 카드로 말한다(아래 일반 그리기가 그걸 한다).
   const _hasRound = Array.isArray(t && t.rounds) && t.rounds.some((r) => r && (r.kind === 'work' || r.kind === 'spare'));
-  if (t && t.duty && !_hasRound && renderDutyHero(t.duty, t.dayOffset)) { renderRoundsStack(null); return; }
+  if (t && t.duty && !_hasRound && renderDutyHero(t.duty, t.dayOffset)) { renderDutyBanner(null); renderRoundsStack(null); return; }
   $('todayHero').classList.remove('duty-live', 'duty-on');
+  // 근무와 당번이 겹치는 날 — 근무 화면은 그대로 두고 제목 밑에 띄 하나로 알린다
+  renderDutyBanner(_hasRound ? (t && t.duty) : null);
   if (!t || t.empty || !t.state) {
     if (t && t.stale) {
       $('heroTitle').textContent = '오늘 배치표 확인 중';
@@ -1781,7 +1809,9 @@ function jDayBadge(d) {
   if (!d) return null;
   // ★당번·벌당이 최우선 — 순번상으론 휴무로 잡히지만 그날 7·13시간을 실제로 일한 날이다.
   //  '휴무'로만 남으면 일한 사실이 기록에서 사라진다.
-  if (d.duty && d.duty.kind) return [d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', d.duty.kind];
+  // ★다만 라운드를 나간 날은 근무가 이긴다 — 흡연실 당번처럼 '순번에 같이' 서는 당번이다.
+  //  그날은 캐디피가 나오는 날인데 당번으로 덮으면 '무보수'로 잎혔 그달 수입이 빈다.
+  if (d.duty && d.duty.kind && d.kind !== 'work') return [d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', d.duty.kind];
   if (d.excluded) return ['removed', '제외'];   // 셀은 좁아 짧게(편집기 칩은 '순번 제외' 그대로)
   if (d.kind === 'off') return d.offType === 'sick' ? ['sick', '병가'] : d.offType === 'vacation' ? ['vac', '휴가'] : ['off', '휴무'];
   if (d.kind === 'spare') return ['spare', '스페어'];
@@ -1792,7 +1822,7 @@ function jDayBadge(d) {
 function jDayToEdit(d) {
   const base = (!d) ? { kind: 'work', parts: ['3'] }
     // ★당번·벌당이 최우선 — 순번상 휴무로 잡혀 있어도 편집기는 그날의 실제 역할을 보여야 한다.
-    : (d.duty && d.duty.kind) ? { kind: d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', parts: [d.duty.part || '3'] }
+    : (d.duty && d.duty.kind && d.kind !== 'work') ? { kind: d.duty.kind === '벌당' ? 'beoldang' : 'dangbeon', parts: [d.duty.part || '3'] }
     : d.excluded ? { kind: 'removed', parts: [] }
     : d.kind === 'off' ? { kind: d.offType === 'sick' ? 'sick' : d.offType === 'vacation' ? 'vacation' : 'off', parts: [] }
     : d.kind === 'spare' ? { kind: 'spare', parts: [] }

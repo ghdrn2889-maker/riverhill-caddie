@@ -433,7 +433,10 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, html, 'text/html; charset=utf-8');
     }
-    if (req.method === 'GET' && p === '/ok') return sendJSON(res, 200, { ok: true, days: listDays().length, app: APPURL ? (APPLAST || { note: '아직 보낸 적 없음' }) : null });
+    // ★화면의 '앱 반영' 단추가 이걸 읽어 '갔나 안 갔나'를 보여 준다.
+    //   기다리는 시간(wait)도 같이 준다 — 화면이 '몇 초 뒤에 갑니다'를 제 입으로 못 지어내게
+    if (req.method === 'GET' && p === '/ok') return sendJSON(res, 200, { ok: true, days: listDays().length,
+      wait: Math.round(APPWAIT / 1000), app: APPURL ? (APPLAST || { note: '아직 보낸 적 없습니다' }) : null });
 
     // ── 저장된 날 목록
     if (req.method === 'GET' && p === '/api/days') return sendJSON(res, 200, { ok: true, days: listDays() });

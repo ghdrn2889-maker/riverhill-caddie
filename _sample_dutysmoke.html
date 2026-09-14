@@ -1,18 +1,7 @@
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>리버힐 캐디 일정</title>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#f3f4f8" />
-  <link rel="apple-touch-icon" href="/icon-192.png?v=4" />
-  <!-- iOS PWA: 홈 화면에 추가 시 앱처럼(주소창 없이) 실행 + 상태바 스타일 -->
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="리버힐 캐디" />
-  <style>
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>흡연실 당번 — 더 또렷하게</title>
+<style>
     /* ===== 확정 시안(sandbox/hybrid-prototypes.html · HYBRID 02 행동 진행 보드) CSS 그대로 이식 ===== */
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     /* ★앱 셸: 문서(body)는 스크롤하지 않고 flex 컬럼 — 상단 헤더 고정 / 가운데(main)만 스크롤.
@@ -1408,22 +1397,6 @@
     .hero.duty-live #heroTitle small { font-size:15px; font-weight:750; letter-spacing:0; opacity:.62; margin-left:7px; }
     .hero.duty-live .sub { font-size:12px; font-weight:700; }
     .hero.duty-live .sub b { font-weight:850; }
-    /* ══ 근무와 겹치는 당번(흡연실 당번 등) — 근무 화면은 그대로 두고 제목 밑에 띠 하나 ══
-       ★당번 보드(hero 통째)는 '그날 근무 대신 하는 당번'의 자리다. 흡연실 당번은 근무를 나가므로
-        그 보드로 덮으면 제 티오프를 못 본다. 그래서 띠로만 말한다 — 주인공은 근무다.
-       색은 앱이 이미 당번에 쓰는 주황(#f5811f, 근무 일지 배지와 같은 색). */
-    .smkbn { display:flex; align-items:center; gap:9px; margin:11px 0 0; padding:11px 13px;
-             border-radius:14px; color:#fff; background:linear-gradient(135deg,#f5811f,#e06a0c);
-             box-shadow:0 4px 12px rgba(224,106,12,.26); }
-    .smkbn .smkico { width:15px; height:15px; flex:0 0 auto; fill:currentColor; }
-    .smkbn .smkico .wv { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; }
-    .smkbn .tx { flex:1 1 auto; min-width:0; }
-    .smkbn .t1 { display:block; font-size:14px; font-weight:900; letter-spacing:-.03em; line-height:1.2; }
-    .smkbn .t2 { display:block; font-size:11px; font-weight:760; opacity:.9; margin-top:2px; }
-    .smkbn .tm { font-size:15px; font-weight:900; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
-    /* 히어로가 날씨 배경을 입은 날에도 띠는 제 색을 지킨다 */
-    .hero.has-wx .smkbn { box-shadow:0 4px 14px rgba(0,0,0,.18); }
-
     .hero.duty-live .sub .dot { opacity:.45; margin:0 6px; }
     .hero.wx-night.duty-live #heroTitle { text-shadow:0 2px 10px rgba(0,0,0,.5); }
     /* 당번 중엔 휴무 응원문구를 숨긴다 — '오늘은 쉬는 날이니 푹 쉬세요'가 근무 중 화면에 남던 문제 */
@@ -2804,409 +2777,8 @@
 #gwToastHost .hidden{color:#9aa0a8}
 #gwToastHost .platinum,#gwToastHost .plat{color:#8e97d6}
 
-  </style>
-</head>
-<body>
-  <!-- 대기(스플래시) 화면 — 실행/새로고침 로딩 동안 노출, 준비되면 페이드아웃. JS가 .hide 부여 -->
-  <div id="splash" class="ldg-screen" aria-hidden="true">
-    <div class="ldg-stage"><div class="ldg-ball"></div><div class="ldg-shadow"></div></div>
-    <div class="ldg-brand"><div class="ldg-wm">RIVERHILL CADDIE</div><div class="ldg-sub">일정 불러오는 중</div></div>
-  </div>
+  
 
-  <!-- 설치 안내 배너 (iOS 사파리 미설치 안내 / 안드로이드 설치 버튼) — JS가 상황 판단해 노출 -->
-  <div id="installBar" hidden>
-    <div class="ib-inner">
-      <span class="ib-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M5 20h14"/></svg></span>
-      <div class="ib-txt" id="installText"></div>
-      <button class="ib-cta" id="installCta" hidden>설치</button>
-      <button class="ib-x" id="installClose" aria-label="닫기">✕</button>
-    </div>
-  </div>
-
-  <!-- 가입/프로필 · 계정 오버레이 -->
-  <div class="ov" id="ov" hidden>
-    <div class="ov-card">
-      <div class="ov-badge"><svg viewBox="0 0 24 24" fill="none" stroke="#0c8f6a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 5h11l-2.2 3.1L17 11.4H6"/></svg></div>
-      <h2 class="ov-title" id="ovTitle">가입을 완성해주세요</h2>
-      <p class="ov-desc" id="ovDesc">근무 알림이 정확히 오려면 <b>배치표에 뜨는 이름 그대로</b> 입력해야 해요.</p>
-      <label class="ov-field"><span>실명 (배치표 이름) <b class="req">*</b></span><input id="obName" type="text" placeholder="예: 홍길동" maxlength="20"></label>
-      <label class="ov-field"><span>캐디 구분 <b class="req">*</b></span>
-        <div class="ac-parts" id="acType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3">3부 캐디</button></div></label>
-      <label class="ov-field"><span>집→골프장 출근 소요시간 <b class="req">*</b> <small>(분)</small></span><input id="obCommute" type="number" inputmode="numeric" placeholder="60"></label>
-      <label class="ov-field"><span>집→골프장 편도 (km)</span><input id="obKm" type="number" inputmode="numeric" placeholder="30"></label>
-      <label class="ov-field"><span>차량번호 <small>(선택)</small></span><input id="obCar" type="text" placeholder="12가3456" maxlength="20"></label>
-      <div class="ov-err" id="ovErr"></div>
-      <button class="ov-submit" id="obSubmit">가입 완료</button>
-      <button class="ov-notify" id="ovEnableBtn" hidden>알림 켜기</button>
-      <div class="ov-notify-msg" id="ovEnableMsg"></div>
-      <div class="ov-actions" id="ovActions" hidden>
-        <button class="ov-ghost" id="obLogout">로그아웃</button>
-        <button class="ov-ghost" id="obClose">닫기</button>
-      </div>
-      <a class="ov-switch" id="obSwitch" href="/api/auth/google?switch=1" hidden>다른 계정으로 로그인</a>
-    </div>
-  </div>
-
-  <!-- 햄버거 메뉴(전체화면) — 이름줄을 누르면 프로필 수정, 그 아래는 바로가기 그리드(JS가 그림) -->
-  <div class="mnu" id="menuOv" hidden>
-    <div class="mnu-hd">
-      <button class="mnu-who" id="mnuWho" type="button">
-        <b id="mnuName">회원</b><i>님</i>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
-      </button>
-      <span class="mnu-sp"></span>
-      <button class="mnu-b lbl" id="mnuLogout" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        <span class="cap">로그아웃</span>
-      </button>
-      <button class="mnu-b" id="mnuClose" type="button" aria-label="닫기">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="mnu-tag" id="mnuTag"></div>
-    <!-- ★테스터 전용 — 로그인한 사람(위 이름줄)과 '배치표로 보는 회원'을 나눠 보여준다.
-         hidden으로 태어난다 — JS가 role='tester'를 확인해야만 열린다(실제 회원 화면엔 안 뜬다). -->
-    <button class="mnu-swap" id="mnuSwap" type="button" hidden>
-      <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 2 21 6 17 10"/><path d="M21 6H8a4 4 0 0 0-4 4"/><polyline points="7 22 3 18 7 14"/><path d="M3 18h13a4 4 0 0 0 4-4"/></svg></span>
-      <span class="tx"><span class="k">배치표로 보는 회원</span><span class="v" id="mnuSwapWho">—</span></span>
-      <span class="go">바꾸기</span>
-    </button>
-    <div class="mnu-sc">
-      <div class="mnu-sech"><h4>바로가기</h4></div>
-      <div class="mnu-g" id="mnuGrid"></div>
-    </div>
-  </div>
-
-  <!-- 메뉴 하위 페이지(캐디 보험 · 근무 수칙) — 본문은 JS가 채운다 -->
-  <div class="mpg" id="mpgOv" hidden>
-    <div class="mpg-hd">
-      <button class="mpg-bk" id="mpgBack" type="button" aria-label="뒤로">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-      </button>
-      <div class="mpg-t" id="mpgTitle"></div>
-    </div>
-    <div class="mpg-sc" id="mpgBody"></div>
-  </div>
-
-  <!-- 가입(온보딩) · 가입 신청서 출력 연출 -->
-  <div class="ov scov" id="obOv" hidden>
-    <div class="stage">
-      <div class="printer" id="obPrinter">
-        <span class="brand">RIVERHILL</span><span class="light"></span>
-        <span class="slot"></span>
-      </div>
-      <div class="ob-taphint" id="obTapHint" hidden>출력기를 눌러보세요!</div>
-      <div class="feed" id="obFeed">
-        <div class="paper sc-card">
-          <div class="sc-hd">
-            <div class="sc-t">RIVERHILL CADDIE</div>
-            <h2 class="sc-title">가입 신청 등록</h2>
-            <div class="sc-stamp" id="obStamp">완료!</div>
-          </div>
-          <div class="sc-bd">
-            <div class="sc-rowh"><span>ITEM</span><span>ENTRY</span></div>
-            <div class="sc-fld"><div class="sc-k">실명 · 배치표 이름 <b>*</b></div><input id="sgName" placeholder="홍길동" maxlength="20"></div>
-            <div class="sc-fld"><div class="sc-k">캐디 구분 <b>*</b></div>
-              <div class="sc-parts" id="sgType"><button type="button" data-t="house">하우스 캐디</button><button type="button" data-t="part3" class="on">3부 캐디</button></div>
-              <div class="sc-ph">하우스 = 1·2부 근무 · 3부 = 3부 근무(2부 콜업 가능)</div></div>
-            <div class="sc-fld"><div class="sc-k">출근 소요시간 (분) <b>*</b></div><input id="sgCommute" inputmode="numeric" placeholder="60"></div>
-            <button class="sc-cta" id="sgSubmit">가입 신청</button>
-            <div class="sc-warn" id="obWarn">모든 항목을 기재해 주세요</div>
-            <div class="sc-err" id="sgErr"></div>
-            <div class="sc-note">— 명부 대조 후 관리자 승인 시 이용 개시 —</div>
-          </div>
-        </div>
-      </div>
-      <!-- 대기 안내문 -->
-      <div class="feed" id="obNoticeFeed" style="display:none">
-        <div class="paper notice-paper">
-          <div class="sc-hd">
-            <div class="sc-t">RIVERHILL CADDIE</div>
-            <h2 class="sc-title">가입 대기 안내</h2>
-            <div class="sc-stamp pending" style="opacity:.9;transform:rotate(-12deg) scale(1);animation:none">대기</div>
-          </div>
-          <div class="sc-bd">
-            <div class="nt-row"><div class="nt-k">신청자</div><div class="nt-v" id="obNoticeName">홍길동</div></div>
-            <div class="nt-msg"><b>명부에서 성함을 확인하지 못해</b> 가입이 보류되었습니다. 리버힐에 정식 등록된 캐디만 이용할 수 있어요.</div>
-            <div class="nt-msg">이름 오기재 또는 신규 등록이면, 아래 관리자에게 문의해 확인받아 주세요.</div>
-            <div class="nt-admin"><div class="nt-k">관리자 문의</div><div class="nt-admin-v">김홍구</div></div>
-            <button class="nt-retry" id="obNoticeRetry">이름 다시 기재하기 ▶</button>
-            <div class="sc-note">— 관리자 확인 후 승인되면 이용 개시 —</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- 완료: 프린터+백지가 한 덩어리로 아래축 확대 → 화면 가득 → 문구 디졸브 → 진짜 홈 -->
-    <div class="wel-scene" id="obWelScene">
-      <div class="printer wel-printer" id="obWelPrinter"><span class="brand">RIVERHILL</span><span class="light"></span><span class="slot"></span></div>
-      <div class="welcome" id="obWelcome"></div>
-    </div>
-    <div class="welmsg" id="obWelText"><div class="welmsg-in"><span class="nm" id="obWelName">홍길동</span> 캐디님<br>어서오세요! <span class="cur">▮</span></div></div>
-  </div>
-
-  <!-- 로그인 게이트 (회원제 모드에서 비로그인 시) — 새벽 티오프 랜딩 -->
-  <div class="ov" id="loginOv" hidden>
-    <div class="dl-stage">
-      <div class="dl-sunwrap"><div class="dl-sun"></div></div>
-      <div class="dl-land">
-        <div class="dl-globe"></div>
-        <div class="dl-flag"><div class="dl-base"></div><div class="dl-cloth"></div><div class="dl-pole"></div></div>
-      </div>
-      <div class="dl-in">
-        <div class="dl-mark">
-          <div class="dl-em">RIVERHILL CADDIE</div>
-          <h2 class="dl-h">편안한 캐디 라이프가<br>시작됩니다</h2>
-          <div class="dl-sub">첫 조부터 배치까지 한눈에.</div>
-        </div>
-        <div class="dl-btnwrap">
-          <a class="ov-submit google" id="googleLoginBtn" href="/api/auth/google"><span class="glogo" aria-hidden="true"><svg viewBox="0 0 48 48" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span> Google로 계속하기</a>
-          <div class="ov-err" id="loginErr" style="text-align:center;color:#7a3b30;"></div>
-          <button class="ov-submit dl-tester" id="testerDemoBtn" hidden>로그인 (체험)</button>
-          <div class="dl-terms">계속 진행하면 이용약관에 동의하게 됩니다</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 가입 승인 대기 (pending) -->
-  <div class="ov" id="pendingOv" hidden>
-    <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#8a5d14" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10"/><path d="M7 3c0 4 4 5 5 6 1-1 5-2 5-6"/><path d="M7 21c0-4 4-5 5-6 1 1 5 2 5 6"/></svg></div>
-      <h2 class="ov-title">가입 승인 대기 중</h2>
-      <p class="ov-desc" style="text-align:center;"><b id="pendName">회원</b>님, 리버힐 캐디 본인 확인 후 <b>관리자가 승인</b>하면 바로 이용할 수 있어요. 승인되면 이 화면이 자동으로 넘어갑니다.</p>
-      <button class="ov-notify" id="pendEnableBtn">승인 알림 받기</button>
-      <div class="ov-notify-msg" id="pendEnableMsg" style="text-align:center;">알림을 켜두면 <b>승인되는 즉시</b> 폰으로 알려드려요.</div>
-      <button class="ov-submit" id="pendReload" style="margin-top:12px;">승인됐어요 · 새로고침</button>
-      <div class="ov-actions" style="justify-content:center;">
-        <button class="ov-ghost" id="pendLogout">로그아웃</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 계정 차단됨 (disabled) -->
-  <div class="ov" id="blockedOv" hidden>
-    <div class="ov-card" style="text-align:center;">
-      <div class="ov-badge" style="margin:0 auto 14px;"><svg viewBox="0 0 24 24" fill="none" stroke="#b3261e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div>
-      <h2 class="ov-title">계정이 차단되었습니다</h2>
-      <p class="ov-desc" id="blockedReason" style="text-align:center;"></p>
-      <p class="ov-desc" style="text-align:center;">이용에 문제가 있거나 오해가 있었다면 <b>관리자에게 따로 문의</b>해 주세요.</p>
-      <div class="ov-actions" style="justify-content:center;">
-        <button class="ov-ghost" id="blockedLogout">로그아웃</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- (회원 관리는 관리자 모니터 :3100 승인 탭으로 이관됨) -->
-
-  <!-- 배치표 뷰 전용 날씨 하늘 백드롭(전면 고정) — 히어로 날씨 CSS 재사용 -->
-  <div id="skyBg" class="hero" aria-hidden="true"><div class="fx" id="skyFx"></div></div>
-
-  <main>
-    <!-- 상단 배너 — main(스크롤 컨테이너) 안에 둬서 예전처럼 스크롤 내리면 숨고 올리면 다시 나타남 -->
-    <header class="top reveal" style="--i:0">
-      <div class="toprow">
-        <button class="tbicon" id="menuBtn" type="button" aria-label="메뉴">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-        </button>
-        <button class="tbicon" id="notifBtn" type="button" aria-label="알림">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-          <span class="tbdot" id="notifDot" hidden></span>
-        </button>
-      </div>
-      <!-- 프로필·날짜는 나중에 재배치 예정 — 지금은 숨김(JS 참조 유지용) -->
-      <div id="topMetaLegacy" style="display:none">
-        <span class="date" id="date">—</span>
-        <button class="acct" id="acctBtn" hidden><span id="acctName">회원</span></button>
-      </div>
-    </header>
-
-    <!-- ★테스터 유도 가이드 — 첫 진입 시 프로필 버튼(회원 배치표 선택)로 안내(세션당 1회) -->
-    <div class="tguide" id="testerGuide" hidden>
-      <div class="tguide-scrim" id="tguideScrim"></div>
-      <div class="tguide-pop">
-        <div class="tguide-arrow"></div>
-        <div class="tguide-card">
-          <div class="tguide-t">회원은 언제든 여기서 바꿔요</div>
-          <div class="tguide-d">보고 있는 회원은 <b>오른쪽 위 프로필</b>에서 언제든 다시 바꿀 수 있어요. 원하는 회원을 고르면 그 회원의 <b>배치표·순번</b>이 그대로 떠요.</div>
-          <button class="tguide-ok" id="tguideOk">알겠어요</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 오늘 -->
-    <section class="view body" id="view-today">
-      <section class="hero" id="todayHero" role="button" tabindex="0" aria-label="오늘 내 상황 — 배치표로 이동">
-        <div class="fx" id="wxFx" aria-hidden="true"></div>
-        <span class="wxref" id="wxRef" hidden></span>
-        <div class="label in" id="heroLabel" style="--j:0">오늘 내 상황</div>
-        <h3 id="heroTitle" class="in" style="--j:1">—</h3>
-        <p class="sub in" id="heroSub" style="--j:2"></p>
-        <!-- 근무와 겹치는 당번(흡연실 당번 등) — 근무는 그대로 두고 여기 띠로만 알린다 -->
-        <div class="smkbn in" id="dutyBanner" style="--j:3" hidden></div>
-        <div id="boardSlot" class="in" style="--j:4"></div>
-        <div class="hero-cheer in" id="heroCheer" style="--j:4" hidden></div>
-      </section>
-
-      <!-- 2부 라운드("2,3 출근" 두 탕) — 2부 근무가 잡힌 날만 3부 위에 카드로 -->
-      <div id="round2Slot" hidden></div>
-
-      <!-- ★홈 위젯 — 배치표 대시보드 바로 아래 2분할. 왼쪽 오늘 카트 번호, 오른쪽 이번 달 수입.
-           탭하면 각각 라운드 점검·정산으로 이동(요약을 보고 바로 들어가는 진입점). -->
-      <div class="hw" id="homeWidgets">
-        <button class="hw-w cart" id="hwCart" type="button" aria-label="오늘 카트 번호 — 라운드 점검으로 이동">
-          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
-          <span class="label">오늘 카트 번호</span>
-          <span class="hw-num noval" id="hwCartNum">번호 없음</span>
-          <span class="hw-ft" id="hwCartFt">탭하여 입력</span>
-        </button>
-        <button class="hw-w pay" id="hwPay" type="button" aria-label="이번 달 수입 — 정산으로 이동">
-          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
-          <span class="label" id="hwPayLab">이번 달 수입</span>
-          <span class="hw-num m" id="hwPayNum">—</span>
-          <span class="hw-ft" id="hwPayFt">불러오는 중…</span>
-        </button>
-        <!-- ★보험은 숫자가 없다 — 그 자리에 '보험'이라는 단어를 그대로 앉힌다.
-             캐디에게 걸린 보험은 셋(산재·고용·배상책임)인데, 슬로건을 크게 쓰던 예전 위젯은 산재 하나만
-             다루는 것처럼 보였다. 셋의 이름을 각주에 그대로 박아, 캐디가 '고용보험'과 '배상책임'을
-             여기서 처음 보게 한다 — 그게 이 칸이 할 수 있는 가장 센 일이다. -->
-        <button class="hw-w ins" id="hwIns" type="button" aria-label="캐디 보험 — 산재·고용·배상책임 세 가지 보기">
-          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
-          <span class="label">캐디 보험</span>
-          <span class="hw-say">보험</span>
-          <span class="hw-ft">산재 · 고용 · 배상책임</span>
-        </button>
-        <button class="hw-w work" id="hwWork" type="button" aria-label="이번 달 근무 — 근무 일지로 이동">
-          <span class="cnr"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
-          <span class="label" id="hwWorkLab">이번 달 근무</span>
-          <span class="hw-num" id="hwWorkNum">—</span>
-          <span class="hw-ft" id="hwWorkFt">불러오는 중…</span>
-        </button>
-      </div>
-
-      <!-- 작은 타일 — 숫자가 없고 '갈 곳'만 있는 것들. -->
-      <div class="tl" id="homeTiles">
-        <button class="tl-b rul" id="hwRule" type="button" aria-label="근무 수칙 열기">
-          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/></svg></span>
-          <span><span class="tn">근무 수칙</span><span class="ts">읽어두기</span></span>
-        </button>
-        <button class="tl-b all" id="hwAllBoard" type="button" aria-label="전체 배치표 — 1·2부 보기">
-          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg></span>
-          <span><span class="tn">전체 배치표</span><span class="ts">1·2부 보기</span></span>
-        </button>
-        <button class="tl-b tro" id="hwTrophy" type="button" aria-label="업적 — 성장 공간 열기">
-          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5H5v2a3 3 0 0 0 3 3"/><path d="M16 5h3v2a3 3 0 0 1-3 3"/><line x1="12" y1="13" x2="12" y2="17"/><line x1="9" y1="20" x2="15" y2="20"/></svg></span>
-          <span><span class="tn">업적</span><span class="ts" id="hwTrophySub">성장 공간</span></span>
-        </button>
-      </div>
-
-      <!-- ★오늘의 기록 위젯 — 안 썼으면 한 줄을 청하고, 썼으면 표정과 그 말이 그대로 남는다.
-           ★탭하면 탭 이동 없이 '그 자리에서' 바로 쓴다(기분 5종 + 한 줄). 한 줄 남기려고
-           기록 탭까지 들어갔다 나오는 왕복이 사라진다. 더 손볼 게 있으면 아래 '기록 탭에서 자세히'. -->
-      <section class="jw2" id="hwJournal">
-        <button class="jw2-tap" id="hwJTap" type="button" aria-expanded="false" aria-controls="hwJEd" aria-label="오늘의 기록 — 여기서 바로 쓰기">
-          <span class="jw2-lb">오늘의 기록</span>
-          <span class="jw2-rule" id="hwJRule"></span>
-          <span class="jw2-foot" id="hwJFoot">기분을 고르고 그날의 순간을 적어요</span>
-        </button>
-        <div class="jw2-ed" id="hwJEd" hidden>
-          <div class="jmoods" id="hwJMoods"></div>
-          <div class="jmemo-ip">
-            <input id="hwJIn" maxlength="60" placeholder="그날의 순간을 한 줄로…" autocomplete="off" enterkeyhint="done">
-            <span class="jmemo-cnt" id="hwJCnt">0/60</span>
-          </div>
-          <div class="jw2-act">
-            <button class="jw2-more" id="hwJMore" type="button">기록 탭에서 자세히</button>
-            <button class="jw2-save" id="hwJSave" type="button">저장</button>
-          </div>
-        </div>
-      </section>
-
-      <div id="notifyNudge" class="nudge" hidden></div>
-
-      <div class="health reveal" id="health" style="--i:2" aria-live="polite">
-        <span id="hWatch">일정 감시 확인 중…</span>
-        <span id="hPush">알림 확인 중…</span>
-      </div>
-
-    </section>
-
-    <!-- 배치표 — 우리 부 전체 순번표(날씨 하늘 배경 + 글래스). 소식 피드 제거(원문·작성자 유출 차단) -->
-    <section class="view" id="view-board" hidden>
-      <div id="boardFull"><div class="fb-empty">배치표를 불러오는 중…</div></div>
-    </section>
-
-    <!-- 근무 기록 -->
-    <section class="view body" id="view-worklog" hidden>
-      <div class="sect"><span>일일 근무 일지</span></div>
-      <section class="hero">
-        <div class="jcal-nav">
-          <button id="jPrev" class="j-navbtn" aria-label="이전 달">‹</button>
-          <b id="jTitle" class="wl-sum">불러오는 중…</b>
-          <button id="jNext" class="j-navbtn" aria-label="다음 달">›</button>
-        </div>
-        <div id="jSub" class="wl-sub"></div>
-        <div class="jcal" id="jCal"></div>
-        <div class="jcal-legend">
-          <span><i style="background:#e9e2fb"></i>3부</span><span><i style="background:#fbe2ee"></i>1부</span><span><i style="background:#dcecfb"></i>2부·2·3</span><span><i style="background:#ffc9e2"></i>1·3</span><span><i style="background:#e6f3c9"></i>54</span><span><i style="background:#ffe985"></i>휴무</span><span><i style="background:#5f9e6a"></i>병가</span><span><i style="background:#fdf3df"></i>스페어</span><span><i style="background:#f5811f"></i>당번·벌당</span>
-        </div>
-        <div class="jedit-cal" id="jEditor" hidden></div>
-        <div class="jcal-hint" id="jHint">날짜를 눌러 그날 근무를 기록하세요 · 이미 있는 날은 눌러서 수정</div>
-      </section>
-
-      <div class="sect"><span>이 달의 기록</span></div>
-      <section class="hero jrec-card">
-        <div class="jrec-head">
-          <div><div class="jrec-title">이 달의 기록</div><div class="jrec-aff" id="jRecAff"></div></div>
-          <div class="jrec-cnt"><b class="num" id="jRecCnt">0</b><span>기록</span></div>
-        </div>
-        <button class="jrec-write" id="jRecWrite" type="button">
-          <span class="jrw-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
-          <span class="jrw-tx"><b id="jRecWriteT">오늘 하루, 한 줄 남기기</b><em id="jRecWriteS">기분을 고르고 그날의 순간을 적어요</em></span>
-          <span class="jrw-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
-        </button>
-        <div class="jrecs" id="jRecs"></div>
-      </section>
-    </section>
-
-    <!-- 정산 (수익·팁·지출·수익계산서) -->
-    <section class="view body" id="view-settle" hidden>
-      <div class="s2" id="s2Root">
-        <div class="hero t-day" id="lgHero">
-          <div class="orb sun"></div>
-          <div class="htop"><button class="mo" id="lgMoBtn"><b id="lgMLabel">불러오는 중…</b><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button></div>
-          <div class="hlab" id="lgHlab">이 달 수입</div>
-          <div class="net"><span class="inc num" id="lgInc">0</span><small>원</small></div>
-          <div class="goal">
-            <div class="g2head"><span class="k">이 달 목표</span><button class="v" id="lgGoalBtn"><span class="num" id="lgGoalNum">설정</span><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button></div>
-            <div class="gtrack"><div class="gfill" id="lgGfill"></div></div>
-            <div class="grow" id="lgGrow"><span></span><span></span></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="chd" style="padding-bottom:6px"><span class="l">이번 달 내역</span><span class="a" id="lgListCount"></span></div>
-          <div class="list" id="lgList"></div>
-          <div class="lg-pager" id="lgPager"></div>
-        </div>
-
-        <div class="card">
-          <div class="navrow" id="lgAnalysisRow"><div class="tt"><div class="a">부별 · 지출 · 세무 분석</div><div class="b" id="lgAnalysisSub">부별 수익 · 지출 · 순이익 보기</div></div><svg class="cv" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2"><path d="m1 1 6 6-6 6"/></svg></div>
-        </div>
-
-        <div class="card" style="padding:15px 16px 15px">
-          <div class="xh" style="margin-bottom:10px">정산서 출력</div>
-          <div class="docseg" id="lgDocSeg"><button class="on" data-per="month">이번 달만</button><button data-per="year">올해 전체(연 단위)</button></div>
-          <div class="docopts" id="lgDocOpts"><button class="optbtn on" data-opt="rev">수익</button><button class="optbtn on" data-opt="tip">팁</button><button class="optbtn on" data-opt="exp">지출</button></div>
-          <div class="dcard">
-            <div class="thumb"><svg viewBox="0 0 66 86"><rect width="66" height="86" fill="#fff"/><rect width="66" height="16" fill="#0c8f6a"/><rect x="8" y="6" width="26" height="3.4" rx="1.7" fill="#fff" opacity=".9"/><rect x="8" y="24" width="34" height="2.6" rx="1.3" fill="#e4e9e3"/><rect x="10" y="40" width="8" height="20" rx="1.5" fill="#0c8f6a"/><rect x="22" y="46" width="8" height="14" rx="1.5" fill="#1a8f68"/><rect x="34" y="34" width="8" height="26" rx="1.5" fill="#0c8f6a"/><rect x="46" y="50" width="8" height="10" rx="1.5" fill="#a9c6b4"/><line x1="8" y1="60.5" x2="58" y2="60.5" stroke="#e2e8e2" stroke-width="1"/><rect x="8" y="70" width="46" height="2.4" rx="1.2" fill="#eef1ec"/><rect x="8" y="76" width="30" height="2.4" rx="1.2" fill="#eef1ec"/></svg></div>
-            <div class="tt"><div class="a" id="lgDocTitle">이 달 정산서</div><div class="b" id="lgDocDesc">수입·지출 · 순이익 포함</div>
-              <div class="pills"><a class="pill" id="lgPdf" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><use href="#ic-pdf"/></svg>PDF</a><a class="pill" id="lgWord"><svg viewBox="0 0 24 24"><use href="#ic-word"/></svg>Word</a></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <style id="lgwStyle">
         .lgw-bg{position:fixed;inset:0;z-index:140;visibility:hidden;pointer-events:none;transition:visibility 0s linear .34s;font-family:"Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif}
         .lgw-bg.on{visibility:visible;pointer-events:auto;transition-delay:0s}
         .lgw-bg .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
@@ -3270,697 +2842,171 @@
         .lgw-ghost{flex:none;padding:16px 20px;border-radius:14px;border:1px solid #e6edf2;background:transparent;color:#6f7d8b;font:inherit;font-weight:800;font-size:14px;cursor:pointer}
         .lgw-go{flex:1;border:0;border-radius:14px;background:#0e6fbf;color:#fff;font:inherit;font-weight:850;font-size:15px;cursor:pointer;box-shadow:0 12px 26px -12px rgba(14,111,191,.7)}
         @media (prefers-reduced-motion:reduce){ .lgw-wave,.lgwfish i{animation:none!important} .lgw-water,.lgw-sheet{transition:none!important} }
-      </style>
-      <div id="lgGoalSheet" class="lgw-bg">
-        <div class="lgw-scrim" id="lgwScrim"></div>
-        <div class="lgw-sheet" id="lgwSheet">
-          <div class="lgw-grip"></div>
-          <div class="lgw-glass" id="lgwGlass">
-            <div class="lgw-water" id="lgwWater">
-              <div class="lgw-surface">
-                <div class="lgw-wave lgw-w1"><svg viewBox="0 0 400 34" preserveAspectRatio="none"><path d="M0 17 Q25 7 50 17 T100 17 T150 17 T200 17 T250 17 T300 17 T350 17 T400 17 V34 H0 Z" fill="#57bff5"/></svg></div>
-                <div class="lgw-wave lgw-w2"><svg viewBox="0 0 400 34" preserveAspectRatio="none"><path d="M0 17 Q20 25 40 17 T80 17 T120 17 T160 17 T200 17 T240 17 T280 17 T320 17 T360 17 T400 17 V34 H0 Z" fill="#0a5390"/></svg></div>
-                <div class="lgw-wave lgw-w3"><svg viewBox="0 0 400 34" preserveAspectRatio="none"><path d="M0 17 Q12.5 12 25 17 T50 17 T75 17 T100 17 T125 17 T150 17 T175 17 T200 17 T225 17 T250 17 T275 17 T300 17 T325 17 T350 17 T375 17 T400 17 V34 H0 Z" fill="#8ad6f8"/></svg></div>
-              </div>
-            </div>
-            <div class="lgw-fishlayer" id="lgwFish"></div>
-            <div class="lgw-content">
-              <div class="lgw-cheer"><span class="lgw-cheerT" id="lgwCheer">지금도 잘 채우고 있어요.</span></div>
-              <div class="lgw-pct"><span class="lgw-big num" id="lgwPct">0</span><span class="lgw-pu">%</span></div>
-            </div>
-          </div>
-          <div class="lgw-set" id="lgwSet">
-            <span class="lgw-lab" id="lgwLab">이 달 목표</span>
-            <div class="lgw-val"><input class="num" id="lgwInput" inputmode="numeric" value="500"><span class="lgw-vu">만원</span></div>
-            <div class="lgw-hint">남은 <b class="num" id="lgwRem">0</b>만 · <b class="num" id="lgwDays">0</b>일 남음<span id="lgwTail"> · 숫자를 눌러 고쳐요</span></div>
-          </div>
-          <div class="lgw-cta"><button class="lgw-ghost" id="lgwClose">닫기</button><button class="lgw-go" id="lgwSave">이 목표를 세운다</button></div>
-        </div>
-      </div>
+      </style><style>
+/* ── 샘플 판을 굴러가게 — 앱은 body 스크롤을 막아 두었다(셸 레이아웃) ── */
+html, body { height:auto !important; overflow:auto !important; display:block !important; }
 
-      <div class="s2sheet-bg" id="lgAnalysisSheet"><div class="s2sheet ana">
-        <div class="gh"></div>
-        <div class="amast"><div class="amast-k" id="lgAnaMast">캐디 월 결산</div><div class="amast-t" id="lgAnaTitle">2026. 8</div><div class="amast-s" id="lgAnaSub"></div></div>
-        <div class="ahero">
-          <div class="ahero-l">이 달 순이익</div>
-          <div class="ahero-v"><b id="lgAnaNet">0</b><small>원</small></div>
-          <div class="aduo"><span>수입 <b id="lgAnaDInc">0</b></span><span class="dot"></span><span>지출 <b id="lgAnaDExp">0</b></span></div>
-        </div>
-        <div class="acard"><div class="ach"><span class="l">부별 수익</span><span class="a" id="lgAnaPSum">0원</span></div><div class="abody" id="lgAnaParts"></div></div>
-        <div class="acard"><div class="ach"><span class="l">지출</span><span class="a e" id="lgAnaESum">0원</span></div><div class="abody" id="lgAnaExp"></div></div>
-        <div class="acard atot">
-          <div class="atr"><span class="k">수입 합계</span><b id="lgAnaTInc">0</b></div>
-          <div class="atr"><span class="k">지출 합계</span><b class="e" id="lgAnaTExp">0</b></div>
-          <div class="atr net"><span class="k">순이익</span><b id="lgAnaTNet">0</b></div>
-        </div>
-        <div class="taxnote">캐디는 <b>사업소득(3.3% 원천징수)</b> — 세금은 매년 5월 <b>종합소득세</b>로 연 단위 정산됩니다. 이 화면은 <b>소명자료</b>이며 세액을 계산하진 않습니다. 정확한 세액은 <b>세무사 상담</b> 권장.</div>
-        <button class="aclose" id="lgAnaClose">닫기</button>
-      </div></div>
+/* ══ 흡연실 당번 — 색은 앱이 이미 쓰는 당번 주황(#f5811f) ══ */
+.smkico { width:15px; height:15px; flex:0 0 auto; fill:currentColor; }
+.smkico .wv { fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; }
 
-      <div class="s2lb" id="lgLb"><img id="lgLbImg" alt="영수증"></div>
-    </section>
+/* 다 — 게이지 판 안 한 칸 */
+.mini.smk { background:#fff4e8; border-color:#f3d8ba; }
+.mini.smk b { color:#a1520a; }
+.mini.smk span { color:#a97a45; }
 
-    <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
-    <section class="view body" id="view-cart" hidden>
-      <!-- s5 히어로: 오늘 카트 번호 + 디지털 표정 -->
-      <section class="rc-hero5">
-        <div class="lab">오늘 카트 번호</div>
-        <div class="heroface" id="rcHeroFace" role="button" tabindex="0" aria-label="카트 번호 수정"><span class="face idle" id="rcFace"></span><span class="num" id="rcHeroNum"></span></div>
-        <div class="edithint" id="rcEditHint">탭하여 카트 번호 입력</div>
-      </section>
+/* 라 — 제목 밑 주황 배너 */
+.smkbn { display:flex; align-items:center; gap:9px; margin:11px 0 0;
+  padding:11px 13px; border-radius:14px; color:#fff;
+  background:linear-gradient(135deg,#f5811f,#e06a0c);
+  box-shadow:0 4px 12px rgba(224,106,12,.26); }
+.smkbn .tx { flex:1 1 auto; min-width:0; }
+.smkbn .t1 { display:block; font-size:14px; font-weight:900; letter-spacing:-.03em; line-height:1.2; }
+.smkbn .t2 { display:block; font-size:11px; font-weight:760; opacity:.9; margin-top:2px; }
+.smkbn .tm { font-size:15px; font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
 
-      <div class="rc-sheet">
-        <div class="rc-prg"><b>반납 점검</b></div>
+/* 마 — 히어로가 통째로 당번 옷을 입는다(왼쪽 굵은 띠 + 머리 칩) */
+.hero.smkday { border-color:#f3cfa6; box-shadow:0 6px 20px rgba(224,106,12,.13); }
+.hero.smkday::after { content:''; position:absolute; left:0; top:0; bottom:0; width:7px;
+  background:linear-gradient(180deg,#f5811f,#e8720f); z-index:3; }
+.hero.smkday > *:not(.fx) { padding-left:6px; }
+.smkcap { display:flex; align-items:center; gap:7px; margin:0 0 2px;
+  color:#a1520a; font-size:11.5px; font-weight:900; letter-spacing:-.02em; }
+.smkcap time { font-weight:820; opacity:.75; font-variant-numeric:tabular-nums; }
 
-        <!-- 오늘 헤더 + 지난 기록 찾기 -->
-        <div class="rc-findbar rc2-datebar">
-          <div class="rc-todayh">
-            <span class="d" id="rcSelDate">오늘</span>
-            <button class="rc-backtoday" id="rcBackToday" type="button" hidden>오늘로</button>
-          </div>
-          <button class="rc-findrow" id="rcFindOpen" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-            <span>지난 반납 기록 찾기</span><span class="ch">›</span>
-          </button>
-        </div>
+/* 바 — 근무 판 머리에 얹기(근무 정보와 한 몸) */
+.actionboard.smkhd { border-top:3px solid #f5811f; }
+.smkrow { display:flex; align-items:center; gap:8px; margin:-4px 0 10px;
+  color:#a1520a; font-size:12px; font-weight:900; letter-spacing:-.02em; }
+.smkrow .sp { margin-left:auto; font-weight:820; opacity:.8; font-variant-numeric:tabular-nums; }
 
-        <!-- ★근무 완료 표식 — 도장을 닫아도 '저장됐다'는 사실이 화면에 남아야 한다(닫으면 흔적이 없던 문제) -->
-        <button class="rc-donebar" id="rcDoneBar" type="button" hidden></button>
+.smpwrap { max-width:430px; margin:0 auto; padding:16px 14px 60px; }
+.smphd { font-size:11px; font-weight:900; letter-spacing:.1em; color:#6e7973; margin:28px 0 8px; }
+.smphd em { font-style:normal; color:#0f3d2e; letter-spacing:-.02em; font-size:14px; margin-right:7px; }
+.smpnote { font-size:11.5px; line-height:1.6; color:#647168; margin:8px 2px 0; font-weight:700; }
+</style></head>
+<body style="background:#f2f5f2">
+<div class="smpwrap">
+  <p class="smpnote" style="margin:0 2px 6px">아래로 굴러갑니다. 넷 다 <b>근무가 주인공</b>이고 당번은 곁들임인데, 목소리 크기가 다릅니다.</p>
 
-        <!-- 지난 반납 기록 찾기 — 전체화면 검색 페이지(네이버 모바일식) -->
-        <div class="rc-search-page" id="rcFindSheet" role="dialog" aria-label="지난 반납 기록 검색">
-          <div class="rc-sp-bar">
-            <button class="rc-sp-back" id="rcFindClose" type="button" aria-label="뒤로">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
-            </button>
-            <div class="rc-sp-field">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-              <input id="rcFindInput" type="text" inputmode="text" autocomplete="off" placeholder="날짜로 찾기  (예: 8/3, 8월 3일)">
-              <button class="rc-sp-clear" id="rcFindClear" type="button" aria-label="지우기" hidden>
-                <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#c3c9d4"></circle><path d="M9 9l6 6M15 9l-6 6" stroke="#fff" stroke-width="2.1" stroke-linecap="round"></path></svg>
-              </button>
-            </div>
-          </div>
-          <div class="rc-sp-list" id="rcFindList"></div>
-        </div>
+  <div class="smphd"><em>다</em>게이지 판 안 한 칸 — 가장 조용함</div>
+  <section class="hero">
+  <div class="label">오늘 내 상황</div>
+  <h3 style="font-size:25px;line-height:1.1;letter-spacing:-.045em;margin:8px 0 6px">오늘 근무 확정</h3>
+  <p class="sub">아래 시간에 맞춰 움직이면 됩니다.</p>
 
-        <div class="rc2-sect" id="rcPhotoSect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
-        <div class="rc-g2" id="rcPhotoCards">
-          <div class="rc-pcard" id="rcCardCart"><div class="k">카트 상태</div><div class="s">전 <em id="rcCcb">0</em> · 후 <em id="rcCca">0</em></div><div class="bd">전·후 비교 ›</div></div>
-          <div class="rc-pcard" id="rcCardClub"><div class="k">클럽 상태</div><div class="s">전 <em id="rcLcb">0</em> · 후 <em id="rcLca">0</em></div><div class="bd">전·후 비교 ›</div></div>
-        </div>
-
-        <!-- 당번·벌당인 날: 카트를 안 끌고 나가므로 사진 점검 면제 안내 -->
-        <div class="rc-dutynote" id="rcDutyNote" hidden></div>
-
-        <div class="rc2-sect">장비 반납 확인</div>
-        <div class="rc2-grid" id="rcReturnGrid"></div>
-
-        <!-- 고객 분실물 확인 -->
-        <div class="rc2-sect">고객 분실물 확인</div>
-        <div class="lf-card">
-          <div class="lf-lead">
-            <div class="lf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg></div>
-            <div><div class="t">카트를 비웠나요?</div><div class="s">두고 간 물건이 있으면 <b>사진과 함께</b> 남겨 주세요.<br>사진이 없으면 그대로 저장 시 <b>‘분실물 없음’</b>으로 기록됩니다.</div></div>
-          </div>
-          <div class="lf-items" id="rcLostItems"></div>
-          <button class="lf-add" type="button" id="rcLostAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>분실물 추가 (이름·사진)</button>
-          <button class="lf-deliver" type="button" disabled aria-disabled="true"><span class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg></span><span class="dt">고객에게 전달하기</span><span class="soon">출시 예정</span></button>
-          <div class="lf-teaser">예약팀 연동 후, 발견한 분실물을 고객에게 <b>바로 알림</b>으로 전달할 수 있어요.</div>
-        </div>
-
-        <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
-
-        <button id="rcStampBtn" class="rc2-stampbtn" type="button"><span class="rc2-fill" id="rcStampFill"></span><span class="rc2-shine"></span><span class="rc2-lbl" id="rcStampLbl">완료 도장 찍기</span></button>
-        <div class="rc2-miss" id="rcMiss"></div>
-      </div>
-
-      <!-- 번호 수정 팝업 -->
-      <div class="rc-ov" id="rcNumWrap">
-        <div class="rc-epop">
-          <div class="eh">오늘 카트 번호</div>
-          <div class="efin"><input id="rcNumIn" type="text" inputmode="numeric" maxlength="3" placeholder="00"><span class="u">번</span></div>
-          <div class="eowner" id="rcNumOwner"></div>
-          <div class="eacts"><button class="g" type="button" id="rcNumCancel">취소</button><button class="p" type="button" id="rcNumSave">저장</button></div>
-        </div>
-      </div>
-
-      <!-- 분실물 추가 팝업 -->
-      <div class="rc-ov" id="rcAddWrap">
-        <div class="rc-asheet">
-          <div class="ash">분실물 추가</div>
-          <div class="aphoto" id="rcAddPhotoBox" role="button" tabindex="0"><div class="aph-empty" id="rcAddEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg>사진 촬영 / 선택<span>선택 사항</span></div><img id="rcAddImg" hidden alt=""></div>
-          <input type="file" accept="image/*" capture="environment" id="rcAddCamIn" hidden>
-          <input type="file" accept="image/*" id="rcAddFile" hidden>
-          <input class="ainput" id="rcAddName" type="text" placeholder="물건 이름 (예: 지갑, 장갑, 우산)">
-          <div class="aacts"><button class="g" type="button" id="rcAddCancel">취소</button><button class="p" type="button" id="rcAddConfirm" disabled>추가</button></div>
-        </div>
-      </div>
-
-      <!-- 완료 도장 오버레이(전체 확인 완료 시) -->
-      <div class="rc2-stampov" id="rcStampOverlay">
-        <svg class="rc2-stamp" viewBox="0 0 100 100" fill="none" aria-label="근무 완료 도장">
-          <defs><path id="rcArcTop" d="M23,50 A27,27 0 0 1 77,50"></path><path id="rcArcBot" d="M22.5,50 A27.5,27.5 0 0 0 77.5,50"></path></defs>
-          <circle cx="50" cy="50" r="46.5" stroke="currentColor" stroke-width="3"></circle>
-          <circle cx="50" cy="50" r="40.5" stroke="currentColor" stroke-width="1.2"></circle>
-          <text font-size="11.5" font-weight="800" letter-spacing="3" fill="currentColor" text-anchor="middle"><textPath href="#rcArcTop" xlink:href="#rcArcTop" startOffset="50%">근 무 완 료</textPath></text>
-          <path d="M39.5 39 L45.5 45.5 L57 31" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
-          <text x="50" y="63" font-size="13" font-weight="850" letter-spacing="0.5" fill="currentColor" text-anchor="middle" id="rcStampDate">8월 11일</text>
-          <text x="50" y="72.5" font-size="7" font-weight="700" letter-spacing="2" fill="currentColor" text-anchor="middle" id="rcStampYear">2026</text>
-        </svg>
-        <div class="rc2-stampcap">근무 완료 · 오늘도 수고하셨습니다</div>
-        <div class="rc2-stampacts">
-          <button id="rcStampFind" class="rc2-editbtn ghost" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>다른 날짜</button>
-          <button id="rcEditBtn" class="rc2-editbtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>수정하기</button>
-          <button id="rcStampClose" class="rc2-editbtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>닫기</button>
-        </div>
-      </div>
-
-    </section>
-  </main>
-
-  <!-- 홈으로 — 하단 탭바를 대신한다(뒤로가기와 같은 자리로 간다) -->
-  <button class="vback" id="vbackBtn" type="button" aria-label="홈으로">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>홈
-  </button>
-
-  <!-- 사진 확대 보기(라이트박스) -->
-  <div id="ccLightbox" class="cc-lb" hidden role="dialog" aria-modal="true" aria-label="사진 확대 보기">
-    <button class="cc-lb-close" id="ccLbClose" aria-label="닫기">✕</button>
-    <button class="cc-lb-nav prev" id="ccLbPrev" aria-label="이전 사진">‹</button>
-    <img id="ccLbImg" alt="카트 점검 사진 확대">
-    <button class="cc-lb-nav next" id="ccLbNext" aria-label="다음 사진">›</button>
-    <div class="cc-lb-count" id="ccLbCount"></div>
-  </div>
-
-  <!-- 라운드 점검: 전·후 사진 갤러리/비교 -->
-  <div id="rcGallery" role="dialog" aria-modal="true" aria-label="전후 사진 비교">
-    <div class="rc2-gtop"><button class="bk" id="rcGvBack" aria-label="닫기">‹</button><div class="tt" id="rcGvTitle">카트 상태</div><button class="tog" id="rcGvTog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"></path></svg><span class="x"></span></button><button class="done" id="rcGvDone" type="button" disabled>미완료</button></div>
-    <div class="rc2-rails">
-      <div class="rc2-rail b" id="rcRailB"><div class="rl"><i></i>라운드 전<span class="n" id="rcRnB">0장</span></div><div class="rc2-strip" id="rcStripB"></div></div>
-      <div class="rc2-rail a" id="rcRailA"><div class="rl"><i></i>라운드 후<span class="n" id="rcRnA">0장</span></div><div class="rc2-strip" id="rcStripA"></div></div>
+  <div class="actionboard">
+    
+    <div class="actiontop"><b>다음 행동 · 집에서 출발 준비</b><span class="clock">현재 11:42</span></div>
+    <div class="nextline"><strong>12:20</strong><span>출발까지 38분</span></div>
+    <div class="rail2">
+      <i class="track"></i><i class="fill" style="width:0%"></i>
+      <i class="rp next" style="left:0"></i><i class="rp" style="left:50%"></i><i class="rp" style="left:100%"></i>
     </div>
-    <div class="rc2-stage">
-      <div class="rc2-pane b" id="rcPaneTop">
-        <span class="lb">라운드 전 <span class="m" id="rcMetaTop"></span></span>
-        <div class="trk" id="rcTrkTop"></div><div class="dts" id="rcDotsTop"></div>
-        <button class="rc2-nav prev" data-nav="top" data-d="-1" type="button" aria-label="이전 사진"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
-        <button class="rc2-nav next" data-nav="top" data-d="1" type="button" aria-label="다음 사진"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></button>
-        <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 전'에서 올려주세요</small></div>
-        <div class="ctl"><button data-z="top" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="top" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
-      </div>
-      <div class="rc2-pane a" id="rcPaneBot">
-        <span class="lb">라운드 후 <span class="m" id="rcMetaBot"></span></span>
-        <div class="trk" id="rcTrkBot"></div><div class="dts" id="rcDotsBot"></div>
-        <button class="rc2-nav prev" data-nav="bot" data-d="-1" type="button" aria-label="이전 사진"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
-        <button class="rc2-nav next" data-nav="bot" data-d="1" type="button" aria-label="다음 사진"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg></button>
-        <div class="np"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="14" rx="2"></rect><circle cx="12" cy="13" r="3.2"></circle></svg><span>사진 없음</span><small>위 '라운드 후'에서 올려주세요</small></div>
-        <div class="ctl"><button data-z="bot" data-f="out"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"></path></svg></button><span class="lv">100%</span><button data-z="bot" data-f="in"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button><span class="sep"></span><button class="tr" data-del="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg></button></div>
-      </div>
+    <div class="railtext3">
+      <div class="rt l next"><b>출발</b><time>12:20</time></div>
+      <div class="rt c"><b>도착</b><time>13:07</time></div>
+      <div class="rt r"><b>티오프</b><time>14:07</time></div>
     </div>
-    <div class="rc2-gfoot" id="rcGvFoot"><b>두 손가락으로 확대</b> · 좌우로 넘기면 다음/이전 사진</div>
-  </div>
-  <div class="rc2-sheet" id="rcChooser"><div class="rc2-sc2">
-    <div class="st" id="rcChTitle">사진 추가</div>
-    <button class="opt" id="rcPickCam"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span><div>카메라로 촬영<small>지금 바로 찍기</small></div></button>
-    <button class="opt" id="rcPickAlb"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></span><div>앨범에서 선택<small>여러 장 한 번에</small></div></button>
-    <button class="cancel" id="rcChCancel">취소</button>
-  </div></div>
-  <div class="rc2-confirm" id="rcConfirm"><div class="rc2-dlg">
-    <div class="wi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"></path></svg></div>
-    <div class="wt" id="rcDelTitle">사진 삭제</div>
-    <div class="wm">이 사진을 <b>삭제</b>하면 되돌릴 수 없어요. 정말 삭제할까요?</div>
-    <div class="bt"><button class="d" id="rcDelYes">삭제</button><button class="c" id="rcDelNo">취소</button></div>
-  </div></div>
-  <input id="rcCamIn" type="file" accept="image/*" capture="environment" hidden>
-  <input id="rcAlbIn" type="file" accept="image/*" multiple hidden>
-
-  <!-- 분실물 사진: 카메라/파일 선택 시트 -->
-  <div class="rc2-sheet" id="rcAddChooser"><div class="rc2-sc2">
-    <div class="st">분실물 사진</div>
-    <button class="opt" id="rcAddPickCam"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span><div>카메라로 촬영<small>지금 바로 찍기</small></div></button>
-    <button class="opt" id="rcAddPickFile"><span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg></span><div>앨범·파일에서 선택<small>저장된 사진 고르기</small></div></button>
-    <button class="cancel" id="rcAddChCancel">취소</button>
-  </div></div>
-
-  <!-- 정산: 문서 미리보기 모달 -->
-  <div class="lg-modal" id="lgModal" hidden>
-    <div class="sheet">
-      <div class="mbar"><b id="lgMTitle">문서 미리보기</b><button class="mclose" id="lgMClose" aria-label="닫기">✕</button></div>
-      <div class="mnote" id="lgMNote"></div>
-      <div class="mframe" id="lgMFrame"></div>
-      <div class="mfoot">
-        <button class="mbtn print" id="lgMPrint"><svg class="mico"><use href="#ic-print"/></svg>인쇄</button>
-        <button class="mbtn save" id="lgMSave"><svg class="mico"><use href="#ic-share"/></svg><span id="lgMSaveLbl">저장·공유</span></button>
-      </div>
+    <div class="alert"><span>12:10에 출발 알림을 보내드릴게요</span><b>10분 전</b></div>
+    <div class="minirow">
+      <div class="mini"><span>백대기 <small>티오프 50분 전</small></span><b>13:17</b></div>
+      <div class="mini"><span>티오프</span><b>14:07<small> OUT</small></b></div>
+      <div class="mini smk"><span>흡연실 당번</span><b>06:00<small> ~</small></b></div>
     </div>
   </div>
+</section>
+  <p class="smpnote">백대기·티오프와 나란히 섭니다. 시각이 같이 보이지만 한 번 내려야 보입니다.</p>
 
-  <!-- 정산 아이콘 정의 -->
-  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="ic-cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3.5 8.8A1.6 1.6 0 0 1 5.1 7.2h1.9l1-1.7A1.2 1.2 0 0 1 10 4.9h4a1.2 1.2 0 0 1 1 .6l1 1.7h1.9a1.6 1.6 0 0 1 1.6 1.6v8.1a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6z"/><circle cx="12" cy="13" r="3.1"/></symbol>
-    <symbol id="sf-rcpt" viewBox="0 0 40 48"><path d="M7 7 a2 2 0 0 1 2 -2 h22 a2 2 0 0 1 2 2 V41 l-4.3 2.6 -4.3 -2.6 -4.3 2.6 -4.3 -2.6 -4.3 2.6 -4.3 -2.6 Z" fill="#fff" stroke="#cfe0d4" stroke-width="1.4"/><path d="M7 7 a2 2 0 0 1 2 -2 h22 a2 2 0 0 1 2 2 V12 H7 Z" fill="#0c8f6a"/><rect x="12" y="19" width="16" height="2.4" rx="1.2" fill="#dfe6de"/><rect x="12" y="25" width="16" height="2.2" rx="1.1" fill="#eef1ec"/><rect x="12" y="32" width="8" height="2.6" rx="1.3" fill="#0c8f6a"/></symbol>
-    <symbol id="ic-pdf" viewBox="0 0 24 24">
-      <path d="M6 2.2h8.2L19 7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4.2a2 2 0 0 1 2-2z" fill="#fff" stroke="#E2231A" stroke-width="1.5"/>
-      <path d="M14 2.4V7.2h4.6" fill="none" stroke="#E2231A" stroke-width="1.5" stroke-linejoin="round"/>
-      <rect x="3.4" y="12.2" width="15.4" height="6.6" rx="1.5" fill="#E2231A"/>
-      <text x="11.1" y="17.15" text-anchor="middle" font-family="Arial, sans-serif" font-size="4.5" font-weight="700" fill="#fff">PDF</text></symbol>
-    <symbol id="ic-word" viewBox="0 0 24 24">
-      <path d="M6 2.2h8.2L19 7v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4.2a2 2 0 0 1 2-2z" fill="#fff" stroke="#2B579A" stroke-width="1.5"/>
-      <path d="M14 2.4V7.2h4.6" fill="none" stroke="#2B579A" stroke-width="1.5" stroke-linejoin="round"/>
-      <rect x="3.4" y="12.2" width="15.4" height="6.6" rx="1.5" fill="#2B579A"/>
-      <text x="11.1" y="17.15" text-anchor="middle" font-family="Arial, sans-serif" font-size="4.3" font-weight="700" fill="#fff">DOC</text></symbol>
-    <symbol id="ic-print" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13.5" width="12" height="7" rx="1"/></symbol>
-    <symbol id="ic-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3v11"/><path d="M8 6.6 12 2.6l4 4"/><path d="M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"/></symbol>
-  </svg>
-
-  <!-- 관리자 공지(팩스 출력지) 연출 오버레이 -->
-  <div class="ov scov" id="faxOv" hidden>
-    <div class="fx-stage" id="fxStage">
-      <div class="fx-col">
-        <div class="machine" id="fxMachine">
-          <div class="m-row">
-            <div class="m-brand"><b>RIVERHILL CADDIE</b><span>NOTICE FAX</span></div>
-            <div class="m-actions">
-              <button class="m-print await" id="fxPrintBtn" aria-label="공지 출력">
-                <svg viewBox="0 0 24 24"><path d="M8 3h8v4H8z"/><path d="M6 7h12a3 3 0 0 1 3 3v6h-4v-3H7v3H3v-6a3 3 0 0 1 3-3z"/><path d="M7 16h10v5H7z"/></svg>
-                출력
-              </button>
-              <div class="m-ready"><span class="m-led"></span><span id="fxReady">수신</span></div>
-            </div>
-          </div>
-          <div class="m-display">
-            <div class="dtext">
-              <div class="dlabel"><span class="ndot"></span>RIVERHILL 소식 · NEW FAX</div>
-              <div class="dmain" id="fxDisp">새 팩스가 도착했어요</div>
-            </div>
-            <span class="dbars"><i></i><i></i><i></i><i></i></span>
-          </div>
-          <div class="m-vents"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <div class="m-slot"></div>
-        </div>
-        <div class="feed" id="fxFeed">
-          <div class="paper">
-            <div class="fx-hd"><span class="sq"></span>FAX TRANSMISSION</div>
-            <div class="fx-line"></div>
-            <div class="fx-grid">
-              <div class="fx-c"><small>TO</small><div class="fx-v" id="fxTo">회원 님</div></div>
-              <div class="fx-c"><small>FROM</small><div class="fx-v"><span id="fxAdmin">관리자</span></div></div>
-              <div class="fx-c"><small>DATE</small><div class="fx-v" id="fxDate">2026-08-05</div></div>
-              <div class="fx-c"><small>PAGES</small><div class="fx-v">1 / 1</div></div>
-            </div>
-            <div class="fx-tags" id="fxTags">
-              <span data-tag="회람"><i class="box"></i>회람</span>
-              <span data-tag="긴급"><i class="box"></i>긴급</span>
-              <span data-tag="확인요망"><i class="box"></i>확인요망</span>
-            </div>
-            <div class="fx-title" id="fxTitle"></div>
-            <div class="fx-body" id="fxBody"></div>
-            <div class="fx-foot">— TRANSMISSION OK · RIVERHILL —</div>
-            <button class="fx-ok" id="fxOk">확 인</button>
-          </div>
-        </div>
-      </div>
+  <div class="smphd"><em>라</em>제목 밑 주황 배너 — <b>제 추천</b></div>
+  <section class="hero">
+  <div class="label">오늘 내 상황</div>
+  <h3 style="font-size:25px;line-height:1.1;letter-spacing:-.045em;margin:8px 0 6px">오늘 근무 확정</h3>
+  <p class="sub">아래 시간에 맞춰 움직이면 됩니다.</p>
+<div class="smkbn"><svg class="smkico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="14.5" width="13" height="4" rx="1.4"/><rect x="16.4" y="14.5" width="2.2" height="4" rx="1"/><rect x="20" y="14.5" width="2" height="4" rx="1"/><path class="wv" d="M8 10.6c2.1-1.1 2.1-2.6 0-3.7S5.9 4.3 8 3.2"/><path class="wv" d="M13 10.6c2.1-1.1 2.1-2.6 0-3.7s-2.1-2.6 0-3.7"/></svg><span class="tx"><b class="t1">흡연실 당번</b><span class="t2">근무는 그대로 나갑니다</span></span><span class="tm">06:00~</span></div>
+  <div class="actionboard">
+    
+    <div class="actiontop"><b>다음 행동 · 집에서 출발 준비</b><span class="clock">현재 11:42</span></div>
+    <div class="nextline"><strong>12:20</strong><span>출발까지 38분</span></div>
+    <div class="rail2">
+      <i class="track"></i><i class="fill" style="width:0%"></i>
+      <i class="rp next" style="left:0"></i><i class="rp" style="left:50%"></i><i class="rp" style="left:100%"></i>
+    </div>
+    <div class="railtext3">
+      <div class="rt l next"><b>출발</b><time>12:20</time></div>
+      <div class="rt c"><b>도착</b><time>13:07</time></div>
+      <div class="rt r"><b>티오프</b><time>14:07</time></div>
+    </div>
+    <div class="alert"><span>12:10에 출발 알림을 보내드릴게요</span><b>10분 전</b></div>
+    <div class="minirow">
+      <div class="mini"><span>백대기 <small>티오프 50분 전</small></span><b>13:17</b></div>
+      <div class="mini"><span>티오프</span><b>14:07<small> OUT</small></b></div>
+      
     </div>
   </div>
+</section>
+  <p class="smpnote">근무 카드 바로 위, 화면 폭을 다 씁니다. 색이 차 있어 <b>지나칠 수가 없습니다.</b>
+  그래도 제목('오늘 근무 확정')보다 아래라 주인공 자리는 안 뺏습니다.</p>
 
-  <!-- 성장 공간(업적) — ★스크립트보다 앞에 둔다.
-       app.js는 여기서 바로 실행되므로, 마크업이 뒤에 있으면 initGrowth가 화면을 못 찾는다. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-  <linearGradient id="lite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".74"/><stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-  <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".4"/></linearGradient>
-  <radialGradient id="spec" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="auraV" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#7b6cff" stop-opacity=".5"/><stop offset=".55" stop-color="#7b6cff" stop-opacity=".12"/><stop offset="1" stop-color="#7b6cff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="auraM" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#e25cc4" stop-opacity=".5"/><stop offset=".55" stop-color="#a25cff" stop-opacity=".14"/><stop offset="1" stop-color="#a25cff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="auraC" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#4ac6ff" stop-opacity=".5"/><stop offset=".55" stop-color="#4ac6ff" stop-opacity=".13"/><stop offset="1" stop-color="#4ac6ff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="orbBody" cx=".38" cy=".3" r=".86"><stop offset="0" stop-color="#f2f8ff"/><stop offset=".22" stop-color="#a9d4ff"/><stop offset=".55" stop-color="#5b6ee6"/><stop offset=".82" stop-color="#3a2f9e"/><stop offset="1" stop-color="#231a5c"/></radialGradient>
-  <linearGradient id="irid" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ff0e0"/><stop offset=".5" stop-color="#b58cff"/><stop offset="1" stop-color="#ff9ecb"/></linearGradient>
-  <radialGradient id="flashG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity="1"/><stop offset=".38" stop-color="#c3d6ff" stop-opacity=".75"/><stop offset="1" stop-color="#8f80ff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="pglowG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset=".45" stop-color="#d3e2ff" stop-opacity=".4"/><stop offset="1" stop-color="#bcd0ff" stop-opacity="0"/></radialGradient>
-  <linearGradient id="shineG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-  <clipPath id="dsShineClip"><path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z"/><path d="M23 27h2v14h-2z"/><path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z"/><ellipse cx="24" cy="46.5" rx="9" ry="2.3"/></clipPath>
-  <radialGradient id="galNeb" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff0cf" stop-opacity=".9"/><stop offset=".3" stop-color="#ff8fce" stop-opacity=".85"/><stop offset=".62" stop-color="#9a5cff" stop-opacity=".6"/><stop offset="1" stop-color="#2a1c66" stop-opacity="0"/></radialGradient>
-  <linearGradient id="arm" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ff8fce"/></linearGradient>
-  <radialGradient id="galCore" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff9ec9" stop-opacity="0"/></radialGradient>
-  <linearGradient id="tessEdge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ff4ff"/><stop offset=".5" stop-color="#4aa6ff"/><stop offset="1" stop-color="#8a7bff"/></linearGradient>
-  <radialGradient id="tessCore" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#c8fbff" stop-opacity=".9"/><stop offset=".5" stop-color="#4ac6ff" stop-opacity=".45"/><stop offset="1" stop-color="#6a5cff" stop-opacity="0"/></radialGradient>
-  <clipPath id="orbClip"><circle cx="24" cy="16" r="11"/></clipPath>
-  <radialGradient id="sphL" cx=".36" cy=".3" r=".72"><stop offset="0" stop-color="#fff" stop-opacity=".92"/><stop offset=".45" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="sphD" cx=".64" cy=".74" r=".78"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#0a1a30" stop-opacity=".16"/><stop offset="1" stop-color="#0a1a30" stop-opacity=".55"/></radialGradient>
-  <radialGradient id="cosmo" cx=".5" cy=".5" r=".55"><stop offset="0" stop-color="#bfe0ff" stop-opacity="0"/><stop offset=".68" stop-color="#7fb0e0" stop-opacity=".05"/><stop offset="1" stop-color="#3f6db0" stop-opacity=".3"/></radialGradient>
+  <div class="smphd"><em>마</em>카드가 통째로 당번 옷</div>
+  <section class="hero smkday">
+  <div class="smkcap"><svg class="smkico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="14.5" width="13" height="4" rx="1.4"/><rect x="16.4" y="14.5" width="2.2" height="4" rx="1"/><rect x="20" y="14.5" width="2" height="4" rx="1"/><path class="wv" d="M8 10.6c2.1-1.1 2.1-2.6 0-3.7S5.9 4.3 8 3.2"/><path class="wv" d="M13 10.6c2.1-1.1 2.1-2.6 0-3.7s-2.1-2.6 0-3.7"/></svg><span>흡연실 당번</span><time>06:00~</time></div>
+  <div class="label">오늘 내 상황</div>
+  <h3 style="font-size:25px;line-height:1.1;letter-spacing:-.045em;margin:8px 0 6px">오늘 근무 확정</h3>
+  <p class="sub">아래 시간에 맞춰 움직이면 됩니다.</p>
 
-  <!-- 챌리스(성배) -->
-  <symbol id="t2" viewBox="0 0 48 60">
-    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="currentColor"/>
-    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="url(#lite)"/>
-    <path d="M15 8H33C33 21 29 27 24 27S15 21 15 8Z" fill="url(#shade)"/>
-    <ellipse cx="24" cy="8" rx="9" ry="2.4" fill="currentColor"/><ellipse cx="24" cy="7.6" rx="9" ry="2" fill="url(#lite)"/>
-    <ellipse cx="20.5" cy="14" rx="2.4" ry="5.2" fill="url(#spec)" transform="rotate(-16 20.5 14)"/>
-    <path d="M23 27h2v14h-2z" fill="currentColor"/><path d="M23 27h2v14h-2z" fill="url(#shade)"/>
-    <ellipse cx="24" cy="33" rx="3.4" ry="2.4" fill="currentColor"/><ellipse cx="24" cy="32.3" rx="3.4" ry="1.6" fill="url(#lite)"/>
-    <path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z" fill="currentColor"/><path d="M17 46c0-3 3.1-5 7-5s7 2 7 5z" fill="url(#lite)"/>
-    <ellipse cx="24" cy="46.5" rx="9" ry="2.3" fill="currentColor"/><ellipse cx="24" cy="46.9" rx="9" ry="1.8" fill="url(#shade)"/>
-  </symbol>
-  <!-- 플래티넘 스탠드 -->
-  <symbol id="stand" viewBox="0 0 48 60">
-    <path d="M20.5 34h7l-1 4h-5z" fill="currentColor"/><path d="M20.5 34h7l-1 4h-5z" fill="url(#shade)"/>
-    <rect x="22.6" y="38" width="2.8" height="5" fill="currentColor"/><rect x="22.6" y="38" width="1.1" height="5" fill="url(#lite)"/>
-    <ellipse cx="24" cy="43" rx="3.3" ry="2.1" fill="currentColor"/><ellipse cx="24" cy="42.4" rx="3.3" ry="1.4" fill="url(#lite)"/>
-    <path d="M17 45h14l2 4H15z" fill="currentColor"/><path d="M17 45h14l2 4H15z" fill="url(#lite)"/>
-    <rect x="12" y="49" width="24" height="5" rx="1.9" fill="currentColor"/><rect x="12" y="51.5" width="24" height="2.5" rx="1" fill="url(#shade)"/>
-  </symbol>
-  <!-- 오브 -->
-  <symbol id="orbSym" viewBox="0 0 48 60">
-    <circle cx="24" cy="16" r="17" fill="url(#auraV)"/>
-    <ellipse cx="24" cy="16" rx="16.5" ry="5" fill="none" stroke="url(#irid)" stroke-width="2" opacity=".4" transform="rotate(-14 24 16)"/>
-    <circle cx="24" cy="16" r="11" fill="url(#orbBody)"/>
-    <circle cx="24" cy="16" r="11" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".65"/>
-    <ellipse cx="20" cy="11.5" rx="3" ry="4.3" fill="url(#spec)" transform="rotate(-20 20 11.5)"/>
-    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="url(#irid)" stroke-width="2.2" transform="rotate(-14 24 16)"/>
-    <g fill="#fff"><circle cx="9" cy="7" r=".8" opacity=".9"/><circle cx="39" cy="9" r=".7" opacity=".8"/><circle cx="37" cy="25" r=".55" opacity=".7"/><circle cx="12" cy="27" r=".5" opacity=".6"/></g>
-  </symbol>
-  <!-- 은하 -->
-  <symbol id="galSym" viewBox="0 0 48 60">
-    <circle cx="24" cy="16" r="18" fill="url(#auraM)"/>
-    <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#galNeb)" transform="rotate(-24 24 16)"/>
-    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
-    <circle cx="24" cy="16" r="4" fill="url(#galCore)"/>
-    <circle cx="24" cy="16" r="1.8" fill="#fff"/>
-    <g fill="#fff"><circle cx="12" cy="8" r=".8" opacity=".9"/><circle cx="37" cy="9" r=".7" opacity=".8"/><circle cx="34" cy="25" r=".6" opacity=".75"/><circle cx="13" cy="25" r=".5" opacity=".65"/><circle cx="24" cy="3.5" r=".6" opacity=".7"/><circle cx="40" cy="17" r=".5" opacity=".6"/></g>
-  </symbol>
-  <!-- 테서랙트 큐브 -->
-  <symbol id="tessSym" viewBox="0 0 48 60">
-    <circle cx="24" cy="16" r="18" fill="url(#auraC)"/>
-    <rect x="18" y="10" width="12" height="12" rx="1" fill="url(#tessCore)"/>
-    <g fill="none" stroke="url(#tessEdge)" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
-      <rect x="10" y="2" width="28" height="28" rx="1.6"/>
-      <rect x="18" y="10" width="12" height="12" rx="1"/>
-      <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
-    </g>
-    <g fill="none" stroke="#e6ffff" stroke-opacity=".55" stroke-width="1" stroke-linejoin="round"><path d="M10 2h28M10 2v28M18 10h12M18 10v12"/></g>
-    <g fill="#eafdff"><circle cx="10" cy="2" r="1.5"/><circle cx="38" cy="2" r="1.5"/><circle cx="10" cy="30" r="1.5"/><circle cx="38" cy="30" r="1.5"/></g>
-  </symbol>
-  <!-- 잠긴 오브(무광 금속) -->
-  <symbol id="orbLock" viewBox="0 0 48 60">
-    <ellipse cx="24" cy="16" rx="16.5" ry="5" fill="none" stroke="currentColor" stroke-width="2" opacity=".5" transform="rotate(-14 24 16)"/>
-    <circle cx="24" cy="16" r="11" fill="currentColor"/>
-    <circle cx="24" cy="16" r="11" fill="url(#sphL)"/>
-    <circle cx="24" cy="16" r="11" fill="url(#cosmo)"/>
-    <circle cx="24" cy="16" r="11" fill="url(#sphD)"/>
-    <ellipse cx="20" cy="11.5" rx="3.1" ry="4.4" fill="url(#spec)" transform="rotate(-20 20 11.5)"/>
-    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="currentColor" stroke-width="2.1" transform="rotate(-14 24 16)"/>
-    <path d="M7.9 14.2A16.5 5 0 0 0 40.1 17.8" fill="none" stroke="url(#lite)" stroke-width="2.1" transform="rotate(-14 24 16)"/>
-  </symbol>
-  <!-- 잠긴 테서랙트 큐브(무광 금속) -->
-  <symbol id="tessLock" viewBox="0 0 48 60">
-    <rect x="18" y="10" width="12" height="12" rx="1" fill="url(#cosmo)"/>
-    <g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
-      <rect x="10" y="2" width="28" height="28" rx="1.5"/>
-      <rect x="18" y="10" width="12" height="12" rx="1"/>
-      <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
-    </g>
-    <g fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" transform="translate(-.6 -.6)">
-      <path d="M10 2h28M10 2v28"/><path d="M18 10h12M18 10v12"/>
-    </g>
-  </symbol>
-  <!-- 잠긴 네뷸라 은하(무광 금속) -->
-  <symbol id="galLock" viewBox="0 0 48 60">
-    <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#cosmo)" transform="rotate(-24 24 16)"/>
-    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#lite)" stroke-width="2.4" stroke-linecap="round"/>
-    <circle cx="24" cy="16" r="3.6" fill="currentColor"/><circle cx="24" cy="16" r="3.6" fill="url(#sphL)"/>
-    <circle cx="24" cy="16" r="2" fill="url(#spec)"/>
-  </symbol>
-  <!-- 티어 명예 메달 그라디언트 -->
-  <radialGradient id="mLo" cx=".33" cy=".27" r=".78"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".55" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="mHi" cx=".72" cy=".8" r=".72"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset=".7" stop-color="#000" stop-opacity=".05"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
-  <radialGradient id="fieldRecess" cx=".5" cy=".42" r=".55"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
-  <radialGradient id="gShade" cx=".62" cy=".68" r=".7"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".6" stop-color="#3c434c" stop-opacity=".3"/><stop offset="1" stop-color="#20262e" stop-opacity=".62"/></radialGradient>
-  <radialGradient id="gPlanet" cx=".38" cy=".32" r=".82"><stop offset="0" stop-color="#cfe6ff"/><stop offset=".4" stop-color="#6f9be6"/><stop offset=".8" stop-color="#3a5aa0"/><stop offset="1" stop-color="#22356e"/></radialGradient>
-  <radialGradient id="gSunGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffdf7a" stop-opacity=".85"/><stop offset=".55" stop-color="#ffb43a" stop-opacity=".2"/><stop offset="1" stop-color="#ffb43a" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gSun" cx=".4" cy=".35" r=".78"><stop offset="0" stop-color="#fff7dc"/><stop offset=".5" stop-color="#ffce4a"/><stop offset="1" stop-color="#ee9326"/></radialGradient>
-  <radialGradient id="gGiantGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff9a5a" stop-opacity=".85"/><stop offset=".55" stop-color="#ff6a3a" stop-opacity=".22"/><stop offset="1" stop-color="#ff6a3a" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gGiant" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffe6bf"/><stop offset=".45" stop-color="#ff9a52"/><stop offset="1" stop-color="#cf3f24"/></radialGradient>
-  <radialGradient id="gNovaGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffe0ec" stop-opacity=".95"/><stop offset=".42" stop-color="#ff7fb0" stop-opacity=".3"/><stop offset="1" stop-color="#c86cff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gClusterGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#dcc4ff" stop-opacity=".6"/><stop offset=".6" stop-color="#9a7fd0" stop-opacity=".16"/><stop offset="1" stop-color="#9a7fd0" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gNeb1" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff8fce" stop-opacity=".9"/><stop offset="1" stop-color="#ff8fce" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gNeb2" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#6f8fff" stop-opacity=".85"/><stop offset="1" stop-color="#6f8fff" stop-opacity="0"/></radialGradient>
-  <radialGradient id="gNeb3" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#b98fff" stop-opacity=".85"/><stop offset="1" stop-color="#b98fff" stop-opacity="0"/></radialGradient>
-  <linearGradient id="apexG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f5f9"/><stop offset=".5" stop-color="#c3ccd6"/><stop offset="1" stop-color="#8f99a5"/></linearGradient>
-  <radialGradient id="apexGlow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#eaf1fa" stop-opacity=".9"/><stop offset=".5" stop-color="#c6d3e4" stop-opacity=".25"/><stop offset="1" stop-color="#c6d3e4" stop-opacity="0"/></radialGradient>
-  <radialGradient id="apexStar" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#e2e9f1"/><stop offset="1" stop-color="#a9b4c0"/></radialGradient>
-  <clipPath id="mfld"><circle cx="28" cy="28" r="15.5"/></clipPath>
-</defs></svg>
-
-<!-- 성장 공간(업적) — 시안 v3에서 기계로 옮긴 화면. 데이터는 /api/trophies. -->
-<div id="growOv" hidden>
-<div class="grow">
-  <div class="tbar">
-    <div class="bk" id="gwBack"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></div>
-    <div><h1>성장 공간</h1><div class="sub" id="gwWho">발자취</div></div>
-  </div>
-
-  <div class="sum">
-    <div class="lvl-head">
-      <div class="lvl-emblem" id="lvlEmblem"></div>
-      <div>
-        <div class="lvl-season">2026 시즌</div>
-        <div class="lvl-rank"><b id="lvlRank">—</b><span class="lv" id="lvlNo">—</span></div>
-      </div>
+  <div class="actionboard">
+    
+    <div class="actiontop"><b>다음 행동 · 집에서 출발 준비</b><span class="clock">현재 11:42</span></div>
+    <div class="nextline"><strong>12:20</strong><span>출발까지 38분</span></div>
+    <div class="rail2">
+      <i class="track"></i><i class="fill" style="width:0%"></i>
+      <i class="rp next" style="left:0"></i><i class="rp" style="left:50%"></i><i class="rp" style="left:100%"></i>
     </div>
-    <div class="lvl-stats">
-      <div class="st-l"><div class="st-pct" id="lvlPct">0%</div><div class="st-lb">다음 티어까지</div></div>
-      <div class="st-r"><div class="st-num" id="lvlGot">0</div><div class="st-lb">획득 트로피</div></div>
+    <div class="railtext3">
+      <div class="rt l next"><b>출발</b><time>12:20</time></div>
+      <div class="rt c"><b>도착</b><time>13:07</time></div>
+      <div class="rt r"><b>티오프</b><time>14:07</time></div>
     </div>
-    <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
-    <div class="xp-cap"><span id="xpNums">0 XP</span><span id="xpNext"></span></div>
-    <div class="sum-div"></div>
-    <div class="sum-cups">
-      <div class="sum-cup"><div class="slot"><span class="mc plat"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupPlat">0</b><span>플래티넘</span></div>
-      <div class="sum-cup"><div class="slot"><span class="mc gold"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupGold">0</b><span>골드</span></div>
-      <div class="sum-cup"><div class="slot"><span class="mc silver"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupSilver">0</b><span>실버</span></div>
-      <div class="sum-cup"><div class="slot"><span class="mc bronze"><svg class="cup" viewBox="0 0 48 60"><use href="#t2"/></svg></span></div><b id="cupBronze">0</b><span>브론즈</span></div>
+    <div class="alert"><span>12:10에 출발 알림을 보내드릴게요</span><b>10분 전</b></div>
+    <div class="minirow">
+      <div class="mini"><span>백대기 <small>티오프 50분 전</small></span><b>13:17</b></div>
+      <div class="mini"><span>티오프</span><b>14:07<small> OUT</small></b></div>
+      
     </div>
   </div>
+</section>
+  <p class="smpnote">왼쪽에 굵은 주황 띠가 서고 머리에 한 줄. <b>'오늘은 당번인 날'</b>이라고 카드 전체가 말합니다.
+  라보다 차분하지만 카드를 스치듯 봐도 색이 먼저 들어옵니다.</p>
 
-  <!-- 명예의 전당 — 개별 대형 스테이지 -->
-  <div class="shd"><div class="l"><span class="t">명예의 전당</span></div><span class="c" id="gwHallCnt"></span></div>
-  <div class="hall-tl">한 해, 리버힐 캐디 중 <b style="color:#7a5cff">단 한 분</b>께만 — 그 해의 정점에게 바치는 트로피.</div>
+  <div class="smphd"><em>바</em>근무 판 머리에 얹기</div>
+  <section class="hero">
+  <div class="label">오늘 내 상황</div>
+  <h3 style="font-size:25px;line-height:1.1;letter-spacing:-.045em;margin:8px 0 6px">오늘 근무 확정</h3>
+  <p class="sub">아래 시간에 맞춰 움직이면 됩니다.</p>
 
-  <div class="stage sh-v">
-    <div class="stars"><i class="starTw" style="left:16%;top:20%"></i><i class="starTw" style="left:74%;top:16%;animation-delay:.6s"></i><i class="starTw" style="left:40%;top:11%;animation-delay:1.2s"></i><i class="starTw" style="left:86%;top:46%;animation-delay:.3s"></i><i class="starTw" style="left:12%;top:54%;animation-delay:.9s"></i><i class="starTw" style="left:60%;top:64%;animation-delay:1.5s"></i></div>
-    <div class="sh-glow sh-glowB"></div>
-    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
-    <div class="sh-trophy aura-v"><svg viewBox="0 -13 48 75">
-      <use href="#stand" style="color:#aab4bd" transform="translate(0 -6)"/>
-      <g class="floaty">
-        <g class="throb">
-          <circle cx="24" cy="16" r="17" fill="url(#auraV)"/>
-          <g transform="rotate(-12 24 16)"><ellipse cx="24" cy="16" rx="17" ry="5.4" fill="none" stroke="url(#irid)" stroke-width="2" opacity=".3"/></g>
-          <circle cx="24" cy="16" r="11" fill="url(#orbBody)"/>
-          <circle cx="24" cy="16" r="11" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".6"/>
-          <ellipse cx="20" cy="11.5" rx="3" ry="4.3" fill="url(#spec)"/>
-          <g transform="rotate(-12 24 16)">
-            <ellipse cx="24" cy="16" rx="17" ry="5.4" fill="none" stroke="url(#irid)" stroke-width="2.4" opacity=".8"/>
-            <ellipse cx="24" cy="16" rx="13.4" ry="4.1" fill="none" stroke="url(#irid)" stroke-width="1.1" opacity=".45"/>
-          </g>
-          <circle class="flash" cx="24" cy="16" r="15" fill="url(#flashG)" opacity="0"/>
-        </g>
-        <g>
-          <g class="pcl-a" style="--tx:20px;--ty:0px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:17.3px;--ty:10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:10px;--ty:17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:0px;--ty:20px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-a" style="--tx:-10px;--ty:17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:-17.3px;--ty:10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:-20px;--ty:0px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:-17.3px;--ty:-10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-a" style="--tx:-10px;--ty:-17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:0px;--ty:-20px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:10px;--ty:-17.3px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:17.3px;--ty:-10px"><circle cx="24" cy="16" r="1.3" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".5" fill="#fff"/></g>
-          <g class="pcl-a" style="--tx:11.6px;--ty:3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:8.5px;--ty:8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:3.1px;--ty:11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:-3.1px;--ty:11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-a" style="--tx:-8.5px;--ty:8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:-11.6px;--ty:3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:-11.6px;--ty:-3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:-8.5px;--ty:-8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-a" style="--tx:-3.1px;--ty:-11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-b" style="--tx:3.1px;--ty:-11.6px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-c" style="--tx:8.5px;--ty:-8.5px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-          <g class="pcl-d" style="--tx:11.6px;--ty:-3.1px"><circle cx="24" cy="16" r="1.05" fill="url(#pglowG)"/><circle cx="24" cy="16" r=".42" fill="#fff"/></g>
-        </g>
-      </g>
-    </svg></div>
-    <div class="sh-name">코스믹 오브</div>
-    <div class="sh-poem">언젠가 닿을, 가장 먼 별</div>
-    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
+  <div class="actionboard smkhd">
+    <div class="smkrow"><svg class="smkico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="14.5" width="13" height="4" rx="1.4"/><rect x="16.4" y="14.5" width="2.2" height="4" rx="1"/><rect x="20" y="14.5" width="2" height="4" rx="1"/><path class="wv" d="M8 10.6c2.1-1.1 2.1-2.6 0-3.7S5.9 4.3 8 3.2"/><path class="wv" d="M13 10.6c2.1-1.1 2.1-2.6 0-3.7s-2.1-2.6 0-3.7"/></svg><span>흡연실 당번</span><span class="sp">06:00~</span></div>
+    <div class="actiontop"><b>다음 행동 · 집에서 출발 준비</b><span class="clock">현재 11:42</span></div>
+    <div class="nextline"><strong>12:20</strong><span>출발까지 38분</span></div>
+    <div class="rail2">
+      <i class="track"></i><i class="fill" style="width:0%"></i>
+      <i class="rp next" style="left:0"></i><i class="rp" style="left:50%"></i><i class="rp" style="left:100%"></i>
+    </div>
+    <div class="railtext3">
+      <div class="rt l next"><b>출발</b><time>12:20</time></div>
+      <div class="rt c"><b>도착</b><time>13:07</time></div>
+      <div class="rt r"><b>티오프</b><time>14:07</time></div>
+    </div>
+    <div class="alert"><span>12:10에 출발 알림을 보내드릴게요</span><b>10분 전</b></div>
+    <div class="minirow">
+      <div class="mini"><span>백대기 <small>티오프 50분 전</small></span><b>13:17</b></div>
+      <div class="mini"><span>티오프</span><b>14:07<small> OUT</small></b></div>
+      
+    </div>
   </div>
-
-  <div class="stage sh-m">
-    <div class="stars"><i style="left:20%;top:18%"></i><i style="left:64%;top:14%"></i><i style="left:44%;top:9%"></i><i style="left:82%;top:50%"></i><i style="left:14%;top:60%"></i></div>
-    <div class="sh-glow"></div>
-    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
-    <div class="sh-trophy aura-m"><svg viewBox="0 0 48 60">
-      <use href="#stand" style="color:#aab4bd"/>
-      <circle cx="24" cy="16" r="18" fill="url(#auraM)"/>
-      <!-- 정지한 성운 -->
-      <ellipse cx="24" cy="16" rx="16" ry="8" fill="url(#galNeb)" transform="rotate(-24 24 16)"/>
-      <!-- 나선팔: 전체가 왔다갔다 흔들리고, 팔 안으로 하얀 빛이 한 번씩 지나감 -->
-      <g class="galSway">
-        <path d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
-        <path d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" fill="none" stroke="url(#arm)" stroke-width="2.4" stroke-linecap="round"/>
-        <path class="armLight" d="M24 16C30 9 37 13 35 20 33.5 25.5 27 25 24 16" pathLength="100" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-dasharray="15 85" stroke-linecap="round" opacity=".9"/>
-        <path class="armLight" d="M24 16C18 23 11 19 13 12 14.5 6.5 21 7 24 16" pathLength="100" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-dasharray="15 85" stroke-linecap="round" opacity=".9"/>
-      </g>
-      <!-- 정지한 핵 -->
-      <circle cx="24" cy="16" r="4" fill="url(#galCore)"/>
-      <circle cx="24" cy="16" r="1.8" fill="#fff"/>
-      <g fill="#fff"><circle cx="12" cy="8" r=".8" opacity=".9"/><circle cx="37" cy="9" r=".7" opacity=".8"/><circle cx="34" cy="25" r=".6" opacity=".75"/><circle cx="13" cy="25" r=".5" opacity=".65"/><circle cx="24" cy="3.5" r=".6" opacity=".7"/><circle cx="40" cy="17" r=".5" opacity=".6"/></g>
-    </svg></div>
-    <div class="sh-name">네뷸라 은하</div>
-    <div class="sh-poem">한 해를 온전히 기록한 이에게</div>
-    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
-  </div>
-
-  <div class="stage sh-c">
-    <div class="stars"><i style="left:18%;top:22%"></i><i style="left:70%;top:15%"></i><i style="left:38%;top:10%"></i><i style="left:88%;top:48%"></i><i style="left:11%;top:56%"></i></div>
-    <div class="sh-glow"></div>
-    <div class="sh-badge"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>올해 단 1인</div>
-    <div class="sh-trophy aura-c"><svg viewBox="0 0 48 60">
-      <use href="#stand" style="color:#aab4bd"/>
-      <circle cx="24" cy="16" r="18" fill="url(#auraC)"/>
-      <rect class="cubeCore" x="18" y="10" width="12" height="12" rx="1" fill="url(#tessCore)"/>
-      <g fill="none" stroke="url(#tessEdge)" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round">
-        <rect x="10" y="2" width="28" height="28" rx="1.6"/>
-        <rect class="cubeInner" x="18" y="10" width="12" height="12" rx="1"/>
-        <path d="M10 2l8 8M38 2l-8 8M10 30l8-8M38 30l-8-8"/>
-      </g>
-      <rect class="cubeEmerge" x="14" y="6" width="20" height="20" rx="1.4" fill="none" stroke="url(#tessEdge)" stroke-width="1.4"/>
-      <g fill="none" stroke="#e6ffff" stroke-opacity=".55" stroke-width="1" stroke-linejoin="round"><path d="M10 2h28M10 2v28M18 10h12M18 10v12"/></g>
-      <g fill="#eafdff"><circle cx="10" cy="2" r="1.5"/><circle cx="38" cy="2" r="1.5"/><circle cx="10" cy="30" r="1.5"/><circle cx="38" cy="30" r="1.5"/></g>
-    </svg></div>
-    <div class="sh-name">테서랙트 큐브</div>
-    <div class="sh-poem">쌓아 올린 라운드의 탑</div>
-    <div class="sh-plaque"><b class="gwYear">2026</b> 수상 기준을 준비하고 있어요</div>
-  </div>
-
-  <div class="hall-note">받은 해의 영광은 영원히 남고, 새해엔 다시 새 주인을 찾습니다.<br>한 분이 여러 종을 품을 수도 있어요.</div>
-
-  <!-- 트로피 (필터 + 획득/미획득 분리, 각 10개씩 더보기) -->
-  <div class="shd"><div class="l"><span class="t">트로피</span></div><span class="c" id="totCount"></span></div>
-  <div class="filterbar">
-    <button class="fchip on" data-f="all">전체</button>
-    <button class="fchip" data-f="platinum">플래티넘</button>
-    <button class="fchip" data-f="gold">골드</button>
-    <button class="fchip" data-f="silver">실버</button>
-    <button class="fchip" data-f="bronze">브론즈</button>
-    <button class="fchip" data-f="hidden">히든</button>
-  </div>
-
-  <div class="grpHd" id="gotHd">획득한 트로피 <span id="gotCnt"></span></div>
-  <div class="list" id="gotList"></div>
-  <button class="morebtn" id="gotMore"></button>
-
-  <div class="grpHd" id="lockHd">미획득 트로피 <span id="lockCnt"></span></div>
-  <div class="list" id="lockList"></div>
-  <button class="morebtn" id="lockMore"></button>
-
-  <div class="foot">획득한 업적은 사라지지 않고 이 공간에 남아,<br>당신이 걸어온 계절을 오래 비춰줍니다.</div>
+</section>
+  <p class="smpnote">근무 판 위에 주황 줄을 긋고 그 안에 한 줄. <b>당번과 근무가 한 몸</b>으로 읽힙니다.
+  히어로 글은 하나도 안 건드립니다.</p>
 </div>
-
-<!-- 업적 상세 바텀시트 -->
-<div class="dsheet-ov" id="dsOv">
-  <div class="dsheet" id="dsSheet">
-    <div class="ds-hero" id="dsHero">
-      <div class="ds-grip"></div>
-      <div class="ds-date" id="dsDate"></div>
-      <div class="ds-cupwrap">
-        <div class="ds-spot" id="dsSpot"></div>
-        <div class="ds-spk" id="dsSpk">
-          <svg style="left:14%;top:20%" width="15" height="15" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-          <svg style="right:16%;top:28%;animation-delay:.5s" width="11" height="11" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-          <svg style="left:22%;bottom:16%;animation-delay:1s" width="10" height="10" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-          <svg style="right:20%;bottom:22%;animation-delay:1.4s" width="13" height="13" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-        </div>
-        <div class="ds-cup" id="dsCup"></div>
-      </div>
-      <span class="ds-ribbon" id="dsRibbon"></span>
-      <div class="ds-name" id="dsName"></div>
-    </div>
-    <div class="ds-body">
-      <div class="ds-sec"><div class="k">달성 조건</div><div class="v" id="dsCond"></div></div>
-      <div class="ds-sec" id="dsXpSec"><div class="k">획득 경험치</div><div class="v" id="dsXp"></div></div>
-      <div class="ds-sec" id="dsMsgSec"><div class="k">달성 메시지</div><div class="ds-msg" id="dsMsg"></div></div>
-      <button class="ds-close" id="dsClose">닫기</button>
-    </div>
-  </div>
-</div>
-
-<!-- 플래티넘 · 명예의 전당 상세(우주 대형 시트) -->
-<div class="plat-ov" id="platOv">
-  <div class="plat-sheet" id="platSheet">
-    <div class="plat-stars" id="platStars"></div>
-    <div class="plat-vig"></div>
-    <div class="pl-x" id="platX"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
-    <div class="plat-scroll">
-      <div class="pl-grip"></div>
-      <div class="pl-eyebrow">명예의 전당 <span class="sep"></span> 연간 단 한 분</div>
-      <div class="pl-status" id="platStatus"></div>
-      <div class="pl-stage">
-        <div class="pl-halo" id="platHalo"></div>
-        <div class="pl-ring r2"></div>
-        <div class="pl-ring"></div>
-        <div class="pl-plinth"></div>
-        <div class="pl-trophy locked" id="platTrophy"></div>
-      </div>
-      <span class="pl-ribbon">플래티넘 스페셜</span>
-      <div class="pl-name" id="platName"></div>
-      <div class="pl-tag" id="platTag"></div>
-      <div class="pl-hero-line" id="platHero"></div>
-      <div class="pl-roulette">
-        <div class="k">올해의 주인공</div>
-        <div class="who">수상 기준을 준비하고 있어요</div>
-        <div class="sub">한 해가 저무는 날, 리버힐 캐디 중 단 한 분의 이름이 이 자리에 새겨져요.</div>
-      </div>
-      <div class="pl-sec"><div class="k">수여 기준</div><div class="v pl-cond" id="platCond"></div></div>
-      <div class="pl-sec"><div class="k">이 트로피에 대하여</div><div class="v" id="platAbout"></div></div>
-      <button class="pl-close" id="platClose">닫기</button>
-    </div>
-  </div>
-</div>
-</div>
-
-<div id="gwToastHost" hidden>
-  <div class="toast-scene">
-    <div class="toast">
-      <div class="glow"></div>
-      <svg class="spk" style="left:24px;top:28px" width="14" height="14" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-      <svg class="spk" style="right:28px;top:54px;animation-delay:.6s" width="10" height="10" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-      <svg class="spk" style="left:42px;bottom:84px;animation-delay:1.1s" width="9" height="9" viewBox="0 0 24 24"><path d="M12 2l1.6 7.4L21 11l-7.4 1.6L12 20l-1.6-7.4L3 11l7.4-1.6z" fill="currentColor"/></svg>
-      <div class="t-eyebrow" id="gwTEyebrow">새 트로피</div>
-      <div class="t-cup"></div>
-      <div><span class="t-ribbon"></span></div>
-      <div class="t-name"></div>
-      <div class="t-xp"></div>
-      <div class="t-msg"></div>
-      <!-- 같이 열린 나머지 — 대표 하나만 보여주고 끝내면 "다른 건 어디 갔지?"가 된다. -->
-      <div class="t-also" id="gwAlso" hidden></div>
-      <button class="t-btn">확인</button>
-      <div class="t-more">성장 공간에서 모든 발자취를 볼 수 있어요</div>
-    </div>
-  </div>
-</div>
-
-  <script src="/html2pdf.bundle.min.js"></script>
-  <script src="/app.js"></script>
-
-</body>
-</html>
+</body></html>

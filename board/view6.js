@@ -2489,9 +2489,39 @@ document.addEventListener('click', function(e){
 $('btnUndo').addEventListener('click', undo);
 $('btnRedo').addEventListener('click', redo);
 $('btnSave').addEventListener('click', daySave);
+// ★저장이 곧 반영이다. 서버가 저장을 받아 두었다가 조용해지면 앱으로 보낸다 —
+//   사람이 한 번 더 누를 일이 없다. 그래서 이 단추는 '보내라'가 아니라
+//   '갔나 안 갔나'를 보여 주는 자리다. 조용히 안 가고 있는 것이 제일 나쁘다
 $('btnApply').addEventListener('click', function(){
-  alert('데모입니다 — 실제로는 여기서 캐디 앱에 반영되고, 바뀐 사람에게만 알림이 갑니다.');
+  if (!srvOn()){
+    openSheet2('앱 반영', '이 화면은 <b>서버 없이</b> 열렸습니다 — 저장본이 브라우저 안에만 있어 앱으로 가지 않습니다.');
+    return;
+  }
+  srvReq('GET', 'ok', null, function(st, o){
+    if (st !== 200 || !o || !o.ok){
+      openSheet2('앱 반영', '서버에 물어보지 못했습니다. 잠시 뒤 다시 눌러 보십시오.');
+      return;
+    }
+    var a = o.app;
+    var h = '<div class="dnote" style="margin:0 0 12px">저장을 누르면 <b>' + (o.wait || 20) + '초쯤 뒤</b> 앱으로 저절로 갑니다 — '
+      + '따로 누를 것이 없습니다. 짜다 여러 번 저장해도 <b>마지막 것 한 번만</b> 갑니다.</div>';
+    if (!a) h += '<div class="grp"><h4>지금</h4><div class="dnote">이 서버는 앱과 <b>안 이어져 있습니다.</b></div></div>';
+    else if (!a.day) h += '<div class="grp"><h4>지금</h4><div class="dnote">' + esc(a.note || '아직 보낸 적 없습니다') + '</div></div>';
+    else h += '<div class="grp"><h4>마지막으로 보낸 것</h4><div class="dnote">'
+      + '<b>' + esc(dayLabel(a.day)) + '</b> · ' + (a.ok ? '갔습니다 ◎' : '<b style="color:#a33b3b">못 갔습니다</b>')
+      + '<br>' + esc(a.note || '') + '<br>' + esc(isoHM(a.at) || '') + '</div></div>';
+    openSheet2('앱 반영', h);
+  });
 });
+// 글 한 장만 보여 주는 작은 창 — 이 단추 말고는 쓸 데가 없어 여기 둔다
+function openSheet2(title, html){
+  sheetFor = { kind: 'note' };
+  $('sheet').innerHTML = '<div class="grab"></div><div class="k">경기과 배치표</div>'
+    + '<div class="st">' + esc(title) + '</div>' + html
+    + '<button class="close" data-act="close">닫기</button>';
+  $('scrim').classList.add('on');
+  $('sheet').classList.add('on');
+}
 // 찾기·거르기만 하는 칸 — 여기 친 글자는 배치표에 아무 자국도 안 남긴다
 var FINDBOX = { findQ: 1, wkQ: 1, pkQ: 1, insQ: 1 };
 function isFindBox(el){ return !!(el && FINDBOX[el.id]); }
