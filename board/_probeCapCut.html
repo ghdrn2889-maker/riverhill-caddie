@@ -1,0 +1,107 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function spareRows(p){ return Math.max(0, active(p).length - p.tees.length); }
+  function drawnRows(p){ return Math.max(spareRows(p), spareCap(p.key)); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    var pk='1', p=part(pk);
+    var wl = workLastNo(p);
+    L('1부 팀 수', p.tees.length + '팀 · 근무 마지막 순번 ' + wl + '번');
+
+    L('','★갑. 대기를 크게 깔았다가 줄인다 — 사람 없이 빈 자리만');
+    setCapNo(pk, wl+10);
+    L('  깔기 ' + (wl+10) + '번까지', '한도 ' + spareCap(pk) + ' · 줄 ' + drawnRows(p) + ' · 끝번 ' + spareLastNo(p));
+    setCapNo(pk, wl+5);
+    ok(spareCap(pk)===5, '  ' + (wl+5) + '번까지로 줄임 · 한도', spareCap(pk));
+    ok(spareLastNo(p)===wl+5, '  글자(끝번)', spareLastNo(p) + '번까지');
+    ok(drawnRows(p)===5, '  ★실제 그려지는 대기 줄', drawnRows(p) + '줄 (5여야 함)');
+
+    L('','★을. 대기에 사람을 세운 뒤 줄인다 — 사람은 못 없앤다');
+    setCapNo(pk, wl+10);
+    var pool = JONAMES.filter(function(n){ return !partsOf(n).length; });
+    var put = [];
+    for (var i=0;i<7 && i<pool.length;i++){ addRow(pk, pool[i]); put.push(pool[i]); }
+    p = part(pk);
+    L('  대기에 세운 사람', put.length + '명 · 대기 인원 ' + spareNow(p) + ' · 줄 ' + drawnRows(p));
+    setCapNo(pk, wl+5);
+    p = part(pk);
+    var stillIn = put.filter(function(n){ return partsOf(n).indexOf(pk)>=0; }).length;
+    ok(stillIn===put.length, '  세운 사람은 한 명도 안 사라진다', stillIn + '/' + put.length + '명 그대로');
+    L('  줄인 뒤 줄', drawnRows(p) + '줄 · 한도 ' + spareCap(pk) + ' · 대기 인원 ' + spareNow(p));
+    ok(drawnRows(p) === Math.max(spareCap(pk), spareNow(p)),
+       '  남는 줄은 서 있는 사람 수만큼만', drawnRows(p) + '줄');
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★병. 되돌리기 한 번이면 그대로 돌아온다');
+    var before = drawnRows(p);
+    undo();
+    p = part(pk);
+    ok(spareCap(pk)===10, '  한도 되돌아옴', spareCap(pk));
+    L('  줄', drawnRows(p) + '줄');
+
+    L('','★정. 제한 없앰 — 빈 줄은 다 걷고 사람만 남는다');
+    setCapNo(pk, 0);
+    p = part(pk);
+    ok(spareCap(pk)===0, '  한도', spareCap(pk) + ' (0=제한 없음)');
+    ok(spareRows(p)===spareNow(p), '  줄 = 서 있는 사람', spareRows(p) + '줄 · ' + spareNow(p) + '명');
+
+    L('','★기. 한도보다 사람이 많을 때 — 사람 줄은 남기고 말해 준다');
+    setCapNo(pk, wl+1);
+    p = part(pk);
+    L('  ' + (wl+1) + '번까지로 줄임', '한도 ' + spareCap(pk) + ' · 대기 인원 ' + spareNow(p) + ' · 줄 ' + drawnRows(p));
+    ok(drawnRows(p) === spareNow(p), '  서 있는 사람은 그대로 서 있다', drawnRows(p) + '줄 · ' + spareNow(p) + '명');
+    ok(((LOG[0]||{}).msg||'').indexOf('남습니다') >= 0, '  기록이 남는 줄을 말한다', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★경. 사용자의 그 일 — 50번까지 깔고 사람을 앉혔다가 45번으로 줄인다');
+    DAY.forEach(function(q){ q.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; TAG={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    p = part(pk); wl = workLastNo(p);
+    setCapNo(pk, 50);
+    L('  50번까지 깔기', '한도 ' + spareCap(pk) + ' · 끝번 ' + spareLastNo(p) + ' · 명단 ' + active(p).length + '줄');
+    var who = JONAMES.filter(function(n){ return !partsOf(n).length; })[0];
+    seatPerson(pk, 49, who);                 // 50번 자리에 한 명
+    p = part(pk);
+    L('  50번에 ' + who + ' 앉힘', '명단 ' + active(p).length + '줄 · 대기 줄 ' + spareRows(p) + ' · 그려지는 줄 ' + drawnRows(p));
+    setCapNo(pk, 45);
+    p = part(pk);
+    L('  45번까지로 줄임', '한도 ' + spareCap(pk) + ' · 끝번 ' + spareLastNo(p)
+      + ' · 명단 ' + active(p).length + '줄 · 그려지는 줄 ' + drawnRows(p));
+    ok(active(p).length < 50, '  ★빈 줄이 걷혔다(50줄 → 줄었나)', active(p).length + '줄');
+    ok(partsOf(who).indexOf(pk) >= 0, '  앉힌 사람은 그대로 있다', who + ' → ' + partsOf(who).join(','));
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+
+    L('','★신. 아무도 안 앉았으면 딱 45번까지로 준다');
+    DAY.forEach(function(q){ q.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; TAG={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    p = part(pk); SMAX[pk]=0;
+    setCapNo(pk, 50);
+    seatPerson(pk, 49, JONAMES.filter(function(n){ return !partsOf(n).length; })[0]);
+    p = part(pk);
+    var last = active(p).length - 1;
+    active(p)[last].n = '';                  // 사람을 치우고 깔린 빈 줄만 남긴다
+    trimBlanks(p);
+    p = part(pk);
+    L('  빈 줄만 50번까지', '명단 ' + active(p).length + '줄 · 그려지는 줄 ' + drawnRows(p));
+    setCapNo(pk, 45);
+    p = part(pk);
+    ok(drawnRows(p) === spareCap(pk), '  ★그려지는 대기 줄 = 한도', drawnRows(p) + '줄 · 한도 ' + spareCap(pk));
+    ok(spareLastNo(p) === 45, '  끝번', spareLastNo(p) + '번까지');
+
+    L('','★무. 근무 자리(티오프)는 안 건드린다');
+    ok(active(part(pk)).length >= part(pk).tees.length, '  근무 자리 수',
+       part(pk).tees.length + '팀 · 명단 ' + active(part(pk)).length + '줄');
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 700);
+</script>

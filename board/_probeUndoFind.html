@@ -1,0 +1,78 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function ctrlZ(el){
+    el.dispatchEvent(new KeyboardEvent('keydown',
+      { key:'z', ctrlKey:true, bubbles:true, cancelable:true }));
+  }
+  function nameAt(){ return (active(part('1'))[0]||{}).n || ''; }
+  function mark(v){ setName('1', 0, v); }        // 한 가지 바꿈 — 되돌리면 원래 이름
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    setView && setView('work'); paint();
+    var orig = nameAt();
+    L('1부 1번', orig);
+
+    L('','★갑. 근무표 찾기 칸 — 커서가 거기 있어도 배치표가 되돌아가야 한다');
+    var wq = document.getElementById('wkQ');
+    ok(!!wq, '  찾기 칸이 있다', wq ? '#wkQ' : '없음');
+    if (wq){
+      mark('바뀐이름갑');
+      wq = document.getElementById('wkQ');
+      wq.focus(); wq.value = '김';
+      wq.dispatchEvent(new Event('input', { bubbles:true }));
+      var n0 = STACK.length;
+      ctrlZ(document.getElementById('wkQ'));
+      ok(STACK.length === n0 - 1, '  ★Ctrl+Z 가 배치표를 되돌렸다', n0 + ' → ' + STACK.length);
+      ok(nameAt() === orig, '  1번 이름이 되돌아갔다', nameAt());
+      var wq2 = document.getElementById('wkQ');
+      ok(wq2 && wq2.value === '김', '  친 검색어는 그대로다', (wq2 ? wq2.value : '(칸 없음)'));
+    }
+
+    L('','★을. 위 찾기 바도 같다');
+    var fq = document.getElementById('findQ');
+    if (!fq) L('  findQ', '(없음)');
+    else {
+      mark('바뀐이름을');
+      var n1 = STACK.length;
+      fq.focus(); fq.value = '김';
+      ctrlZ(fq);
+      ok(STACK.length === n1 - 1, '  #findQ 에서 Ctrl+Z', n1 + ' → ' + STACK.length);
+      ok(nameAt() === orig, '  이름 되돌아감', nameAt());
+    }
+
+    L('','★병. 진짜로 글자를 치는 칸은 손대지 않는다 — 글자 되돌리기가 먼저다');
+    openCell('1', 0);
+    var nameBox = document.getElementById('shName');
+    ok(!!nameBox, '  칸 창의 이름 칸', nameBox ? '#shName' : '없음(창 안 열림)');
+    if (nameBox){
+      mark('바뀐이름병');
+      openCell('1', 0);
+      nameBox = document.getElementById('shName');
+      var n2 = STACK.length, v2 = nameAt();
+      nameBox.focus();
+      ctrlZ(nameBox);
+      ok(STACK.length === n2, '  ★배치표는 안 건드린다', n2 + ' → ' + STACK.length);
+      ok(nameAt() === v2, '  이름 그대로', nameAt());
+      undo();                                   // 뒷정리
+    }
+    closeSheet();
+
+    L('','★정. 아무 칸에도 커서가 없을 때는 여태처럼');
+    mark('바뀐이름정');
+    var n3 = STACK.length;
+    ctrlZ(document.body);
+    ok(STACK.length === n3 - 1, '  본문에서 Ctrl+Z', n3 + ' → ' + STACK.length);
+    ok(nameAt() === orig, '  이름 되돌아감', nameAt());
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>

@@ -2598,6 +2598,9 @@ $('btnSave').addEventListener('click', daySave);
 $('btnApply').addEventListener('click', function(){
   alert('데모입니다 — 실제로는 여기서 캐디 앱에 반영되고, 바뀐 사람에게만 알림이 갑니다.');
 });
+// 찾기·거르기만 하는 칸 — 여기 친 글자는 배치표에 아무 자국도 안 남긴다
+var FINDBOX = { findQ: 1, wkQ: 1, pkQ: 1, insQ: 1 };
+function isFindBox(el){ return !!(el && FINDBOX[el.id]); }
 document.addEventListener('keydown', function(e){
   if (e.key === 'Escape') { if (pickList.length) { pickClear(); paint(); }
     closeSheet(); closeDrawer(); closeCfg(); closeLog(); return; }
@@ -2609,7 +2612,10 @@ document.addEventListener('keydown', function(e){
     return;
   }
   var tag = (e.target && e.target.tagName) || '';
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return;      // 글자 치는 중엔 글자 되돌리기가 먼저다
+  // ★찾기 칸은 '글을 치는 칸'이 아니라 '거르는 칸'이다 — 거기서의 되돌리기는
+  //   친 글자를 지우는 것이 아니라 배치표를 되돌리는 것이어야 한다.
+  //   한꺼번에 바꾸기는 커서를 찾기 칸에 두고 시작하므로 특히 그렇다
+  if ((tag === 'INPUT' || tag === 'TEXTAREA') && !isFindBox(e.target)) return;      // 글자 치는 중엔 글자 되돌리기가 먼저다
   if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'z'){
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
@@ -2674,14 +2680,28 @@ function setGap(v){ v = Math.max(3, Math.min(20, Number(v) || GAP));
   cfgChange('티오프 간격 ' + GAP + '분 → ' + v + '분', function(){ GAP = v; }); }
 function setRows(v){ v = Math.max(4, Math.min(40, Number(v) || ROWS));
   cfgChange('격자 줄 수 ' + ROWS + ' → ' + v, function(){ ROWS = v; }); }
+// ★한도를 줄이면 깔아 둔 자리도 같이 줄어야 한다 — 글자만 바뀌고 칸이 50번까지
+//   그대로 서 있으면 줄인 것이 아니다. 사람이 안 선 빈 줄은 여기서 걷는다.
+//   사람이 선 줄은 못 걷는다 — 몇 줄이 남는지 미리 세어 말해 준다
+function capLeftOver(p, v){
+  var a = active(p), keep = p.tees.length + v, left = 0;
+  for (var i = keep; i < a.length; i++) if (a[i].n || a[i].itn) left++;
+  return left;
+}
 // ★대기는 '몇 번 순번까지'로 정한다 — 0이면 제한 없음
 function setCapNo(pk, no){
   var p = part(pk), was = spareLastNo(p);
   var v = setSpareLastNo(p, no);
   if (spareCap(pk) === v) return;
+  var nowNo = v ? workLastNo(p) + v : 0;
+  var left = v ? capLeftOver(p, v) : 0;
   cfgChange(p.name + ' 대기 ' + (was ? was + '번까지' : '제한 없음')
-    + ' → ' + (v ? (workLastNo(p) + v) + '번까지' : '제한 없음')
-    + ' · 순번 세우기가 여기서 끊습니다', function(){ SMAX[pk] = v; });
+    + ' → ' + (v ? nowNo + '번까지' : '제한 없음')
+    + ' · 순번 세우기가 여기서 끊습니다'
+    + (left ? ' · 한도 뒤에 ' + left + '명이 서 있어 그 줄은 남습니다' : ''), function(){
+    SMAX[pk] = v;
+    trimBlanks(p);                     // 빈 줄까지 걷어야 자리가 정말 줄어든다
+  });
 }
 function setStart(pk, v){ var p = part(pk);
   cfgChange(p.name + ' 시작 ' + p.start + ' → ' + v, function(){ p.start = v; }); }
