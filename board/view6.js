@@ -1198,27 +1198,15 @@ function bu3Grp(nm){
 // 그날의 구분 — 조출·후출 같은 것. 늘 같은 자리에 같은 수의 칸이 있다
 function dayTagGrp(nm){
   // ★'3부'와 '선발'은 여기 것이 아니다 — 소속 칸과 선발 고르개가 따로 말한다
-  var t0 = dayMark(nm), isA = isAbs(tagOf(nm));
-  var mine = DAYTAGS.indexOf(t0) >= 0;
-  return '<div class="grp"><h4>그날의 구분</h4>'
+  // ★밑에 풀어 적지 않는다 — 못 붙이는 까닭(휴무 중이다 · 선발이다)은
+  //   누르는 그 순간 기계가 말해 준다. 미리 적어 두면 늘 떠 있는 군더더기다
+  var t0 = dayMark(nm);
+  return '<div class="grp"><h4>상태 변경</h4>'
     + '<div class="acts fix" style="grid-template-columns:repeat(4,minmax(0,1fr))">'
     + '<button data-dtag=""' + (!t0 ? ' class="on"' : '') + '>없음</button>'
     + DAYTAGS.map(function(t){
         return '<button data-dtag="' + esc(t) + '"' + (t0 === t ? ' class="on"' : '') + '>'
           + t + '</button>'; }).join('')
-    + '</div><div class="dnote">'
-    + (t0 === '찾근'
-       ? '<b>찾근</b>은 본인이 <b>원하는 순번을 골라 옵니다</b> — 자유 이용권입니다. '
-         + '그래서 순번 세우기가 안 세우고 배치표 자리에서도 내려와 있습니다. '
-         + '고른 칸을 열어 이름을 치거나, 그 칸 후보 목록 맨 위에서 고르십시오.<br>'
-       : '')
-    + (isA ? '지금은 <b>' + esc(tagOf(nm)) + '</b>입니다 — 구분을 붙이려면 아래에서 <b>근무</b>로 되돌리십시오.'
-           : (mine || !t0
-              ? '붙이면 <b>순번 세우기에서 빠지고 배치표 자리에서도 내려옵니다</b> '
-                + '— 어디에 놓을지는 사람이 정합니다. 같은 것을 다시 누르면 떼고, '
-                + '떼면 있던 부의 <b>대기 뒤로</b> 돌아옵니다.'
-              : '지금은 <b>' + esc(t0) + '</b>입니다. 다른 것을 누르면 <b>덮어씁니다</b> '
-                + '— 되돌리기 한 번으로 돌아옵니다.'))
     + '</div></div>';
 }
 // ★그날의 구분과 근태는 한 칸(TAG)을 나눠 쓴다 — 그래서 화면에서도 한 묶음이다.

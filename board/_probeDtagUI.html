@@ -1,0 +1,56 @@
+<div id="PROBE"></div>
+<script>
+var E=[]; window.addEventListener('error',function(e){E.push(e.message+' @'+e.lineno);});
+setTimeout(function(){
+  var o=[]; function L(k,v){ o.push(k+': '+v); }
+  function ok(c,k,v){ o.push((c?'◎ ':'✗ ')+k+': '+v); }
+  function sh(){ return document.getElementById('sheet'); }
+  try{
+    localStorage.clear(); resetToBoard(); DATE=BOARD.date;
+    savedSig=null; PENDING=null; CAUGHT=null; STACK=[]; REDO=[]; LOG=[];
+    bootLoad(); caughtSeen();
+    DAY.forEach(function(p){ p.roster=[]; }); OFFDUTY=JONAMES.slice(); PLAN={}; ABSFROM={};
+    applyLineup(seonbal(), ['1','2']); applyLineup(bu3Start(), ['3']);
+    paint();
+
+    L('','★갑. 배치표 칸 창 — 이름과 칸');
+    openCell('1', 6);
+    var tx = sh().textContent || '';
+    ok(tx.indexOf('상태 변경') >= 0, '  머리말', '상태 변경');
+    ok(tx.indexOf('그날의 구분') < 0, '  옛 머리말', '없음');
+    var bs = sh().querySelectorAll('[data-dtag]');
+    L('  단추', [].map.call(bs, function(b){ return b.textContent + (b.className.indexOf('on')>=0?'●':''); }).join(' · '));
+    ok(bs.length === DAYTAGS.length + 1, '  칸 수(없음 + 구분)', bs.length + '칸');
+
+    L('','★을. 없앤 문구가 안 보인다');
+    ok(tx.indexOf('다른 것을 누르면') < 0, '  \'다른 것을 누르면 덮어씁니다\'', '없음');
+    ok(tx.indexOf('되돌리기 한 번으로 돌아옵니다') < 0, '  \'되돌리기 한 번으로…\'', '없음');
+    ok(tx.indexOf('순번 세우기에서 빠지고') < 0, '  \'붙이면 순번 세우기에서 빠지고…\'', '없음');
+    ok(tx.indexOf('자유 이용권') < 0, '  \'찾근은 자유 이용권입니다…\'', '없음');
+    ok(tx.indexOf('먼저 근태를') < 0 && tx.indexOf('근무로 되돌리십시오') < 0, '  \'근무로 되돌리십시오\'', '없음');
+
+    L('','★병. 눌러서 붙는다 · 되돌아온다');
+    var nm = active(part('1'))[6].n;
+    L('  이 칸', nm + ' · 지금 [' + (dayMark(nm) || '없음') + ']');
+    var b2 = null;
+    [].forEach.call(bs, function(b){ if (b.getAttribute('data-dtag') === '조출') b2 = b; });
+    b2.click();
+    ok(dayMark(nm) === '조출' || tagOf(nm) === '조출', '  조출이 붙었다', tagOf(nm) || '없음');
+    L('  기록', (LOG[0]||{}).msg || '(없음)');
+    undo();
+    ok(!dayMark(nm), '  되돌리기', dayMark(nm) || '없음');
+
+    L('','★정. 쉬는 사람에게는 못 붙이고 — 눌렀을 때 말해 준다');
+    setAbsent(nm, '휴무');
+    var wasLog = LOG.length;
+    setDayTag(nm, '조출');
+    ok(tagOf(nm) === '휴무', '  안 붙었다', tagOf(nm));
+    ok(LOG.length === wasLog, '  기록도 안 남는다', LOG.length + '줄');
+    L('  (누르면 뜨는 알림)', document.getElementById('toast') ? (document.getElementById('toast').textContent || '(빔)') : '(없음)');
+    setAbsent(nm, '');
+    closeSheet();
+  }catch(err){ o.push('✗ 터짐: ' + err.message); }
+  o.push('errs: ' + (E.length? E.join(' | ') : 'none'));
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 800);
+</script>
