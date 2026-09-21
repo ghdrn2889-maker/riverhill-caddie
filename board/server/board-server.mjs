@@ -13,6 +13,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+// 휴무 신청 — 장부와 화면은 따로 산다. 이 파일은 길만 이어 준다
+import { dayoffPage, addRequest, decide, delRequest, readBook, approvedOn,
+  mineOf, cancelOwn, matOf, tallyOf, KINDS } from './board-dayoff.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const HOST = process.env.BOARD_HOST || '127.0.0.1';
@@ -164,6 +167,11 @@ const PASSF = path.join(DATA, 'passes.json');     // 발급한 코드들
 const SESSF = path.join(DATA, 'sessions.json');   // 들어와 있는 기기들
 const SESS_DAYS = Number(process.env.BOARD_SESS_DAYS || 60);
 const OPEN = process.env.BOARD_OPEN === '1';      // 문을 걷어 두는 비상 스위치(집 안에서만 쓸 때)
+// ★앱이 들어오는 옆문. 사람이 쓰는 문(입장 코드)과 아주 따로다.
+//   같은 기계 안에서 앱 서버만 두드린다 — 폰은 이 열쇠를 모르고, 알 까닭도 없다.
+//   열쇠가 비어 있으면 옆문은 아예 없는 것과 같다(연습할 때 그렇게 둔다).
+//   ★옆문은 신청 장부 한 곳에만 열린다. 배치표도 명부도 코드 관리도 이 열쇠로는 못 본다.
+const REQKEY = process.env.BOARD_REQ_KEY || '';
 const FAIL = new Map();                           // 어디서 몇 번 틀렸나 — 찍어 맞히기 막기
 
 const readJSON = (f, dflt) => { try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch (e) { return dflt; } };
@@ -381,7 +389,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── ★여기를 못 지나면 아무것도 안 보인다
-    const me = OPEN ? { name: '경기과', role: 'ops', code: '' } : sessWho(cookieOf(req, 'bpass'));
+    // 옆문은 /api/app/* 한 가지에만 열린다 — 길을 여기서 못 박아 둔다
+    const appDoor = p === '/api/app/req' || p === BASE + '/api/app/req';
+    const appIn = !!REQKEY && appDoor && req.headers['x-board-req-key'] === REQKEY;
+    const me = appIn ? { name: '앱', role: 'app', code: '' }
+      : OPEN ? { name: '경기과', role: 'ops', code: '' }
+      : sessWho(cookieOf(req, 'bpass'));
     if (!me) {
       if (p.indexOf('/api/') >= 0) return sendJSON(res, 401, { ok: false, error: '입장 코드가 필요합니다' });
       return send(res, 401, gatePage(''), 'text/html; charset=utf-8');
@@ -425,6 +438,111 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, keysPage(me, msg, fresh), 'text/html; charset=utf-8');
       }
     }
+    // ── 휴무 신청 — 입장 코드가 있는 경기과 분이면 누구나 본다.
+    //  ★관리자 전용으로 막지 않는다. 내일 판을 짜는 사람이 그 자리에서 정해야 하는 일이고,
+    //    관리자 한 사람을 거쳐야 하면 결국 카톡이 더 빨라진다
+    if (p === BASE + '/dayoff' || p === '/dayoff') {
+      const showDone = u.searchParams.get('done') === '1';
+      // ★종류마다 제 페이지다 — k 는 영문 한 글자(r·v·s·d54·d13·d23).
+      //   주소에 한글을 넣으면 인코딩이 한 번만 어긋나도 통째로 안 걸린다.
+      //   k 가 없으면 여섯이 다 서는 '전체' 자리다
+      const only = u.searchParams.get('k') || '';
+      const draw = (msg, bad) => send(res, 200,
+        dayoffPage(DATA, me, msg, bad, showDone, esc, BASE, only), 'text/html; charset=utf-8');
+      if (req.method === 'GET') return draw('', '');
+      if (req.method === 'POST') {
+        const f = new URLSearchParams(await body(req));
+        const act = f.get('act'), id = f.get('id');
+        let r = null, msg = '';
+        if (act === 'add') {
+          // 달력 칸은 '2026-09-24'로 준다 — 장부는 숫자 여덟 자리로 쥔다
+          const dt = String(f.get('date') || '').replace(/-/g, '');
+          r = addRequest(DATA, { name: f.get('name'), date: dt, why: f.get('why'),
+            kind: f.get('kind'), by: '경기과(' + who + ')' });
+          if (r.ok) { msg = `${r.rec.name} 님 ${r.rec.kind} 신청을 넣었습니다`;
+            log('신청 대신 넣음', r.rec.kind, r.rec.name, r.rec.date, who); }
+        } else if (act === 'ok' || act === 'no' || act === 'wait') {
+          r = decide(DATA, id, act, f.get('note'), who);
+          if (r.ok) {
+            const kd = r.rec.kind || '휴무';
+            msg = act === 'ok' ? `${r.rec.name} 님 ${kd} — 됐습니다`
+                : act === 'no' ? `${r.rec.name} 님 ${kd} — 안 된다고 알립니다`
+                : `${r.rec.name} 님 신청을 도로 기다림으로 두었습니다`;
+            log('신청', act, kd, r.rec.name, r.rec.date, who);
+          }
+        } else if (act === 'del') {
+          r = delRequest(DATA, id);
+          if (r.ok) { msg = `${r.rec.name} 님 신청을 지웠습니다`; log('휴무 신청 지움', r.rec.name, who); }
+        } else {
+          r = { ok: false, error: '알 수 없는 단추입니다' };
+        }
+        return draw(r.ok ? msg : '', r.ok ? '' : r.error);
+      }
+    }
+    // ── 휴무 신청 — 기계가 묻는 문.
+    //  배치표 화면은 '이 날 승인된 휴무가 누구냐'를 묻고, 앱은 신청을 밀어 넣는다
+    if (req.method === 'GET' && p === '/api/dayoff') {
+      const d = u.searchParams.get('date') || '';
+      if (d) return sendJSON(res, 200, { ok: true, date: d, names: approvedOn(DATA, d) });
+      return sendJSON(res, 200, { ok: true, ...readBook(DATA) });
+    }
+    if (req.method === 'POST' && p === '/api/dayoff') {
+      const inb = JSON.parse(await body(req) || '{}');
+      const r = addRequest(DATA, { name: inb.name, date: inb.date, why: inb.why,
+        kind: inb.kind, by: inb.by || '앱' });
+      if (!r.ok) return sendJSON(res, 400, r);
+      log('신청 들어옴', r.rec.kind, r.rec.name, r.rec.date, r.rec.by);
+      return sendJSON(res, 200, r);
+    }
+
+    // ── 앱이 드나드는 옆문 — 그 사람 것만 오간다.
+    //  ★이름은 앱 서버가 로그인에서 꺼내 붙인 것이다. 폰이 적어 보낸 게 아니다.
+    //   그래서 여기서는 이름을 그대로 믿는다 — 옆문 열쇠가 곧 그 보증이다.
+    if (appDoor) {
+      if (!appIn) return sendJSON(res, 401, { ok: false, error: '앱 열쇠가 아닙니다' });
+      const nm = String(u.searchParams.get('name') || '').trim();
+      if (!nm) return sendJSON(res, 400, { ok: false, error: '누구인지 없이는 아무것도 못 합니다' });
+      if (req.method === 'GET') {
+        const now = new Date();                       // 서버는 한국 시각으로 돈다
+        const mon = u.searchParams.get('month')
+          || String(now.getFullYear()) + String(now.getMonth() + 1).padStart(2, '0');
+        return sendJSON(res, 200, { ok: true, name: nm,
+          list: mineOf(DATA, nm), mat: matOf(DATA, nm, mon),
+          // 그 달 날마다 갈래별 건수 — 앱 달력의 칸 밑 숫자이고 그날 판의 여섯 줄이다.
+          // 제 이름은 빠져 있다(앱이 제 장부로 이미 알고 있다)
+          tally: tallyOf(DATA, mon, nm),
+          kinds: KINDS.map((k) => ({ k: k.k, cls: k.cls, grp: k.grp, pool: k.pool,
+            away: k.away, sub: k.sub || '' })) });
+      }
+      if (req.method === 'POST') {
+        let inb = {};
+        try { inb = JSON.parse(await body(req) || '{}'); } catch (e) { inb = {}; }
+        if (inb.act === 'cancel') {
+          const r = cancelOwn(DATA, inb.id, nm);
+          if (r.ok) log('신청 무름', r.rec.kind, nm, r.rec.date);
+          return sendJSON(res, r.ok ? 200 : 400, r);
+        }
+        // ★한 번에 여러 날을 받는다. 담아 두고 한꺼번에 내는 화면이라 그렇다.
+        //  장부에는 날마다 한 건씩 따로 들어간다 — 경기과가 25일은 되고 26일은
+        //  안 된다고 따로 정할 수 있어야 하기 때문이다. 까닭은 한 번 적어 모두에 붙는다.
+        //  ★하나가 막혀도 나머지는 넣는다. 이미 낸 날이 하나 껴 있다고 나머지 이틀까지
+        //   되돌리면, 사람은 무엇이 들어갔고 무엇이 안 들어갔는지 알 길이 없다.
+        const many = Array.isArray(inb.items) ? inb.items.slice(0, 31)
+          : [{ date: inb.date, kind: inb.kind }];
+        const done = [], failed = [];
+        for (const it of many) {
+          const r = addRequest(DATA, { name: nm, date: it && it.date, why: inb.why,
+            kind: it && it.kind, by: '앱' });
+          if (r.ok) { done.push(r.rec); log('신청 들어옴', r.rec.kind, nm, r.rec.date, '앱'); }
+          else failed.push(r.error);
+        }
+        if (!done.length) return sendJSON(res, 400, { ok: false, error: failed[0] || '넣지 못했습니다' });
+        return sendJSON(res, 200, { ok: true, recs: done, rec: done[0],
+          failed, n: done.length });
+      }
+      return sendJSON(res, 405, { ok: false, error: '그런 방법은 없습니다' });
+    }
+
     // ── 화면
     if (req.method === 'GET' && (p === '/' || p === '/board')) {
       let html;

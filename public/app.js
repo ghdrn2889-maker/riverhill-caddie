@@ -30,7 +30,7 @@ function tickDate() {
 }
 
 /* ── 뷰 전환(홈이 허브 · 하단 탭바 없음) ── */
-const VIEWS = ['today', 'board', 'cart', 'worklog', 'settle'];
+const VIEWS = ['today', 'board', 'cart', 'worklog', 'settle', 'request'];
 let curView = 'today';
 const _boxFxDone = new Set();   // 박스 스태거는 뷰별 최초 1회만(이후엔 가벼운 방향 슬라이드)
 let _viewPushed = false;        // 홈 위에 뷰 한 칸만 쌓는다 → 뒤로가기 한 번이면 언제나 홈
@@ -69,6 +69,10 @@ function showView(name, opts = {}) {
   // ★근무 기록·라운드 점검도 같은 원칙 — 첫 진입만 그리고, 재진입은 조용히 확인만(바뀌면 갱신).
   if (name === 'worklog') { if (jCache.year == null) loadJournal(); else loadJournal(jCache.year, { quiet: true }); }
   if (name === 'cart') { if (!ccDate) loadCartCheck(); else loadCartCheck(undefined, { quiet: true }); }
+  if (name === 'request') loadRequests();
+  // ★달력에도 신청 배지가 뜬다 — 그 자료를 여기서도 받아 둔다.
+  //  신청 화면을 먼저 봐야만 달력에 뜨면, 내가 낸 것을 내 달력에서 못 보는 셈이 된다.
+  if (name === 'worklog' && rqState.ready === null) loadRequests();
   // ★정산 재진입은 '아무 일도 일어나지 않아야' 한다. 뷰는 display:none 으로 숨겨질 뿐 DOM이 그대로
   //  남아 있는데, 들어올 때마다 통째로 다시 그리고 금액을 0부터 세고 페이드인까지 돌려서
   //  '페이지를 새로 불러오는' 느낌이 났다(사용자 지적: "들어갈 때마다"). 첫 진입만 그렇게 하고,
@@ -83,7 +87,7 @@ function showView(name, opts = {}) {
   // 배치표 탭: 날씨 하늘 백드롭 켜고 전체 순번표 렌더. 나갈 땐 백드롭·밤클래스 해제.
   document.body.classList.toggle('on-board', name === 'board');
   // 라운드 점검·근무 기록·정산: 상단바(알림·햄버거) 숨겨 공간 확보(오늘·배치표는 유지).
-  document.body.classList.toggle('no-top', name === 'cart' || name === 'worklog' || name === 'settle');
+  document.body.classList.toggle('no-top', name === 'cart' || name === 'worklog' || name === 'settle' || name === 'request');
   // ★옆 부 순번표는 배치표 탭에 들어올 때만 받아온다(홈·정산엔 불필요). 도착하면 loadBoards가 다시 그린다.
   if (name === 'board') { loadBoards(); boardActiveIdx = boardFocusIdx(); renderFullBoard(); applyBoardSky(); }
   else document.body.classList.remove('sky-night');
@@ -1977,7 +1981,11 @@ async function renderJournalCal() {
     const key = `${pre}-${String(d).padStart(2, '0')}`;
     const dd = jMap[key];
     const b = jDayBadge(dd);
-    const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>` : '';
+    // ★기록이 없는 날에 신청만 있으면 그걸 보여 준다 — 점선이다.
+    //  꽉 찬 색은 '정해졌다'는 뜻이라, 아직 기다리는 것에 쓰면 거짓말이 된다.
+    const rqb = b ? null : rqBadgeOn(key);
+    const bd = b ? `<span class="jcbd ${b[0]}">${esc(b[1])}</span>`
+      : rqb ? `<span class="jcbd ${rqb[0]}">${esc(rqb[1])}</span>` : '';
     const dot = (dd && (dd.mood || dd.memo)) ? `<span class="jc-memodot" style="background:${dd.mood ? (JMOOD_COL[dd.mood] || '#0c8f6a') : '#0c8f6a'}"></span>` : '';
     h += `<div class="jcell${dd ? '' : ' none'}${jSelDate === key ? ' sel' : ''}${key === todayISO ? ' today' : ''}" data-d="${key}">${dot}<span class="jcn">${d}</span>${bd}</div>`;
   }
@@ -2040,8 +2048,12 @@ function drawDayEditor() {
     ${isDuty ? `<div class="jparts"><span class="jplabel">부</span>${['1', '2', '3'].map((p) => `<button class="jpchip${jEdit.parts[0] === p ? ' on' : ''}" data-p="${p}">${p}부</button>`).join('')}<div class="jphint">${dutyKo}는 부에 따라 출근 시각이 정해져요 · 하나만 고르세요</div></div>` : ''}
     ${showMood ? `<div class="jmood"><div class="jmood-l">${pen}오늘의 기분과 한 줄</div><div class="jmoods">${JMOODS.map((m) => `<button class="jmoodbtn${jEdit.mood === m.k ? ' on' : ''}" data-m="${m.k}"><span class="fw">${jFaceSVG(m.k, 36)}</span><em>${m.l}</em></button>`).join('')}</div><div class="jmemo-ip"><input id="jMemoIn" maxlength="60" placeholder="그날의 순간을 한 줄로…" value="${esc(jEdit.memo || '')}"><span class="jmemo-cnt" id="jMemoCnt"></span></div></div>` : ''}
     <div class="jed-res${isWork && !jEdit.parts.length ? ' muted' : ''}">→ ${res}</div>
-    <button class="jed-save">${exists ? '저장' : '추가'}</button>`;
+    <button class="jed-save">${exists ? '저장' : '추가'}</button>
+    ${rqCanAsk(key) ? '<button class="jed-req" type="button" id="jedReq">이 날 신청하기 (휴무 · 54 · 조출 …)</button>' : ''}`;
   ed.hidden = false; if ($('jHint')) $('jHint').hidden = true;
+  // ★기록과 신청은 다른 일이다. 여기는 '지난 일을 적는 곳'이고, 신청은 '앞일을 부탁하는 곳'이다.
+  //  같은 날 칸에서 이어지되 화면은 갈라 둔다 — 섞으면 적은 것이 신청된 줄 안다.
+  if ($('jedReq')) $('jedReq').onclick = () => openRequest(key);
   ed.querySelectorAll('.jkbtn[data-k]').forEach((b) => { b.onclick = () => { jSyncMemo(); jEdit.kind = b.dataset.k;
     if (jEdit.kind === 'work' && !jEdit.parts.length) jEdit.parts = ['3'];
     // 당번·벌당은 한 부만(부에 따라 출근 시각이 정해짐) — 복수 선택 상태로 넘어왔으면 하나로 줄인다.
@@ -4798,6 +4810,388 @@ async function main() {
    맨 위 이름줄 = 프로필 수정(기존 계정 팝업 재사용), 오른쪽 두 아이콘 = 로그아웃·닫기.
    그 아래는 바로가기 — 홈 위젯만으로는 몇 단계 들어가야 닿는 곳(목표·정산서·지출)을 한 번에 연다.
    ★아이콘은 타일 없이 글리프만(C안). 타일이 없으니 '눌리는 자리'는 누르는 순간 깔리는 민트 원이 대신한다. */
+/* ══ 신청 — 휴무 · 휴가 · 병가 · 54 · 1·3 · 2·3 ═══════════════════════
+   ★장부는 앱에 없다. 경기과 배치표 프로그램이 쥐고 있고, 앱은 캐디 대신 두드린다.
+    둘이 각자 적으면 언젠가 서로 다른 말을 한다 — 폰엔 '됐습니다'가 뜨는데
+    경기과 화면엔 아직 기다리는 중으로 남는 식이다.
+
+   ★경기과 화면은 종류마다 페이지를 갈랐고 여기는 한 자리에 모았다. 일부러 다르다.
+    경기과는 여러 건을 놓고 고르는 사람이고, 캐디는 한 건을 내는 사람이다.
+    캐디는 '휴무 페이지에 가야지'라고 생각하지 않는다 — '19일에 쉬고 싶은데'가 먼저다.
+    그래서 날짜가 먼저고 종류는 그다음이다.
+
+   ★장부는 '1,3'으로 적고 화면은 '1·3'으로 읽는다. 앱 달력 배지가 가운뎃점이라 거기 맞췄다.
+    양쪽 글자를 억지로 통일하면 이미 쌓인 장부를 건드려야 한다 — 옮기는 표를 두는 게 싸다. */
+/* ══ 신청 — 날이 먼저다 ══════════════════════════════════════════════
+   ★장부는 여기 없다. 경기과 배치표 프로그램이 쥐고 있고 앱은 옆문을 두드릴 뿐이다.
+   ★열 가지, 세 갈래. 가름은 '그날 근무를 하느냐'다 —
+    쉼(휴무·휴가·병가) · 일(54·1,3·2,3·조출·후출·찾근) · 자유(프리).
+    프리만 따로 선다. 하든 안 하든 본인이 정하는 것이라 어느 쪽도 아니다.
+   ★걸음은 셋이다: 달력 → 확인 → 내 신청.
+    캐디가 정하는 단위는 종류가 아니라 날이다 — "26일에 뭘 하지?"이지
+    "조출을 언제 하지?"가 아니다. 그리고 26일에 뭘 할지는 그날 중복 근무가 몇인지를
+    보고 셈한다. 종류를 먼저 고르게 하면 그 셈을 할 자리가 없어진다.
+   ★적는 꼴은 장부 그대로('1,3')를 들고 다니고, 화면에만 '1·3'으로 곱게 적는다.
+    여기서만 '1·3'으로 바꿔 보내면 장부와 두 화면이 딴말을 하게 된다. */
+const RQ_K = {
+  '휴무': { lab: '휴무', c: '#c79a2e', t: '#c79a2e', lt: 0, cls: 'off',   pool: 'rest',
+    d: '그날 순번에서 빠집니다',         ph: '예) 집안 일이 있습니다' },
+  '휴가': { lab: '휴가', c: '#5d9450', t: '#5d9450', lt: 0, cls: 'vac',   pool: 'rest',
+    d: '미리 정해 둔 휴가를 씁니다',      ph: '예) 집안 일이 있습니다' },
+  '병가': { lab: '병가', c: '#3f7f66', t: '#3f7f66', lt: 0, cls: 'sick',  pool: 'rest',
+    d: '아파서 못 섭니다',               ph: '예) 몸이 안 좋아 못 섭니다' },
+  '54':   { lab: '54',  c: '#7d9438', t: '#7d9438', lt: 0, cls: 'jc-54',  pool: 'more',
+    d: '1 · 2 · 3부를 다 섭니다',        ph: '예) 그날 종일 설 수 있습니다' },
+  '1,3':  { lab: '1·3', c: '#b8577e', t: '#b8577e', lt: 0, cls: 'jc-13',  pool: 'more',
+    d: '1부와 3부를 섭니다',             ph: '예) 그날 두 번 설 수 있습니다' },
+  '2,3':  { lab: '2·3', c: '#4d7ca8', t: '#4d7ca8', lt: 0, cls: 'jc-23',  pool: 'more',
+    d: '2부와 3부를 섭니다',             ph: '예) 그날 두 번 설 수 있습니다' },
+  // 아래 넷은 배치표 배지 색 그대로다 — 밝은 면과 짙은 글씨가 한 짝이라 둘 다 들고 온다
+  '조출': { lab: '조출', c: '#ffcb9a', t: '#8f3f00', lt: 1, cls: 'jc-jo',  pool: '조출',
+    d: '순번을 앞으로 당겨 일찍 나갑니다', ph: '예) 오후에 일이 있습니다' },
+  '후출': { lab: '후출', c: '#9ed8ff', t: '#03446e', lt: 1, cls: 'jc-hu',  pool: '후출',
+    d: '순번을 뒤로 미뤄 늦게 나갑니다',   ph: '예) 오전에 일이 있습니다' },
+  '찾근': { lab: '찾근', c: '#d2da55', t: '#3d4708', lt: 1, cls: 'jc-cg',  pool: '찾근',
+    d: '순번을 직접 골라 옵니다',         ph: '예) 시간 맞춰 골라 오겠습니다' },
+  '프리': { lab: '프리', c: '#d8e13f', t: '#3b4300', lt: 1, cls: 'jc-pr',  pool: '프리',
+    d: '그날 순번에 서지 않습니다',       ph: '예) 그날 다른 일을 맡습니다' },
+};
+const RQ_GROUPS = [
+  ['쉼',   '그날 근무를 안 합니다',        ['휴무', '휴가', '병가']],
+  ['일',   '그날 근무를 합니다',           ['54', '1,3', '2,3', '조출', '후출', '찾근']],
+  ['자유', '하든 안 하든 본인이 정합니다', ['프리']],
+];
+// 그날 판 위에 두 줄로 서는 여섯 장부. 칸 밑 숫자는 이 가운데 앞의 둘이다
+const RQ_FACTS = [['rest', '쉬는 분'], ['more', '더 서는 분'], ['조출', '조출'],
+  ['후출', '후출'], ['찾근', '찾근'], ['프리', '프리']];
+const RQ_WD = ['일', '월', '화', '수', '목', '금', '토'];
+const RQ_CK = '<svg viewBox="0 0 24 24"><path d="m5 13 4 4 10-10"/></svg>';
+const RQ_IC = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+const RQ_XX = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+const RQ_LABEL = Object.fromEntries(Object.entries(RQ_K).map(([k, v]) => [k, v.lab]));
+const RQ_CLS = Object.fromEntries(Object.entries(RQ_K).map(([k, v]) => [k, v.cls]));
+
+let rqState = { ready: null, mon: '', list: [], tally: {}, mat: null,
+  cart: [], why: '', step: 1, sheet: '', err: '', msg: '', busy: false, loading: false };
+
+const rqKey = (iso) => String(iso || '').replace(/-/g, '');          // 2026-09-19 → 20260919
+const rqIso = (key) => `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`;
+function rqTodayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const rqThisMon = () => rqKey(rqTodayISO()).slice(0, 6);
+// 앞날만 신청한다. 지난 날은 부탁이 아니라 기록이다.
+function rqCanAsk(iso) { return rqState.ready !== false && String(iso || '') > rqTodayISO(); }
+
+// 그 날 신청이 있으면 근무 일지 달력이 쓸 배지를 돌려준다.
+// ★기다리는 것은 점선(wait), 정해진 것은 꽉 찬 색. 둘을 같은 모양으로 두면
+//  '부탁한 것'과 '정해진 것'이 구분되지 않는다 — 그게 제일 무서운 어긋남이다.
+//  안 된 것은 아무것도 안 그린다. 그날은 아무 일도 없는 날이다.
+function rqBadgeOn(iso) {
+  const k = rqKey(iso);
+  const r = (rqState.list || []).find((x) => x.date === k && x.state !== 'no');
+  if (!r) return null;
+  const lab = RQ_LABEL[r.kind] || r.kind;
+  return r.state === 'ok' ? [RQ_CLS[r.kind] || 'off', lab] : ['wait', lab];
+}
+
+// 근무 일지의 '이 날 신청하기'가 부른다 — 그 날 판을 바로 연다
+function openRequest(iso) {
+  rqState.step = 1; rqState.err = ''; rqState.msg = '';
+  const k = rqKey(iso || '');
+  if (k) rqState.mon = k.slice(0, 6);
+  showView('request');
+  if (k && rqCanAsk(iso)) setTimeout(() => { rqOpenSheet(k); }, 60);
+}
+
+// ── 셈 ────────────────────────────────────────────────
+const rqPool = (k) => (RQ_K[k] || {}).pool || 'rest';
+// 쉼·일은 여럿이 한 장부에 모이니 넷부터 붐빈다. 줄 갈래는 원래 인원이 적어 셋부터다
+const rqBusyOf = (p) => ((p === 'rest' || p === 'more') ? 4 : 3);
+const rqBookOn = (key) => (rqState.list || []).find((x) => x.date === key && x.state !== 'no');
+const rqCartOn = (key) => rqState.cart.find((x) => x.d === key);
+// ★남이 낸 수는 서버가 준다(제 이름은 빼고 세어 온다). 내 것만 여기서 더한다 —
+//  같은 장부에 든 것만 더한다. 22일에 휴무를 내 두었다고 조출 장부에 내가 선 것은 아니다.
+function rqCnt(pool, key) {
+  const base = (rqState.tally[key] || {})[pool] || 0;
+  const b = rqBookOn(key), c = rqCartOn(key);
+  const mine = (b && rqPool(b.kind) === pool) || (c && rqPool(c.k) === pool);
+  return base + (mine ? 1 : 0);
+}
+function rqNum(pool, key) {
+  const t = rqCnt(pool, key);
+  return `<i class="${t >= rqBusyOf(pool) ? 'busy' : (t ? '' : 'zero')}">${t}</i>`;
+}
+function rqDayFull(key) {
+  const d = new Date(+key.slice(0, 4), +key.slice(4, 6) - 1, +key.slice(6, 8));
+  return `${+key.slice(4, 6)}월 ${+key.slice(6, 8)}일 ${RQ_WD[d.getDay()]}요일`;
+}
+function rqAway(key) {
+  const a = new Date(rqIso(key)), b = new Date(rqTodayISO());
+  const n = Math.round((a - b) / 86400000);
+  return n === 1 ? '내일' : n === 2 ? '모레' : n > 0 ? `${n}일 뒤` : '';
+}
+
+// ── 들여오기 ──────────────────────────────────────────
+async function loadRequests(mon) {
+  if (rqState.loading) return;
+  rqState.loading = true;
+  if (!rqState.mon) rqState.mon = rqThisMon();
+  const want = mon || rqState.mon;
+  try {
+    const j = await (await fetch(`/api/request?month=${encodeURIComponent(want)}`)).json();
+    rqState.ready = j.ready !== false;
+    rqState.list = j.list || [];
+    rqState.tally = j.tally || {};
+    rqState.mat = j.mat || null;
+    rqState.needName = !!j.needName;
+    rqState.mon = want;
+  } catch (e) {
+    rqState.ready = false;
+  }
+  rqState.loading = false;
+  if (!$('view-request').hidden) renderRequest();
+  // 일지 달력에도 신청 배지가 서니 같이 다시 그린다
+  const wl = $('view-worklog');
+  if (wl && !wl.hidden && typeof renderJournalCal === 'function') renderJournalCal();
+}
+
+// ── 그리기 ────────────────────────────────────────────
+function renderRequest() {
+  const w = $('rqWrap');
+  if (!w) return;
+  if (rqState.ready === false) {
+    w.innerHTML = `<h1 class="rq-h1">신청</h1><div class="rq-empty">${rqState.needName
+      ? '배치표 이름이 아직 없습니다.<br>프로필에서 이름을 채우면 신청할 수 있어요.'
+      : '아직 경기과 프로그램과 이어지지 않았습니다.<br>이어지면 여기서 바로 신청할 수 있어요.'}</div>`;
+    return;
+  }
+  if (rqState.ready === null) { w.innerHTML = '<div class="rq-empty">불러오는 중…</div>'; return; }
+  w.innerHTML = rqState.step === 2 ? rqDrawCheck() : rqState.step === 9 ? rqDrawMine() : rqDrawCal();
+  rqBind(w);
+  rqSheet();
+}
+
+function rqDrawCal() {
+  const mon = rqState.mon, y = +mon.slice(0, 4), m = +mon.slice(4, 6);
+  const first = new Date(y, m - 1, 1).getDay(), ndays = new Date(y, m, 0).getDate();
+  const today = rqKey(rqTodayISO());
+  let h = `<h1 class="rq-h1">언제 신청하시겠어요?</h1>
+    <p class="rq-lead">날을 누르면 그날 사정과 할 수 있는 것이 나옵니다.</p>
+    <div class="rq-mon">
+      <button type="button" data-mv="-1"${mon <= rqThisMon() ? ' disabled' : ''}>&lsaquo;</button>
+      <b>${y}년 ${m}월</b>
+      <button type="button" data-mv="1"${mon >= rqMonAdd(rqThisMon(), 2) ? ' disabled' : ''}>&rsaquo;</button>
+    </div>
+    <div class="rq-cal">${RQ_WD.map((d) => `<div class="rq-cw">${d}</div>`).join('')}`;
+  for (let i = 0; i < first; i++) h += '<div></div>';
+  for (let d = 1; d <= ndays; d++) {
+    const key = mon + String(d).padStart(2, '0');
+    const past = key <= today, bk = rqBookOn(key), ct = rqCartOn(key);
+    const st = ct ? ` style="background:${RQ_K[ct.k].c};color:${RQ_K[ct.k].lt ? RQ_K[ct.k].t : '#fff'}"` : '';
+    // ★이미 낸 날과 담은 날은 수 대신 '무엇'을 적는다. 칸이 칠해져 눌리지도 않는데
+    //  밑에 숫자만 있으면 왜 그런지 알 길이 없다 — '휴무'라 적으면 곧장 안다
+    h += `<button class="rq-cd${past ? ' dim' : ''}${bk ? ' mine' : ''}${ct ? ' got' : ''}" type="button"${
+      (past || bk) ? ' disabled' : ` data-day="${key}"`}>
+      <span class="n"${st}>${d}</span>${past ? ''
+        : bk ? `<span class="c">${esc(RQ_LABEL[bk.kind] || bk.kind)}</span>`
+        : ct ? `<span class="c" style="color:${RQ_K[ct.k].t}">${esc(RQ_K[ct.k].lab)}</span>`
+        : `<span class="c">${rqNum('rest', key)}<s>·</s>${rqNum('more', key)}</span>`}
+    </button>`;
+  }
+  h += `</div>
+    <p class="rq-hint">칸 밑은 그날 <b>쉬는 분 · 더 서는 분</b> 수예요.
+      조출 · 후출 · 찾근 · 프리는 날을 누르면 나옵니다.
+      <b>노란 날</b>은 이미 낸 날, <b>색칠한 날</b>은 담은 날입니다.</p>`;
+  if (rqState.cart.length) {
+    const c = rqState.cart.slice().sort((a, b) => a.d < b.d ? -1 : 1);
+    h += `<div class="rq-cart"><div class="tp">${c.length}건 담으셨어요
+      <button type="button" id="rqClr">비우기</button></div><ul>${c.map((x) =>
+      `<li><i style="background:${RQ_K[x.k].t}"></i>${esc(RQ_K[x.k].lab)}
+        <em>${esc(rqDayFull(x.d))}</em></li>`).join('')}</ul></div>`;
+  }
+  h += `<div class="rq-foot">
+    <button class="rq-cta" type="button" id="rqNext"${rqState.cart.length ? '' : ' disabled'}>${
+      rqState.cart.length ? `${rqState.cart.length}건 신청하기` : '날을 눌러 골라 주세요'}</button>
+    <button class="rq-cta quiet" type="button" id="rqToMine">내 신청 ${(rqState.list || []).length}건 보기</button>
+  </div>`;
+  return h;
+}
+function rqMonAdd(mon, n) {
+  const y = +mon.slice(0, 4), m = +mon.slice(4, 6) + n;
+  const d = new Date(y, m - 1, 1);
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function rqDrawCheck() {
+  const c = rqState.cart.slice().sort((a, b) => a.d < b.d ? -1 : 1);
+  const need = c.some((x) => x.k === '병가');
+  return `<p class="rq-eye">확인</p><h1 class="rq-h1">${c.length}건을 신청할게요</h1>
+    <div style="height:14px"></div>
+    ${c.map((x) => {
+      const p = rqPool(x.k), t = rqCnt(p, x.d), b = t >= rqBusyOf(p);
+      return `<div class="rq-sum"><span class="ln" style="background:${RQ_K[x.k].t}"></span>
+        <span class="k">${esc(RQ_K[x.k].lab)}<s>${esc(rqDayFull(x.d))}</s></span>
+        <span class="v${b ? ' b' : ''}">${t}명이 됩니다</span></div>`;
+    }).join('')}
+    ${c.length > 1 ? `<div class="rq-apart">${RQ_IC}<div><b>경기과는 건마다 따로 정합니다.</b><br>
+      ${+c[0].d.slice(6, 8)}일은 되고 ${+c[c.length - 1].d.slice(6, 8)}일은 안 될 수 있어요.</div></div>` : ''}
+    <div class="rq-lab">까닭을 적어 두시겠어요?
+      ${need ? '<span class="req">병가가 있어 꼭 적어 주세요</span>'
+        : `<span>${c.length > 1 ? '모든 건에 같이 붙습니다' : '선택'}</span>`}</div>
+    <textarea class="rq-why" id="rqWhy" maxlength="60"
+      placeholder="${esc(RQ_K[c[0] ? c[0].k : '휴무'].ph)}">${esc(rqState.why)}</textarea>
+    ${rqState.err ? `<div class="rq-err">${esc(rqState.err)}</div>` : ''}
+    <div class="rq-foot">
+      <button class="rq-cta" type="button" id="rqSend"${
+        (rqState.busy || (need && !rqState.why.trim())) ? ' disabled' : ''}>${
+        rqState.busy ? '보내는 중…' : `${c.length}건 신청하기`}</button>
+      <button class="rq-cta quiet" type="button" id="rqBack2">달력으로 돌아가기</button>
+    </div>`;
+}
+
+function rqDrawMine() {
+  const today = rqKey(rqTodayISO());
+  const rows = (rqState.list || []).slice().sort((a, b) => {
+    const fa = a.date > today, fb = b.date > today;
+    if (fa !== fb) return fa ? -1 : 1;
+    return fa ? (a.date < b.date ? -1 : 1) : (a.date > b.date ? -1 : 1);
+  });
+  const P = { wait: ['w', '기다리는 중'], ok: ['o', '됐습니다'], no: ['n', '안 됐습니다'] };
+  return `${rqState.msg ? `<div class="rq-done">${RQ_CK}${esc(rqState.msg)}</div>` : ''}
+    <p class="rq-eye">내 신청</p><h1 class="rq-h1">낸 것과 정해진 것</h1>
+    <p class="rq-lead">경기과가 정하면 알려 드릴게요.</p>
+    ${rqState.err ? `<div class="rq-err">${esc(rqState.err)}</div>` : ''}
+    ${rows.length ? rows.map((r) => {
+      const o = RQ_K[r.kind] || { lab: r.kind, t: '#8b95a1' };
+      const s = P[r.state] || P.wait;
+      const sub = r.state === 'no' ? (r.note || '') : (r.why || rqAway(r.date));
+      return `<div class="rq-r"><span class="ln" style="background:${o.t}"></span>
+        <span class="tx"><b>${esc(o.lab)}</b><em>${esc(rqDayFull(r.date))}${sub ? ' · ' + esc(sub) : ''}</em></span>
+        <span class="rq-st2"><span class="p ${s[0]}">${s[1]}</span>${
+          r.state === 'wait' ? `<button class="un" type="button" data-un="${r.id}">무르기</button>` : ''}</span></div>`;
+    }).join('') : '<div class="rq-empty">아직 낸 신청이 없어요.</div>'}
+    <div class="rq-foot">
+      <button class="rq-cta" type="button" id="rqAgain">새로 신청하기</button>
+    </div>`;
+}
+
+// ── 그날 판 ───────────────────────────────────────────
+//  몸(body)에 붙인다 — 뷰 안에 두면 탭 슬라이드 애니가 가둬 스크롤에 딸려 움직인다
+function rqOpenSheet(key) { rqState.sheet = key; rqSheet(); }
+function rqShut() { rqState.sheet = ''; rqSheet(); }
+function rqSheet() {
+  const old = document.getElementById('rqSheetWrap');
+  if (old) old.remove();
+  const key = rqState.sheet;
+  if (!key || rqState.step !== 1) return;
+  const ct = rqCartOn(key);
+  const w = document.createElement('div');
+  w.id = 'rqSheetWrap';
+  w.innerHTML = `<div class="rq-back" id="rqBackdrop"></div>
+    <div class="rq-sheet"><div class="rq-sh"><b>${esc(rqDayFull(key))}</b>
+      <button type="button" id="rqClose" aria-label="닫기">${RQ_XX}</button></div>
+    <div class="rq-sb">
+      <div class="rq-facts">${RQ_FACTS.map((f) => {
+        const t = (rqState.tally[key] || {})[f[0]] || 0;
+        return `<div><span>${f[1]}</span><b class="${
+          t >= rqBusyOf(f[0]) ? 'busy' : (t ? '' : 'zero')}">${t}명</b></div>`;
+      }).join('')}</div>
+      <p class="rq-fh">남들이 낸 수예요. 내가 넣으면 한 분씩 늘어납니다.</p>
+      <p class="rq-ask">무엇을 하시겠어요?</p>
+      ${RQ_GROUPS.map((g) => `<div class="rq-grp">${g[0]}<span>${g[1]}</span></div>
+        ${g[2].map((k) => rqKindRow(k, key, ct)).join('')}`).join('')}
+    </div></div>`;
+  document.body.appendChild(w);
+  document.getElementById('rqBackdrop').onclick = rqShut;
+  document.getElementById('rqClose').onclick = rqShut;
+  w.querySelectorAll('[data-pick]').forEach((b) => {
+    b.onclick = () => {
+      const k = b.dataset.pick;
+      // 한 날에 한 건이다. 같은 것을 또 누르면 뺀다
+      rqState.cart = rqState.cart.filter((x) => x.d !== key);
+      if (!ct || ct.k !== k) rqState.cart.push({ d: key, k });
+      rqState.sheet = ''; renderRequest();
+    };
+  });
+}
+function rqKindRow(k, key, ct) {
+  const o = RQ_K[k], p = o.pool;
+  const t = (rqState.tally[key] || {})[p] || 0, to = t + 1;
+  const on = ct && ct.k === k;
+  return `<button class="rq-o${on ? ' on' : ''}" type="button" data-pick="${esc(k)}">
+    <span class="ln" style="background:${o.t}"></span>
+    <span class="tx"><b>${esc(o.lab)}</b><em>${esc(o.d)}</em></span>
+    <span class="to"><s>${t}명 →</s> <i class="${to >= rqBusyOf(p) ? 'busy' : ''}">${to}명</i></span>
+    <span class="ck">${on ? RQ_CK : ''}</span></button>`;
+}
+
+// ── 손 ────────────────────────────────────────────────
+function rqBind(w) {
+  w.querySelectorAll('[data-day]').forEach((b) => { b.onclick = () => rqOpenSheet(b.dataset.day); });
+  w.querySelectorAll('[data-mv]').forEach((b) => {
+    b.onclick = () => { const m = rqMonAdd(rqState.mon, +b.dataset.mv); rqState.mon = m; renderRequest(); loadRequests(m); };
+  });
+  w.querySelectorAll('[data-un]').forEach((b) => { b.onclick = () => rqCancel(b.dataset.un); });
+  const g = (id) => document.getElementById(id);
+  if (g('rqClr')) g('rqClr').onclick = () => { rqState.cart = []; renderRequest(); };
+  if (g('rqNext')) g('rqNext').onclick = () => { rqState.step = 2; rqState.err = ''; renderRequest(); };
+  if (g('rqToMine')) g('rqToMine').onclick = () => { rqState.step = 9; rqState.msg = ''; rqState.err = ''; renderRequest(); };
+  if (g('rqBack2')) g('rqBack2').onclick = () => { rqState.step = 1; rqState.err = ''; renderRequest(); };
+  if (g('rqAgain')) g('rqAgain').onclick = () => { rqState.step = 1; rqState.msg = ''; rqState.err = ''; renderRequest(); };
+  if (g('rqSend')) g('rqSend').onclick = rqSubmit;
+  const why = g('rqWhy');
+  if (why) why.oninput = (e) => {
+    const was = !!rqState.why.trim();
+    rqState.why = e.target.value;
+    // 병가가 낀 묶음은 까닭이 있어야 보낸다 — 켜고 끄는 것만 손대고 화면은 다시 안 그린다
+    if (was !== !!rqState.why.trim() && rqState.cart.some((x) => x.k === '병가')) {
+      const s = g('rqSend'); if (s) s.disabled = !rqState.why.trim();
+    }
+  };
+}
+
+async function rqSubmit() {
+  if (rqState.busy || !rqState.cart.length) return;
+  rqState.busy = true; rqState.err = ''; renderRequest();
+  const items = rqState.cart.slice().sort((a, b) => a.d < b.d ? -1 : 1)
+    .map((x) => ({ date: x.d, kind: x.k }));
+  let j = {};
+  try {
+    j = await (await fetch('/api/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ items, why: rqState.why.trim() }),
+    })).json();
+  } catch (e) { j = { ok: false, error: '보내지 못했습니다 — 잠시 뒤 다시 해 주세요' }; }
+  rqState.busy = false;
+  if (!j.ok) { rqState.err = j.error || '신청이 받아들여지지 않았습니다'; renderRequest(); return; }
+  // ★하나가 막혀도 나머지는 들어간다. 막힌 것이 있으면 감추지 않고 그대로 말한다
+  const n = j.n || (j.recs || []).length || 1;
+  rqState.msg = `${n}건을 넣었습니다`;
+  rqState.err = (j.failed && j.failed.length) ? j.failed.join(' · ') : '';
+  rqState.cart = []; rqState.why = ''; rqState.step = 9;
+  renderRequest();
+  loadRequests();
+}
+
+async function rqCancel(id) {
+  if (rqState.busy) return;
+  rqState.busy = true;
+  let j = {};
+  try {
+    j = await (await fetch('/api/request/cancel', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: Number(id) }),
+    })).json();
+  } catch (e) { j = { ok: false, error: '무르지 못했습니다 — 잠시 뒤 다시 해 주세요' }; }
+  rqState.busy = false;
+  rqState.err = j.ok ? '' : (j.error || '무르지 못했습니다');
+  rqState.msg = j.ok ? '무르셨습니다' : rqState.msg;
+  renderRequest();
+  loadRequests();
+}
+
 const MENU_ICONS = {
   shield: '<path d="M12 2.6 20 6v5.6c0 4.9-3.3 8.5-8 9.8-4.7-1.3-8-4.9-8-9.8V6z"/><polyline points="9 12 11.2 14.2 15.4 10"/>',
   rules: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3h6v3H9z"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="13" y2="15"/>',
@@ -4809,6 +5203,8 @@ const MENU_ICONS = {
   doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>',
   // 아래가 톱니인 영수증
   receipt: '<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><line x1="9.5" y1="8.5" x2="14.5" y2="8.5"/><line x1="9.5" y1="12.5" x2="14.5" y2="12.5"/>',
+  // 종이와 연필 — 적어서 내는 곳
+  ask: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/><path d="M8.5 8h4.5"/><path d="M8.5 12h3"/><path d="M19.6 12.4 14.5 17.5l-2.7.7.7-2.7 5.1-5.1a1.45 1.45 0 0 1 2 2z"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 5.5H5.5V7a3 3 0 0 0 3 3"/><path d="M16 5.5h2.5V7a3 3 0 0 1-3 3"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8.5 20h7"/><path d="M10 17h4v3h-4z"/>',
 };
 
@@ -4894,6 +5290,7 @@ const MENU_ITEMS = [
   { k: 'chart', t: '수익 분석', go: () => goSettle(() => { const r = $('lgAnalysisRow'); if (r) r.click(); }) },
   { k: 'doc', t: '정산서', go: () => goSettle(() => scrollToCard('lgDocSeg')) },
   { k: 'receipt', t: '지출 등록', go: () => goSettle(() => lgOpenExpenseToday()) },
+  { k: 'ask', t: '신청', go: () => menuGoView('request') },
   { k: 'trophy', t: '업적', go: () => gwOpen() },
 ];
 

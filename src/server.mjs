@@ -44,6 +44,7 @@ import { fetchOpen as teeFetchOpen, teescannerOn } from './teescanner.mjs';
 import { buildBoardsView } from './boardsview.mjs';
 import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
+import { reqReady, listMine, addMine, cancelMine } from './dayoffreq.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -416,6 +417,36 @@ app.post('/api/journal/remove', (req, res) => {
   const ok = journal.removeDay(date, uid);
   ledger.setDayParts(date, [], uid);
   res.json({ ok });
+});
+
+// ══ 신청(휴무·휴가·병가·54·1,3·2,3) ══════════════════════════════
+//  ★장부는 경기과 배치표 프로그램에 있다. 앱은 캐디 대신 두드리기만 한다(dayoffreq.mjs).
+//   이름은 여기서 붙인다 — 폰이 적어 보낸 이름은 한 번도 쓰지 않는다.
+const myBoardName = (req) => String((getProfile(req.user.id) || {}).board_name || '').trim();
+
+// 내 신청 + 이 달 재료. 신청 기능이 아직 안 이어졌으면 ready:false 로 조용히 알린다.
+app.get('/api/request', requireAuth, async (req, res) => {
+  if (!reqReady()) return res.json({ ok: true, ready: false, list: [] });
+  const name = myBoardName(req);
+  if (!name) return res.json({ ok: true, ready: false, list: [], needName: true });
+  const r = await listMine(name, req.query.month);
+  res.status(r.ok ? 200 : 502).json({ ...r, ready: true });
+});
+
+// ★담은 것을 통째로 받는다(items). 옛 꼴(date·kind 하나)도 그대로 받는다 —
+//  폰이 새 화면으로 다 갈아타기 전에도 옛 앱이 계속 돌아야 한다.
+app.post('/api/request', requireAuth, async (req, res) => {
+  const name = myBoardName(req);
+  const { items, date, kind, why } = req.body || {};
+  const r = await addMine(name, { items, date, kind, why });
+  if (r.ok) console.log(`📝 [신청] ${name} · ${(r.recs || [r.rec]).map((x) => `${x.kind} ${x.date}`).join(' · ')}`);
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+app.post('/api/request/cancel', requireAuth, async (req, res) => {
+  const name = myBoardName(req);
+  const r = await cancelMine(name, (req.body || {}).id);
+  res.status(r.ok ? 200 : 400).json(r);
 });
 
 // 관리자 전용 알림 — 이제 '운영 통로'(push.mjs broadcastOps)로 나간다.
