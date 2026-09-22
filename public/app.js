@@ -2340,10 +2340,26 @@ const LG_PAGE = 7;
 const wonKo = (n) => `${(Number(n) || 0).toLocaleString('ko-KR')}원`;
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR');
 const manKo = (n) => { const v = Number(n) || 0; return v >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만` : v.toLocaleString('ko-KR'); };
-const lgFEES = () => (lgData && lgData.fees) || { 1: 140000, 2: 140000, 3: 150000 };
-const LG_HOLE = { 1: 70000, 2: 70000, 3: 80000 };
-const lgFeeHole = (p, st, F) => (st === 'front' ? (LG_HOLE[p] || 0) : ((F || lgFEES())[p] || 0));
-const lgDayRev = (d, F) => d.parts.reduce((s, p) => s + lgFeeHole(p, d.hole && d.hole[p], F), 0);
+// ══ 캐디피 단가 — 날짜로 갈린다 ══════════════════════════════════
+//  ★서버가 표째로 내려 준다(lgData.feeTable). 폰이 한 값만 들고 있으면
+//   9월 6일 근무를 9월 7일 단가로 고쳐 보여 준다 — 화면과 문서가 어긋난다.
+//  ★서버가 표를 안 줬을 때 쓸 붙박이도 같은 표로 둔다(옛 서버와 섞여 돌 때).
+const LG_FEE_TABLE = [
+  { from: '2026-09-07', fees: { 1: 150000, 2: 150000, 3: 150000 }, hole: { 1: 80000, 2: 80000, 3: 80000 } },
+  { from: '0000-00-00', fees: { 1: 140000, 2: 140000, 3: 150000 }, hole: { 1: 70000, 2: 70000, 3: 80000 } },
+];
+function lgFeeRow(date) {
+  const tb = (lgData && Array.isArray(lgData.feeTable) && lgData.feeTable.length)
+    ? lgData.feeTable : LG_FEE_TABLE;
+  const d = String(date || '') || new Date().toLocaleDateString('en-CA');
+  return tb.find((x) => d >= x.from) || tb[tb.length - 1];
+}
+const lgFEES = (date) => lgFeeRow(date).fees;
+const lgFeeHole = (p, st, F, date) => (st === 'front'
+  ? (lgFeeRow(date).hole[p] || 0)
+  : ((F || lgFEES(date))[p] || 0));
+// ★날짜를 꼭 넘긴다. 안 넘기면 오늘 단가로 옛 날을 계산한다(9월 6일이 15만원이 된다)
+const lgDayRev = (d, F, date) => d.parts.reduce((s, p) => s + lgFeeHole(p, d.hole && d.hole[p], F, date || d.date), 0);
 const lgDow = (iso) => WD[new Date(iso + 'T00:00:00').getDay()];
 const lgDayNum = (iso) => Number(iso.slice(8, 10));
 const lgReduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -2806,7 +2822,8 @@ function lgRowHTML(d) {
   const hasExp = d.expN > 0;
   const xptag = hasExp ? `<span class="xptag"> · 지출 ${d.expN}건</span>` : '';
   if (d.worked) {
-    const cut = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - lgDayRev(d, lgFEES());
+    const FD = lgFEES(d.date);
+    const cut = d.parts.reduce((s, p) => s + FD[p], 0) - lgDayRev(d, FD);
     return `<div class="row${hasExp ? ' hasexp' : ''}" data-day="${d.date}"><div class="dd"><div class="n num">${lgDayNum(d.date)}</div></div>
       <div class="rt"><div class="a">${lgPartLabel(d.parts)}<span class="hltag"${cut > 0 ? '' : ' hidden'}> · 홀정산</span>${xptag}</div></div>
       <div class="amt num${cut > 0 ? ' holed' : ''}">+${fmtN(d.revenue)}</div>
@@ -2844,7 +2861,10 @@ function renderLgList() {
 function lgPanelHTML(date) {
   const w = lgWorkByDate(date);
   let cutTxt = '';
-  if (w) { const cut = w.parts.reduce((s, p) => s + lgFEES()[p], 0) - lgDayRev({ parts: w.parts, hole: w.hole }, lgFEES()); cutTxt = cut > 0 ? '· ' + fmtN(cut) + '원 감액' : ''; }
+  if (w) { const FW = lgFEES(date);
+    const cut = w.parts.reduce((s, p) => s + FW[p], 0)
+      - lgDayRev({ parts: w.parts, hole: w.hole, date }, FW);
+    cutTxt = cut > 0 ? '· ' + fmtN(cut) + '원 감액' : ''; }
   const workBlock = w ? `
     <div class="dsub">캐디피 · 홀정산</div><div id="hollo-${date}">${lgHoleHTML(date)}</div>
     <div id="tipwrap-${date}">${lgTipHTML(date)}</div>` : '';
@@ -2862,13 +2882,13 @@ function lgPanelHTML(date) {
 
 function lgHoleHTML(date) {
   const w = lgWorkByDate(date); if (!w || !w.parts.length) return '';
-  const F = lgFEES(), sel = (lgSelPart[date] = lgSelPart[date] || w.parts[0]);
+  const F = lgFEES(date), sel = (lgSelPart[date] = lgSelPart[date] || w.parts[0]);
   const single = w.parts.length < 2;
-  const chips = w.parts.map((p) => { const holed = w.hole && w.hole[p] === 'front'; return `<button class="pchip${p === sel ? ' on' : ''}${holed ? ' holed' : ''}" data-hchip="${date}|${p}">${p}부 <b>${manKo(lgFeeHole(p, w.hole && w.hole[p], F))}</b></button>`; }).join('');
+  const chips = w.parts.map((p) => { const holed = w.hole && w.hole[p] === 'front'; return `<button class="pchip${p === sel ? ' on' : ''}${holed ? ' holed' : ''}" data-hchip="${date}|${p}">${p}부 <b>${manKo(lgFeeHole(p, w.hole && w.hole[p], F, date))}</b></button>`; }).join('');
   const cur = (w.hole && w.hole[sel]) || 'full', holed = cur === 'front';
   const OPTS = [['full', '정상'], ['front', '전반 중단'], ['back', '후반 이후']];
   const segs = OPTS.map((o) => `<button class="pz-o${cur === o[0] ? ' on' : ''}" data-hset="${date}|${sel}|${o[0]}" data-v="${o[0]}">${o[1]}</button>`).join('');
-  return `${single ? '' : '<div class="pchips">' + chips + '</div>'}<div class="pstate"><div class="pstate-h">${sel}부 캐디피 <b class="${holed ? 'holed' : ''}">${fmtN(lgFeeHole(sel, w.hole && w.hole[sel], F))}원</b></div><div class="pz-seg">${segs}</div><div class="pnote">우천·천재지변 중단 시만 · <b>전반</b>=반값, <b>후반</b>=전액</div></div>`;
+  return `${single ? '' : '<div class="pchips">' + chips + '</div>'}<div class="pstate"><div class="pstate-h">${sel}부 캐디피 <b class="${holed ? 'holed' : ''}">${fmtN(lgFeeHole(sel, w.hole && w.hole[sel], F, date))}원</b></div><div class="pz-seg">${segs}</div><div class="pnote">우천·천재지변 중단 시만 · <b>전반</b>=반값, <b>후반</b>=전액</div></div>`;
 }
 const lgSelPart = {};
 // 팁 · 퀵 칩(없음/1·2·3·5만)으로 누르면 아래 입력칸에 반영. 입력칸은 항상 보이고 기본 0원, 직접 수정 가능.
@@ -2984,15 +3004,18 @@ function lgApplyHole(date, part, state) {
   d.hole = d.hole || {};
   if (state === 'front' || state === 'back') d.hole[part] = state; else delete d.hole[part];
   if (!Object.keys(d.hole).length) d.hole = null;
-  d.revenue = lgDayRev(d, lgFEES()); d.holed = !!(d.hole && d.parts.some((p) => d.hole[p] === 'front'));
+  d.revenue = lgDayRev(d, lgFEES(date), date); d.holed = !!(d.hole && d.parts.some((p) => d.hole[p] === 'front'));
   postJSON('/api/ledger/holesettle', { date, part, state: state || '' });
   document.getElementById('hollo-' + date).innerHTML = lgHoleHTML(date);
-  const cutEl = document.getElementById('cut-' + date); if (cutEl) { const c = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - d.revenue; cutEl.textContent = c > 0 ? '· ' + fmtN(c) + '원 감액' : ''; }
+  const cutEl = document.getElementById('cut-' + date);
+  if (cutEl) { const FC = lgFEES(date); const c = d.parts.reduce((s, p) => s + FC[p], 0) - d.revenue;
+    cutEl.textContent = c > 0 ? '· ' + fmtN(c) + '원 감액' : ''; }
   lgUpdateRow(date); refreshLgHero(); bindLgList();
 }
 function lgUpdateRow(date) {
   const row = document.querySelector('.row[data-day="' + date + '"]'); const d = lgWorkByDate(date); if (!row || !d) return;
-  const amt = row.querySelector('.amt'); const cut = d.parts.reduce((s, p) => s + lgFEES()[p], 0) - d.revenue;
+  const amt = row.querySelector('.amt');
+  const FR = lgFEES(date); const cut = d.parts.reduce((s, p) => s + FR[p], 0) - d.revenue;
   amt.textContent = '+' + fmtN(d.revenue); amt.classList.toggle('holed', cut > 0);
   const tag = row.querySelector('.hltag'); if (tag) tag.hidden = !(cut > 0);
 }
@@ -3159,9 +3182,22 @@ function lgReportInner(o, S, opts) {
   const rows = (S.rows || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const period = opts.period, isYear = opts.isYear, profile = opts.profile || { name: '', workplace: '리버힐CC' };
   const title = o.rev && o.exp ? '수입·지출 정산서' : o.rev ? '수입 정산서' : '지출 정산서';
-  const F = S.fees || { 1: 140000, 2: 140000, 3: 150000 };
-  const byPart = { 1: { days: 0, amt: 0, fee: F[1] }, 2: { days: 0, amt: 0, fee: F[2] }, 3: { days: 0, amt: 0, fee: F[3] } };
-  rows.forEach((r) => r.parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amt += F[p]; } }));
+  // ★날마다 그날 단가로 더한다. 기간이 2026-09-07을 가로지르면 단가가 둘이다 —
+  //  한 값으로 곱하면 날수 × 단가 = 금액이 안 맞는 표가 세무 문서로 나간다.
+  const byPart = { 1: { days: 0, amt: 0, fee: 0, units: [] },
+    2: { days: 0, amt: 0, fee: 0, units: [] },
+    3: { days: 0, amt: 0, fee: 0, units: [] } };
+  rows.forEach((r) => r.parts.forEach((p) => {
+    if (!byPart[p]) return;
+    const u = lgFEES(r.date)[p] || 0;
+    byPart[p].days++; byPart[p].amt += u;
+    if (u && byPart[p].units.indexOf(u) < 0) byPart[p].units.push(u);
+  }));
+  const F = lgFEES(rows.length ? rows[rows.length - 1].date : '');
+  for (const p of ['1', '2', '3']) {
+    byPart[p].units.sort((a, b) => a - b);
+    byPart[p].fee = byPart[p].units.length ? byPart[p].units[byPart[p].units.length - 1] : (F[p] || 0);
+  }
   const workRev = rows.reduce((s, r) => s + r.revenue, 0), tipTot = rows.reduce((s, r) => s + (r.tip || 0), 0);
   const w = (n) => wonKo(n), tk = (parts) => parts.length >= 3 ? '54(1·2·3부)' : parts.map((p) => p + '부').join('·');
 
@@ -3179,7 +3215,11 @@ function lgReportInner(o, S, opts) {
       detHead = `<tr><th>No</th><th>근무일</th><th>근무(부)</th><th>캐디피</th>${o.tip ? '<th>팁</th>' : ''}</tr>`;
       detBody = rows.length ? rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.date}(${lgDow(r.date)})</td><td>${tk(r.parts)}</td><td class="num st">${w(r.revenue)}</td>${o.tip ? `<td class="num">${r.tip ? w(r.tip) : '-'}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${o.tip ? 5 : 4}" class="mid">확정된 근무가 없습니다.</td></tr>`;
     }
-    const partRows = ['1', '2', '3'].filter((p) => byPart[p].days).map((p) => `<tr><td>${p}부</td><td class="num">${byPart[p].days}일</td><td class="num">${w(byPart[p].fee)}</td><td class="num st">${w(byPart[p].amt)}</td></tr>`).join('') || `<tr><td colspan="4" class="mid">-</td></tr>`;
+    // ★기간 안에서 단가가 바뀌었으면 둘 다 적는다. 한 값만 적으면
+    //  읽는 사람이 '날수 × 단가'를 해 보고 금액이 안 맞는다고 본다.
+    const unitTxt = (p) => (byPart[p].units.length > 1
+      ? byPart[p].units.map((u) => w(u)).join(' → ') : w(byPart[p].fee));
+    const partRows = ['1', '2', '3'].filter((p) => byPart[p].days).map((p) => `<tr><td>${p}부</td><td class="num">${byPart[p].days}일</td><td class="num">${unitTxt(p)}</td><td class="num st">${w(byPart[p].amt)}</td></tr>`).join('') || `<tr><td colspan="4" class="mid">-</td></tr>`;
     const totalRev = o.tip ? workRev + tipTot : workRev;
     revBlock = `<h2>1. 수입</h2><h3>${detTitle}</h3>
       <table class="log"><thead>${detHead}</thead><tbody>${detBody}</tbody></table>
@@ -3213,7 +3253,7 @@ function lgReportInner(o, S, opts) {
     <table class="meta"><tr><td class="k">성명</td><td>${esc(profile.name || '(설정에서 입력)')}</td><td class="k">사업장</td><td>${esc(profile.workplace || '리버힐CC')}</td></tr>
     <tr><td class="k">확정 근무</td><td>${rows.length}일</td><td class="k">작성 구분</td><td>${title}</td></tr></table>
     ${revBlock}${expBlock}${netBlock}
-    <div class="note">※ ${o.rev ? '수입은 확정 근무일 × 부별 캐디피(1·2부 14만원, 3부 15만원) 자동 합산입니다. ' : ''}${o.exp ? '지출의 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서이며, 본 문서는 이를 정리한 소명자료입니다. 세무사 상담을 권장합니다.' : ''}</div>`;
+    <div class="note">※ ${o.rev ? '수입은 확정 근무일 × 부별 캐디피 자동 합산입니다(2026-09-07부터 1·2·3부 각 15만원, 그 전에는 1·2부 14만원·3부 15만원). ' : ''}${o.exp ? '지출의 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서이며, 본 문서는 이를 정리한 소명자료입니다. 세무사 상담을 권장합니다.' : ''}</div>`;
 }
 
 const LG_WORD_CSS = `body{font-family:-apple-system,"Malgun Gothic",sans-serif;color:#1a201d;margin:0;padding:24px;background:#fff;font-size:12.5px;}

@@ -1,5 +1,5 @@
 // 정산(회계) — 캐디피 수익 자동 산정 + 팁(선택) + 지출/영수증 증빙 + 수익계산서 문서(PDF/Word).
-//  · 수익: 근무 확정일 × 그날 근무한 부(部)의 캐디피 합(1·2부 14만, 3부 15만 — 설정에서 수정).
+//  · 수익: 근무 확정일 × 그날 근무한 부(部)의 캐디피 합. 단가는 날짜로 갈린다(FEE_TABLE).
 //    부 조합은 근무일지(worklog)의 rounds에서 자동 감지, 틀리면 dayParts로 수동 보정(유령 2부 대비).
 //  · 팁: 날짜별 선택 입력(미기재=0).
 //  · 지출: 날짜·항목·금액·결제수단·증빙유형·상호 + 영수증 사진(선택). AI 판독으로 자동 채움 후 사용자 확인.
@@ -12,11 +12,27 @@ import * as journal from './journal.mjs';
 import * as wd from './workday.mjs';
 
 const FILE = 'ledger.json';
-// 캐디피 단가 — 고정값(로직에 박음, 설정에서 변경 불가). 1·2부 14만, 3부 15만.
-//   조합은 자동 합산: 1·3부 = 14+15 = 29만, 54(1·2·3부) = 14+14+15 = 43만.
-const FEES = { 1: 140000, 2: 140000, 3: 150000 };
-// 홀정산(경기 중단) 캐디피 — 전반 중단/후반 미시작: 1·2부 7만, 3부 8만. 후반 진입 이후는 정상가(기록용).
-const HOLE_FEES = { 1: 70000, 2: 70000, 3: 80000 };
+// ══ 캐디피 단가 — 날짜로 갈린다 ═══════════════════════════════════
+//  ★한 값으로 박아 두면 안 된다. 단가가 바뀌면 지난 달 정산까지 새 값으로 다시 계산되어
+//   이미 받은 돈과 어긋난다. 수익계산서는 세무에 쓰는 문서라, 옛 달이 조용히 바뀌면
+//   그 문서가 거짓이 된다. 그래서 '언제부터 얼마'를 줄줄이 적고 그날 값을 꺼내 쓴다.
+//  ★줄은 늦은 날짜가 위에 온다 — 위에서부터 훑어 처음 걸리는 줄이 그날의 표다.
+//  ★조합은 자동 합산: 1·3부 = 15+15 = 30만, 54(1·2·3부) = 15+15+15 = 45만(2026-09-07 이후).
+const FEE_TABLE = [
+  // 2026-09-07 — 1·2부도 3부와 같은 15만이 되었다(리버힐).
+  { from: '2026-09-07', fees: { 1: 150000, 2: 150000, 3: 150000 },
+    hole: { 1: 80000, 2: 80000, 3: 80000 } },
+  // 그 전 — 1·2부 14만, 3부 15만.
+  { from: '0000-00-00', fees: { 1: 140000, 2: 140000, 3: 150000 },
+    hole: { 1: 70000, 2: 70000, 3: 80000 } },
+];
+// 그날에 걸리는 표 한 줄. 날짜가 없으면 오늘로 본다 —
+// 날짜를 안 주는 옛 부름이 남아 있어도 적어도 '지금 값'은 내주어야 한다.
+const todayISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+function feeRow(iso) {
+  const d = String(iso || '') || todayISO();
+  return FEE_TABLE.find((x) => d >= x.from) || FEE_TABLE[FEE_TABLE.length - 1];
+}
 const HOLE_STATES = ['front', 'back']; // front=전반 중단(감액) · back=후반 이후(정상가·기록용)
 const DEFAULT_PART = '3'; // 부를 알 수 없을 때 가정하는 기본부(3부 스페어).
 const EXP_CATS = ['주유', '톨비', '식대', '주차', '기타'];
@@ -57,11 +73,17 @@ function partsForDay(day, d) {
   if (wd.hasDuty(day)) return [];
   return [DEFAULT_PART];
 }
-function feeOf(part) { return FEES[part] || 0; }
+function feeOf(part, iso) { return feeRow(iso).fees[part] || 0; }
 // 홀정산 반영 단가 — 'front'(전반 중단)만 감액, 'back'(후반 이후)·미지정은 정상가.
-function feeOfHole(part, state) { return state === 'front' ? (HOLE_FEES[part] || 0) : (FEES[part] || 0); }
+function feeOfHole(part, state, iso) {
+  const r = feeRow(iso);
+  return state === 'front' ? (r.hole[part] || 0) : (r.fees[part] || 0);
+}
 // 그날 수익 — hole = { part: 'front'|'back' }(해당 날짜의 홀정산 맵). 부별 감액을 반영해 합산.
-function dayRevenue(parts, hole) { return (parts || []).reduce((sum, p) => sum + feeOfHole(p, hole && hole[p]), 0); }
+// ★날짜를 반드시 받는다. 안 받으면 오늘 단가로 옛 날을 계산하게 된다.
+function dayRevenue(parts, hole, iso) {
+  return (parts || []).reduce((sum, p) => sum + feeOfHole(p, hole && hole[p], iso), 0);
+}
 
 // 한 날짜의 '유효 부 조합' — 수동보정(dayParts) → 일일 근무 일지 rounds → 근거 없으면 null.
 //  일지 표시와 정산 수익이 같은 값을 쓰도록 하는 단일 소스(partsForDay와 동일 우선순위).
@@ -113,14 +135,25 @@ export function summary({ year, month } = {}, userId = 1) {
   const dutyDays = all.filter((x) => wd.hasDuty(x) && !(wd.isWorkDone(x) && wd.isPayable(x)));
   const pending = [];                                                    // 일지엔 '확인 대기' 개념 없음(확정만 기록)
 
-  const byPart = { 1: { days: 0, amount: 0, fee: feeOf('1') }, 2: { days: 0, amount: 0, fee: feeOf('2') }, 3: { days: 0, amount: 0, fee: feeOf('3') } };
+  // ★기간 안에서 단가가 바뀌었을 수 있다(2026-09-07). 그러면 '부별 단가' 한 칸에
+  //  적을 수 있는 값이 하나가 아니다. 실제로 쓰인 단가를 모아 두고 화면이 둘 다 적게 한다 —
+  //  날수 × 단가 = 금액이 안 맞는 표를 세무 문서에 내보내면 안 된다.
+  const byPart = { 1: { days: 0, amount: 0, fee: 0, units: [] },
+    2: { days: 0, amount: 0, fee: 0, units: [] },
+    3: { days: 0, amount: 0, fee: 0, units: [] } };
   let workRevenue = 0;
   const rows = worked.map((day) => {
     const parts = partsForDay(day, d);
     const hole = d.holeSettle[day.date] || null;
-    const rev = dayRevenue(parts, hole);
+    const rev = dayRevenue(parts, hole, day.date);
     // 부별 요약도 홀정산 감액을 반영해 합산 → 부별 합계와 근무 수입 소계가 항상 일치.
-    parts.forEach((p) => { if (byPart[p]) { byPart[p].days++; byPart[p].amount += feeOfHole(p, hole && hole[p]); } });
+    parts.forEach((p) => {
+      if (!byPart[p]) return;
+      byPart[p].days++;
+      byPart[p].amount += feeOfHole(p, hole && hole[p], day.date);
+      const u = feeOf(p, day.date);                       // 그날의 정상 단가(감액 전)
+      if (u && byPart[p].units.indexOf(u) < 0) byPart[p].units.push(u);
+    });
     workRevenue += rev;
     const tip = Math.max(0, Number(d.tips[day.date]) || 0);
     // holed: 감액(front)이 하나라도 있는 날 표시용. holeParts: 부별 상태 맵(정산서·UI 뱃지).
@@ -128,6 +161,12 @@ export function summary({ year, month } = {}, userId = 1) {
     return { date: day.date, parts, tang: parts.length >= 3 ? '54' : parts.join('/'), revenue: rev, tip, hole: hole || null, holed };
   }).sort((a, b) => (a.date < b.date ? 1 : -1));
 
+  // 쓰인 단가를 오름차순으로 정리하고, 대표값은 늦은 쪽(지금 값)으로 둔다.
+  //  한 날도 안 뛴 부는 오늘 단가를 적어 둔다 — 빈칸보다 '지금 얼마인지'가 쓸모 있다.
+  for (const p of ['1', '2', '3']) {
+    byPart[p].units.sort((a, b) => a - b);
+    byPart[p].fee = byPart[p].units.length ? byPart[p].units[byPart[p].units.length - 1] : feeOf(p);
+  }
   const pendingRevenue = 0;
   const tipTotal = rows.reduce((a, r) => a + r.tip, 0);
   const expenses = d.expenses.filter((e) => inPeriod(e.date, year, month)).sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -148,14 +187,16 @@ export function summary({ year, month } = {}, userId = 1) {
   }
 
   return {
-    fees: FEES,
+    // ★표째로 내려보낸다. 폰도 날짜를 보고 단가를 꺼내야 하기 때문이다 —
+    //  폰이 한 값만 들고 있으면 9월 6일 근무를 9월 7일 단가로 고쳐 보여 준다.
+    fees: feeRow().fees, feeTable: FEE_TABLE,
     byPart, partKo: PART_KO,
     // ★근무일수 = 근무 확정(당번 포함). 캐디피가 붙은 날수는 paidDays로 따로 준다 —
     //  둘을 한 숫자로 뚝치면 당번으로 일한 날이 근무 기록에서 통째로 사라진다.
     workedDays: done.length, paidDays: worked.length, pendingDays: pending.length,
     // 예정(아직 안 한 근무) — 금액엔 안 넣고 '예정 N일'로만 알린다. 당번·벌당은 무보수라 일수만.
     upcomingDays: upcoming.length,
-    upcomingRevenue: upcoming.reduce((a, day) => a + dayRevenue(partsForDay(day, d), d.holeSettle[day.date] || null), 0),
+    upcomingRevenue: upcoming.reduce((a, day) => a + dayRevenue(partsForDay(day, d), d.holeSettle[day.date] || null, day.date), 0),
     dutyDays: dutyDays.length,
     workRevenue, pendingRevenue,
     tipTotal, revenueTotal,
@@ -383,8 +424,12 @@ export function incomeReportHTML(opts = {}, userId = 1) {
   }
 
   const noteBits = [];
-  if (showRev) noteBits.push('수입은 확정 근무일 × 부별 캐디피(1·2부 14만원, 3부 15만원) 자동 합산입니다.');
-  if (showRev && st.rows.some((r) => r.holed)) noteBits.push("'홀정산' 표시일은 경기 중단(전반)으로 캐디피가 감액된 날입니다(1·2부 7만원, 3부 8만원).");
+  // ★단가를 말로 적을 때도 날짜를 같이 적는다. '1·2부 14만원'이라고만 적힌 문서가
+  //  9월 7일 뒤 근무와 같이 놓이면, 읽는 사람은 표가 틀렸다고 본다.
+  if (showRev) noteBits.push('수입은 확정 근무일 × 부별 캐디피 자동 합산입니다'
+    + ' (2026-09-07부터 1·2·3부 각 15만원, 그 전에는 1·2부 14만원·3부 15만원).');
+  if (showRev && st.rows.some((r) => r.holed)) noteBits.push("'홀정산' 표시일은 경기 중단(전반)으로 캐디피가 감액된 날입니다"
+    + ' (2026-09-07부터 각 8만원, 그 전에는 1·2부 7만원·3부 8만원).');
   if (showExp) noteBits.push('지출은 업무를 위한 실제 경비이며, 실제 증빙은 영수증·카드매출전표·현금영수증(지출증빙용)·세금계산서입니다. 본 문서는 이를 정리·집계한 소명자료로, 신고 방식(장부작성 여부)에 따라 공제 범위가 다르므로 세무사 상담을 권장합니다.');
 
   const mso = opts.forWord ? `<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->` : '';
