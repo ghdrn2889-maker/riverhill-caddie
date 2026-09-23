@@ -509,20 +509,21 @@
     .jkbtn.on.dangbeon, .jkbtn.on.beoldang { background:#f5811f; color:#fff; border-color:#dd6f10; }
     /* ★[hidden]이 먹도록 — display:grid/flex를 준 요소는 UA의 [hidden]{display:none}을 덮어써
        '빈 상자'만 남는다. 이 화면에서 hidden으로 접는 요소는 전부 여기 등록할 것. */
-    #rcPhotoSect[hidden], #rcPhotoCards[hidden],
+    #rcPhotoSect[hidden], #rcCartBox[hidden], #rcClubSect[hidden], #rcClubBox[hidden],
     #rcDoneBar[hidden], #rcDutyNote[hidden] { display:none !important; }
     /* ★도장이 찍힌 날은 잠근다 — 안 잠그면 체크·사진·카트번호가 그대로 눌려 모르는 사이 도장이 풀린다.
        (서버 mutate가 변경 시 stampedAt을 지우도록 설계돼 있어, 실수 한 번에 완료 기록이 사라졌다.)
        고치려면 완료 표식의 '수정하기'를 눌러 명시적으로 잠금을 풀어야 한다. */
     #view-cart.rc-locked .rc2-grid,
-    #view-cart.rc-locked #rcPhotoCards,
+    #view-cart.rc-locked #rcCartBox,
+    #view-cart.rc-locked #rcClubBox,
     #view-cart.rc-locked #rcLostItems,
     #view-cart.rc-locked #rcLostAdd,
-    #view-cart.rc-locked .heroface,
     #view-cart.rc-locked #rcEditItems,
     #view-cart.rc-locked #rcStampBtn { pointer-events:none; }
     #view-cart.rc-locked .rc2-grid,
-    #view-cart.rc-locked #rcPhotoCards,
+    #view-cart.rc-locked #rcCartBox,
+    #view-cart.rc-locked #rcClubBox,
     #view-cart.rc-locked #rcLostAdd { opacity:.62; filter:grayscale(.25); }
     .rc-donebar .lockbtn { flex:none; font:inherit; font-size:11.5px; font-weight:850; color:#0a5f46;
       background:#fff; border:1px solid #bfe3cd; border-radius:9px; padding:7px 11px; cursor:pointer; }
@@ -1916,6 +1917,95 @@
     .rc2-miss { display:none; margin:8px 4px 0; font-size:11.5px; color:#b4460b; line-height:1.65; }
     .rc2-miss.on { display:block; }
     .rc2-miss b { color:#8f3708; font-weight:850; }
+
+    /* ═══ 오늘 탄 카트 · 오늘 받은 클럽 ═══════════════════════════
+       ★두 상자는 같은 부품으로 짠다(.ct-item · .ct-top · .ct-auto · .ct-pic).
+        자리마다 뜻이 같아야 두 상자가 한 짜임으로 읽힌다.
+       ★줄은 둘로 나뉜다 — 왼쪽은 경기과로 가는 값, 오른쪽은 사진으로 드나드는 문. */
+    #view-cart .ct-box { background:#fff; border-radius:15px; box-shadow:0 4px 14px rgba(20,50,35,.05); }
+    #view-cart .ct-item { padding:13px 14px; display:flex; align-items:stretch; gap:11px; }
+    #view-cart .ct-item + .ct-item { border-top:1px solid #f0f2f5; }
+    #view-cart .ct-item.todo { background:#fffdf7; box-shadow:inset 3px 0 0 #e8971a; }
+    #view-cart .ct-body { flex:1 1 auto; min-width:0; }
+    #view-cart .ct-top { display:flex; align-items:center; gap:9px; }
+    #view-cart .ct-in { flex:0 1 auto; min-width:0; font:inherit; font-size:19px; font-weight:900;
+      letter-spacing:-.03em; color:#171a23; font-variant-numeric:tabular-nums;
+      border:0; background:transparent; padding:2px 0; outline:none; }
+    #view-cart .ct-in::placeholder { color:#e0863f; font-weight:800; letter-spacing:0; font-size:13.5px; }
+    #view-cart .ct-u { flex:none; font-size:12px; font-weight:800; color:#8b968f; margin-left:-4px; }
+    #view-cart .cl-nm { font-size:19px; font-weight:900; letter-spacing:-.03em; color:#171a23; }
+    #view-cart .cl-nm .u { font-size:12px; font-weight:800; color:#8b968f; margin-left:1px; }
+    #view-cart .ct-sp { flex:1 1 auto; }
+    #view-cart .ct-del { flex:none; width:28px; height:28px; padding:0; border:0; background:transparent;
+      cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    #view-cart .ct-del svg { width:16px; height:16px; stroke:#c3c9d4; fill:none; stroke-width:2.2; stroke-linecap:round; }
+    /* 앱이 스스로 적는 줄 — 캐디는 못 누른다 */
+    #view-cart .ct-auto { display:flex; align-items:center; gap:6px; margin-top:7px; padding:0 2px;
+      font-size:11.5px; font-weight:800; color:#9aa3ae; font-variant-numeric:tabular-nums; }
+    #view-cart .ct-auto .dt { flex:none; width:6px; height:6px; border-radius:50%; background:#cbd1d9; }
+    #view-cart .ct-auto .de { color:#b6bec7; font-weight:750; }
+    #view-cart .ct-auto.run { color:#0a9e77; }
+    #view-cart .ct-auto.run .dt { background:#12bf94; }
+    #view-cart .ct-auto.run .de { color:#7fc4ad; }
+    #view-cart .ct-auto.out .dt { background:#b9c0c9; }
+    /* 캐디가 스스로 고르는 둘 — 나머지는 앱이 안다 */
+    #view-cart .ct-flags { display:flex; gap:6px; margin-top:7px; }
+    #view-cart .ct-flags button { flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:5px;
+      font:inherit; font-size:11.5px; font-weight:850; cursor:pointer; color:#7b8590;
+      background:#f4f6f8; border:1px solid #e7eaf0; border-radius:10px; padding:9px 4px; }
+    #view-cart .ct-flags button svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+    #view-cart .ct-flags button.on.chg { color:#fff; background:#e8971a; border-color:#e8971a; }
+    #view-cart .ct-flags button.on.bad { color:#fff; background:#ef4757; border-color:#ef4757; }
+    #view-cart .ct-note { width:100%; margin-top:7px; font:inherit; font-size:12px; font-weight:700;
+      color:#171a23; background:#fdebed; border:1px solid #f6ccd1; border-radius:10px;
+      padding:9px 11px; outline:none; }
+    #view-cart .ct-note::placeholder { color:#d99aa2; font-weight:700; }
+    #view-cart .ct-chg { margin-top:7px; font-size:11px; line-height:1.55; font-weight:700; color:#8a6520;
+      background:#fdf6e6; border-radius:10px; padding:9px 11px; }
+    #view-cart .ct-chg b { color:#5e4310; font-weight:900; }
+    /* 사진 문 — 줄의 오른쪽 끝. 자리로 '이 카트의 사진'임이 드러난다 */
+    #view-cart .ct-pic { flex:none; align-self:center; width:68px; height:74px; padding:8px 4px; cursor:pointer; font:inherit;
+      border:1px solid #eaeef3; border-radius:12px; background:#f6f8fa;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; }
+    #view-cart .ct-pic svg { width:19px; height:19px; stroke:#9aa5b1; fill:none;
+      stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    #view-cart .ct-pic .l { font-size:10.5px; font-weight:850; color:#7b8590; }
+    #view-cart .ct-pic .c { font-size:9px; font-weight:800; color:#b3bac3; font-variant-numeric:tabular-nums; }
+    #view-cart .ct-pic.has { background:#edf7f3; border-color:#cbe7db; }
+    #view-cart .ct-pic.has svg { stroke:#0a9e77; }
+    #view-cart .ct-pic.has .l { color:#0a7d60; }
+    #view-cart .ct-pic.has .c { color:#5aab92; }
+    #view-cart .ct-pic:active { filter:brightness(.97); }
+    /* 늘리는 줄 — 목록의 맨 아래 */
+    #view-cart .ct-addrow { width:100%; display:flex; align-items:center; gap:9px; cursor:pointer;
+      font:inherit; font-size:13px; font-weight:850; color:#0a7d60; text-align:left;
+      background:transparent; border:0; border-top:1px solid #f0f2f5; padding:14px; }
+    #view-cart .ct-addrow .pl { flex:none; width:22px; height:22px; border-radius:50%; background:#e3f6ee;
+      display:flex; align-items:center; justify-content:center; }
+    #view-cart .ct-addrow .pl svg { width:12px; height:12px; stroke:#0a9e77; fill:none; stroke-width:3; stroke-linecap:round; }
+    #view-cart .ct-addrow:active { background:#f4faf7; }
+    #view-cart .ct-addrow:disabled { color:#c3c9d4; cursor:default; }
+    #view-cart .ct-addrow:disabled .pl { background:#f2f4f7; }
+    #view-cart .ct-addrow:disabled .pl svg { stroke:#c3c9d4; }
+    /* 분실물 한 건이 어디까지 갔나 — 올린 순간 경기과 판에 뜬다 */
+    #view-cart .lf-item .sent { display:flex; align-items:center; gap:4px; margin-top:4px;
+      font-size:10.5px; font-weight:800; color:#0a9e77; }
+    #view-cart .lf-item .sent svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    #view-cart .lf-item .sent.wait { color:#c9822f; }
+    /* 남긴 사진 셈 · 못 적은 것 알림 */
+    #view-cart .ev-tally { text-align:center; font-size:11.5px; font-weight:750; color:#9aa3ae; margin:9px 0 2px; }
+    #view-cart .ev-tally b { color:#0a9e77; font-weight:850; }
+    #view-cart .rc2-stampbtn.locked { background:#b9c0c9; box-shadow:none; }
+    #view-cart .rc2-stampbtn.locked .rc2-fill { display:none; }
+    #view-cart .ct-miss { display:none; gap:8px; align-items:flex-start; margin-top:9px;
+      font-size:11.5px; line-height:1.55; font-weight:750; color:#a4442c;
+      background:#fdeee9; border:1px solid #f6cdbe; border-radius:12px; padding:11px 13px; }
+    #view-cart .ct-miss.on { display:flex; }
+    #view-cart .ct-miss svg { width:15px; height:15px; flex:none; margin-top:1px; stroke:#e0562f; fill:none; stroke-width:2.2; }
+    #view-cart .ct-miss b { color:#8a2f18; font-weight:900; }
+    /* 히어로를 걷었으니 시트가 곧 화면의 맨 위다 */
+    #view-cart .rc-sheet { margin:-14px -14px 0; border-radius:0;
+      padding:calc(16px + env(safe-area-inset-top,0px)) 14px 6px; }
 
     /* ===== s5 카트뷰 재디자인 (히어로·표정·시트·분실물·팝업) ===== */
     #view-cart .rc-hero5 { margin:-14px -14px 0; padding:22px 20px 30px; text-align:center; color:#fff; background:linear-gradient(180deg,#12bf94,#0c8f6a); }
@@ -3489,13 +3579,8 @@
 
     <!-- 라운드 점검 (카트 점검 + 클럽 점검) -->
     <section class="view body" id="view-cart" hidden>
-      <!-- s5 히어로: 오늘 카트 번호 + 디지털 표정 -->
-      <section class="rc-hero5">
-        <div class="lab">오늘 카트 번호</div>
-        <div class="heroface" id="rcHeroFace" role="button" tabindex="0" aria-label="카트 번호 수정"><span class="face idle" id="rcFace"></span><span class="num" id="rcHeroNum"></span></div>
-        <div class="edithint" id="rcEditHint">탭하여 카트 번호 입력</div>
-      </section>
-
+      <!-- ★히어로(큰 카트 번호)는 걷었다 — 카트가 하루에 둘 셋이 되는 순간
+           '오늘 카트 번호' 하나를 크게 세우는 것이 거짓이 된다. 번호는 아래 줄마다 적는다. -->
       <div class="rc-sheet">
         <div class="rc-prg"><b>반납 점검</b></div>
 
@@ -3531,11 +3616,12 @@
           <div class="rc-sp-list" id="rcFindList"></div>
         </div>
 
-        <div class="rc2-sect" id="rcPhotoSect">전 · 후 사진 비교<span class="rc2-c">카트 · 클럽</span></div>
-        <div class="rc-g2" id="rcPhotoCards">
-          <div class="rc-pcard" id="rcCardCart"><div class="k">카트 상태</div><div class="s">전 <em id="rcCcb">0</em> · 후 <em id="rcCca">0</em></div><div class="bd">전·후 비교 ›</div></div>
-          <div class="rc-pcard" id="rcCardClub"><div class="k">클럽 상태</div><div class="s">전 <em id="rcLcb">0</em> · 후 <em id="rcLca">0</em></div><div class="bd">전·후 비교 ›</div></div>
-        </div>
+        <!-- ★기본은 칸 하나. 바꿔 타셨으면 맨 아래 '카트 추가'로 늘린다 —
+             앱이 부를 보고 알아서 늘리면, 안 바꾼 날에도 빈 칸이 생겨 사람이 헷갈린다. -->
+        <div class="rc2-sect" id="rcPhotoSect">오늘 탄 카트</div>
+        <div class="ct-box" id="rcCartBox"></div>
+        <div class="rc2-sect" id="rcClubSect">오늘 받은 클럽</div>
+        <div class="ct-box" id="rcClubBox"></div>
 
         <!-- 당번·벌당인 날: 카트를 안 끌고 나가므로 사진 점검 면제 안내 -->
         <div class="rc-dutynote" id="rcDutyNote" hidden></div>
@@ -3548,28 +3634,17 @@
         <div class="lf-card">
           <div class="lf-lead">
             <div class="lf-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle></svg></div>
-            <div><div class="t">카트를 비웠나요?</div><div class="s">두고 간 물건이 있으면 <b>사진과 함께</b> 남겨 주세요.<br>사진이 없으면 그대로 저장 시 <b>‘분실물 없음’</b>으로 기록됩니다.</div></div>
+            <div><div class="t">카트를 비웠나요?</div><div class="s">올리시면 <b>경기과 배치표 프로그램</b>에 바로 뜹니다.</div></div>
           </div>
           <div class="lf-items" id="rcLostItems"></div>
           <button class="lf-add" type="button" id="rcLostAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>분실물 추가 (이름·사진)</button>
-          <button class="lf-deliver" type="button" disabled aria-disabled="true"><span class="di"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg></span><span class="dt">고객에게 전달하기</span><span class="soon">출시 예정</span></button>
-          <div class="lf-teaser">예약팀 연동 후, 발견한 분실물을 고객에게 <b>바로 알림</b>으로 전달할 수 있어요.</div>
         </div>
 
         <div class="rc2-nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><div class="t"><span id="rcNudge">반납 점검 사진과 기록은 <b>45일</b>이 지나면 자동으로 삭제됩니다.</span></div></div>
 
         <button id="rcStampBtn" class="rc2-stampbtn" type="button"><span class="rc2-fill" id="rcStampFill"></span><span class="rc2-shine"></span><span class="rc2-lbl" id="rcStampLbl">완료 도장 찍기</span></button>
-        <div class="rc2-miss" id="rcMiss"></div>
-      </div>
-
-      <!-- 번호 수정 팝업 -->
-      <div class="rc-ov" id="rcNumWrap">
-        <div class="rc-epop">
-          <div class="eh">오늘 카트 번호</div>
-          <div class="efin"><input id="rcNumIn" type="text" inputmode="numeric" maxlength="3" placeholder="00"><span class="u">번</span></div>
-          <div class="eowner" id="rcNumOwner"></div>
-          <div class="eacts"><button class="g" type="button" id="rcNumCancel">취소</button><button class="p" type="button" id="rcNumSave">저장</button></div>
-        </div>
+        <div class="ct-miss" id="rcMiss"></div>
+        <div class="ev-tally" id="rcTally" hidden></div>
       </div>
 
       <!-- 분실물 추가 팝업 -->

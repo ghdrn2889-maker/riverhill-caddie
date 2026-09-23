@@ -45,6 +45,7 @@ import { buildBoardsView } from './boardsview.mjs';
 import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
 import { reqReady, listMine, addMine, cancelMine } from './dayoffreq.mjs';
+import { sendLost, dropLost, lostKey } from './lostreq.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -1250,7 +1251,17 @@ app.get('/api/cartcheck', (req, res) => {
   const t = loadToday(uid);
   const tISO = t && worklog.labelToISO(t.date);
   const isWorkToday = !!(t && tISO === date && ['assigned', 'work', 'your_turn'].includes(t.status));
-  res.json({ ok: true, date, today: todayISOKST(), items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid),
+  // ★부마다 티오프 시각 — 앱이 '타는 중'을 스스로 판정하는 근거.
+  //  캐디한테 타는 중을 누르라고 하면 놓친다. 앱이 이미 아는 것을 사람에게 묻지 않는다.
+  let tees = [];
+  try {
+    const rounds = (journal.getDay(date, uid) || {}).rounds || {};
+    tees = Object.values(rounds)
+      .filter((r) => r && r.teeTime && /^\d{1,2}:\d{2}/.test(String(r.teeTime)))
+      .map((r) => ({ part: String(r.part || '').replace(/부$/, '') + '부', teeTime: String(r.teeTime).slice(0, 5) }));
+  } catch (e) { tees = []; }
+  if (!tees.length && isWorkToday && t.teeTime) tees = [{ part: String(t.part || '3부'), teeTime: String(t.teeTime).slice(0, 5) }];
+  res.json({ ok: true, date, today: todayISOKST(), items: cartcheck.getItems(uid), day: cartcheck.getDay(date, uid), tees,
     work: { isWorkToday, teeTime: (isWorkToday && t.teeTime) || '', course: (isWorkToday && t.course) || '', cartNo: (t && tISO === date && t.cartNo) || '' } });
 });
 // 지난 반납 기록 찾기 — 유예기간 내 기록 있는 날 목록(최신순, 완료여부·카트#·사진수). 프런트에서 날짜 검색으로 좁힘.
@@ -1296,6 +1307,39 @@ app.post('/api/cartcheck/cart', (req, res) => {
   if (!date) return res.status(400).json({ error: 'date 필요' });
   res.json({ ok: true, day: cartcheck.setCartNo(date, cartNo, req.user?.id || 1) });
 });
+// ── 오늘 탄 카트 칸 ────────────────────────────────────
+//  중복 근무자는 라운드마다 카트를 바꿔 탄다. 칸은 캐디가 직접 늘린다 —
+//  앱이 부를 보고 알아서 늘리면, 안 바꾼 날에도 빈 칸이 생겨 사람이 헷갈린다.
+app.post('/api/cartcheck/cart/set', (req, res) => {
+  const { date, i, no, chg, bad, note } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  const patch = {};
+  if (no !== undefined) patch.no = no;
+  if (chg !== undefined) patch.chg = !!chg;
+  if (bad !== undefined) patch.bad = !!bad;
+  if (note !== undefined) patch.note = note;
+  res.json({ ok: true, day: cartcheck.setCart(date, Number(i) || 0, patch, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/cart/add', (req, res) => {
+  const { date } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.addCart(date, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/cart/remove', (req, res) => {
+  const { date, i } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.removeCart(date, Number(i) || 0, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/club/add', (req, res) => {
+  const { date } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.addClub(date, req.user?.id || 1) });
+});
+app.post('/api/cartcheck/club/remove', (req, res) => {
+  const { date, i } = req.body || {};
+  if (!date) return res.status(400).json({ error: 'date 필요' });
+  res.json({ ok: true, day: cartcheck.removeClub(date, Number(i) || 0, req.user?.id || 1) });
+});
 app.post('/api/cartcheck/check', (req, res) => {
   const { date, key, done } = req.body || {};
   if (!date || !key) return res.status(400).json({ error: 'date, key 필요' });
@@ -1331,15 +1375,62 @@ app.get('/api/cartcheck/photo/:fname', (req, res) => {
   res.sendFile(cartcheck.photoPath(fname, req.user?.id || 1), (err) => { if (err) res.status(404).end(); });
 });
 // 고객 분실물 로그 — 이름(제목) + 선택 사진. 완료 6칸과 독립.
-app.post('/api/cartcheck/lost/add', (req, res) => {
+//  ★올리는 순간 경기과 배치표 프로그램으로 같이 간다. 거기서 단추가 달아오른다.
+//   어느 카트 · 몇 부인지는 캐디가 안 적는다 — 앱이 아는 것을 붙여 보낸다.
+//  ★경기과에 못 닿아도 앱은 멈추지 않는다. 캐디 화면엔 그대로 남고
+//   '아직 못 알림'으로 뜬다(sendFail). 다시 올리면 다시 두드린다.
+function lostWhere(uid, dateISO) {
+  const day = cartcheck.getDay(dateISO, uid) || {};
+  const carts = (day.carts || []).filter((c) => c.no);
+  const cart = carts.length ? carts[carts.length - 1].no : '';
+  // 지금 도는 라운드가 그 물건이 나온 라운드다. 없으면 오늘 첫 라운드.
+  let part = '';
+  try {
+    const rounds = (journal.getDay(dateISO, uid) || {}).rounds || {};
+    const now = new Date(), cur = now.getHours() * 60 + now.getMinutes();
+    const mins = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+    const past = Object.values(rounds).filter((r) => mins(r.teeTime) >= 0 && mins(r.teeTime) <= cur)
+      .sort((a, b) => mins(a.teeTime) - mins(b.teeTime));
+    const r = past.length ? past[past.length - 1] : Object.values(rounds)[0];
+    if (r && r.part) part = String(r.part).replace(/부$/, '') + '부';
+  } catch (e) { part = ''; }
+  return { cart, part };
+}
+app.post('/api/cartcheck/lost/add', async (req, res) => {
   const { date, name, image } = req.body || {};
   if (!date || !name) return res.status(400).json({ error: 'date, name 필요' });
-  res.json({ ok: true, day: cartcheck.addLostItem(date, name, image || null, req.user?.id || 1) });
+  const uid = req.user?.id || 1;
+  let day = cartcheck.addLostItem(date, name, image || null, uid);
+  const its = day.lostItems || [];
+  const it = its[its.length - 1];
+  if (it) {
+    const who = myBoardName(req);
+    const { cart, part } = lostWhere(uid, date);
+    let sent = { ok: false };
+    if (who) {
+      try {
+        sent = await sendLost(who, { appId: lostKey(uid, date, it.id), what: it.name, cart, part, image: image || null });
+      } catch (e) { sent = { ok: false }; }
+    }
+    if (sent.ok) console.log(`[분실물] ${who} · ${it.name} · ${part} ${cart}번 카트 → 경기과`);
+    else console.warn(`[분실물] 경기과에 못 알림 — ${who || '이름없음'} · ${it.name}`);
+    day = cartcheck.markLostSent(date, it.id, !!sent.ok, uid);
+  }
+  res.json({ ok: true, day });
 });
-app.post('/api/cartcheck/lost/remove', (req, res) => {
+app.post('/api/cartcheck/lost/remove', async (req, res) => {
   const { date, id } = req.body || {};
   if (!date || !id) return res.status(400).json({ error: 'date, id 필요' });
-  res.json({ ok: true, day: cartcheck.removeLostItem(date, id, req.user?.id || 1) });
+  const uid = req.user?.id || 1;
+  const who = myBoardName(req);
+  let held = null;
+  if (who) {
+    // 경기과가 이미 받아 두었으면 앱에서 지워도 장부는 안 지운다 — 물건이 거기 있다.
+    try { const r = await dropLost(who, lostKey(uid, date, id)); if (!r.ok) held = r.error || ''; }
+    catch (e) { held = ''; }
+  }
+  const day = cartcheck.removeLostItem(date, id, uid);
+  res.json({ ok: true, day, held });
 });
 // 카트 소유자 매핑(번호→이름) — 팝업의 '이 카트 주인' 표시용. data/cart-owners.json(수정 가능), mtime 캐시.
 let _cartOwners = null, _cartOwnersMtime = -1;

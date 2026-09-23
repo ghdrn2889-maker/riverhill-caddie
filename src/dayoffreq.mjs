@@ -16,7 +16,9 @@ const reqKey = () => process.env.BOARD_REQ_KEY || '';
 // 이 앱에서 신청을 받을 수 있는 상태인가 — 화면이 단추를 띄울지 말지 이걸로 정한다
 export function reqReady() { return !!reqKey(); }
 
-async function knock(method, name, { body, query } = {}) {
+// ★옆문은 하나뿐이다 — 분실물도 이 문으로 간다(src/lostreq.mjs).
+//  문을 또 뚫으면 열쇠가 둘이 되고, 둘이 되면 하나는 언젠가 안 바뀐다.
+export async function knock(method, name, { body, query } = {}) {
   const key = reqKey();
   if (!key) return { ok: false, error: '아직 경기과 프로그램과 이어지지 않았습니다' };
   const nm = String(name || '').trim();

@@ -3377,25 +3377,27 @@ let rcJustTapped = null;                   // 방금 탭해서 켠 반납 항목
 let rcPrevDone = null;                      // 직전 완료 개수(늘어난 순간에만 링 숫자 팝)
 let rcWasStampFull = false;                 // 직전 '전부 완료' 여부(방금 다 찬 순간에만 게이지 완료 애니메이션)
 const RC_LEG = { cart: { before: 'intake', after: 'exit' }, club: { before: 'club_pre', after: 'club_post' } };
-const RC_META = { cart: { title: '카트 상태' }, club: { title: '클럽 상태' } };
+// ★제목은 이제 칸마다 다르다(12번 카트 · 2부 클럽) — rcSlotTitle 이 짓는다.
 const RC_ICN = {
   // 각 기기 = 기본 도형 + .rccharge(충전 번개, 평소 숨김 → '확인' 시 팝 등장). guidekey는 충전 개념 없음(정적).
   battery:  '<rect x="2" y="7" width="16.5" height="10" rx="2.2"></rect><path d="M20.5 10.5v3"></path><path class="rccharge" fill="currentColor" stroke="none" d="M11.4 8L8.4 12.6H10.4L9.6 16L12.8 11.2H10.8Z"></path>',
   tablet:   '<rect x="4" y="2" width="16" height="20" rx="2"></rect><path d="M11 19.2h2"></path><path class="rccharge" fill="currentColor" stroke="none" d="M13 6L9.4 12H11.7L10.7 16.6L14.6 10H12.2Z"></path>',
-  radio:    '<rect x="5" y="8" width="9" height="14" rx="2"></rect><path d="M12.5 8V4"></path><path d="M7 8V6"></path><path d="M7.5 11.5h4"></path><path d="M7.5 14h4"></path><path d="M7.5 16.5h4"></path><path class="rccharge" fill="currentColor" stroke="none" d="M18.3 9.4L15.7 13.4H17.4L16.5 16.6L19.5 12.2H17.7Z"></path>',
+  radio:    '<rect x="7" y="7" width="10" height="14" rx="2"></rect><path d="M14.5 7V3"></path><path d="M9.5 7V5"></path><path d="M9.8 9.8h4.4"></path><path class="rccharge" fill="currentColor" stroke="none" d="M13.2 11.6L10.2 16.6H12.1L11.3 19.8L14.6 14.8H12.5Z"></path>',
   guidekey: '<rect x="8" y="4" width="8" height="17" rx="3"></rect><circle cx="12" cy="8.5" r="2.2"></circle><path d="M12 2.6V4"></path><path d="M10 14.5h4"></path><path d="M10 17.5h4"></path>',
 };
-function rcArr(subject, side) {                       // 그 구간(leg)의 사진 파일명 배열
-  const leg = RC_LEG[subject][side];
-  const c = (ccDay && ccDay.photos) ? ccDay.photos[leg] : null;
+// ★사진 칸 이름은 첫 칸이 옛 이름 그대로다(intake·exit·club_pre·club_post).
+//  두 번째 칸부터만 '#2'가 붙는다 — 여태 쌓인 기록이 안 깨지게.
+let rcSlot = 0;                                       // 지금 열어 둔 칸(카트/클럽 몇 번째)
+const rcLeg = (subject, side, slot) => {
+  const b = RC_LEG[subject][side];
+  return (slot || 0) > 0 ? `${b}#${(slot || 0) + 1}` : b;
+};
+function rcShots(subject, side, slot) {               // 그 칸 그 구간의 사진 파일명 배열
+  const c = (ccDay && ccDay.photos) ? ccDay.photos[rcLeg(subject, side, slot)] : null;
   return Array.isArray(c) ? c : (c ? [c] : []);
 }
+function rcArr(subject, side) { return rcShots(subject, side, rcSlot); }
 const rcUrl = (f) => `/api/cartcheck/photo/${f}`;
-function rcBadge(id, done, afterN) {
-  const el = $(id); if (!el) return;
-  if (done) { el.className = 'rc2-badge ok'; el.textContent = '완료'; }
-  else { el.className = 'rc2-badge need'; el.textContent = afterN === 0 ? '라운드 후 필요' : '라운드 전 필요'; }
-}
 // 반납 확인 효과음(웹오디오 합성 — 외부파일 X, 오프라인 OK). 켤 때=밝은 2음 상승 딩, 끌 때=짧고 낮은 틱.
 //  obActx()가 사용자 제스처(탭) 안에서 resume하므로 자동재생 정책에 안 걸린다.
 function rcChime(on) {
@@ -3415,18 +3417,187 @@ function rcChime(on) {
     o.connect(g); g.connect(c.destination); o.start(t0); o.stop(t0 + 0.13);
   }
 }
-// 대시보드(링·카트/클럽 카드·반납 4종) 렌더 — 완료 판정은 서버 returnStatus(6칸) 기준.
+/* ── 오늘 탄 카트 · 오늘 받은 클럽 ─────────────────────────────
+   ★캐디가 고르는 것은 둘뿐이다 — 충전 중 · 문제 있음.
+    '타는 중'은 앱이 안다(부마다 티오프 시각을 이미 쥐고 있다). 놓치기 쉬운 것을
+    사람에게 맡기면 안 눌리고, 안 눌리면 경기과가 빈 카트를 못 찾는다.
+   ★막는 것은 번호뿐. 사진은 도장을 안 막는다. */
+const RC_ORD = ['첫', '두', '세', '네', '다섯', '여섯'];
+const RC_XS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>';
+const RC_CAM = '<path d="M9 3h6l1 3h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3z"></path><circle cx="12" cy="13" r="3.4"></circle>';
+const RC_BOLT = '<path d="M13 2L3 14h8l-1 8 10-12h-8z"></path>';
+const RC_WARN = '<path d="M12 8v5M12 16.5v.01"></path><path d="M10.3 3.9L2.4 17.4A1.8 1.8 0 0 0 4 20h16a1.8 1.8 0 0 0 1.6-2.6L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"></path>';
+const RC_ROUND_MIN = 250;                             // 한 라운드가 도는 데 드는 대략 시간(분)
+let rcTees = [];                                      // [{part:'1부', teeTime:'06:50', m:410}] — 서버가 일지에서 꺼내 준다
+const rcMin = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+const rcHm = (ts) => { const d = new Date(ts); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const rcIsToday = () => !rcTodayISO || !ccDate || ccDate === rcTodayISO;
+
+// 이 카트가 지금 무엇을 하고 있나 — 앱이 스스로 적는 줄.
+function rcAutoOf(c, i, n) {
+  if (!c.no) return null;
+  if (c.outAt) return { k: 'out', lb: '내놓음', de: rcHm(c.outAt) + ' 넘김' };
+  if (i < n - 1) return { k: 'out', lb: '내놓음', de: '' };       // 뒤에 다른 칸이 있으면 이미 넘긴 것
+  if (ccDay && ccDay.stampedAt) return { k: 'out', lb: '내놓음', de: '근무 마침' };
+  if (!rcIsToday()) return { k: 'out', lb: '내놓음', de: '' };    // 지난 날은 다 끝난 날이다
+  const now = new Date(); const cur = now.getHours() * 60 + now.getMinutes();
+  const run = rcTees.find((t) => cur >= t.m && cur < t.m + RC_ROUND_MIN);
+  if (run) return { k: 'run', lb: '타는 중', de: `${run.part} ${run.teeTime} 티오프` };
+  const next = rcTees.find((t) => cur < t.m);
+  if (next) return { k: 'wait', lb: `${next.part} 예정`, de: `${next.teeTime} 티오프` };
+  return { k: 'run', lb: '타는 중', de: '아직 안 넘김' };
+}
+// 그 클럽이 어느 부의 것인가 — 티오프 표에서 차례대로. 부보다 칸이 많으면 번호로 부른다.
+function rcClubOf(i) {
+  const t = rcTees[i];
+  if (!t) return { nm: (i + 1) + '번째 팀', a: null };
+  if (!rcIsToday()) return { nm: t.part, a: { k: 'out', lb: '끝남', de: `${t.teeTime} 티오프` } };
+  const now = new Date(); const cur = now.getHours() * 60 + now.getMinutes();
+  const k = cur < t.m ? 'wait' : (cur < t.m + RC_ROUND_MIN ? 'run' : 'out');
+  const lb = k === 'wait' ? '예정' : (k === 'run' ? '라운드 중' : '끝남');
+  return { nm: t.part, a: { k, lb, de: `${t.teeTime} 티오프` } };
+}
+function rcPicBtn(kind, i) {
+  const b = rcShots(kind, 'before', i).length, a = rcShots(kind, 'after', i).length;
+  return `<button class="ct-pic ${b + a ? 'has' : ''}" data-open="${kind}:${i}" type="button">
+    <svg viewBox="0 0 24 24">${RC_CAM}</svg><span class="l">사진</span>
+    <span class="c">전 ${b} · 후 ${a}</span></button>`;
+}
+const rcAddRow = (id, label, full) => `<button class="ct-addrow" id="${id}" type="button"${full ? ' disabled' : ''}>
+  <span class="pl"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"></path></svg></span>${full ? '더 못 늘립니다' : label}</button>`;
+function rcWireOpen(box) {
+  box.querySelectorAll('[data-open]').forEach((el) => {
+    el.onclick = () => { const [k, i] = el.dataset.open.split(':'); rcOpenGallery(k, Number(i)); };
+  });
+}
+// 이 번호의 카트 주인이 누구인가 — 대여용이면 그렇다고 알린다.
+function rcOwnerTx(no) {
+  const nm = rcOwners[String(parseInt(no, 10))];
+  return nm ? `${nm} 님 카트` : '';
+}
+
+function rcRenderCarts() {
+  const box = $('rcCartBox'); if (!box) return;
+  const carts = (ccDay && ccDay.carts) || [{ no: '', chg: false, bad: false, note: '' }];
+  box.innerHTML = carts.map((c, i) => {
+    const a = rcAutoOf(c, i, carts.length);
+    const own = c.no ? rcOwnerTx(c.no) : '';
+    return `<div class="ct-item ${c.no ? '' : 'todo'}">
+      <div class="ct-body">
+        <div class="ct-top">
+          <input class="ct-in" data-i="${i}" type="text" inputmode="numeric" maxlength="3"
+            style="width:${c.no ? (c.no.length * 0.68 + 0.3) + 'em' : '92px'}"
+            value="${esc(c.no)}" placeholder="번호 적기" aria-label="${i + 1}번째 카트 번호">
+          <span class="ct-u">${c.no ? '번' : ''}</span>
+          <span class="ct-sp"></span>
+          ${carts.length > 1 ? `<button class="ct-del" data-del="${i}" type="button" aria-label="이 칸 지우기">${RC_XS}</button>` : ''}
+        </div>
+        ${a ? `<div class="ct-auto ${a.k}"><span class="dt"></span><span>${esc(a.lb)}</span>${a.de ? `<span class="de">· ${esc(a.de)}</span>` : ''}${own ? `<span class="de">· ${esc(own)}</span>` : ''}</div>` : ''}
+        <div class="ct-flags" data-fi="${i}">
+          <button class="chg ${c.chg ? 'on' : ''}" data-f="chg" type="button"><svg viewBox="0 0 24 24" fill="none">${RC_BOLT}</svg>충전 중</button>
+          <button class="bad ${c.bad ? 'on' : ''}" data-f="bad" type="button"><svg viewBox="0 0 24 24" fill="none">${RC_WARN}</svg>문제 있음</button>
+        </div>
+        ${c.chg ? `<div class="ct-chg">충전기에 꽂아 두신 것만 알립니다. 경기과 판에는 <b>${esc(rcHm(c.chgAt || Date.now()))}부터 충전 중</b>으로 떠서, 얼마나 됐는지 시계로 보입니다.</div>` : ''}
+        ${c.bad ? `<input class="ct-note" data-note="${i}" type="text" maxlength="40" value="${esc(c.note || '')}" placeholder="어디가 문제인가요? (예: 배터리가 빨리 닳음)">` : ''}
+      </div>
+      ${rcPicBtn('cart', i)}
+    </div>`;
+  }).join('') + rcAddRow('rcCartAdd', '카트 추가', carts.length >= 6);
+  rcWireOpen(box);
+  $('rcCartAdd').onclick = async () => { await postJSON('/api/cartcheck/cart/add', { date: ccDate }); await loadCartCheck(ccDate); rcFocusLastCart(); };
+  // ★번호를 치는 동안에는 다시 그리지 않는다 — 한 자 칠 때마다 커서가 튄다.
+  box.querySelectorAll('.ct-in').forEach((el) => {
+    el.oninput = () => {
+      const v = el.value.replace(/[^0-9]/g, '').slice(0, 3);
+      if (el.value !== v) el.value = v;
+      el.parentElement.querySelector('.ct-u').textContent = v ? '번' : '';
+      el.style.width = v ? (v.length * 0.68 + 0.3) + 'em' : '92px';
+      rcSaveNo(Number(el.dataset.i), v);
+    };
+  });
+  box.querySelectorAll('.ct-note').forEach((el) => {
+    el.oninput = () => rcSaveNote(Number(el.dataset.note), el.value);
+  });
+  box.querySelectorAll('.ct-flags').forEach((g) => {
+    g.querySelectorAll('[data-f]').forEach((b) => {
+      b.onclick = async () => {
+        const i = Number(g.dataset.fi), k = b.dataset.f, on = b.classList.contains('on');
+        await postJSON('/api/cartcheck/cart/set', { date: ccDate, i, [k]: !on });
+        await loadCartCheck(ccDate);
+      };
+    });
+  });
+  box.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      const i = Number(b.dataset.del);
+      const has = rcShots('cart', 'before', i).length + rcShots('cart', 'after', i).length;
+      if (has && !confirm('이 칸에 남긴 사진도 같이 지워집니다. 지울까요?')) return;
+      await postJSON('/api/cartcheck/cart/remove', { date: ccDate, i }); await loadCartCheck(ccDate);
+    };
+  });
+}
+function rcFocusLastCart() {
+  const ins = $('rcCartBox').querySelectorAll('.ct-in');
+  if (ins.length) ins[ins.length - 1].focus({ preventScroll: false });
+}
+// 번호·메모는 한 자 칠 때마다 서버에 안 보낸다 — 손이 멎으면 보낸다.
+let rcSaveT = null;
+function rcSaveNo(i, v) {
+  clearTimeout(rcSaveT);
+  rcSaveT = setTimeout(async () => {
+    await postJSON('/api/cartcheck/cart/set', { date: ccDate, i, no: v });
+    const keep = document.activeElement && document.activeElement.classList.contains('ct-in')
+      ? document.activeElement.dataset.i : null;
+    await loadCartCheck(ccDate);
+    if (keep !== null) { const again = $('rcCartBox').querySelector(`.ct-in[data-i="${keep}"]`); if (again) { again.focus(); const n = again.value.length; try { again.setSelectionRange(n, n); } catch { /* noop */ } } }
+    if (i === 0 && rcIsToday()) { hwCartNo = v; renderHomeWidgets(); }   // 홈 위젯도 같이
+  }, 450);
+}
+let rcNoteT = null;
+function rcSaveNote(i, v) {
+  clearTimeout(rcNoteT);
+  rcNoteT = setTimeout(() => postJSON('/api/cartcheck/cart/set', { date: ccDate, i, note: v }).catch(() => { /* noop */ }), 500);
+}
+
+function rcRenderClubs() {
+  const box = $('rcClubBox'); if (!box) return;
+  const n = (ccDay && ccDay.clubN) || 1;
+  box.innerHTML = Array.from({ length: n }, (unused, i) => {
+    const o = rcClubOf(i);
+    return `<div class="ct-item">
+      <div class="ct-body">
+        <div class="ct-top">
+          <span class="cl-nm">${esc(o.nm)}<span class="u"> 클럽</span></span>
+          <span class="ct-sp"></span>
+          ${n > 1 ? `<button class="ct-del" data-cdel="${i}" type="button" aria-label="이 칸 지우기">${RC_XS}</button>` : ''}
+        </div>
+        ${o.a ? `<div class="ct-auto ${o.a.k}"><span class="dt"></span><span>${esc(o.a.lb)}</span><span class="de">· ${esc(o.a.de)}</span></div>` : ''}
+      </div>
+      ${rcPicBtn('club', i)}
+    </div>`;
+  }).join('') + rcAddRow('rcClubAdd', '클럽 추가', n >= 6);
+  rcWireOpen(box);
+  $('rcClubAdd').onclick = async () => { await postJSON('/api/cartcheck/club/add', { date: ccDate }); await loadCartCheck(ccDate); };
+  box.querySelectorAll('[data-cdel]').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      const i = Number(b.dataset.cdel);
+      const has = rcShots('club', 'before', i).length + rcShots('club', 'after', i).length;
+      if (has && !confirm('이 칸에 남긴 사진도 같이 지워집니다. 지울까요?')) return;
+      await postJSON('/api/cartcheck/club/remove', { date: ccDate, i }); await loadCartCheck(ccDate);
+    };
+  });
+}
+
+// 대시보드(카트·클럽 상자 + 반납 4종) 렌더 — 완료 판정은 서버 returnStatus 기준.
 function rcRenderDash() {
-  const st = (ccDay && ccDay.returnStatus) || { cart: {}, club: {}, checks: [], doneCount: 0, total: 6 };
-  const cb = rcArr('cart', 'before').length, ca = rcArr('cart', 'after').length;
-  const lb = rcArr('club', 'before').length, la = rcArr('club', 'after').length;
-  $('rcCcb').textContent = cb; $('rcCca').textContent = ca; $('rcLcb').textContent = lb; $('rcLca').textContent = la;
-  rcBadge('rcBdCart', st.cart.done, ca); rcBadge('rcBdClub', st.club.done, la);
+  const st = (ccDay && ccDay.returnStatus) || { cart: {}, club: {}, checks: [], doneCount: 0, total: 5 };
+  rcRenderCarts(); rcRenderClubs();
   const grid = $('rcReturnGrid');
   // ★충전 팝 애니메이션은 '방금 탭해서 켠 항목'에만(rcJustTapped). 전체 재렌더 시 다른 확인된 항목이 같이 튀는 문제 방지.
   grid.innerHTML = (st.checks || []).map((c) => {
     const pop = (c.done && c.key === rcJustTapped) ? ' rcpop' : '';
-    return `<div class="rc2-op ${c.done ? 'on' : ''}${pop}" data-rk="${c.key}"><div class="rc2-oi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">${RC_ICN[c.key] || ''}</svg></div><div><div class="rc2-on">${esc(c.label)}</div><div class="rc2-os">${c.done ? '확인됨' : '미확인'}</div></div><div class="rc2-ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"></path></svg></div></div>`;
+    return `<div class="rc2-op ${c.done ? 'on' : ''}${pop}" data-rk="${c.key}"><div class="rc2-oi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">${RC_ICN[c.key] || ''}</svg></div><div><div class="rc2-on">${esc(c.label)}</div><div class="rc2-os">${c.done ? '확인됨' : ''}</div></div><div class="rc2-ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"></path></svg></div></div>`;
   }).join('');
   rcJustTapped = null;                              // 팝은 1회성 — 렌더 후 소진
   grid.querySelectorAll('[data-rk]').forEach((el) => {
@@ -3434,11 +3605,11 @@ function rcRenderDash() {
   });
   // ★당번·벌당인 날 — 라운드에 카트를 끌고 나가지 않으므로 카트·클럽 사진 점검은 면제(4칸만 완료 판정).
   const duty = !!st.dutyDay;
-  ['rcPhotoSect', 'rcPhotoCards'].forEach((id) => { const el = $(id); if (el) el.hidden = duty; });
+  ['rcPhotoSect', 'rcCartBox', 'rcClubSect', 'rcClubBox'].forEach((id) => { const el = $(id); if (el) el.hidden = duty; });
   const dn = $('rcDutyNote');
   if (dn) {
     dn.hidden = !duty;
-    if (duty) dn.innerHTML = '<b>오늘은 당번이에요</b><span>라운드에 카트를 끌고 나가지 않으니 카트·클럽 사진은 안 올려도 돼요. 아래 장비 반납만 확인하면 완료입니다.</span>';
+    if (duty) dn.innerHTML = '<b>오늘은 당번이에요</b><span>라운드에 카트를 끌고 나가지 않으니 카트 번호도 사진도 안 적어도 돼요. 아래 장비 반납만 확인하면 완료입니다.</span>';
   }
   const done = st.doneCount || 0, total = st.total || (duty ? 4 : 6);
   const pt = $('rcProgTxt');
@@ -3448,11 +3619,12 @@ function rcRenderDash() {
 }
 
 // 미완료 항목 목록(사진 전·후 + 반납 4종) — 미완료 안내에 콕 집어 보여준다.
+// 아직 못 적은 것 — ★사진은 여기 없다. 사진은 도장을 막지 않는다.
 function rcMissingList(st) {
   const m = [];
-  // ★완료판정 6칸 모델과 일치 — 카트/클럽 사진은 각 1칸(전·후 둘 다 있어야 done). 전/후로 쪼개면 최대 8이 돼 링(6)과 어긋남.
-  if (!st.cart || !st.cart.done) m.push('카트 전·후 사진');
-  if (!st.club || !st.club.done) m.push('클럽 전·후 사진');
+  const n = ((st.nums && st.nums.need) || []);
+  const many = ((st.carts || []).length) > 1;
+  for (const i of n) m.push((many ? RC_ORD[i] + ' 번째 ' : '') + '카트 번호');
   for (const c of (st.checks || [])) if (!c.done) m.push(c.label);
   return m;
 }
@@ -3509,15 +3681,18 @@ function rcSyncStamp(st) {
       };
     }
   }
-  if (miss) miss.classList.remove('on');                                         // 미완료 안내는 저장 시도 때만 노출
+  if (miss) miss.classList.remove('on');                                         // 못 적은 것 안내는 저장 시도 때만 노출
+  // 남긴 사진 셈 — 압박이 아니라 셈이다(0장이면 아예 안 뜬다).
+  const tal = $('rcTally');
+  if (tal) { const np = st.nPhoto || 0; tal.hidden = !np; tal.innerHTML = np ? `남긴 사진 <b>${np}장</b>` : ''; }
   // 게이지: 완료 항목 비율만큼 왼→오 차오름(CSS transition), 다 차면 팝+샤인 1회.
   const total = st.total || 6, done = st.doneCount || 0;
   const lbl = $('rcStampLbl'), fill = $('rcStampFill');
   // 이미 찍힌 날은 버튼이 그 사실을 알리고 '다시 보기' 역할을 한다(오버레이를 자동으로 안 띄우므로).
-  if (lbl) lbl.textContent = (ccDay && ccDay.stampedAt) ? '근무 완료 · 도장 보기'
-    : st.allDone ? '완료 도장 찍기' : `미완료 ${rcMissingList(st).length}개`;
+  if (lbl) lbl.textContent = (ccDay && ccDay.stampedAt) ? '근무 완료 · 도장 보기' : '완료 도장 찍기';
   if (fill) fill.style.width = (total ? (done / total * 100) : 0).toFixed(1) + '%';
   btn.classList.toggle('done', !!st.allDone);
+  btn.classList.toggle('locked', !st.allDone && !(ccDay && ccDay.stampedAt));
   if (st.allDone && !rcWasStampFull) {                                           // 방금 다 찬 순간에만 완료 애니메이션
     btn.classList.remove('pop'); void btn.offsetWidth; btn.classList.add('pop');
     btn.addEventListener('animationend', () => btn.classList.remove('pop'), { once: true });
@@ -3530,7 +3705,15 @@ function rcSyncStamp(st) {
       rcShowStampAnimated();
     } else {
       const l = rcMissingList(cur);
-      if (miss) { miss.innerHTML = `아직 완료되지 않아 도장을 못 찍었어요. <b>미완료 ${l.length}개</b> — ${l.map(esc).join(', ')}`; miss.classList.add('on'); }
+      if (miss) {
+        const why = ((cur.nums && cur.nums.need) || []).length
+          ? '번호가 있어야 경기과가 이 카트를 다음 캐디에게 줄 수 있습니다.'
+          : '경기팀이 반납을 확인하는 항목입니다.';
+        miss.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 8v5M12 16.5v.01"></path><circle cx="12" cy="12" r="9"></circle></svg>'
+          + `<div><b>${l.map(esc).join(' · ')}</b>를 아직 안 적으셨어요.<br>${why}</div>`;
+        miss.classList.add('on');
+        miss.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
     }
   };
   const eb = $('rcEditBtn');
@@ -3673,7 +3856,7 @@ async function loadCartCheck(date, opts = {}) {
     // ★조용한 갱신(재진입): 내용이 그대로면 화면을 손대지 않는다 — 상태값은 위에서 이미 최신으로 맞췄다.
     if (opts.quiet && sig === ccSig) return;
     ccSig = sig;
-    rcSetCart(ccDay.cartNo || work.cartNo || '', false);   // 히어로 번호(로드 시 즉시 반영, 애니메이션 없음)
+    rcTees = (r.tees || []).map((t) => ({ ...t, m: rcMin(t.teeTime) })).filter((t) => t.m >= 0).sort((a, b) => a.m - b.m);
     rcRenderDash();
     rcRenderLost(ccDay.lostItems || []);
     if ($('rcGallery').classList.contains('on')) { ['before', 'after'].forEach(rcRenderRail); rcRenderPane('top'); rcRenderPane('bot'); }
@@ -3692,10 +3875,11 @@ const rcTrk = (w) => $(w === 'top' ? 'rcTrkTop' : 'rcTrkBot');
 const rcDots = (w) => $(w === 'top' ? 'rcDotsTop' : 'rcDotsBot');
 const rcMeta = (w) => $(w === 'top' ? 'rcMetaTop' : 'rcMetaBot');
 
-function rcOpenGallery(subject, vo) {
-  rcSubject = subject; rcViewOnly = !!vo;
+function rcOpenGallery(subject, slot, vo) {
+  rcSubject = subject; rcSlot = Number(slot) || 0; rcViewOnly = !!vo;
+  rcSel[subject].before = 0; rcSel[subject].after = 0;              // 칸이 바뀌면 보던 자리도 처음으로
   const g = $('rcGallery'); g.classList.toggle('viewonly', rcViewOnly); g.classList.add('mini');   // 기본=접힘(4)
-  $('rcGvTitle').textContent = RC_META[subject].title;
+  $('rcGvTitle').textContent = rcSlotTitle(subject, rcSlot);
   $('rcGvFoot').innerHTML = '<b>두 손가락으로 확대</b> · 좌우로 넘기면 다음/이전 사진';
   ['before', 'after'].forEach(rcRenderRail);
   rcRenderPane('top'); rcRenderPane('bot');
@@ -3703,10 +3887,16 @@ function rcOpenGallery(subject, vo) {
   g.classList.add('on'); document.body.style.overflow = 'hidden';
   if (!rcGalPushed) { try { history.pushState({ rcgal: 1 }, ''); rcGalPushed = true; } catch { /* noop */ } }
 }
-function rcUpdateGalDone() {                          // 완료 버튼: 전·후 각 1장 이상일 때만 활성(2)
+// 무엇의 사진인지 제목으로 못 박는다 — 칸이 여럿일 때 '어느 카트'인지가 제일 중요하다.
+function rcSlotTitle(subject, slot) {
+  if (subject === 'club') return rcClubOf(slot).nm + ' 클럽';
+  const c = ((ccDay && ccDay.carts) || [])[slot];
+  return (c && c.no) ? `${c.no}번 카트` : (slot > 0 ? `${RC_ORD[slot]} 번째 카트` : '오늘 카트');
+}
+// ★사진은 도장을 안 막는다 → 닫기 단추는 언제나 '완료'다(미완료로 가두지 않는다).
+function rcUpdateGalDone() {
   const btn = $('rcGvDone'); if (!btn) return;
-  const ok = rcArr(rcSubject, 'before').length > 0 && rcArr(rcSubject, 'after').length > 0;
-  btn.disabled = !ok; btn.textContent = ok ? '완료' : '미완료';
+  btn.disabled = false; btn.textContent = '완료';
 }
 function rcCloseGalleryUI() {                         // UI만 닫기(히스토리 조작 없음) — popstate에서 호출
   $('rcGallery').classList.remove('on'); $('rcChooser').classList.remove('on'); $('rcConfirm').classList.remove('on');
@@ -3799,14 +3989,14 @@ function rcGoIndex(w, ni) {
 }
 function rcDelCurrent(w) { const side = rcSideOf(w); if (!rcArr(rcSubject, side).length) return; rcAskDel(side, rcSel[rcSubject][side]); }
 function rcTapAdd(side) {
-  rcPendingAdd = { subject: rcSubject, side };
-  $('rcChTitle').textContent = `${RC_META[rcSubject].title} · ${side === 'before' ? '라운드 전' : '라운드 후'} 사진 추가`;
+  rcPendingAdd = { subject: rcSubject, side, slot: rcSlot };
+  $('rcChTitle').textContent = `${rcSlotTitle(rcSubject, rcSlot)} · ${side === 'before' ? '라운드 전' : '라운드 후'} 사진 추가`;
   $('rcChooser').classList.add('on');   // 네이티브 클릭이라 유령클릭 없음 → 즉시 사용 가능
 }
 function rcAskDel(side, i) { rcPendingDel = { side, i }; $('rcDelTitle').textContent = `${side === 'before' ? '라운드 전' : '라운드 후'} ${i + 1}번째 사진`; $('rcConfirm').classList.add('on'); }
 async function rcDoUpload(files) {
   if (!rcPendingAdd || !files.length) return;
-  const { subject, side } = rcPendingAdd; const leg = RC_LEG[subject][side];
+  const { subject, side, slot } = rcPendingAdd; const leg = rcLeg(subject, side, slot);
   const CAP = 10, room = Math.max(0, CAP - rcArr(subject, side).length);
   let pick = files.filter((f) => /^image\//.test(f.type));
   if (pick.length > room) { alert(`사진은 최대 ${CAP}장까지예요. ${room}장만 올릴게요.`); pick = pick.slice(0, room); }
@@ -3822,7 +4012,7 @@ async function rcDoUpload(files) {
 }
 async function rcConfirmDel() {
   $('rcConfirm').classList.remove('on'); if (!rcPendingDel) return;
-  const { side, i } = rcPendingDel; const f = rcArr(rcSubject, side)[i]; const leg = RC_LEG[rcSubject][side];
+  const { side, i } = rcPendingDel; const f = rcArr(rcSubject, side)[i]; const leg = rcLeg(rcSubject, side, rcSlot);
   if (f) { await postJSON('/api/cartcheck/photo/remove', { date: ccDate, leg, fname: f }); await loadCartCheck(ccDate); }
   rcRenderRail(side); rcRenderPane(side === 'before' ? 'top' : 'bot'); rcPendingDel = null;
 }
@@ -3880,80 +4070,11 @@ function rcInitGallery() {
   });
   document.addEventListener('keydown', (e) => { if ($('rcGallery').classList.contains('on') && e.key === 'Escape') { if ($('rcConfirm').classList.contains('on')) $('rcConfirm').classList.remove('on'); else if ($('rcChooser').classList.contains('on')) $('rcChooser').classList.remove('on'); else rcCloseGallery(); } });
 }
-/* ── 카트번호 히어로: 디지털 도트 표정 + 번호 팝업(주인 조회) ── */
+/* ── 카트 주인표 — 번호를 치면 줄에 '누구 님 카트'로 붙는다 ──
+   ★큰 히어로(오늘 카트 번호 하나 + 표정)는 걷었다. 카트가 하루에 둘 셋이 되는 순간
+    번호 하나를 크게 세우는 것이 거짓이 되고, 고치려면 팝업을 또 열어야 했다.
+    번호는 이제 카트 줄에서 바로 친다. */
 let rcOwners = {};                                   // 번호→소유자 이름 (서버 seed, data/cart-owners.json)
-const RC_EYES       = '<circle cx="45" cy="42" r="7.5" fill="#fff"/><circle cx="93" cy="42" r="7.5" fill="#fff"/>';
-const RC_EYES_BLINK = '<rect x="37" y="40" width="16" height="5.5" rx="2.75" fill="#fff"/><rect x="85" y="40" width="16" height="5.5" rx="2.75" fill="#fff"/>';
-const RC_MOUTH3     = '<text x="69" y="96" text-anchor="middle" font-size="44" font-weight="800" fill="#fff" font-family="Courier New,monospace">3</text>';
-const RC_SMILE      = '<path d="M45 75 Q69 96 93 75" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>';
-const rcFaceSvg = (inner) => `<svg viewBox="0 0 138 118" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
-const RC_FACE_IDLE = rcFaceSvg(RC_EYES + RC_MOUTH3), RC_FACE_BLINK = rcFaceSvg(RC_EYES_BLINK + RC_MOUTH3), RC_FACE_HAPPY = rcFaceSvg(RC_EYES + RC_SMILE);
-let rcCartVal = '', rcTypeTimer = null, rcT1 = null, rcT2 = null, rcIdle = null;
-function rcStopIdle() { if (rcIdle) { clearInterval(rcIdle); rcIdle = null; } }
-function rcStartIdle() {
-  rcStopIdle(); const f = $('rcFace'); if (!f) return; f.innerHTML = RC_FACE_IDLE;
-  rcIdle = setInterval(() => {
-    const f2 = $('rcFace'); if (!f2 || !f2.classList.contains('idle')) return;
-    f2.innerHTML = RC_FACE_BLINK;
-    setTimeout(() => { const f3 = $('rcFace'); if (f3 && f3.classList.contains('idle')) f3.innerHTML = RC_FACE_IDLE; }, 220);
-  }, 2600);
-}
-function rcClearFaceTimers() { [rcTypeTimer, rcT1, rcT2].forEach((t) => t && clearTimeout(t)); rcTypeTimer = rcT1 = rcT2 = null; }
-// 카트번호 반영. animate=true면 웃음→표정 사라짐→차분한 타이핑. false면 즉시(로드 시).
-function rcSetCart(v, animate) {
-  v = String(v || '').trim(); rcCartVal = v; rcClearFaceTimers();
-  const face = $('rcFace'), num = $('rcHeroNum'), hint = $('rcEditHint'); if (!face) return;
-  if (!v) {
-    num.textContent = ''; if (hint) hint.textContent = '탭하여 카트 번호 입력';
-    face.classList.remove('happy', 'vanish'); face.style.opacity = ''; face.style.transform = ''; face.style.display = '';
-    face.classList.add('idle'); rcStartIdle(); return;
-  }
-  rcStopIdle();
-  if (hint) hint.textContent = '탭하여 번호 수정';
-  face.classList.remove('idle'); face.style.display = ''; face.style.opacity = '1'; face.style.transform = '';
-  if (!animate) { num.textContent = v; face.classList.remove('happy', 'vanish'); face.style.display = 'none'; return; }
-  num.textContent = ''; face.classList.remove('happy', 'vanish'); face.innerHTML = RC_FACE_HAPPY; void face.offsetWidth; face.classList.add('happy');
-  rcT1 = setTimeout(() => {
-    face.classList.add('vanish');
-    rcT2 = setTimeout(() => {
-      face.style.display = 'none';
-      const d = v.split(''); let i = 0;
-      (function step() { if (i < d.length) { num.textContent += d[i++]; rcTypeTimer = setTimeout(step, 200); } })();
-    }, 330);
-  }, 780);
-}
-function rcOwnerLookup() {
-  const el = $('rcNumOwner'); if (!el) return;
-  const v = $('rcNumIn').value.trim();
-  if (!v) { el.className = 'eowner'; el.innerHTML = ''; return; }
-  const name = rcOwners[String(parseInt(v, 10))];
-  if (name) el.className = 'eowner', el.innerHTML = `<div class="oc"><div class="av">${esc(name.charAt(0))}</div><div class="tx">이 카트의 주인은 <b>${esc(name)}</b>님</div></div>`;
-  else el.className = 'eowner free', el.innerHTML = '<div class="oc"><div class="av">?</div><div class="tx">지정 주인이 없는 <b>대여용</b> 카트예요</div></div>';
-}
-function rcOpenNum() {
-  $('rcNumIn').value = rcCartVal; rcOwnerLookup(); $('rcNumWrap').classList.add('on');
-  setTimeout(() => { const i = $('rcNumIn'); i.focus({ preventScroll: true }); try { i.select(); } catch { /* noop */ } if (rcKbApply) rcKbApply(); }, 320);
-}
-function rcCloseNum() { $('rcNumWrap').classList.remove('on'); if (rcKbApply) rcKbApply(); }
-async function rcSaveNum() {
-  const v = $('rcNumIn').value.trim(); rcCloseNum();
-  await postJSON('/api/cartcheck/cart', { date: ccDate, cartNo: v });
-  setTimeout(() => rcSetCart(v, true), 260);
-  // 홈 위젯 즉시 동기화 — 오늘 날짜를 고칠 때만(지난 기록 수정은 오늘 카트와 무관).
-  if (!ccDate || !rcTodayISO || ccDate === rcTodayISO) { hwCartNo = v; renderHomeWidgets(); }
-}
-function rcInitHero() {
-  fetch('/api/cart-owners').then((r) => r.json()).then((r) => { rcOwners = (r && r.owners) || {}; }).catch(() => { /* noop */ });
-  const open = () => rcOpenNum();
-  $('rcHeroFace').onclick = open;
-  $('rcHeroFace').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
-  $('rcEditHint').onclick = (e) => { e.stopPropagation(); open(); };
-  $('rcNumIn').oninput = rcOwnerLookup;
-  $('rcNumCancel').onclick = rcCloseNum;
-  $('rcNumSave').onclick = rcSaveNum;
-  $('rcNumWrap').onclick = (e) => { if (e.target === $('rcNumWrap')) rcCloseNum(); };
-  rcStartIdle();
-}
 
 /* ── 고객 분실물 로그(이름 + 선택 사진) ── */
 const RC_XSVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>';
@@ -3963,10 +4084,22 @@ function rcRenderLost(items) {
     const thumb = it.photo
       ? `<div class="lf-thumb" style="background-image:url(${rcUrl(it.photo)})"></div>`
       : '<div class="lf-thumb ph"><span>사진</span></div>';
-    return `<div class="lf-item">${thumb}<div><div class="nm">${esc(it.name || '')}</div></div><button class="lf-del" data-id="${esc(it.id)}" type="button" aria-label="삭제">${RC_XSVG}</button></div>`;
+    // ★경기과 판에 떴는지를 한 줄로 알린다. 못 갔으면 못 갔다고 적는다 —
+    //  '갔다'고 거짓말하면 손님이 찾을 때 경기과엔 없고 캐디만 억울해진다.
+    const tick = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5"></path></svg>';
+    const bang = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16.5v.01"></path><circle cx="12" cy="12" r="9"></circle></svg>';
+    const sent = it.sentAt
+      ? `<div class="sent">${tick}${esc(rcHm(it.sentAt))} · 경기과에 뜸</div>`
+      : `<div class="sent wait">${bang}경기과에 아직 못 알림</div>`;
+    return `<div class="lf-item">${thumb}<div><div class="nm">${esc(it.name || '')}</div>${sent}</div><button class="lf-del" data-id="${esc(it.id)}" type="button" aria-label="삭제">${RC_XSVG}</button></div>`;
   }).join('');
   box.querySelectorAll('.lf-del').forEach((b) => {
-    b.onclick = async () => { await postJSON('/api/cartcheck/lost/remove', { date: ccDate, id: b.dataset.id }); loadCartCheck(ccDate); };
+    b.onclick = async () => {
+      const r = await postJSON('/api/cartcheck/lost/remove', { date: ccDate, id: b.dataset.id });
+      // 경기과가 이미 받아 뒀으면 앱에서 지워도 거기 장부는 남는다 — 그 사실을 숨기지 않는다.
+      if (r && r.held) alert('경기과가 이미 받아 두었어요.\n앱에서는 지웠지만 경기과 장부에는 남아 있습니다 — 경기과에 말씀해 주세요.');
+      loadCartCheck(ccDate);
+    };
   });
 }
 let rcAddPhoto = null;
@@ -4024,9 +4157,8 @@ function initCartButtons() {
   $('rcFindClose').onclick = rcCloseFind;                                  // 뒤로(←)
   $('rcFindInput').oninput = (e) => { rcFindClearToggle(); rcRenderFindList(e.target.value); };
   $('rcFindClear').onclick = () => { const i = $('rcFindInput'); i.value = ''; rcFindClearToggle(); rcRenderFindList(''); i.focus(); };  // 입력 지우기
-  $('rcCardCart').onclick = () => rcOpenGallery('cart');
-  $('rcCardClub').onclick = () => rcOpenGallery('club');
-  rcInitHero();       // 카트번호 히어로(표정·번호 팝업·주인 조회)
+  // 카트 주인표(번호→이름) — 줄마다 '누구 님 카트'로 붙는다
+  fetch('/api/cart-owners').then((x) => x.json()).then((x) => { rcOwners = (x && x.owners) || {}; rcRenderCarts(); }).catch(() => { /* noop */ });
   rcInitLost();       // 고객 분실물 로그(추가 시트)
   rcInitGallery();
   rcInitKbAvoid();    // 키보드 가림 방지(visualViewport)

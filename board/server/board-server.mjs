@@ -16,6 +16,9 @@ import { fileURLToPath } from 'node:url';
 // 휴무 신청 — 장부와 화면은 따로 산다. 이 파일은 길만 이어 준다
 import { dayoffPage, addRequest, decide, delRequest, readBook, approvedOn,
   mineOf, cancelOwn, matOf, tallyOf, KINDS } from './board-dayoff.mjs';
+// 분실물 — 캐디가 앱에서 올린 것을 경기과가 받는 자리. 장부와 화면은 저 안에 산다
+import { lostPage, addLost, cancelLost, move as lostMove, readBook as lostBook,
+  waitingCount as lostWaiting, lostPhotoDir, okPhoto } from './board-lost.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const HOST = process.env.BOARD_HOST || '127.0.0.1';
@@ -495,6 +498,38 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, r);
     }
 
+    // ── 분실물 — 입장 코드가 있는 경기과 분이면 누구나 본다(휴무 신청과 같은 잣대).
+    if (p === BASE + '/lost' || p === '/lost') {
+      const showAll = u.searchParams.get('all') === '1';
+      const draw = (m2, b2) => send(res, 200, lostPage(DATA, me, m2, b2, showAll, esc, BASE), 'text/html; charset=utf-8');
+      if (req.method === 'GET') return draw('', '');
+      if (req.method === 'POST') {
+        const f = new URLSearchParams(await body(req));
+        const r = lostMove(DATA, f.get('id'), f.get('act'), f.get('note'));
+        if (!r.ok) return draw('', r.error);
+        const what = r.rec.name;
+        const m2 = r.gone ? `${what} 신고를 지웠습니다`
+          : r.rec.state === 'done' ? `${what} — 주인에게 전달한 것으로 적었습니다`
+          : r.rec.state === 'keep' ? `${what} — 받아 둔 것으로 적었습니다` : '';
+        log('분실물', f.get('act'), what, r.rec.by, who);
+        return draw(m2, '');
+      }
+    }
+    // 사진 한 장 — 장부에 적힌 이름만 내준다(주소를 지어내 남의 파일을 못 읽게)
+    if (req.method === 'GET' && (p.startsWith(BASE + '/lost/photo/') || p.startsWith('/lost/photo/'))) {
+      const fn = decodeURIComponent(p.slice(p.indexOf('/lost/photo/') + 12));
+      if (!okPhoto(fn) || !lostBook(DATA).list.some((x) => x.photo === fn)) return sendJSON(res, 404, { ok: false });
+      try {
+        const buf = fs.readFileSync(path.join(lostPhotoDir(DATA), fn));
+        return send(res, 200, buf, fn.endsWith('.png') ? 'image/png' : 'image/jpeg');
+      } catch (e) { return sendJSON(res, 404, { ok: false }); }
+    }
+    // 배치표 화면 위쪽 단추가 묻는 문 — 몇 건이 기다리나
+    if (req.method === 'GET' && (p === '/api/lost' || p === BASE + '/api/lost')) {
+      return sendJSON(res, 200, { ok: true, wait: lostWaiting(DATA),
+        list: lostBook(DATA).list.map((x) => ({ id: x.id, state: x.state })) });
+    }
+
     // ── 앱이 드나드는 옆문 — 그 사람 것만 오간다.
     //  ★이름은 앱 서버가 로그인에서 꺼내 붙인 것이다. 폰이 적어 보낸 게 아니다.
     //   그래서 여기서는 이름을 그대로 믿는다 — 옆문 열쇠가 곧 그 보증이다.
@@ -517,6 +552,19 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST') {
         let inb = {};
         try { inb = JSON.parse(await body(req) || '{}'); } catch (e) { inb = {}; }
+        // ★분실물 — 캐디가 카트를 비우다 찾은 것. 신청과 한 문으로 들어온다.
+        //  문을 또 뚫으면 열쇠가 둘이 되고, 둘이 되면 하나는 언젠가 안 바뀐다.
+        if (inb.act === 'lost') {
+          const r = addLost(DATA, { name: inb.name, by: nm, cart: inb.cart, part: inb.part,
+            image: inb.image, appId: inb.appId });
+          if (r.ok && !r.dup) log('분실물 들어옴', r.rec.name, nm, r.rec.part, r.rec.cart);
+          return sendJSON(res, r.ok ? 200 : 400, r.ok ? { ok: true, id: r.rec.id, at: r.rec.at } : r);
+        }
+        if (inb.act === 'lost-cancel') {
+          const r = cancelLost(DATA, inb.appId, nm);
+          if (r.ok) log('분실물 무름', r.rec.name, nm);
+          return sendJSON(res, r.ok ? 200 : 400, r);
+        }
         if (inb.act === 'cancel') {
           const r = cancelOwn(DATA, inb.id, nm);
           if (r.ok) log('신청 무름', r.rec.kind, nm, r.rec.date);

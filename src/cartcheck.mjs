@@ -34,33 +34,73 @@ export const DEFAULT_ITEMS = [
 export const PHOTO_LEGS = ['intake', 'exit', 'club_pre', 'club_post']; // 카트 라운드전/후 · 클럽 라운드전/후
 const SETTINGS_KEY = '__settings'; // 날짜 키와 안 겹치는 예약 키
 
+// ══ 하루에 카트를 여러 대 타는 날 ═══════════════════════════════
+//  중복 근무자는 한 라운드를 돌고 배터리가 모자라 카트를 바꿔 탄다. 그래서 '오늘 카트'는
+//  하나가 아니라 목록이다. 클럽도 팀마다 따로 받으므로 칸이 늘 수 있다.
+//  ★사진 칸 이름(leg)은 첫 칸이 옛 이름 그대로다 — intake·exit·club_pre·club_post.
+//   두 번째 칸부터만 '#2'가 붙는다. 그래야 여태 쌓인 기록·바깥 화면이 안 깨진다.
+const MAX_SLOT = 6;
+const legOf = (base, slot) => (slot > 0 ? `${base}#${slot + 1}` : base);
+const LEG_RE = /^(intake|exit|club_pre|club_post)(?:#([2-6]))?$/;
+function legArr(rec, leg) {
+  const c = rec && rec.photos && rec.photos[leg];
+  return Array.isArray(c) ? c : (c ? [c] : []);   // 과거 단일 문자열도 배열로 흡수(하위호환)
+}
+const usedLegs = (rec) => Object.keys((rec && rec.photos) || {}).filter((k) => LEG_RE.test(k));
+const countShots = (rec) => usedLegs(rec).reduce((s, l) => s + legArr(rec, l).length, 0);
+
+let cartSeq = 0;
+const newCartId = () => 'c' + Date.now().toString(36) + (cartSeq++).toString(36);
+const blankCart = () => ({ id: newCartId(), no: '', chg: false, chgAt: null, bad: false, note: '', outAt: null });
+// 저장본을 늘 같은 모양으로 펴 준다 — 옛 기록(cartNo 한 칸)도 여기서 목록으로 흡수한다.
+function normCarts(rec) {
+  const raw = Array.isArray(rec && rec.carts) && rec.carts.length ? rec.carts : null;
+  if (!raw) return [{ ...blankCart(), no: String((rec && rec.cartNo) || '').slice(0, 4) }];
+  return raw.slice(0, MAX_SLOT).map((c) => ({
+    id: String((c && c.id) || newCartId()), no: String((c && c.no) || '').slice(0, 4),
+    chg: !!(c && c.chg), chgAt: (c && c.chgAt) || null, bad: !!(c && c.bad),
+    note: String((c && c.note) || '').slice(0, 60), outAt: (c && c.outAt) || null,
+  }));
+}
+const normClubN = (rec) => Math.max(1, Math.min(MAX_SLOT, Number(rec && rec.clubN) || 1));
+
 // 경기팀 반납 확인(고정 4종) — 사진 없이 탭 체크. 카트 청소·상태는 카트 사진(intake/exit)이 증거.
 //  key = 저장 식별자(체크 시각이 여기 묶임). 편집 불가(경기팀 필수 항목).
 export const OPS_RETURN_ITEMS = [
-  { key: 'battery',  label: '카트 배터리 충전' },
+  // ★카트 배터리는 이제 카트 칸에서 '충전 중'으로 적는다(카트마다 따로다).
+  //  여기 남는 건 캐디가 몸에 지니고 다니는 보조배터리다.
+  { key: 'battery',  label: '보조배터리 충전' },
   { key: 'tablet',   label: '태블릿 충전' },
   { key: 'radio',    label: '무전기 충전' },
   { key: 'guidekey', label: '유도키 전용칸 반납' },
 ];
 const OPS_KEYS = new Set(OPS_RETURN_ITEMS.map((i) => i.key));
 
-// 반납 완료 판정(경기팀 공유·캐디 대시보드 링 공용):
-//  6칸 = 카트(전·후 사진 있음) + 클럽(전·후 사진 있음) + 반납체크 4종.
-function legCount(photos, leg) { const c = photos && photos[leg]; return Array.isArray(c) ? c.length : (c ? 1 : 0); }
-//  ★당번·벌당인 날(dutyDay)은 라운드에 카트를 끌고 나가지 않는다 → 카트·클럽 사진 자체가 없으므로
-//   4칸(반납체크)만으로 완료 판정한다. 안 그러면 영원히 6칸을 못 채워 완료 도장을 못 찍는다.
+// 반납 완료 판정 — ★무엇이 도장을 막는가가 여기서 정해진다.
+//  막는 것 : ① 카트 칸마다 번호   ② 장비 반납 4종
+//  안 막는 것: 사진. 카트를 바꿔 탈 때마다 찍으라고 하면 압박이 된다. 남기고 싶은 사람만 남긴다.
+//  ★번호는 왜 막나 — 경기과가 이 카트를 다음 캐디에게 줄 수 있는지 그 번호로 본다.
+//   한 사람이 안 적으면 다른 캐디가 빈 카트를 못 받는다. 그래서 여기만 죈다.
+//  ★당번·벌당인 날(dutyDay)은 라운드에 카트를 끌고 나가지 않는다 → 번호도 안 묻고 4종만 본다.
 export function computeReturn(rec, dutyDay = false) {
-  const p = (rec && rec.photos) || {};
-  const cart = { before: legCount(p, 'intake'), after: legCount(p, 'exit') };
-  cart.done = cart.before > 0 && cart.after > 0;
-  const club = { before: legCount(p, 'club_pre'), after: legCount(p, 'club_post') };
-  club.done = club.before > 0 && club.after > 0;
+  const carts = normCarts(rec), clubN = normClubN(rec);
+  const shots = (base, i) => { const a = legArr(rec, legOf(base, i)); return a.length; };
+  const cartShots = carts.map((c, i) => ({ before: shots('intake', i), after: shots('exit', i) }));
+  const clubShots = Array.from({ length: clubN }, (unused, i) => ({ before: shots('club_pre', i), after: shots('club_post', i) }));
+  // 첫 칸 요약 — 여태 이 두 값을 읽어 온 자리(모니터·응원·옛 화면)가 그대로 돌게 남긴다.
+  const cart = { ...cartShots[0], done: cartShots[0].before > 0 && cartShots[0].after > 0 };
+  const club = { ...clubShots[0], done: clubShots[0].before > 0 && clubShots[0].after > 0 };
   const or = (rec && rec.opsReturn) || {};
   const checks = OPS_RETURN_ITEMS.map((i) => ({ key: i.key, label: i.label, done: !!or[i.key], at: or[i.key] || null }));
   const checkDone = checks.filter((c) => c.done).length;
-  const doneCount = dutyDay ? checkDone : ((cart.done ? 1 : 0) + (club.done ? 1 : 0) + checkDone);
-  const total = dutyDay ? OPS_RETURN_ITEMS.length : (2 + OPS_RETURN_ITEMS.length); // 4 또는 6
-  return { cart, club, checks, doneCount, total, allDone: doneCount === total, dutyDay };
+  const needNo = dutyDay ? [] : carts.map((c, i) => (c.no ? -1 : i)).filter((i) => i >= 0);
+  const numsDone = needNo.length === 0;
+  const doneCount = (dutyDay ? 0 : (numsDone ? 1 : 0)) + checkDone;
+  const total = (dutyDay ? 0 : 1) + OPS_RETURN_ITEMS.length;     // 5칸(당번인 날은 4칸)
+  return { cart, club, cartShots, clubShots, carts, clubN, checks,
+    nums: { need: needNo, done: numsDone },
+    nPhoto: countShots(rec),
+    doneCount, total, allDone: doneCount === total, dutyDay };
 }
 
 function loadAll(userId = 1) { return loadUserJSON(userId, FILE, {}); }
@@ -116,7 +156,8 @@ export function recommendItems(userId = 1) {
 }
 
 function blank(dateISO) {
-  return { date: dateISO, cartNo: '', photos: {}, checklist: {}, checklistDoneAt: null,
+  return { date: dateISO, cartNo: '', carts: [blankCart()], clubN: 1,
+    photos: {}, checklist: {}, checklistDoneAt: null,
     opsReturn: {}, returnDoneAt: null, stampedAt: null, remindedAt: null, updatedAt: null, lostItems: [] };
 }
 
@@ -127,7 +168,9 @@ export function getDay(dateISO, userId = 1) {
   const rec = d[dateISO] || blank(dateISO);
   const items = getItems(userId);
   const checked = items.filter((i) => (rec.checklist || {})[i.key]).length;
+  const carts = normCarts(rec);
   return { ...rec, opsReturn: rec.opsReturn || {}, lostItems: Array.isArray(rec.lostItems) ? rec.lostItems : [],
+    carts, clubN: normClubN(rec), cartNo: rec.cartNo || carts[0].no || '',
     progress: { checked, total: items.length, done: items.length > 0 && checked === items.length },
     returnStatus: computeReturn(rec, isDutyDay(dateISO, userId)) };
 }
@@ -137,6 +180,9 @@ function mutate(dateISO, fn, userId = 1) {
   const d = loadAll(userId);
   const rec = d[dateISO] || blank(dateISO);
   fn(rec);
+  rec.carts = normCarts(rec);
+  rec.clubN = normClubN(rec);
+  rec.cartNo = rec.carts[0].no || '';     // ★첫 칸 번호를 거울로 남긴다 — 홈 위젯·지난 기록이 이걸 읽는다
   rec.updatedAt = Date.now();
   const st = computeReturn(rec, isDutyDay(dateISO, userId));      // 반납 완료 시각(경기팀 '반납 완료' 표시)
   rec.returnDoneAt = st.allDone ? (rec.returnDoneAt || Date.now()) : null;
@@ -146,8 +192,69 @@ function mutate(dateISO, fn, userId = 1) {
   return getDay(dateISO, userId);
 }
 
-export function setCartNo(dateISO, cartNo, userId = 1) {
-  return mutate(dateISO, (r) => { r.cartNo = String(cartNo || '').slice(0, 20); }, userId);
+export function setCartNo(dateISO, cartNo, userId = 1) {   // 옛 길 — 첫 칸을 고친다
+  return setCart(dateISO, 0, { no: cartNo }, userId);
+}
+
+// ── 오늘 탄 카트 칸 ─────────────────────────────────────────────
+//  한 칸씩 고친다. 번호·충전·문제는 각각 따로 눌리므로 통째로 덮지 않는다.
+export function setCart(dateISO, i, patch, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const cs = normCarts(r);
+    const c = cs[i]; if (!c) return;
+    if (patch.no !== undefined) c.no = String(patch.no || '').replace(/[^0-9]/g, '').slice(0, 4);
+    if (patch.bad !== undefined) { c.bad = !!patch.bad; if (!c.bad) c.note = ''; }
+    if (patch.note !== undefined) c.note = String(patch.note || '').slice(0, 60);
+    // ★충전은 퍼센트를 못 본다. 꽂았다는 사실과 '꽂은 시각'만 남긴다 —
+    //  얼마나 됐는지는 보는 쪽(경기과)이 시계로 셈한다.
+    if (patch.chg !== undefined) { c.chg = !!patch.chg; c.chgAt = c.chg ? (c.chgAt || Date.now()) : null; }
+    r.carts = cs;
+  }, userId);
+}
+// 칸 늘리기 — 바꿔 탄 것이므로 앞 카트는 그 시각에 '내놓음'이 된다.
+export function addCart(dateISO, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const cs = normCarts(r);
+    if (cs.length >= MAX_SLOT) return;
+    const last = cs[cs.length - 1];
+    if (last && !last.outAt) last.outAt = Date.now();
+    r.carts = [...cs, blankCart()];
+  }, userId);
+}
+// 칸 지우기 — 그 칸에 남긴 사진도 같이 지우고, 뒤 칸 사진을 한 자리씩 당긴다.
+//  (사진 칸 이름이 자리 번호를 쓰므로, 안 당기면 남의 칸 사진으로 보인다)
+export function removeCart(dateISO, i, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const cs = normCarts(r);
+    if (cs.length <= 1 || i < 0 || i >= cs.length) return;
+    shiftLegs(r, ['intake', 'exit'], i, cs.length, userId);
+    cs.splice(i, 1);
+    r.carts = cs;
+  }, userId);
+}
+export function addClub(dateISO, userId = 1) {
+  return mutate(dateISO, (r) => { r.clubN = Math.min(MAX_SLOT, normClubN(r) + 1); }, userId);
+}
+export function removeClub(dateISO, i, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const n = normClubN(r);
+    if (n <= 1 || i < 0 || i >= n) return;
+    shiftLegs(r, ['club_pre', 'club_post'], i, n, userId);
+    r.clubN = n - 1;
+  }, userId);
+}
+// i번 칸의 사진을 지우고 i+1..n-1 칸을 한 자리씩 당긴다.
+function shiftLegs(r, bases, i, n, userId) {
+  r.photos = { ...(r.photos || {}) };
+  for (const b of bases) {
+    for (const f of legArr(r, legOf(b, i))) dropFile(f, userId);
+    for (let k = i; k < n - 1; k++) r.photos[legOf(b, k)] = legArr(r, legOf(b, k + 1));
+    delete r.photos[legOf(b, n - 1)];
+  }
+}
+function dropFile(fname, userId) {
+  try { if (fname && /^[\w.-]+\.(jpg|png)$/.test(fname)) fs.unlinkSync(path.join(userPhotoDir(userId), fname)); }
+  catch { /* 이미 없음 */ }
 }
 
 // 체크리스트 항목 토글. 전부 체크되면 완료시각 기록(=증거 타임스탬프).
@@ -192,29 +299,28 @@ export function setStamp(dateISO, stamped, userId = 1) {
 let photoSeq = 0;
 // intake(카트 전)·exit(카트 후)·club_pre(클럽 전)·club_post(클럽 후) 모두 여러 장 누적(배열).
 export function savePhoto(dateISO, leg, dataUrl, userId = 1) {
-  if (!isISO(dateISO) || !PHOTO_LEGS.includes(leg)) return null;
+  if (!isISO(dateISO) || !LEG_RE.test(leg)) return null;   // intake / exit#3 ... 칸 번호까지 검사한다
   const m = String(dataUrl || '').match(/^data:(image\/\w+);base64,(.+)$/);
   if (!m) return null;
   const ext = m[1] === 'image/png' ? 'png' : 'jpg';
   const dir = userPhotoDir(userId);
   fs.mkdirSync(dir, { recursive: true });
-  const fname = `cart_${dateISO}_${leg}_${Date.now()}_${photoSeq++}.${ext}`;
+  // ★파일 이름에 '#'을 넣지 않는다 — 사진을 내주는 문과 지우는 손이
+  //  이름을 [\w.-]로만 받아서, '#'가 끼면 안 보이고 안 지워진다(실측).
+  const tag = leg.replace('#', '-');
+  const fname = `cart_${dateISO}_${tag}_${Date.now()}_${photoSeq++}.${ext}`;
   fs.writeFileSync(path.join(dir, fname), Buffer.from(m[2], 'base64'));
   return mutate(dateISO, (r) => {
-    const cur = r.photos && r.photos[leg];
-    const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []); // 과거 단일 문자열도 배열로 흡수(하위호환)
-    r.photos = { ...r.photos, [leg]: [...arr, fname] };
+    r.photos = { ...r.photos, [leg]: [...legArr(r, leg), fname] };
   }, userId);
 }
 
 // 사진 삭제 — 두 구간 모두 배열에서 해당 파일만 제거. 파일도 지운다.
 export function removePhoto(dateISO, leg, fname, userId = 1) {
   return mutate(dateISO, (r) => {
-    if (!r.photos) return;
-    const cur = r.photos[leg];
-    const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
-    r.photos = { ...r.photos, [leg]: arr.filter((f) => f !== fname) };
-    try { if (fname && /^[\w.-]+\.(jpg|png)$/.test(fname)) fs.unlinkSync(path.join(userPhotoDir(userId), fname)); } catch { /* 이미 없음 */ }
+    if (!r.photos || !LEG_RE.test(leg)) return;
+    r.photos = { ...r.photos, [leg]: legArr(r, leg).filter((f) => f !== fname) };
+    dropFile(fname, userId);
   }, userId);
 }
 
@@ -238,6 +344,15 @@ export function addLostItem(dateISO, name, dataUrl, userId = 1) {
     r.lostItems = [...arr, { id, name: nm, photo: fname, at: Date.now() }];
   }, userId);
 }
+// 경기과에 갔는가 — 한 건마다 자국을 남긴다.
+//  ★못 갔으면 못 갔다고 적는다. 캐디 화면이 '갔다'고 거짓말하면
+//   손님이 찾을 때 경기과에는 없고 캐디만 억울해진다.
+export function markLostSent(dateISO, id, ok, userId = 1) {
+  return mutate(dateISO, (r) => {
+    const arr = Array.isArray(r.lostItems) ? r.lostItems : [];
+    r.lostItems = arr.map((x) => (x.id === id ? { ...x, sentAt: ok ? Date.now() : null, sendFail: !ok } : x));
+  }, userId);
+}
 export function removeLostItem(dateISO, id, userId = 1) {
   return mutate(dateISO, (r) => {
     const arr = Array.isArray(r.lostItems) ? r.lostItems : [];
@@ -253,8 +368,7 @@ export function recordsSince(userId = 1, sinceISO) {
   const items = getItems(userId);
   return Object.keys(d).filter((k) => isISO(k) && (!sinceISO || k >= sinceISO)).sort().map((date) => {
     const rec = d[date] || {};
-    const photos = rec.photos || {};
-    const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);
+    const nPhoto = countShots(rec);
     const checked = items.filter((i) => rec.checklist && rec.checklist[i.key]).length;
     return { date, cartNo: rec.cartNo || '', nPhoto, checked, total: items.length,
       done: items.length > 0 && checked === items.length };
@@ -269,10 +383,7 @@ export function recentDays(userId = 1, n = 14, todayISO = null) {
   if (todayISO && isISO(todayISO)) dates.add(todayISO);
   return [...dates].sort().reverse().slice(0, n).map((date) => {
     const rec = d[date] || {};
-    const photos = rec.photos || {};
-    const nPhoto = PHOTO_LEGS.reduce((s, leg) => {
-      const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0));
-    }, 0);
+    const nPhoto = countShots(rec);
     const checked = items.filter((i) => rec.checklist && rec.checklist[i.key]).length;
     return { date, cartNo: rec.cartNo || '', nPhoto, checked, total: items.length,
       done: items.length > 0 && checked === items.length };
@@ -285,8 +396,7 @@ export function returnRecords(userId = 1, sinceISO) {
   const d = loadAll(userId);
   return Object.keys(d).filter((k) => isISO(k) && (!sinceISO || k >= sinceISO)).sort().reverse().map((date) => {
     const rec = d[date] || {};
-    const photos = rec.photos || {};
-    const nPhoto = PHOTO_LEGS.reduce((s, leg) => { const c = photos[leg]; return s + (Array.isArray(c) ? c.length : (c ? 1 : 0)); }, 0);
+    const nPhoto = countShots(rec);
     const st = computeReturn(rec, isDutyDay(date, userId));
     return { date, cartNo: rec.cartNo || '', nPhoto, allDone: st.allDone, doneCount: st.doneCount, total: st.total, stamped: !!rec.stampedAt };
   }).filter((r) => r.nPhoto > 0 || r.cartNo || r.doneCount > 0);   // 빈 날 제외(실제 기록만)
@@ -300,13 +410,9 @@ export function pruneOld(userId, cutoffISO) {
   let days = 0, files = 0;
   for (const key of Object.keys(d)) {
     if (!isISO(key) || key >= cutoffISO) continue;   // 예약키(__settings)·유예기간 내 날짜는 보존
-    const photos = (d[key] && d[key].photos) || {};
-    for (const leg of PHOTO_LEGS) {
-      const cur = photos[leg];
-      const arr = Array.isArray(cur) ? cur : (cur ? [cur] : []);
-      for (const f of arr) {
-        try { if (f && /^[\w.-]+\.(jpg|png)$/.test(f)) { fs.unlinkSync(path.join(userPhotoDir(userId), f)); files++; } } catch { /* 이미 없음 */ }
-      }
+    const rec = d[key] || {};
+    for (const leg of usedLegs(rec)) {            // ★늘어난 칸(intake#2 …)까지 빠짐없이 걷는다
+      for (const f of legArr(rec, leg)) { dropFile(f, userId); files++; }
     }
     const lost = Array.isArray(d[key] && d[key].lostItems) ? d[key].lostItems : [];  // 분실물 사진도 롤링 삭제
     for (const it of lost) {

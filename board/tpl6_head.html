@@ -93,6 +93,8 @@ button,input{font-family:inherit}
 .hbtn{border:1px solid #b9c3ce;background:#fff;border-radius:8px;padding:8px 12px;font-size:12.5px;
   font-weight:870;color:var(--sub);cursor:pointer;flex:0 0 auto;letter-spacing:-.03em}
 .hbtn:hover{border-color:var(--go);color:var(--go)}
+/* 기다리는 휴무 신청이 있을 때만 눈에 띈다 — 없는 날에는 여느 단추와 같다 */
+.hbtn.hot{background:#fff6e6;border-color:#d9a441;color:#8a5a0b;font-weight:800}
 .find{position:relative;flex:1 1 180px;max-width:300px;min-width:150px}
 .find input{width:100%;padding:8px 12px;border:1.5px solid #b9c3ce;border-radius:8px;font-size:13.5px;
   font-weight:850;color:var(--ink);letter-spacing:-.03em;background:#fff}
@@ -592,6 +594,7 @@ body.celldrag .cell{cursor:grabbing}
 .lst .row .wh{flex:0 0 auto;font-size:11px;font-weight:820;color:var(--dim)}
 .lst .row .b{flex:0 0 auto;font-size:10px;font-weight:880;border-radius:5px;padding:2px 6px;
   background:#eef1f5;color:var(--dim)}
+.lst .row .b.csb{background:var(--csb);color:var(--csbi)}   /* 선발 — 배치표·근무표와 같은 색 */
 .lst .hd2{padding:11px 14px 5px;font-size:10.5px;font-weight:900;color:var(--dim);
   background:#f6f8fa;border-top:1px solid var(--line2)}
 .lst.inswap{max-height:46vh;overflow-y:auto;border-top:1px solid var(--line2)}
@@ -739,6 +742,12 @@ body.celldrag .cell{cursor:grabbing}
   background-image:radial-gradient(circle,#b3bcc6 1.15px,transparent 1.25px);
   background-size:5px 5px;background-position:center;border-radius:4px}
 .grip:hover{background-image:radial-gradient(circle,var(--go) 1.15px,transparent 1.25px)}
+/* 근무표 조 칸의 손잡이 — 한 칸에 스무 줄씩 서니 늘 또렷하면 눈이 시끄럽다.
+   그 줄에 손이 올라올 때만 또렷해진다. 끄는 동안에는 칸 전체가 또렷해진다 */
+/* ★점은 작게 두되 잡히는 넓이는 넉넉히 — 9px 짜리 띠는 눈으로 찾기 전에 손이 먼저 빗나간다.
+   배경 그림 크기는 그대로라 점 세 줄은 여전히 작게 보인다 */
+#viewWork .wrow .grip{width:16px;height:20px;margin-left:calc(-7px*var(--k));opacity:.3}
+#viewWork .wrow:hover .grip,#viewWork .sorting .grip{opacity:1}
 .sorting .grip,.grip:active{cursor:grabbing}
 .sorting{user-select:none;-webkit-user-select:none}
 .dragging{opacity:.62;border-color:var(--go)!important;
@@ -770,6 +779,9 @@ body.celldrag .cell{cursor:grabbing}
   white-space:nowrap;padding-top:2px}
 .crow .dtm{width:98px}
 .crow .dhr{width:56px}
+/* 경기과 줄 — 손잡이는 왼쪽 끝, 시각 칸은 넣을 만큼만 */
+.crow[data-strow] .grip{flex:0 0 auto}
+.crow .stm{width:72px;flex:0 0 auto;text-align:center;font-variant-numeric:tabular-nums}
 .drow .num{font-style:normal;font-size:10.5px;font-weight:900;color:#fff;background:var(--go);
   border-radius:5px;text-align:center;padding:2px 0}
 /* 이름 칸 — 평소엔 글자처럼 보이고 누르면 고쳐진다. 비우면 그대로 공백 */
@@ -1165,6 +1177,42 @@ body.celldrag .cell{cursor:grabbing}
    파란 단추들 사이에서 이 하나만 색이 다르니 무엇을 만드는 단추인지 안다 */
 .fld button.itn{background:var(--cin);color:var(--cini);border:1px solid #e7d492}
 .fld button.itn:hover{background:#f8ecb4;border-color:#dcc677}
+/* 중복근무 나열 — 배치표 오른쪽 줄에서 바로 열다.
+   부마다 한 줄, 왼쪽은 그 부 색 이름표, 오른쪽은 무슨 표시가 몇 명이냐다 */
+.dgbox{border-top:1px solid var(--line);padding:calc(7px*var(--k)) calc(10px*var(--k)) calc(9px*var(--k))}
+.dgh{display:flex;align-items:center;gap:calc(6px*var(--k))}
+.dgh .lk{flex:0 0 auto;font-size:calc(11px*var(--k));font-weight:900;color:var(--go);
+  background:var(--goSoft);border-radius:calc(6px*var(--k));padding:calc(3px*var(--k)) calc(7px*var(--k))}
+.dgw{flex:1;min-width:0;font-size:calc(10px*var(--k));font-weight:800;color:var(--dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dgr{display:flex;align-items:flex-start;gap:calc(6px*var(--k));margin-top:calc(6px*var(--k))}
+.dgp{flex:0 0 auto;text-align:center;font-size:calc(10.5px*var(--k));font-weight:900;color:#fff;
+  border-radius:calc(6px*var(--k));padding:calc(4px*var(--k)) calc(7px*var(--k))}
+.dgp.d1{background:var(--p1)}
+.dgp.d2{background:var(--p2)}
+.dgp.d3{background:var(--p3)}
+.dgbs{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:calc(4px*var(--k))}
+.dgbs button{display:inline-flex;align-items:center;gap:calc(5px*var(--k));border:1px solid var(--line);
+  background:#fff;border-radius:calc(7px*var(--k));font-family:inherit;cursor:pointer;
+  padding:calc(3px*var(--k)) calc(7px*var(--k))}
+.dgbs button b{font-size:calc(11.5px*var(--k));font-weight:900;letter-spacing:-.03em}
+.dgbs button .num{font-size:calc(11px*var(--k));font-weight:900;color:var(--go);font-variant-numeric:tabular-nums}
+.dgbs button .num em{font-style:normal;font-size:calc(9.5px*var(--k));font-weight:850;margin-left:1px;opacity:.75}
+.dgbs button:hover{border-color:var(--go);background:var(--goSoft)}
+/* 몇 번부터 — 칸 뒤에 '번부터'를 붙여 무슨 수인지 말한다 */
+.fld .fldu{flex:0 0 auto;align-self:center;font-size:calc(12px*var(--k));font-weight:850;color:var(--dim)}
+/* 당번의 근무 성격 — 셋을 나란히 놓고 고른 것만 채운다.
+   접힌 고르개는 '무엇을 고를 수 있는가'를 숨긴다 — 그 셋이 곷 당번의 성격이다 */
+.crow .dtseg{flex:1 0 100%;order:5;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;
+  border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}
+.crow .dtseg button{border:0;border-left:1px solid var(--line);background:#fff;font-family:inherit;
+  padding:8px 4px;font-size:11.5px;font-weight:880;color:var(--sub);cursor:pointer;letter-spacing:-.03em}
+.crow .dtseg button:first-child{border-left:0}
+.crow .dtseg button:hover{background:var(--goSoft);color:var(--go)}
+.crow .dtseg button.on{background:var(--go);color:#fff}
+.crow .dtwhen{flex:1 0 100%;order:6;display:flex;align-items:center;gap:8px}
+.crow .dtwhen .fl.dim{opacity:.45}
+.crow .dtwhen .lb{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -1188,6 +1236,13 @@ body.celldrag .cell{cursor:grabbing}
         <span class="fdrop" id="findDrop" hidden></span>
       </span>
       <button class="hbtn" id="btnRoster">순번 · 명단</button>
+      <!-- ★휴무 신청 — 서버가 그 길을 열어 두었을 때만 뜬다.
+           화면 파일은 서버 없이 혼자 열릴 때도 있다(시험방·사본). 그때 있지도 않은
+           페이지로 보내는 단추가 서 있으면 누른 사람만 헛걸음한다 -->
+      <button class="hbtn" id="btnDayoff" hidden>캐디 신청</button>
+      <!-- ★분실물 — 캐디 신청과 나란히 선다. 캐디가 앱에서 올리면 여기에 숫자가 붙고
+           단추가 달아오른다. 새 몸짓을 안 만든다 — 경기과가 이미 아는 몸짓이다 -->
+      <button class="hbtn" id="btnLost" hidden>분실물</button>
       <button class="hbtn" id="btnCfg">설정</button>
       <span class="savebar" id="savebar">
         <button class="t" id="btnLog"><b id="sbN">—</b><span id="sbW">—</span></button>
@@ -1258,7 +1313,7 @@ body.celldrag .cell{cursor:grabbing}
 </div>
 
 <div class="drw" id="cfg">
-  <div class="dh"><b>설정</b><span class="sub2">여기서 고친 건 바로 화면에 뜹니다</span>
+  <div class="dh"><b>설정</b>
     <button class="x" id="cfgClose">닫기</button></div>
   <div class="dt" id="cfgTabs"></div>
   <div class="db" id="cfgBody"></div>

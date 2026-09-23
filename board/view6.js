@@ -224,7 +224,10 @@ function wkListHTML(){
           + (list.length ? list.map(function(r){
               return '<button class="wrow' + (r.cls === 'r' || r.cls === 'v' || r.cls === 's' ? ' rest' : '')
                 + (isBu3(r.n) ? ' b3' : '') + (bsel[r.n] ? ' ' + bsel[r.n] : '')
-                + '" data-who="' + esc(r.n) + '">'
+                + '" data-who="' + esc(r.n) + '" data-key="' + esc(r.n) + '">'
+                // ★왼쪽 손잡이를 끌면 그 조 안에서 차례가 바뀐다 — 당번·코스와 같은 손잡이다.
+                //   이름을 누르는 것은 그대로 사람 고치기다(손잡이만 끌린다)
+                + '<span class="grip" data-grip="1"></span>'
                 + '<span class="nw"><span class="n">' + esc(r.n) + '</span>'
                 + bu3BadgeHTML(r.n) + '</span>'                 // ★소속은 이름 바로 오른쪽
                 + dayBadges(r.bts).map(function(x){
@@ -520,8 +523,29 @@ function openSeatGo(pk, i, key){
   sheetFor = { kind: 'seatgo', pk: pk, i: i, key: key };
   drawSeatGo(true);
 }
+// ★배치표 오른쪽에서 부를 때 — 누른 칸이 없으니 '몇 번부터'를 물어서 받는다.
+//   처음 값은 근무 줄 바로 뒤다 — 아무도 안 밀리는 자리라 잘못 눌러도 사고가 안 난다
+function openSeatGoFree(pk, key){
+  sgStart = '';
+  sheetFor = { kind: 'seatgo', pk: pk, key: key, free: true, no: workLastNo(part(pk)) + 1 };
+  drawSeatGo(true);
+}
+function sgNoAt(f){ return f.free ? Math.max(1, Math.floor(Number(f.no) || 1)) : seatGroupSeat(f.pk, f.i); }
+// 번호를 고칠 때마다 시트를 다시 그리면 치던 글자가 달아난다 — 번호만 손으로 고쳐 준다
+function sgNoType(){
+  var f = sheetFor;
+  if (!f || f.kind !== 'seatgo' || !f.free) return;
+  var raw = String(($('sgNo') || {}).value || '').replace(/[^0-9]/g, '');
+  f.no = Math.max(1, Math.floor(Number(raw) || 1));
+  var no = sgNoAt(f), n = 0;
+  [].slice.call($('sheet').querySelectorAll('.inswap .row .p')).forEach(function(el, k){
+    el.textContent = no + k; n = k + 1;
+  });
+  var go = $('sheet').querySelector('[data-act="sggo"]');
+  if (go && n) go.textContent = '이대로 ' + no + '~' + (no + n - 1) + '번에 앉히기';
+}
 function seatGoHTML(){
-  var f = sheetFor, p = part(f.pk), no = seatGroupSeat(f.pk, f.i);
+  var f = sheetFor, p = part(f.pk), no = sgNoAt(f);
   var names = seatGroupNames(f.pk, f.key);
   if (sgStart && names.indexOf(sgStart) < 0) sgStart = '';
   var ord = seatManyOrder(names, sgStart);
@@ -532,24 +556,31 @@ function seatGoHTML(){
     }).join(' · ');
     return '<button class="row" data-sgs="' + esc(n) + '">'
       + '<span class="p num">' + (no + k) + '</span>'
-      + '<span class="nm">' + esc(n) + (k === 0 ? ' <b>첫 사람</b>' : '') + '</span>'
+      + '<span class="nm">' + esc(n) + '</span>'
+      // ★글자로 '첫 사람'이라 쓰지 않는다 — 이미 만들어 둔 선발 배지가 있다.
+      //   배치표·근무표에서 쓰는 그 색 그대로여야 같은 뜻으로 읽힌다
+      + (k === 0 ? '<span class="b csb">선발</span>' : '')
       + '<span class="wh">' + esc(at || '자리 없음') + '</span></button>';
   }).join('');
   return '<div class="grab"></div>'
     + '<div class="k">' + esc(p.name) + ' · ' + no + '번부터</div>'
     + '<div class="st">' + esc(f.key) + ' ' + names.length + '명 앉히기</div>'
-    + '<div class="sub"><b>누구부터 앉힐지</b> 고르십시오. 고른 사람이 <b>' + no + '번</b>이 되고, '
-    + '나머지는 <b>조 차례</b>로 뒤를 잇습니다 — 순번 세우기의 선발과 같은 규칙입니다.</div>'
-    + '<div class="grp" style="padding-bottom:4px"><h4>누구부터 · 눌러서 바꿉니다</h4></div>'
+    + (f.free
+       ? '<div class="grp"><h4>몇 번부터</h4>'
+         + '<div class="fld"><input id="sgNo" inputmode="numeric" autocomplete="off" value="' + no + '">'
+         + '<span class="fldu">번부터</span></div></div>'
+       : '')
+    // ★규칙을 밑에 풀어 적지 않는다 — 줄 번호와 선발 배지가 이미 그것을 말하고 있다
+    + '<div class="grp" style="padding-bottom:4px"><h4>선발 고르기</h4></div>'
     + '<div class="lst inswap">' + rows + '</div>'
     + '<div class="acts" style="margin:12px 14px"><button class="go" style="flex:1" '
     + 'data-act="sggo">이대로 ' + no + '~' + (no + ord.length - 1) + '번에 앉히기</button></div>'
-    + '<div class="dnote" style="margin:0 14px 12px">뒤가 ' + ord.length + '칸 밀립니다 — '
-    + '아무도 자리를 잃지 않습니다.</div>'
     + '<button class="close" data-act="close">닫기</button>';
 }
 function drawSeatGo(open){
   $('sheet').innerHTML = seatGoHTML();
+  var e = $('sgNo');
+  if (e) e.addEventListener('input', sgNoType);
   if (open) { $('scrim').classList.add('on'); $('sheet').classList.add('on'); }
 }
 // 끼워 넣기 — 그 자리에 들어가고 뒤가 밀린다. 맞바꾸기와 문을 나눠 둔다.
@@ -876,10 +907,12 @@ function openAddTeam(pk){
     + '<div class="grp"><h4>시각</h4>'
     + '<div class="fld">' + timeInput('id="adTime" class="tf"', hm(mm(last.time) + GAP))
     + '</div>'
-    + '<div class="acts" style="margin-top:11px">'
-    + '<button class="on" data-act="addteam">넣기</button></div>'
-    + '<div class="dnote">' + GAP + '분 격자에 <b>맞추지 않아도 됩니다</b> — 끼워 넣는 날이 있습니다.</div></div>'
-    + '<button class="close" data-act="close">닫기</button>';
+    // ★넣기와 닫기를 같은 줄에 나란히 — 하나는 상자 안, 하나는 창 맨 밑에 두면
+    //   닫기가 '딱 붙은 것'처럼 보인다. 둘 다 이 창을 끝내는 단추니 같은 크기로 놓는다.
+    //   어두운 바탕을 눌러도 닫힌다
+    + '<div class="acts two" style="margin-top:11px">'
+    + '<button class="on" data-act="addteam">넣기</button>'
+    + '<button data-act="close">닫기</button></div></div>';
   $('scrim').classList.add('on');
   $('sheet').classList.add('on');
 }
@@ -977,8 +1010,12 @@ function dutyApplyDef(k){
 var sortBlock = 0;                    // 끌고 난 직후의 누름은 삼킨다
 function sortable(box, sel, done){
   var cur = null;
-  function rowAt(y){
-    var rs = box.querySelectorAll(sel);
+  // ★줄을 찾을 때 세로만 보면 안 된다 — 근무표 조 칸처럼 칸이 옆으로 여럿이면
+  //   같은 높이에 줄이 넷 있어서 늘 맨 왼쪽 칸의 줄이 잡혔다. 그러면 바로 아래에서
+  //   '딴 칸이다'라며 끌기가 통째로 멎는다 — 1조만 되고 2·3·4조는 꿈쩍도 안 했다.
+  //   끌고 있는 줄이 든 칸 안에서만 찾는다. 끌기는 원래 한 칸 안의 일이다
+  function rowAt(y, within){
+    var rs = (within || box).querySelectorAll(sel);
     for (var i = 0; i < rs.length; i++){
       var b = rs[i].getBoundingClientRect();
       if (y >= b.top && y <= b.bottom) return rs[i];
@@ -1000,7 +1037,7 @@ function sortable(box, sel, done){
   box.addEventListener('pointermove', function(e){
     if (!cur) return;
     e.preventDefault();
-    var over = rowAt(e.clientY);
+    var over = rowAt(e.clientY, cur.parentNode);
     if (!over || over === cur || over.parentNode !== cur.parentNode) return;
     var b = over.getBoundingClientRect();
     cur.parentNode.insertBefore(cur, (e.clientY - b.top) > b.height / 2 ? over.nextSibling : over);
@@ -1543,8 +1580,7 @@ function bulkActHTML(){
     + btns([['t|휴무', '휴무'], ['t|휴가', '휴가'], ['t|병가', '병가'], ['t|', '근무로']]) + '</div>'
     + '<div class="grp"><h4>그날의 구분</h4>'
     + btns(DAYTAGS.map(function(x){ return ['t|' + x, x]; }))
-    + '<div class="dnote" style="margin-top:9px">조출\u00b7후출\u00b7정출\u00b7찾근을 붙이면 '
-    + '<b>어제 자리에서 내려옵니다</b> \u2014 순번은 경기과가 정한다는 뜻입니다.</div></div>'
+    + '</div>'
     + '<div class="grp"><h4>부 선택</h4>'
     // ★한 부에 한 칸. 이름만 적고, 그 부에서 일하면 그 부 색으로 찬다 —
     //   글로 상태를 적어 두면 칸마다 글이 달라져 줄이 지저분해진다
@@ -1644,11 +1680,33 @@ function noticeBoxHTML(){
     + '<div class="ntoff">아직 앱과 안 이어졌습니다 — 눌러도 아직 나가지 않습니다</div>'
     + '</div>';
 }
+// ★중복 근무를 줄 세우는 일은 자리를 잡는 일이라 배치표 오른쪽에도 문을 낸다.
+//   여태는 칸을 눌러 사람 창을 열어야만 닿았다 — 그 창은 '이 자리' 이야기를 하는 곣이고,
+//   여기는 '어느 부의 누구들' 이야기를 하는 곤이다. 자리는 열고 나서 몇 번인지 적는다
+function dupRailHTML(){
+  var rows = DAY.map(function(p){
+    var gs = seatGroups(p.key);
+    if (!gs.length) return '';
+    return '<div class="dgr"><span class="dgp d' + esc(p.key) + '">' + esc(p.name) + '</span>'
+      + '<span class="dgbs">' + gs.map(function(x){
+          var who = x.names.slice(0, 8).join(' · ')
+            + (x.names.length > 8 ? ' 외 ' + (x.names.length - 8) + '명' : '');
+          return '<button data-sgr="' + esc(p.key + '|' + x.key) + '" title="' + esc(who) + '">'
+            + '<b>' + esc(x.label) + '</b><span class="num">' + x.names.length + '<em>명</em></span></button>';
+        }).join('') + '</span></div>';
+  }).join('');
+  return '<div class="dgbox"><div class="dgh"><span class="lk">중복근무</span>'
+    + '<span class="dgw">' + (rows
+        ? '눌러서 몇 번부터 나열할지 고릅니다'
+        : '지금 부를 사람이 없습니다') + '</span></div>'
+    + rows + '</div>';
+}
 function lineupBarHTML(){
   return lineupBar1('선발', seonbal(), '여기부터 조를 돌며 1부·2부가 섭니다',
       'lnpick', 'lnrun', '선발 고르기', '1·2부 순번 세우기')
     + lineupBar1('3부 선발', bu3Start(), '여기부터 3부끼리 돕니다',
       'ln3pick', 'ln3run', '3부 선발 고르기', '3부 순번 세우기')
+    + dupRailHTML()
     + caughtBar()
     + driftBar();
 }
@@ -1681,12 +1739,10 @@ function openSeonbalPick(kind){
   sheetFor = { kind: 'seonbal' };
   $('sheet').innerHTML = '<div class="grab"></div><div class="k">순번 세우기</div>'
     + '<div class="st">' + (b3 ? '3부 선발 고르기' : '선발 고르기') + '</div>'
-    + '<div class="sub">고른 사람의 <b>조 자리부터</b> 조를 돌며(4조 다음은 1조) '
-    + (b3 ? '<b>3부</b>가 차례로 섭니다. 3부 배지를 단 사람끼리만 돕니다.'
-          : '1부와 2부가 차례로 섭니다. 배지가 붙은 사람은 후보에서 빠집니다.') + '</div>'
-    + '<div class="grp"><h4>이름으로 좁히기</h4>'
+    // ★규칙을 밑에 풀어 적지 않는다 — 고르고 나면 순번 세우기 단추가 그대로 말해 준다
+    + '<div class="grp">'
     + '<div class="fld"><input id="sbQ" autocomplete="off" value="' + esc(sbQ)
-    + '" placeholder="이름 두 글자만 쳐도 됩니다"></div>'
+    + '" placeholder="이름 검색하기"></div>'
     + '<div id="sbOut"></div></div>'
     + '<button class="close" data-act="close">닫기</button>';
   $('scrim').classList.add('on');
@@ -2055,6 +2111,10 @@ function railClick(e){
   else if (b.hasAttribute('data-ntto')){
     if (noticeSet('to', b.getAttribute('data-ntto'))) { noticeStash(); paint(); }
   }
+  else if (b.hasAttribute('data-sgr')){
+    var sv = b.getAttribute('data-sgr').split('|');
+    openSeatGoFree(sv[0], sv.slice(1).join('|'));
+  }
 }
 // 적던 글은 새로고침을 해도 남는다 — 배치표 장부가 아니라 이 브라우저의 쓰다 만 글이다
 function noticeStash(){
@@ -2209,7 +2269,8 @@ $('sheet').addEventListener('click', function(e){
   var sgs = b.getAttribute('data-sgs');
   if (sgs){ sgStart = (sgStart === sgs) ? '' : sgs; drawSeatGo(false); return; }
   if (b.getAttribute('data-act') === 'sggo' && sheetFor && sheetFor.kind === 'seatgo'){
-    seatGroup(sheetFor.pk, sheetFor.i, sheetFor.key, sgStart);
+    if (sheetFor.free) seatGroupAt(sheetFor.pk, sgNoAt(sheetFor), sheetFor.key, sgStart);
+    else seatGroup(sheetFor.pk, sheetFor.i, sheetFor.key, sgStart);
     closeSheet(); paint(); return;
   }
   var cpt = b.getAttribute('data-capto');
@@ -2451,8 +2512,16 @@ sortable($('sheet'), '.drow', function(order){
   openDuty(k);
 });
 sortable($('cfg'), '.crow[data-dtrow]', dtOrder);
+sortable($('cfg'), '.crow[data-strow]', stOrder);
 sortable($('cfg'), '.crow[data-ctrow]', ctOrder);
 sortable($('drwBody'), '.rrow', function(order, moved){ rosterOrder(drwPart, order, moved); });
+// ★근무표 조 칸 — 끌면 그 조 안에서 차례가 바뀐다.
+//   order 는 조 칸을 왼쪽부터 훑은 이름 전부다. 끈 사람이 있는 조만 골라 넘긴다 —
+//   딴 조 사람까지 같이 넘기면 조끼리 뒤섞인다(끌기는 한 칸 안에서만 일어난다)
+sortable($('workTable'), '.wrow', function(order, moved){
+  var g = joOf(moved);
+  joOrder(g, order.filter(function(n){ return joOf(n) === g; }), moved);
+});
 $('bnPick').addEventListener('click', openPicker);
 $('hDate').addEventListener('click', openDayPick);   // 날짜를 누르면 다른 날로
 $('btnRoster').addEventListener('click', openDrawer);
@@ -2581,10 +2650,9 @@ function joDel(i){
 }
 function joName(i, v){ cfgChange('조 이름 ' + JOLABEL[i] + ' → ' + v, function(){ JOLABEL[i] = v; }); }
 function joSet(nm, i){ cfgChange(nm + ' → ' + JOLABEL[i], function(){ JOMAP[nm] = i; }); }
-function joAuto(){ cfgChange('임시로 인원 수만 맞춰 나눔 — 실제 조 편성이 아닙니다', function(){
-  var per = Math.ceil(JONAMES.length / JOCNT);
-  JONAMES.forEach(function(n, k){ JOMAP[n] = Math.min(JOCNT - 1, Math.floor(k / per)); });
-}); }
+// ★'임시로 인원 수만 맞춰 나누기'는 걷었다(2026-09-15).
+//   조는 골프장이 정해 둔 것이지 기계가 수를 맞춰 지어낼 값이 아니다.
+//   순번 세우기가 조 차례를 보고 돌기에, 지어낸 조는 그대로 지어낸 순번이 된다
 function joClear(){ cfgChange('조 배정을 전부 비움', function(){ JOMAP = {}; }); }
 function joDrop(n){ cfgChange(n + ' 조에서 뺌', function(){ delete JOMAP[n]; }); }
 
@@ -2598,12 +2666,32 @@ function stDel(i){ var k = STAFF[i].k;
 function stTitle(i, v){ var k = STAFF[i].k;
   cfgChange('경기과 자리 이름 ' + k + ' → ' + v, function(){
     staffEdit(function(){ STAFF[i].k = v; }); }); }
+// 자리 차례 — 손잡이를 끔어 놓은 그대로
+function stOrder(order){
+  var next = staffOrder(order);
+  if (!next) return;
+  cfgChange('경기과 자리 차례 · ' + next.map(function(x){ return x.n || x.k; }).join(' · '),
+    function(){ STAFF = next; });
+}
 
 // 당번 종류
 function setGap(v){ v = Math.max(3, Math.min(20, Number(v) || GAP));
   cfgChange('티오프 간격 ' + GAP + '분 → ' + v + '분', function(){ GAP = v; }); }
-function setRows(v){ v = Math.max(4, Math.min(40, Number(v) || ROWS));
-  cfgChange('격자 줄 수 ' + ROWS + ' → ' + v, function(){ ROWS = v; }); }
+// ★끝 시각으로 그 부의 격자 길이를 정한다.
+//   팀이 서 있는 줄보다 짧게는 못 줄인다 — 종이 배치표에서 팀이 선 칸을
+//   지울 수 없는 것과 같다. 그럴 때는 기록에 어디서 막혔는지를 적는다
+function setEnd(pk, v){
+  var p = part(pk);
+  if (!v) return;
+  var n = Math.floor((mm(v) - mm(p.start)) / GAP) + 1;
+  n = Math.max(1, Math.min(240, n));
+  var was = gridEnd(p), need = gridNeed(p), eff = Math.max(n, need);
+  if (eff === gridRows(p)) return;
+  var to = hm(mm(p.start) + (eff - 1) * GAP);
+  cfgChange(p.name + ' 격자 ' + was + ' → ' + to + ' · ' + eff + '줄'
+    + (eff > n ? ' · 팀이 선 ' + to + '까지는 남습니다' : ''),
+    function(){ p.rows = eff; });
+}
 // ★한도를 줄이면 깔아 둔 자리도 같이 줄어야 한다 — 글자만 바뀌고 칸이 50번까지
 //   그대로 서 있으면 줄인 것이 아니다.
 //   한도 밖에 선 사람은 미배치로 보낸다 — 순번 세우기가 한도 밖을 안 세우고
@@ -2666,9 +2754,7 @@ function drawCfg(){
 
   if (cfgTab === 'jo'){
     var un = joUnset();
-    h += '<div class="cfgsec"><h4>조가 몇 개입니까</h4>'
-      + '<p>배치표 오른쪽 조편성표에 있는 그대로 적으세요. <b>조 이름이 그대로 화면에 뜹니다.</b><br>'
-      + '조 명단은 <b>거의 안 바뀌는 값</b>이라 한 번 넣으면 계속 쓰입니다 — 날마다 다시 넣지 않습니다.</p>';
+    h += '<div class="cfgsec"><h4>조 구분</h4>';
     for (var i2 = 0; i2 < JOCNT; i2++){
       h += '<div class="crow"><span class="lb">' + (i2 + 1) + '번째</span>'
         + '<input type="text" class="gr" data-joname="' + i2 + '" value="' + esc(JOLABEL[i2]) + '">'
@@ -2677,9 +2763,7 @@ function drawCfg(){
     }
     h += '<button class="cadd" data-joadd="1">조 추가</button></div>';
 
-    h += '<div class="cfgsec"><h4>누가 몇 조입니까</h4>'
-      + '<p>이름 옆 <b>번호를 누르면</b> 그 조로 갑니다. <b>×</b>는 다시 미배정으로 뺍니다.<br>'
-      + '옆에 붙은 <b>근무 · 카트</b>는 오늘 판독본 그대로라 조편성표와 대조하며 넣으실 수 있습니다.</p>';
+    h += '<div class="cfgsec"><h4>조 편성</h4>';
     if (un) h += '<div class="cnote" style="border-color:#e0c68d;border-left-color:#d8b25e">'
       + '<b>아직 ' + un + '명이 미배정입니다.</b> 조편성표를 보고 넣으세요. 지어낸 값은 넣지 않았습니다.</div>';
 
@@ -2706,66 +2790,57 @@ function drawCfg(){
         + (mem.length ? mem.map(mk).join('') : '<div class="jr"><span class="n" style="color:#8b96a2">아직 없습니다</span></div>')
         + '</div>';
     }
-    h += '<div class="cnote">조를 다 채우기 전에도 배치표는 그대로 돕니다. '
-      + '<b>조는 지금 순번에 아무 영향도 주지 않습니다</b> — 조가 순번을 어떻게 정하는지 알기 전까지는 표시만 합니다.</div>';
-    h += '<div class="cnote">여기서 넣은 조 명단은 <b>이 브라우저에 저장</b>돼 새로고침해도 남습니다. '
-      + '실제 프로그램에서는 골프장 계정에 저장됩니다.</div>'
-      + '<button class="cadd" style="margin-top:8px" data-cfgforget="1">저장된 설정 지우기</button>'
-      + '<button class="cadd" style="margin-top:8px" data-joclear="1">조 배정 전부 비우기</button>'
-      + '<div class="cnote">급하면 아래로 인원만 맞춰 나눌 수 있지만, <b>실제 조 편성이 아닙니다.</b></div>'
-      + '<button class="cadd" style="margin-top:8px" data-joauto="1">임시로 인원 수만 맞춰 나누기</button></div>';
+    // ★'저장된 설정 지우기'는 걷었다(2026-09-15).
+    //   그 단추는 이 브라우저 칸만 지워서, 새로고침하면 서버 것이 도로 내려와
+    //   아무 일도 안 한 꼴이었다. 거기다 되돌리기도 안 되는 단추였다 —
+    //   조 배정을 비우는 일은 밑의 '조 배정 전부 비우기'가 하고, 그쪽은 되돌려진다
+    h += '<button class="cadd" style="margin-top:8px" data-joclear="1">조 배정 전부 비우기</button></div>';
   }
 
   if (cfgTab === 'st'){
-    h += '<div class="cfgsec"><h4>경기과에 어떤 자리가 있습니까</h4>'
-      + '<p>자리 이름을 바꾸면 배치표 아래에 <b>그 이름으로</b> 뜹니다. 사람과 출근 시각은 배치표에서 누르면 고쳐집니다.</p>';
+    h += '<div class="cfgsec"><h4>경기과</h4>';
+    // ★한 줄이 그 자리를 통째로 말한다 — 손잡이·자리 이름·사람·출근 시각·지움.
+    //   여태는 사람과 시각이 읽기만 하는 글자였고, 고치려면 배치표로 나가야 했다 —
+    //   설정에 자리가 보이는데 거기서 못 고치는 것은 칸이 거짓말을 하는 것이다
     STAFF.forEach(function(x, k){
-      h += '<div class="crow">'
-        + '<input type="text" class="gr" data-sttitle="' + k + '" value="' + esc(x.k) + '">'
-        + '<span class="lb">' + esc(x.n || '비어 있음') + '</span>'
-        + '<span class="lb">' + esc(x.t || '') + '</span>'
+      h += '<div class="crow strow" data-strow="1" data-key="' + k + '">'
+        + '<span class="grip" data-grip="1"></span>'
+        + '<input type="text" class="gr" data-sttitle="' + k + '" autocomplete="off" placeholder="자리 이름" value="' + esc(x.k) + '">'
+        + '<input type="text" class="gr" data-stname="' + k + '" autocomplete="off" placeholder="비어 있음" value="' + esc(x.n || '') + '">'
+        + timeInput('class="stm" data-sttime="' + k + '"', x.t)
         + '<button class="x" data-stdel="' + k + '">지움</button></div>';
     });
-    h += '<button class="cadd" data-stadd="1">자리 추가</button>'
-      + '<div class="cnote"><b>마샬처럼 자리가 둘 이상이면</b> 출근 시각이 이른 쪽이 조출, 늦은 쪽이 마감으로 저절로 붙습니다.</div></div>';
+    h += '<button class="cadd" data-stadd="1">자리 추가</button></div>';
   }
 
   if (cfgTab === 'dt'){
-    h += '<div class="cfgsec"><h4>당번이 어떤 것들이 있습니까</h4>'
-      + '<p>골프장마다 다릅니다. <b>여기 적은 그대로</b> 배치표 아래에 칸이 생깁니다.</p>';
+    h += '<div class="cfgsec"><h4>당번</h4>';
     DUTYKEYS.forEach(function(k){
+      var d = defOf(k), dim = (d.w === 'in') ? ' dim' : '';
       h += '<div class="crow" data-dtrow="1" data-key="' + esc(k) + '">'
         + '<span class="grip" data-grip="1"></span>'
         + '<input type="text" class="gr" data-dtname="' + esc(k) + '" value="' + esc(k) + '">'
-        + '<span class="fl"><em>근무</em><select class="gr dtw" data-dtwork="' + esc(k) + '">'
-        + DUTYWORK.map(function(w){
-            return '<option value="' + w + '"' + (defOf(k).w === w ? ' selected' : '') + '>'
-              + esc(DUTYWTX[w]) + '</option>'; }).join('')
-        + '</select></span>'
-        + '<span class="fl"' + (defOf(k).w === 'in' ? ' style="opacity:.45"' : '') + '><em>시작</em>'
-        + timeInput('class="dtm" data-dtdef="' + esc(k) + '"', defOf(k).t) + '</span>'
-        + '<span class="fl"' + (defOf(k).w === 'in' ? ' style="opacity:.45"' : '') + '><em>서는</em><input type="number" class="dhr" data-dtdefh="' + esc(k) + '" value="'
-        + (defOf(k).h || '') + '" min="0" max="24" step="0.5"><em>시간</em></span>'
-        + '<span class="lb">' + esc(dutyLabel(k) || '지정 없음') + '</span>'
-        + '<button class="x" data-dtdel="' + esc(k) + '">지움</button></div>';
+        + '<button class="x" data-dtdel="' + esc(k) + '">지움</button>'
+        // ★근무 성격은 셋이 전부다 — 접힌 고르개는 무엇을 고를 수 있는지를 숨긴다.
+        //   그 셋이 곧 '이 당번이 무엇인가'라 나란히 놓고 고른 것만 채운다
+        + '<div class="dtseg">' + DUTYWORK.map(function(w){
+            return '<button data-dtw="' + esc(k + '|' + w) + '"' + (d.w === w ? ' class="on"' : '') + '>'
+              + esc(DUTYWTX[w]) + '</button>'; }).join('') + '</div>'
+        // 순번에 같이 서는 당번은 시각이 아무 것도 정하지 않는다 — 흐리게 둔다
+        + '<div class="dtwhen"><span class="fl' + dim + '"><em>시작</em>'
+        + timeInput('class="dtm" data-dtdef="' + esc(k) + '"', d.t)
+        + '<input type="number" class="dhr" data-dtdefh="' + esc(k) + '" value="'
+        + (d.h || '') + '" min="0" max="24" step="0.5"><em>시간</em></span>'
+        // 아무도 안 서 있으면 아무 글자도 안 적는다 — 빈 칸이 곧 '없다'다
+        + (dutyLabel(k) ? '<span class="lb">' + esc(dutyLabel(k)) + '</span>' : '')
+        + '</div></div>';
     });
     h += '<div class="crow"><input type="text" class="gr" id="dtNew" placeholder="예: 그늘집 당번">'
-      + '<button class="x" data-dtadd="1" style="color:var(--go);border-color:#a9c6e6">넣기</button></div>'
-      + '<div class="cnote"><b>근무</b>가 그 당번의 성격입니다 — '
-      + '<b>순번에 같이</b>는 그날 근무가 확정되는 당번입니다(순번 세우기가 자리를 줍니다). '
-      + '<b>상황 따라</b>는 순번에서는 빼고, 적은 시각과 안 겹치는 라운드가 남아 있으면 가용으로 둡니다. '
-      + '<b>근무 안 함</b>은 그날 캐디 근무를 안 하는 당번입니다. '
-      + '시각·서는 시간은 <b>상황 따라</b>와 <b>근무 안 함</b>에서만 뜻이 있습니다.<br>'
-      + '누가 설지는 배치표 아래에서 누르면 고칩니다. 여기서는 <b>당번의 종류</b>와 '
-      + '<b>기본 시각·서는 시간</b>을 정합니다 — <b>배치표에서 당번 칸을 눌렀을 때 나오는 그 값</b>이라 '
-      + '어느 쪽에서 고쳐도 같이 바뀝니다. 이미 서 있는 사람은 그대로 두고, 당번 창의 '
-      + '<b>모두 이 값으로</b>를 눌러야 한꺼번에 바뀝니다.<br>'
-      + '<b>왼쪽 손잡이를 끌면</b> 배치표에 뜨는 차례가 바뀝니다.</div></div>';
+      + '<button class="x" data-dtadd="1" style="color:var(--go);border-color:#a9c6e6">넣기</button></div></div>';
   }
 
   if (cfgTab === 'ct'){
-    h += '<div class="cfgsec"><h4>부</h4><p>하루에 몇 번 나가는지입니다. '
-      + '<b>3부를 안 하는 골프장이면 지우면 됩니다.</b> 최대 ' + MAXPART + '부.</p>';
+    h += '<div class="cfgsec"><h4>부</h4>';
     DAY.forEach(function(q){
       h += '<div class="crow"><input type="text" class="gr" data-pname="' + esc(q.key) + '" value="'
         + esc(q.name) + '">'
@@ -2775,13 +2850,10 @@ function drawCfg(){
     h += (DAY.length < MAXPART
         ? '<div class="crow"><span class="lb" style="flex:1">부를 하나 더</span>'
           + '<button class="x" data-padd="1" style="color:var(--go);border-color:#a9c6e6">넣기</button></div>'
-        : '<div class="crow"><span class="lb" style="flex:1;color:var(--dim)">'
-          + MAXPART + '부까지입니다 — 네 번 도는 골프장은 없습니다</span></div>')
-      + '<div class="cnote">지운 부는 <b>되돌리기</b>로 되살아납니다. 새 부는 빈 명단으로 서고, '
-      + '사람은 <b>순번 · 명단</b>에서 넣습니다.</div></div>';
+        : '')
+      + '</div>';
 
-    h += '<div class="cfgsec"><h4>코스</h4><p>배치표 열의 이름과 차례입니다. '
-      + '<b>동 · 서</b>처럼 바꿔도 되고, 27홀이면 셋, 36홀이면 넷으로 늘리면 됩니다.</p>';
+    h += '<div class="cfgsec"><h4>코스</h4>';
     COURSES.forEach(function(ck, ci){
       h += '<div class="crow" data-ctrow="' + esc(ck) + '" data-key="' + esc(ck) + '">'
         + '<span class="grip" data-grip="1"></span>'
@@ -2790,26 +2862,27 @@ function drawCfg(){
         + '<span class="lb">' + (courseUsed(ck) ? '쓰는 중' : '빈 코스') + '</span>'
         + '<button class="x" data-ctdel="' + esc(ck) + '">지움</button></div>';
     });
+    // ★칸이 늘어날 수 있을 때만 넣는 줄을 낸다 — 막혔다는 말은 따로 적지 않는다.
+    //   넣는 줄이 없는 것이 곧 '더는 안 된다'이다
     h += (COURSES.length < MAXCOURSE
         ? '<div class="crow"><input type="text" class="gr" id="ctNew" placeholder="예: 남코스">'
           + '<button class="x" data-ctadd="1" style="color:var(--go);border-color:#a9c6e6">넣기</button></div>'
-        : '<div class="crow"><span class="lb" style="flex:1;color:var(--dim)">'
-          + '코스는 넷까지입니다 — 36홀이 가장 큽니다</span></div>')
-      + '<div class="cnote"><b>왼쪽 손잡이를 끌면</b> 배치표 열 차례가 바뀝니다. '
-      + '코스가 <b>둘이면 시각이 가운데</b>, <b>셋 이상이면 시각이 왼쪽</b>으로 갑니다.<br>'
-      + '팀이 선 코스는 지울 수 없습니다 — 그 팀을 먼저 옮기십시오.</div></div>';
-    h += '<div class="cfgsec"><h4>티오프 격자</h4><p>몇 분 간격으로 몇 줄을 깔지 정합니다.</p>'
+        : '') + '</div>';
+    h += '<div class="cfgsec"><h4>티오프 격자</h4>'
       + '<div class="crow"><span class="lb">간격</span>'
       + '<input type="number" class="gr" data-gap="1" value="' + GAP + '" min="3" max="20"><span class="lb">분</span></div>'
-      + '<div class="crow"><span class="lb">줄 수</span>'
-      + '<input type="number" class="gr" data-rows="1" value="' + ROWS + '" min="4" max="40"><span class="lb">줄</span></div>';
+      ;
+    // ★줄 수 칸은 걷었다(2026-09-15) — 사람은 '몇 줄'이 아니라 '몇 시까지'로 말한다.
+    //   게다가 줄 수는 온 부가 한 값을 나눠 써서, 1부가 35팀이고 3부가 3팀인 날
+    //   그 한 값이 아무것도 뜻하지 못했다. 부마다 끝 시각을 정하면 그것이 곰 그 부의 길이다
     DAY.forEach(function(p){
-      var g = gridTimes(p);
       h += '<div class="crow"><span class="lb">' + p.name + '</span>'
         + timeInput('class="gr tf" data-pstart="' + p.key + '"', p.start)
-        + '<span class="lb">~ ' + g[g.length - 1] + '</span></div>';
+        + '<span class="lb">~</span>'
+        + timeInput('class="gr tf" data-pend="' + p.key + '"', gridEnd(p))
+        + '<span class="lb num">' + gridRows(p) + '줄</span></div>';
     });
-    h += '<div class="cnote">끝 시각은 <b>시작 + 간격 × 줄 수</b>로 저절로 정해집니다. 격자 밖 시각을 끼워 넣는 건 배치표에서 따로 합니다.</div></div>';
+    h += '</div>';
 
   }
 
@@ -2826,9 +2899,7 @@ $('cfg').addEventListener('click', function(e){
   var a;
   if ((a = b.getAttribute('data-ctab'))) { cfgTab = a; drawCfg(); return; }
   if (b.hasAttribute('data-joadd')) { joAdd(); return; }
-  if (b.hasAttribute('data-joauto')) { joAuto(); return; }
   if (b.hasAttribute('data-joclear')) { joClear(); return; }
-  if (b.hasAttribute('data-cfgforget')) { cfgForget(); dayForget(); return; }
   if (b.hasAttribute('data-jodrop')) { joDrop(b.getAttribute('data-jodrop')); return; }
   if (b.hasAttribute('data-jodel')) { joDel(Number(b.getAttribute('data-jodel'))); return; }
   if ((a = b.getAttribute('data-joset'))) { var q = a.split('|'); joSet(q[0], Number(q[1])); return; }
@@ -2836,6 +2907,11 @@ $('cfg').addEventListener('click', function(e){
   if (b.hasAttribute('data-stdel')) { stDel(Number(b.getAttribute('data-stdel'))); return; }
   if (b.hasAttribute('data-dtadd')) { dtAdd($('dtNew') ? $('dtNew').value : ''); return; }
   if (b.hasAttribute('data-dtdel')) { dtDel(b.getAttribute('data-dtdel')); return; }
+  if ((a = b.getAttribute('data-dtw'))) {                 // 근무 성격 — 셋 중 하나
+    var dw = a.split('|');
+    setDutyWork(dw.slice(0, -1).join('|'), dw[dw.length - 1]);
+    return;
+  }
   if (b.hasAttribute('data-padd')) { addPart(); drawCfg(); return; }
   if (b.hasAttribute('data-pdel')) { confirmDelPart(b.getAttribute('data-pdel')); return; }
   if (b.hasAttribute('data-ctadd')) { ctAdd($('ctNew') ? $('ctNew').value : ''); return; }
@@ -2871,14 +2947,20 @@ $('cfg').addEventListener('change', function(e){
   if (el.hasAttribute('data-joname')) { var ji = Number(el.getAttribute('data-joname'));
     joName(ji, el.value.trim() || (ji + 1) + '조'); return; }
   if (el.hasAttribute('data-sttitle')) { stTitle(Number(el.getAttribute('data-sttitle')), el.value.trim() || '자리'); return; }
+  if (el.hasAttribute('data-stname')) { setStaff(Number(el.getAttribute('data-stname')), el.value.trim()); drawCfg(); return; }
+  if (el.hasAttribute('data-sttime')) { setStaffTime(Number(el.getAttribute('data-sttime')), readTime(el)); drawCfg(); return; }
   if (el.hasAttribute('data-dtname')) { dtName(el.getAttribute('data-dtname'), el.value.trim()); return; }
-  if (el.hasAttribute('data-dtwork')) { setDutyWork(el.getAttribute('data-dtwork'), el.value); return; }
   if (el.hasAttribute('data-dtdef')) { setDutyDef(el.getAttribute('data-dtdef'), readTime(el)); return; }
   if (el.hasAttribute('data-dtdefh')) { setDutyDefHour(el.getAttribute('data-dtdefh'), el.value); return; }
   if (el.hasAttribute('data-pname')) { setPartName(el.getAttribute('data-pname'), el.value); return; }
   if (el.hasAttribute('data-cname')) { setCourseName(el.getAttribute('data-cname'), el.value.trim()); return; }
   if (el.hasAttribute('data-gap')) { setGap(el.value); return; }
-  if (el.hasAttribute('data-rows')) { setRows(el.value); return; }
+  if (el.hasAttribute('data-pend')) {
+    var ev = readTime(el);
+    if (ev) setEnd(el.getAttribute('data-pend'), ev);
+    else drawCfg();
+    return;
+  }
   if (el.hasAttribute('data-pstart')) {
     var pv = readTime(el);
     if (pv) setStart(el.getAttribute('data-pstart'), pv);
@@ -2963,9 +3045,49 @@ if (/\/pc\.html$/.test(location.pathname)) $('toPhone').classList.add('can');
 
 // ★서버가 있으면 서버 것을 먼저 가져온 뒤에 켜다.
 //   파일 하나로 열었을 때는 그 자리에서 곳바로 켜진다 — 시간차도 안 생긴다
+// ★캐디 신청 단추(휴무·휴가·병가·중복 근무) — 서버가 그 길을 열어 두었을 때만 보인다.
+//   기다리는 건수를 글자에 붙인다. 숫자가 없으면 눌러 볼 까닭이 없고,
+//   숫자가 있는데 안 보이면 며칠씩 묵힌다 — 단추가 스스로 말해야 한다
+function dayoffPeek(){
+  if (!srvOn()) return;
+  srvReq('GET', 'api/dayoff', null, function(st, o){
+    var b = $('btnDayoff');
+    if (!b || st !== 200 || !o || !o.ok || !o.list) return;   // 길이 없으면 단추도 없다
+    var n = 0;
+    o.list.forEach(function(x){ if (x.state === 'wait') n++; });
+    b.hidden = false;
+    b.textContent = n ? '캐디 신청 ' + n : '캐디 신청';
+    b.classList.toggle('hot', n > 0);
+  });
+}
+$('btnDayoff').addEventListener('click', function(){ location.href = 'dayoff'; });
+
+// ★분실물 — 캐디 신청과 같은 몸짓이다. 아직 안 본 건수를 글자에 붙이고 달아오른다.
+//  손님이 찾는 전화는 갑자기 온다. 그때 여기에 숫자가 없으면 무전으로 되돌아간다
+function lostPeek(){
+  if (!srvOn()) return;
+  srvReq('GET', 'api/lost', null, function(st, o){
+    var b = $('btnLost');
+    if (!b || st !== 200 || !o || !o.ok) return;              // 길이 없으면 단추도 없다
+    var n = o.wait || 0;
+    b.hidden = false;
+    b.textContent = n ? '분실물 ' + n : '분실물';
+    b.classList.toggle('hot', n > 0);
+  });
+}
+$('btnLost').addEventListener('click', function(){ location.href = 'lost'; });
+// 그 페이지에서 정하고 돌아오면 건수가 달라져 있다 — 돌아올 때 다시 센다
+window.addEventListener('focus', dayoffPeek);
+window.addEventListener('focus', lostPeek);
+// ★분실물은 판을 짜는 동안에도 들어온다 — 이쪽만 스스로 다시 센다(1분).
+//  배치표를 건드리지 않으니 짜던 것이 흐트러지지 않는다
+setInterval(lostPeek, 60000);
+
 srvBoot(function(){
   bootLoad();
   paint();
+  dayoffPeek();
+  lostPeek();
   try { var v0 = localStorage.getItem('board.view'); if (v0 === 'work' || v0 === 'board') VIEW = v0; }
   catch (e) { /* 기본은 배치표 */ }
   setView(VIEW);
