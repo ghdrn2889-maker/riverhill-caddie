@@ -4,7 +4,7 @@
 //   ② 칸을 늘리면 앞 카트가 '내놓음'이 된다
 //   ③ 사진은 칸마다 따로 쌓이고, 첫 칸은 옛 이름(intake/exit) 그대로다
 //   ④ 칸을 지우면 그 칸 사진이 사라지고 뒤 칸이 한 자리 당겨진다
-//   ⑤ 도장을 막는 것은 번호와 장비 4종뿐이다 — 사진은 안 막는다
+//   ⑤ 도장을 막는 것은 카트 번호뿐이다 — 사진도 장비도 안 막는다
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR } from '../src/store.mjs';
@@ -40,21 +40,27 @@ ok((d.photos['intake#2'] || []).length === 1, '두 번째 칸은 intake#2');
 ok(d.returnStatus.cartShots[0].before === 1 && d.returnStatus.cartShots[1].before === 1, '칸마다 따로 센다');
 ok(cc.savePhoto(D, 'intake#9', png, UID) === null, '없는 칸 이름은 안 받는다');
 
-console.log('④ 막는 것은 번호와 장비뿐');
+console.log('④ 막는 것은 번호뿐');
 let st = cc.getDay(D, UID).returnStatus;
 ok(st.nums.need.length === 1 && st.nums.need[0] === 1, '두 번째 칸 번호가 비었다고 짚는다');
 ok(!st.allDone, '번호가 비면 도장이 안 찍힌다');
 ok(cc.setStamp(D, true, UID).stampError === 'incomplete', '도장이 거절된다');
-cc.setCart(D, 1, { no: '27' }, UID);
-for (const k of ['battery', 'tablet', 'radio', 'guidekey']) cc.toggleReturn(D, k, true, UID);
-d = cc.getDay(D, UID);
-ok(d.returnStatus.allDone, '번호 둘 + 장비 넷이면 다 됐다');
-ok(d.returnStatus.total === 5, '칸은 다섯이다(번호 하나 + 장비 넷)');
-ok(!!cc.setStamp(D, true, UID).stampedAt, '도장이 찍힌다');
+d = cc.setCart(D, 1, { no: '27' }, UID);
+ok(d.returnStatus.allDone, '번호가 다 적히면 장비를 안 눌러도 다 됐다');
+ok(d.returnStatus.total === 1, '죄는 칸은 하나뿐이다');
+ok(d.returnStatus.checks.every((c) => !c.done), '장비 넷은 아직 아무것도 안 눌렀다');
+ok(!!cc.setStamp(D, true, UID).stampedAt, '그래도 도장이 찍힌다');
 
-console.log('⑤ 사진은 도장을 안 막는다');
+console.log('⑤ 사진도 장비도 도장을 안 막는다');
 d = cc.getDay(D, UID);
 ok(!!d.stampedAt && d.returnStatus.clubShots[0].before === 0, '클럽 사진이 한 장도 없는데 도장은 찍혀 있다');
+d = cc.toggleReturn(D, 'battery', true, UID);
+ok(!!d.stampedAt, '장비를 눌러도 도장이 안 풀린다');
+d = cc.toggleReturn(D, 'battery', false, UID);
+ok(!!d.stampedAt, '도로 꺼도 도장이 안 풀린다');
+d = cc.setCart(D, 1, { no: '' }, UID);
+ok(!d.stampedAt, '번호를 지우면 그때는 도장이 풀린다');
+cc.setCart(D, 1, { no: '27' }, UID); cc.setStamp(D, true, UID);
 
 console.log('⑥ 칸을 지우면 뒤 칸이 당겨진다');
 cc.setStamp(D, false, UID);

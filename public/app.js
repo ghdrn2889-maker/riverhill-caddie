@@ -3434,8 +3434,9 @@ const rcHm = (ts) => { const d = new Date(ts); return String(d.getHours()).padSt
 const rcIsToday = () => !rcTodayISO || !ccDate || ccDate === rcTodayISO;
 
 // 이 카트가 지금 무엇을 하고 있나 — 앱이 스스로 적는 줄.
+//  ★번호가 없어도 줄은 선다. 안 그리면 그 칸만 키가 작아져 상자가 저 혼자 다르게 보인다.
 function rcAutoOf(c, i, n) {
-  if (!c.no) return null;
+  if (!c.no) return { k: 'todo', lb: '번호를 적어 주세요', de: '경기과가 이 번호로 카트를 내줍니다' };
   if (c.outAt) return { k: 'out', lb: '내놓음', de: rcHm(c.outAt) + ' 넘김' };
   if (i < n - 1) return { k: 'out', lb: '내놓음', de: '' };       // 뒤에 다른 칸이 있으면 이미 넘긴 것
   if (ccDay && ccDay.stampedAt) return { k: 'out', lb: '내놓음', de: '근무 마침' };
@@ -3448,9 +3449,11 @@ function rcAutoOf(c, i, n) {
   return { k: 'run', lb: '타는 중', de: '아직 안 넘김' };
 }
 // 그 클럽이 어느 부의 것인가 — 티오프 표에서 차례대로. 부보다 칸이 많으면 번호로 부른다.
+//  ★티오프를 아직 모르는 날(근무 아닌 날·판독 전)도 줄은 카트 줄과 같은 꼴로 선다.
 function rcClubOf(i) {
   const t = rcTees[i];
-  if (!t) return { nm: (i + 1) + '번째 팀', a: null };
+  if (!t) return { nm: i > 0 ? (i + 1) + '번째' : '클럽',
+    a: { k: 'wait', lb: '티오프 미정', de: '' }, plain: i === 0 };
   if (!rcIsToday()) return { nm: t.part, a: { k: 'out', lb: '끝남', de: `${t.teeTime} 티오프` } };
   const now = new Date(); const cur = now.getHours() * 60 + now.getMinutes();
   const k = cur < t.m ? 'wait' : (cur < t.m + RC_ROUND_MIN ? 'run' : 'out');
@@ -3567,11 +3570,11 @@ function rcRenderClubs() {
     return `<div class="ct-item">
       <div class="ct-body">
         <div class="ct-top">
-          <span class="cl-nm">${esc(o.nm)}<span class="u"> 클럽</span></span>
+          <span class="cl-nm">${esc(o.nm)}${o.plain ? '' : '<span class="u"> 클럽</span>'}</span>
           <span class="ct-sp"></span>
           ${n > 1 ? `<button class="ct-del" data-cdel="${i}" type="button" aria-label="이 칸 지우기">${RC_XS}</button>` : ''}
         </div>
-        ${o.a ? `<div class="ct-auto ${o.a.k}"><span class="dt"></span><span>${esc(o.a.lb)}</span><span class="de">· ${esc(o.a.de)}</span></div>` : ''}
+        ${o.a ? `<div class="ct-auto ${o.a.k}"><span class="dt"></span><span>${esc(o.a.lb)}</span>${o.a.de ? `<span class="de">· ${esc(o.a.de)}</span>` : ''}</div>` : ''}
       </div>
       ${rcPicBtn('club', i)}
     </div>`;
@@ -3619,14 +3622,11 @@ function rcRenderDash() {
 }
 
 // 미완료 항목 목록(사진 전·후 + 반납 4종) — 미완료 안내에 콕 집어 보여준다.
-// 아직 못 적은 것 — ★사진은 여기 없다. 사진은 도장을 막지 않는다.
+// 아직 못 적은 것 — ★카트 번호뿐이다. 사진도 장비도 도장을 막지 않는다.
 function rcMissingList(st) {
-  const m = [];
   const n = ((st.nums && st.nums.need) || []);
   const many = ((st.carts || []).length) > 1;
-  for (const i of n) m.push((many ? RC_ORD[i] + ' 번째 ' : '') + '카트 번호');
-  for (const c of (st.checks || [])) if (!c.done) m.push(c.label);
-  return m;
+  return n.map((i) => (many ? RC_ORD[i] + ' 번째 ' : '') + '카트 번호');
 }
 // 도장 날짜 = 한국어 스택("8월 11일" + 아래 작은 "2026").
 function rcSetStampDate(iso) {
@@ -3706,11 +3706,8 @@ function rcSyncStamp(st) {
     } else {
       const l = rcMissingList(cur);
       if (miss) {
-        const why = ((cur.nums && cur.nums.need) || []).length
-          ? '번호가 있어야 경기과가 이 카트를 다음 캐디에게 줄 수 있습니다.'
-          : '경기팀이 반납을 확인하는 항목입니다.';
         miss.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 8v5M12 16.5v.01"></path><circle cx="12" cy="12" r="9"></circle></svg>'
-          + `<div><b>${l.map(esc).join(' · ')}</b>를 아직 안 적으셨어요.<br>${why}</div>`;
+          + `<div><b>${l.map(esc).join(' · ')}</b>를 아직 안 적으셨어요.<br>번호가 있어야 경기과가 이 카트를 다음 캐디에게 줄 수 있습니다.</div>`;
         miss.classList.add('on');
         miss.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
@@ -3808,7 +3805,8 @@ function rcRenderFindList(q) {
   list.innerHTML = rows.map((r) => {
     const dow = rcDowOf(r.date); const wc = dow === 0 ? 'sun' : (dow === 6 ? 'sat' : '');
     const meta = [r.cartNo ? `카트 ${esc(r.cartNo)}` : '', r.nPhoto ? `사진 ${r.nPhoto}` : ''].filter(Boolean).join(' · ') || '기록';
-    const bdg = r.allDone ? '<span class="bdg ok">완료</span>' : `<span class="bdg no">미완료 ${r.doneCount}/${r.total}</span>`;
+    // ★셈(n/m)을 안 보여 준다 — 죄는 칸이 하나뿐이라 '0/1'은 아무 말도 안 해 준다.
+    const bdg = r.allDone ? '<span class="bdg ok">완료</span>' : '<span class="bdg no">번호 없음</span>';
     return `<button class="rc-rec" data-date="${r.date}"><span class="dt">${rcDateKo(r.date)}<small class="${wc}">${RC_WD[dow]}</small></span><span class="meta">${meta}</span>${bdg}${CH}</button>`;
   }).join('');
   list.querySelectorAll('button[data-date]').forEach((b) => { b.onclick = () => { rcCloseFind(); loadCartCheck(b.dataset.date); }; });

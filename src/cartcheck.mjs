@@ -77,11 +77,12 @@ export const OPS_RETURN_ITEMS = [
 const OPS_KEYS = new Set(OPS_RETURN_ITEMS.map((i) => i.key));
 
 // 반납 완료 판정 — ★무엇이 도장을 막는가가 여기서 정해진다.
-//  막는 것 : ① 카트 칸마다 번호   ② 장비 반납 4종
-//  안 막는 것: 사진. 카트를 바꿔 탈 때마다 찍으라고 하면 압박이 된다. 남기고 싶은 사람만 남긴다.
-//  ★번호는 왜 막나 — 경기과가 이 카트를 다음 캐디에게 줄 수 있는지 그 번호로 본다.
-//   한 사람이 안 적으면 다른 캐디가 빈 카트를 못 받는다. 그래서 여기만 죈다.
-//  ★당번·벌당인 날(dutyDay)은 라운드에 카트를 끌고 나가지 않는다 → 번호도 안 묻고 4종만 본다.
+//  막는 것    : 카트 칸마다 번호. 그것뿐이다.
+//  안 막는 것 : 사진 · 장비 반납 4종.
+//  ★번호만 죄는 까닭 — 경기과가 이 카트를 다음 캐디에게 줄 수 있는지 그 번호로 본다.
+//   한 사람이 안 적으면 다른 캐디가 빈 카트를 못 받는다. 남에게 피해가 가는 것은 이것뿐이다.
+//   사진도 장비도 안 하면 제 손해로 끝난다 — 그건 죄지 않는다(2026-09-23 풀었다).
+//  ★당번·벌당인 날(dutyDay)은 라운드에 카트를 끌고 나가지 않는다 → 번호도 안 묻는다.
 export function computeReturn(rec, dutyDay = false) {
   const carts = normCarts(rec), clubN = normClubN(rec);
   const shots = (base, i) => { const a = legArr(rec, legOf(base, i)); return a.length; };
@@ -95,8 +96,8 @@ export function computeReturn(rec, dutyDay = false) {
   const checkDone = checks.filter((c) => c.done).length;
   const needNo = dutyDay ? [] : carts.map((c, i) => (c.no ? -1 : i)).filter((i) => i >= 0);
   const numsDone = needNo.length === 0;
-  const doneCount = (dutyDay ? 0 : (numsDone ? 1 : 0)) + checkDone;
-  const total = (dutyDay ? 0 : 1) + OPS_RETURN_ITEMS.length;     // 5칸(당번인 날은 4칸)
+  const doneCount = dutyDay ? 0 : (numsDone ? 1 : 0);
+  const total = dutyDay ? 0 : 1;                                 // 죄는 칸은 하나 — 번호뿐
   return { cart, club, cartShots, clubShots, carts, clubN, checks,
     nums: { need: needNo, done: numsDone },
     nPhoto: countShots(rec),
@@ -278,7 +279,7 @@ export function toggleReturn(dateISO, key, done, userId = 1) {
   }, userId);
 }
 
-// '완료 도장' 찍기/해제 — 6칸 완료(allDone)일 때만 도장이 찍힌다. 미완료면 stampError로 되돌려준다(프런트가 미완료 안내).
+// '완료 도장' 찍기/해제 — 카트 번호가 다 적혔을 때만(allDone) 찍힌다. 미완료면 stampError로 되돌려준다(프런트가 미완료 안내).
 //  수정하기(stamped=false)는 언제든 도장 해제(다시 편집 가능). getDay가 stampedAt를 그대로 내려준다.
 export function setStamp(dateISO, stamped, userId = 1) {
   if (!isISO(dateISO)) return null;
