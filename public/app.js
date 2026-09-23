@@ -3397,7 +3397,9 @@ function rcShots(subject, side, slot) {               // 그 칸 그 구간의 �
   return Array.isArray(c) ? c : (c ? [c] : []);
 }
 function rcArr(subject, side) { return rcShots(subject, side, rcSlot); }
-const rcUrl = (f) => `/api/cartcheck/photo/${f}`;
+// ★사진 이름이 곧 그림일 때도 있다(샘플은 서버가 없어 그림을 통째로 들고 다닌다).
+//  진짜 앱에서는 늘 파일 이름이라 이 갈림은 안 탄다.
+const rcUrl = (f) => (String(f).slice(0, 5) === 'data:' ? f : `/api/cartcheck/photo/${f}`);
 // 반납 확인 효과음(웹오디오 합성 — 외부파일 X, 오프라인 OK). 켤 때=밝은 2음 상승 딩, 끌 때=짧고 낮은 틱.
 //  obActx()가 사용자 제스처(탭) 안에서 resume하므로 자동재생 정책에 안 걸린다.
 function rcChime(on) {
