@@ -1931,8 +1931,8 @@
     #view-cart .ct-in { flex:0 1 auto; min-width:0; font:inherit; font-size:19px; font-weight:900;
       letter-spacing:-.03em; color:#171a23; font-variant-numeric:tabular-nums;
       border:0; background:transparent; padding:2px 0; outline:none; }
-    /* 빈 칸은 겁주는 자리가 아니라 누르는 자리다 — 앱의 민트로 '적으세요'라고만 한다 */
-    #view-cart .ct-in::placeholder { color:var(--a); font-weight:850; letter-spacing:-.02em; font-size:14.5px; }
+    /* 빈 칸은 겁주는 자리도, 튀는 자리도 아니다 — 들어설 숫자와 같은 먹색 계열로 차분하게 */
+    #view-cart .ct-in::placeholder { color:#6b7480; font-weight:850; letter-spacing:-.02em; font-size:14.5px; }
     #view-cart .ct-u { flex:none; font-size:12px; font-weight:800; color:#8b968f; margin-left:-4px; }
     #view-cart .cl-nm { font-size:19px; font-weight:900; letter-spacing:-.03em; color:#171a23; }
     #view-cart .cl-nm .u { font-size:12px; font-weight:800; color:#8b968f; margin-left:1px; }
@@ -1949,10 +1949,6 @@
     #view-cart .ct-auto.run .dt { background:#12bf94; }
     #view-cart .ct-auto.run .de { color:#7fc4ad; }
     #view-cart .ct-auto.out .dt { background:#b9c0c9; }
-    /* 아직 번호가 없는 줄 — 다른 줄과 같은 자리, 같은 크기. 색만 조금 짙다 */
-    #view-cart .ct-auto.todo { color:var(--ai); }
-    #view-cart .ct-auto.todo .dt { background:var(--a); }
-    #view-cart .ct-auto.todo .de { color:#8fbfae; }
     /* 캐디가 스스로 고르는 둘 — 나머지는 앱이 안다 */
     #view-cart .ct-flags { display:flex; gap:6px; margin-top:7px; }
     #view-cart .ct-flags button { flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:5px;

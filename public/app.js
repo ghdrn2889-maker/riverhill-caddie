@@ -3436,9 +3436,10 @@ const rcHm = (ts) => { const d = new Date(ts); return String(d.getHours()).padSt
 const rcIsToday = () => !rcTodayISO || !ccDate || ccDate === rcTodayISO;
 
 // 이 카트가 지금 무엇을 하고 있나 — 앱이 스스로 적는 줄.
-//  ★번호가 없어도 줄은 선다. 안 그리면 그 칸만 키가 작아져 상자가 저 혼자 다르게 보인다.
+//  ★번호가 없으면 아무 말도 안 적는다. 적을 사실이 아직 없고,
+//   '적어 주세요' 같은 말은 빈 칸이 이미 하고 있다.
 function rcAutoOf(c, i, n) {
-  if (!c.no) return { k: 'todo', lb: '번호를 적어 주세요', de: '경기과가 이 번호로 카트를 내줍니다' };
+  if (!c.no) return null;
   if (c.outAt) return { k: 'out', lb: '내놓음', de: rcHm(c.outAt) + ' 넘김' };
   if (i < n - 1) return { k: 'out', lb: '내놓음', de: '' };       // 뒤에 다른 칸이 있으면 이미 넘긴 것
   if (ccDay && ccDay.stampedAt) return { k: 'out', lb: '내놓음', de: '근무 마침' };
