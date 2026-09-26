@@ -3503,7 +3503,7 @@ function rcRenderCarts() {
           <button class="chg ${c.chg ? 'on' : ''}" data-f="chg" type="button"><svg viewBox="0 0 24 24" fill="none">${RC_BOLT}</svg>충전 중</button>
           <button class="bad ${c.bad ? 'on' : ''}" data-f="bad" type="button"><svg viewBox="0 0 24 24" fill="none">${RC_WARN}</svg>문제 있음</button>
         </div>
-        ${c.chg ? `<div class="ct-chg">충전기에 꽂아 두신 것만 알립니다. 경기과 판에는 <b>${esc(rcHm(c.chgAt || Date.now()))}부터 충전 중</b>으로 떠서, 얼마나 됐는지 시계로 보입니다.</div>` : ''}
+        ${c.chg ? `<div class="ct-chg"><span class="dt"></span><b>${esc(rcHm(c.chgAt || Date.now()))}부터 충전 중</b><span class="de">· 경기과 판에 그대로 뜹니다</span></div>` : ''}
         ${c.bad ? `<input class="ct-note" data-note="${i}" type="text" maxlength="40" value="${esc(c.note || '')}" placeholder="어디가 문제인가요? (예: 배터리가 빨리 닳음)">` : ''}
       </div>
       ${rcPicBtn('cart', i)}

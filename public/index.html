@@ -1949,21 +1949,29 @@
     #view-cart .ct-auto.run .dt { background:#12bf94; }
     #view-cart .ct-auto.run .de { color:#7fc4ad; }
     #view-cart .ct-auto.out .dt { background:#b9c0c9; }
-    /* 캐디가 스스로 고르는 둘 — 나머지는 앱이 안다 */
-    #view-cart .ct-flags { display:flex; gap:6px; margin-top:7px; }
-    #view-cart .ct-flags button { flex:1 1 0; display:flex; align-items:center; justify-content:center; gap:5px;
-      font:inherit; font-size:11.5px; font-weight:850; cursor:pointer; color:#7b8590;
-      background:#f4f6f8; border:1px solid #e7eaf0; border-radius:10px; padding:9px 4px; }
-    #view-cart .ct-flags button svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
-    #view-cart .ct-flags button.on.chg { color:#fff; background:#e8971a; border-color:#e8971a; }
-    #view-cart .ct-flags button.on.bad { color:#fff; background:#ef4757; border-color:#ef4757; }
-    #view-cart .ct-note { width:100%; margin-top:7px; font:inherit; font-size:12px; font-weight:700;
-      color:#171a23; background:#fdebed; border:1px solid #f6ccd1; border-radius:10px;
+    /* 캐디가 스스로 고르는 둘 — 나머지는 앱이 안다.
+       ★줄 안에 얹히는 작은 알약이다. 두 칸을 꽉 채우면 줄이 아니라 벽이 되고,
+        고작 두 가지를 고르는 자리가 화면에서 제일 큰 물건이 된다.
+       ★켠 표시는 앱의 배지 말투(옅은 면 + 짙은 글씨)를 따른다 — 꽉 찬 원색은 '경고'로 읽힌다. */
+    #view-cart .ct-flags { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; padding:0 1px; }
+    #view-cart .ct-flags button { display:inline-flex; align-items:center; gap:5px;
+      font:inherit; font-size:11.5px; font-weight:820; letter-spacing:-.02em; cursor:pointer; color:#7b8590;
+      background:#fff; border:1px solid #e3e7ee; border-radius:99px; padding:7px 12px 7px 10px; }
+    #view-cart .ct-flags button svg { width:12.5px; height:12.5px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+    #view-cart .ct-flags button:active { filter:brightness(.97); }
+    #view-cart .ct-flags button.on.chg { color:#8a5e18; background:#fdf3e2; border-color:#e8c88a; }
+    #view-cart .ct-flags button.on.bad { color:#b3323f; background:#fdebed; border-color:#f3bfc6; }
+    #view-cart .ct-note { width:100%; margin-top:8px; font:inherit; font-size:12px; font-weight:700;
+      color:#171a23; background:#fff; border:1px solid #f1cdd3; border-radius:10px;
       padding:9px 11px; outline:none; }
-    #view-cart .ct-note::placeholder { color:#d99aa2; font-weight:700; }
-    #view-cart .ct-chg { margin-top:7px; font-size:11px; line-height:1.55; font-weight:700; color:#8a6520;
-      background:#fdf6e6; border-radius:10px; padding:9px 11px; }
-    #view-cart .ct-chg b { color:#5e4310; font-weight:900; }
+    #view-cart .ct-note:focus { border-color:#e79aa5; }
+    #view-cart .ct-note::placeholder { color:#c9a4aa; font-weight:700; }
+    /* 꽂은 시각은 상자가 아니라 한 줄이다 — 앱이 스스로 적는 줄(.ct-auto)과 같은 결 */
+    #view-cart .ct-chg { display:flex; align-items:center; gap:6px; margin-top:8px; padding:0 2px;
+      font-size:11px; font-weight:800; color:#a58547; font-variant-numeric:tabular-nums; }
+    #view-cart .ct-chg .dt { flex:none; width:6px; height:6px; border-radius:50%; background:#e8971a; }
+    #view-cart .ct-chg b { color:#8a5e18; font-weight:900; }
+    #view-cart .ct-chg .de { color:#bda87f; font-weight:750; }
     /* 사진 문 — 줄의 오른쪽 끝. 자리로 '이 카트의 사진'임이 드러난다 */
     #view-cart .ct-pic { flex:none; align-self:center; width:68px; height:74px; padding:8px 4px; cursor:pointer; font:inherit;
       border:1px solid #eaeef3; border-radius:12px; background:#f6f8fa;
