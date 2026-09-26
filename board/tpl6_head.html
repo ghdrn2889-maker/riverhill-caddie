@@ -1076,6 +1076,10 @@ body.celldrag .cell{cursor:grabbing}
 /* 몇 번째로 집었는지 */
 .cell .tag.pkn{background:var(--swap);color:#fff;min-width:calc(15px*var(--k));text-align:center}
 /* ── 순번 세우기 — 근무표 집계 아래 띠 ── */
+/* 합쳐 세우는 날 — 띠에 색을 넣어 켠 것이 하루 내내 보이게 */
+.lnbar.mrg{background:#eef4fb}
+.lnbar.mrg .lk{background:var(--go);color:#fff;border-color:var(--go)}
+.lnbar.mrg .lv{color:var(--go)}
 .lnbar{display:flex;align-items:center;gap:calc(8px*var(--k));
   padding:calc(8px*var(--k)) calc(11px*var(--k));border-top:1px solid var(--line2)}
 .lnbar .lk{flex:0 0 auto;font-size:calc(11px*var(--k));font-weight:900;color:var(--go);

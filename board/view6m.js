@@ -311,8 +311,13 @@ function workHTML(){
     + (qv ? '<button class="x" data-act="wkqx">지움</button>' : '') + '</div>'
     + '<div class="lineup">'
     + '<div class="lh"><b>순번 세우기</b><span>시작한 사람부터 조를 돌며 세웁니다</span></div>'
-    + lineupRow('1·2부', seonbal(), 'lnpick', 'lnrun', '1부 · 2부 순번 세우기')
-    + lineupRow('3부', bu3Start(), 'ln3pick', 'ln3run', '3부 순번 세우기')
+    + mergeRow()
+    + (MERGED
+        ? lineupRow('함께', seonbal(), 'lnpick', 'lnrunall', '순번 세우기')
+        : (housePks().length ? lineupRow(housePks().map(function(k){ return part(k).name; }).join(' · '),
+              seonbal(), 'lnpick', 'lnrun',
+              housePks().map(function(k){ return part(k).name; }).join(' · ') + ' 순번 세우기') : '')
+          + (bu3Pks().length ? lineupRow('3부', bu3Start(), 'ln3pick', 'ln3run', '3부 순번 세우기') : ''))
     + caughtHTML()
     + roundClashHTML()
     + cartClashHTML()
@@ -920,20 +925,20 @@ function seatGoHTML(){
     }).join(' · ');
     return '<button class="row" data-sgs="' + esc(n) + '">'
       + '<span class="p num">' + (no + k) + '</span>'
-      + '<span class="nm">' + esc(n) + (k === 0 ? ' <b>첫 사람</b>' : '') + '</span>'
+      + '<span class="nm">' + esc(n) + '</span>'
+      // ★글자로 '첫 사람'이라 쓰지 않는다 — 이미 만들어 둔 선발 배지가 있다.
+      //   배치표·근무표에서 쓰는 그 색 그대로여야 같은 뜻으로 읽힌다
+      + (k === 0 ? '<span class="b csb">선발</span>' : '')
       + '<span class="wh">' + esc(at || '자리 없음') + '</span></button>';
   }).join('');
   return '<div class="grab"></div>'
     + '<div class="k">' + esc(p.name) + ' · ' + no + '번부터</div>'
     + '<div class="st">' + esc(f.key) + ' ' + names.length + '명 앉히기</div>'
-    + '<div class="sub"><b>누구부터 앉힐지</b> 고르십시오. 고른 사람이 <b>' + no + '번</b>이 되고, '
-    + '나머지는 <b>조 차례</b>로 뒤를 잇습니다 — 순번 세우기의 선발과 같은 규칙입니다.</div>'
-    + '<div class="grp" style="padding-bottom:4px"><h4>누구부터 · 눌러서 바꿉니다</h4></div>'
+    // ★규칙을 밑에 풀어 적지 않는다 — 줄 번호와 선발 배지가 이미 그것을 말하고 있다
+    + '<div class="grp" style="padding-bottom:4px"><h4>선발 고르기</h4></div>'
     + '<div class="lst inswap">' + rows + '</div>'
     + '<div class="acts" style="margin:12px 14px"><button class="go" style="flex:1" '
     + 'data-act="sggo">이대로 ' + no + '~' + (no + ord.length - 1) + '번에 앉히기</button></div>'
-    + '<div class="dnote" style="margin:0 14px 12px">뒤가 ' + ord.length + '칸 밀립니다 — '
-    + '아무도 자리를 잃지 않습니다.</div>'
     + '<button class="close" data-act="close">닫기</button>';
 }
 function drawSeatGo(open){
@@ -1020,8 +1025,7 @@ function bulkActHTML(){
     + btns([['t|휴무', '휴무'], ['t|휴가', '휴가'], ['t|병가', '병가'], ['t|', '근무로']]) + '</div>'
     + '<div class="grp"><h4>그날의 구분</h4>'
     + btns(DAYTAGS.map(function(x){ return ['t|' + x, x]; }))
-    + '<div class="dnote" style="margin-top:9px">조출\u00b7후출\u00b7정출\u00b7찾근을 붙이면 '
-    + '<b>어제 자리에서 내려옵니다</b> \u2014 순번은 경기과가 정한다는 뜻입니다.</div></div>'
+    + '</div>'
     + '<div class="grp"><h4>부 선택</h4>'
     // ★한 부에 한 칸. 이름만 적고, 그 부에서 일하면 그 부 색으로 찬다 —
     //   글로 상태를 적어 두면 칸마다 글이 달라져 줄이 지저분해진다
@@ -1079,12 +1083,12 @@ function openAddTeam(pk){
     + '<div class="sub">넣으면 시각순으로 자리를 다시 맞추고, 대기 첫 사람이 근무가 됩니다</div>'
     + '<div class="grp"><h4>시각</h4>'
     + '<div class="fld">' + timeInput('id="adTime" class="tf"', hm(mm(last.time) + GAP)) + '</div>'
-    + '<div class="acts" style="margin-top:11px">'
-    + '<button class="go" data-act="addteam" style="flex:1">넣기</button></div>'
+    // ★넣기와 닫기는 같은 줄에 나란히 — PC 판과 같은 짜임이다
+    + '<div class="acts two" style="margin-top:11px">'
+    + '<button class="go" data-act="addteam">넣기</button>'
+    + '<button data-act="close">닫기</button></div>'
     + '<div class="dnote">시각만 넣으면 <b>그 시각에 빈 코스</b>로 들어갑니다 — '
-    + '코스는 안 고르셔도 됩니다. 다르면 그 칸에서 코스를 바꾸십시오.<br>'
-    + GAP + '분 격자에 <b>맞추지 않아도 됩니다</b> — 끼워 넣는 날이 있습니다.</div></div>'
-    + '<button class="close" data-act="close">닫기</button>', 'add', { pk: pk });
+    + '코스는 안 고르셔도 됩니다. 다르면 그 칸에서 코스를 바꾸십시오.</div></div>', 'add', { pk: pk });
 }
 // 순번 · 명단 — 그 부의 명단을 순번 그대로. 결근한 사람도 자리에 남겨 보여준다
 function openRoster(){
@@ -1408,11 +1412,8 @@ function openSeonbalPick(kind){
   var b3 = (sbKind === 'bu3');
   openSheet('<div class="grab"></div><div class="k">순번 세우기</div>'
     + '<div class="st">' + (b3 ? '3부 선발 고르기' : '선발 고르기') + '</div>'
-    + '<div class="sub">고른 사람의 <b>조 자리부터</b> 조를 돌며(4조 다음은 1조) '
-    + (b3 ? '<b>3부</b>가 차례로 섭니다. 3부 배지를 단 사람끼리만 돕니다'
-          : '1부와 2부가 차례로 섭니다') + '</div>'
     + '<div class="srch"><input id="sbQ" autocomplete="off" value="' + esc(sbQ)
-    + '" placeholder="이름으로 찾기"></div>'
+    + '" placeholder="이름 검색하기"></div>'
     + '<div class="lst inswap" id="sbOut"></div>'
     + '<button class="close" data-act="close">닫기</button>', 'seonbal', {});
   drawSeonbalPick();
@@ -1445,6 +1446,14 @@ function drawSeonbalPick(){
     + (q ? esc(q) + ' — 후보에 없습니다' : '고를 수 있는 사람이 없습니다') + '</div>';
 }
 // 세우기 전에 무엇이 바뀌는지 먼저 보여 준다 — 자리를 통째로 흔드는 일이다
+// 겨울 통합 스위치 — 폰에서도 같은 자리, 같은 말
+function mergeRow(){
+  return '<div class="mrgline' + (MERGED ? ' on' : '') + '">'
+    + '<b>' + (MERGED ? '합쳐서 한 줄' : '하우스 · 3부반 따로') + '</b>'
+    + '<span>' + (MERGED ? '오늘만 — 소속을 안 가리고 섭니다' : '팀이 적은 날이면 합쳐 세우십시오') + '</span></div>'
+    + '<button class="lgo" data-act="' + (MERGED ? 'mrgoff' : 'mrgon') + '">'
+    + (MERGED ? '도로 따로 세우기' : '합쳐 세우기') + '</button>';
+}
 function openLineupPreview(pks){
   pks = pks || ['1', '2'];
   var b3 = (pks.length === 1 && pks[0] === '3');
@@ -1687,8 +1696,11 @@ $('pad').addEventListener('click', function(e){
   if (padd0) { openAddPerson(padd0.getAttribute('data-pk') || cur); return; }
   if (e.target.closest('[data-act="lnpick"]'))  { openSeonbalPick('house'); return; }
   if (e.target.closest('[data-act="ln3pick"]')) { openSeonbalPick('bu3'); return; }
-  if (e.target.closest('[data-act="lnrun"]'))   { openLineupPreview(['1', '2']); return; }
-  if (e.target.closest('[data-act="ln3run"]'))  { openLineupPreview(['3']); return; }
+  if (e.target.closest('[data-act="lnrun"]'))   { openLineupPreview(housePks()); return; }
+  if (e.target.closest('[data-act="ln3run"]'))  { openLineupPreview(bu3Pks()); return; }
+  if (e.target.closest('[data-act="lnrunall"]')) { openLineupPreview(allPks()); return; }
+  if (e.target.closest('[data-act="mrgon"]'))   { setMerged(true); paint(); return; }
+  if (e.target.closest('[data-act="mrgoff"]'))  { setMerged(false); paint(); return; }
   var bk = e.target.closest('[data-bulk]');
   if (bk){
     var bkt = bk.getAttribute('data-bulk');

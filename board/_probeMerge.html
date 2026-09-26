@@ -1,0 +1,96 @@
+<div id="PROBE"></div>
+<script>
+// 겨울 통합 순번 — 합치면 한 줄로 서는지, 끄면 도로 갈라지는지, 단부제 날에도 도는지
+var E = []; window.addEventListener('error', function (e) { E.push(e.message + ' @' + e.lineno); });
+setTimeout(function () {
+  var o = [], bad = 0;
+  function ok(c, m) { o.push((c ? '  ok  ' : '  X   ') + m); if (!c) bad++; }
+  try {
+    var b3 = bu3List().slice();
+    ok(b3.length > 0, '3부반 명부 ' + b3.length + '명');
+
+    o.push('① 갈라 세우는 평소');
+    MERGED = false;
+    var house = lineupPool('house'), only3 = lineupPool('bu3');
+    ok(house.every(function (n) { return !isBu3(n); }), '하우스 무리에 3부반이 한 명도 없다');
+    ok(only3.length > 0 && only3.every(isBu3), '3부 무리는 3부반뿐이다 (' + only3.length + '명)');
+    ok(lineupKind(['1', '2']) === 'house' && lineupKind(['3']) === 'bu3', '무리 이름이 갈린다');
+
+    o.push('② 합쳐 세우는 날');
+    MERGED = true;
+    var all = lineupPool('all');
+    ok(lineupKind(['1', '2']) === 'all' && lineupKind(['3']) === 'all', '합친 날에는 무리가 하나다');
+    var g3 = all.filter(isBu3).length, gH = all.length - g3;
+    ok(g3 > 0 && gH > 0, '한 줄에 3부반 ' + g3 + '명 · 하우스 ' + gH + '명이 같이 있다');
+    ok(all.length === house.length + only3.length,
+      '합친 수(' + all.length + ') = 따로 센 둘의 합(' + house.length + '+' + only3.length + ')');
+    ok(lineupPool('house').length === all.length, '어느 이름으로 물어도 같은 한 줄이다');
+
+    var sb = seonbal() || all[0];
+    var ring = joRing(sb).filter(function (n) { return all.indexOf(n) >= 0; });
+    ok(ring.length === all.length, '조를 한 바퀴 돌면 ' + ring.length + '명이 차례로 선다');
+    var f3 = -1;
+    for (var i = 0; i < ring.length; i++) if (isBu3(ring[i])) { f3 = i; break; }
+    ok(f3 > 0 && f3 < ring.length - 1,
+      '3부반이 줄 끝이 아니라 제 조 자리(' + (f3 + 1) + '번째)에 섞여 있다');
+
+    ok(!mix3('1', b3[0]), '합친 날에는 1부의 3부반을 이상하다고 안 짚는다');
+    MERGED = false;
+    ok(mix3('1', b3[0]) === true, '도로 가른 날에는 다시 짚는다');
+
+    o.push('③ 단부제 — 부가 하나뿐인 날');
+    var keep = DAY.slice();
+    DAY = keep.filter(function (p) { return p.key === '3'; });
+    ok(housePks().length === 0 && bu3Pks().length === 1, '3부만 남으면 하우스 줄은 안 선다');
+    MERGED = true;
+    ok(allPks().join() === '3', '합쳐 세우면 그 한 부에 전부 선다');
+    var p1 = lineupPool(lineupKind(allPks()));
+    ok(p1.filter(isBu3).length > 0 && p1.filter(function (n) { return !isBu3(n); }).length > 0,
+      '단부제 + 합침 = 하우스도 3부반도 그 한 부에 선다 (' + p1.length + '명)');
+    MERGED = false;
+    ok(lineupPool(lineupKind(bu3Pks())).every(isBu3), '단부제인데 안 합치면 3부반만 선다');
+    DAY = keep.filter(function (p) { return p.key !== '3'; });
+    ok(bu3Pks().length === 0, '1·2부만 남으면 3부 줄은 안 선다');
+    DAY = keep;
+
+    o.push('④ 자리까지 실제로 잡히나');
+    MERGED = true;
+    var plan = lineupPlan(seonbal(), allPks());
+    ok(!!plan, '합친 채로 순번을 세워 본다');
+    if (plan) {
+      var names = plan.rows ? plan.rows.map(function (r) { return r.to; })
+        : (plan.slots || []).map(function (r) { return r.to; });
+      var n3 = names.filter(isBu3).length;
+      ok(n3 > 0, '세워 본 자리에 3부반이 ' + n3 + '명 들어간다');
+    }
+
+    o.push('⑤ 날 넘기기 · 되돌리기');
+    MERGED = true;
+    clearDayMarks({});
+    ok(MERGED === false, '날을 넘기면 합침이 꺼진 채로 시작한다');
+    MERGED = false;
+    var s0 = state();
+    MERGED = true;
+    restore(s0);
+    ok(MERGED === false, '되돌리면 합침도 같이 되돌아온다');
+
+    o.push('⑥ 화면');
+    MERGED = false; paint();
+    var bar = document.querySelector('.lnbar');
+    ok(!!bar && /따로/.test(bar.textContent), '평소 띠: ' + (bar ? bar.textContent.slice(0, 30) : '-'));
+    var on = document.querySelector('[data-act="mrgon"]');
+    ok(!!on, '합쳐 세우기 단추가 있다');
+    on.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    ok(MERGED === true, '눌렀더니 합쳐졌다 · ' + (LOG[0] ? LOG[0].msg : ''));
+    ok(!!document.querySelector('.lnbar.mrg'), '띠에 색이 들어왔다');
+    ok(document.querySelectorAll('[data-act="ln3run"]').length === 0, '3부 선발 줄이 사라졌다(줄은 하나다)');
+    ok(!!document.querySelector('[data-act="lnrunall"]'), '순번 세우기 단추 하나로 합쳐졌다');
+    document.querySelector('[data-act="mrgoff"]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    ok(MERGED === false && !!document.querySelector('[data-act="ln3run"]'), '도로 따로 세우면 3부 줄이 돌아온다');
+
+    ok(E.length === 0, 'errs: ' + (E.join(' | ') || 'none'));
+    o.unshift(bad ? 'X ' + bad + '군데 어긋남' : 'OK 모두 맞음');
+  } catch (e) { o.unshift('ERROR: ' + e.message + ' | ' + (e.stack || '').split('\n')[1]); }
+  document.getElementById('PROBE').textContent = o.join('\n');
+}, 600);
+</script>

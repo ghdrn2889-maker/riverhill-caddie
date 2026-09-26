@@ -146,10 +146,15 @@ var DUTY = { '당번': [{ n: '정용호', t: '7:00' }], '벌당': [], '흡연실
 //           시간에 안 묶이고, 순번 세우기가 자리를 준다. 당번 배지는 그대로 붙는다.
 //   w='may' 상황 따라. 순번 세우기에서는 빼고, 적힌 시각만 묶는다 —
 //           안 겹치는 라운드가 남아 있으면 아직 일할 수 있는 사람(미배치·가용)이다.
-//   w='no'  그날 캐디 근무는 없다. 시각과 무관하게 하루를 잡는다.
+//           시각을 비워 두면 하루를 통째로 잡는다 — 그날 캐디 근무를 안 하는 당번이다.
 //   ★여태는 이 셋이 '시각이 있나 없나' 하나로 뭉개져 있었다. 그래서 시각을 안 적는
 //    흡연실 당번이 하루 종일 묶인 것으로 읽혀 근무에서 통째로 빠졌다 — 실제와 정반대였다.
-var DUTYWORK = ['in', 'may', 'no'];
+// ★고를 수 있는 것은 둘뿐이다(2026-09-15) — '근무 안 함'은 걷었다.
+//   하루를 통째로 잡는 당번은 '상황 따라'에 시각을 비워 두면 그대로 된다 —
+//   시각을 안 적은 당번은 원래 하루를 잡게 돼 있어, 둘은 같은 일을 두 이름으로
+//   말하고 있었다. 둘 중 어느 것을 골라야 하나로 사람을 걱정시킬 까닭이 없다
+var DUTYWORK = ['in', 'may'];
+// 'no' 는 옛 저장본에만 남은 값이다 — defOf 가 읽으면서 '상황 따라'로 바꿔 놓는다
 var DUTYWTX = { 'in': '순번에 같이', 'may': '상황 따라', 'no': '근무 안 함' };
 var DUTYDEF = { '당번': { t: '7:00', h: 5, w: 'may' },
                 '벌당': { t: '13:00', h: 5, w: 'may' },
@@ -260,6 +265,19 @@ var DAYTAGS = ['조출', '후출', '정출', '찾근', '배치', '프리'];
 // ★씨앗은 여기서 바로 심는다. 늦게 뽑으면 '그날의 구분 비우기'가 먼저 지워 버려
 // 명부가 빈 채로 시작한다 — 한 번 비면 되살릴 길이 없다
 var BU3SET = Object.keys(TAG).filter(function(n){ return TAG[n] === '3부'; });
+// ★겨울 통합 — 팀이 적은 날에는 하우스와 3부반이 따로 순번을 받지 않고 한 줄로 선다.
+//  실제 리버힐 운영이 그렇다(2026-09-26 확인). 조 편성은 그대로 쓰고 소속 가름만 끈다.
+//  ★그날 하루짜리다 — 날을 넘기면 꺼진 채로 시작한다(clearDayMarks 가 끈다).
+//   한철 설정으로 두면 봄에 끄는 것을 잊고, 잊으면 3부반이 1·2부에 섞인 채로 돈다.
+var MERGED = false;
+function setMerged(v){
+  v = !!v;
+  if (MERGED === v) return;
+  var b = whereMap(); snap();
+  MERGED = v;
+  commit(v ? '하우스와 3부반을 합쳐 세웁니다 · 오늘만 — 순번 세우기를 누르십시오'
+           : '하우스와 3부반을 도로 갈라 세웁니다 — 순번 세우기를 누르십시오', b);
+}
 function bu3List(){ return BU3SET || (BU3SET = []); }
 function isBu3(n){ return bu3List().indexOf(n) >= 0; }
 function setBu3(n, on){
@@ -442,6 +460,7 @@ function keepOnCarry(t, o){
 }
 function clearDayMarks(o){
   var gone = 0;
+  MERGED = false;                              // ★합침은 그날 것이다 — 새 날은 도로 갈라서 시작한다
   JONAMES.forEach(function(n){
     var t = TAG[n];
     if (!t || keepOnCarry(t, o)) return;
@@ -525,7 +544,8 @@ function cellTag(t){
 }
 // ★3부 사람이 1·2부 칸에 앉아 있으면 눈에 띄어야 한다.
 // 막지는 않는다 — 조출·대바로는 갈 수 있다. 다만 모르고 섞이는 일은 없어야 한다
-function mix3(pk, n){ return (pk !== '3' && isBu3(n)); }
+// 3부반이 1·2부 칸에 앉아 있다 — 평소에는 짚어 줄 일이지만 합친 날에는 그게 정상이다
+function mix3(pk, n){ return (!MERGED && pk !== '3' && isBu3(n)); }
 // 근무표 배지에 적을 말. 근태(휴무·휴가·병가)는 상태 칩이 이미 말하므로 겹쳐 적지 않는다
 // ★3부반이면 3부반 배지를 단다 — 소속이니 늘 붙어 있어야 한다.
 // 오늘 따로 붙은 구분(조출·중복 근무…)이 있으면 그 옆에 하나 더 단다.
@@ -581,7 +601,8 @@ function hasDuty(n){ return dutyMarks(n).length > 0; }
 function dutyBusy(n){
   var out = [];
   // w: 그 당번의 근무 성격. 'in' 은 아무 시간도 안 묶는다 — 근무를 같이 하는 당번이다.
-  //    'no' 는 시각이 적혀 있어도 하루를 잡는다 — 그날 근무를 안 하는 당번이다.
+  //    시각을 안 적었으면 하루를 잡는다 — 그날 근무를 안 하는 당번이 그렇다.
+  //    'no' 는 옛 저장본 값이라 defOf 가 이미 걷어 가지만, 혹시를 위해 남겨 둔다.
   function put(w, t, h){
     if (w === 'in') return;
     if (w === 'no' || !t) { out.push([0, 1440]); return; }
@@ -771,6 +792,35 @@ function delCaddie(nm){
 function joOf(n){ return (n in JOMAP) ? JOMAP[n] : -1; }
 function joCount(i){ var c = 0; JONAMES.forEach(function(n){ if (joOf(n) === i) c++; }); return c; }
 function joUnset(){ var c = 0; JONAMES.forEach(function(n){ if (joOf(n) < 0) c++; }); return c; }
+function joLabel(g){ return g >= 0 ? (JOLABEL[g] || (g + 1) + '조') : '조 미배정'; }
+// ★조 안의 차례를 바꾼다 — 이건 보기 좋으라고 있는 문이 아니다.
+//   순번 세우기가 joMembers 의 차례를 그대로 읽는다(joRing). 그래서 조 안에서
+//   한 칸 올리면 그 사람이 그만큼 먼저 선다 — 종이 조편성표의 차례가 곧 순번 차례다.
+//   명부에 새로 넣은 사람은 JONAMES 맨 뒤에 붙으므로 늘 그 조의 꼴찌로 선다.
+//   조편성표의 제 자리로 올려 둘 문이 여태 없었다.
+//   ★거르개나 찾기를 켜 두면 그 조에서 몇 사람만 보인다. 보이는 사람끼리만
+//     자리를 맞바꾸고, 안 보이는 사람은 있던 자리에 그대로 둔다 —
+//     화면에 없는 사람이 조용히 밀려나면 그건 고친 게 아니라 망가뜨린 것이다
+function joOrder(g, names, moved){
+  var at = [], i, j;
+  for (i = 0; i < names.length; i++){
+    j = JONAMES.indexOf(names[i]);
+    if (j < 0) return;                      // 못 맞추면 아무것도 안 한다
+    at.push(j);
+  }
+  if (at.length < 2) return;
+  at.sort(function(a, b){ return a - b; });
+  var same = true;
+  for (i = 0; i < names.length; i++) if (JONAMES[at[i]] !== names[i]) { same = false; break; }
+  if (same) return;                         // 차례가 그대로면 기록도 안 남긴다
+  var was = joMembers(g).indexOf(moved) + 1;
+  var b = whereMap(); snap();
+  for (i = 0; i < names.length; i++) JONAMES[at[i]] = names[i];
+  var now = joMembers(g).indexOf(moved) + 1;
+  cfgSave();                                // ★명부는 설정이다 — 날을 넘겨도 그대로다
+  commit(joLabel(g) + ' 차례 · ' + moved + ' ' + was + '번째 → ' + now + '번째'
+    + ' · 순번 세우기가 이 차례로 돕니다', b);
+}
 
 var cur = '2', pick = null, dirty = {}, LOG = [], STACK = [], REDO = [], drwPart = '2';
 
@@ -814,13 +864,25 @@ var BOARDROWS = (function(){
   return m;
 })();
 function gridRows(p){
-  var n = Math.max(ROWS, Math.floor(Number(p.rows) || 0),
-                   Math.floor(Number(BOARDROWS[p.key]) || 0));
+  // ★사람이 정해 둔 길이(p.rows)가 있으면 그것이 바닥이다 — 기본 줄 수는
+  //   아직 아무것도 정해지지 않은 부에만 쓴다.
+  //   여태는 둘을 max 로 묶어, '끝 시각을 앞으로 당기기'가 기본 줄 수에 막혔다
+  var own = Math.floor(Number(p.rows) || 0);
+  var n = own || Math.max(ROWS, Math.floor(Number(BOARDROWS[p.key]) || 0));
   var last = 0;
   p.tees.forEach(function(t){ var m = mm(t.time); if (m > last) last = m; });
   var s0 = mm(p.start);
   if (last > s0) n = Math.max(n, Math.floor((last - s0) / GAP) + 1);
   return Math.max(1, Math.min(n, 240));      // 터무니없는 값에 화면이 굳지 않게
+}
+// 그 부 격자의 끝 시각 — 시작에서 (줄 수 - 1)만큼 간격을 더한 자리.
+// 사람은 '몇 줄'이 아니라 '몇 시까지'로 말한다
+function gridEnd(p){ return hm(mm(p.start) + (gridRows(p) - 1) * GAP); }
+// 팀이 서 있어 도로 필요한 최소 줄 수 — 이 아래로는 못 줄인다
+function gridNeed(p){
+  var s0 = mm(p.start), last = 0;
+  p.tees.forEach(function(t){ var m = mm(t.time); if (m > last) last = m; });
+  return last > s0 ? Math.floor((last - s0) / GAP) + 1 : 1;
 }
 // ★실려 온 배치표에도 자국을 찍는다.
 //   여태는 자국이 '끟어 넣기·밀기' 때만 찍혔다. 그래서 1부처럼
@@ -892,6 +954,8 @@ function state(){ return JSON.stringify({ day: DAY, log: LOG, dirty: dirty, off:
   staff: STAFF, duty: DUTY, dkeys: DUTYKEYS, ddef: DUTYDEF, dcol: DUTYCOLOR, jomap: JOMAP, jolab: JOLABEL, jocnt: JOCNT,
   gap: GAP, rows: ROWS, smax: SMAX, course: COURSE, courses: COURSES,
   tag: TAG, plan: PLAN, dpin: DUPPIN, cart: CART, lend: LEND, cbad: CARTBAD, bu3set: bu3List(),
+  merged: MERGED,
+  sgdone: SGDONE,
   jonames: JONAMES }); }
 function restore(s){
   var o = JSON.parse(s);
@@ -914,7 +978,9 @@ function restore(s){
   if (o.tag) TAG = o.tag;
   PLAN = o.plan || {};
   DUPPIN = o.dpin || {};
+  SGDONE = o.sgdone || {};
   if (o.bu3set) BU3SET = o.bu3set;
+  MERGED = !!o.merged;
   if (o.cart) CART = o.cart;
   LEND = o.lend || {};
   CARTBAD = o.cbad || {};
@@ -1032,7 +1098,7 @@ function setDutyDef(k, t){
   cfgChange(k + ' 기본 시각 ' + (d.t || '없음') + ' → ' + (t || '없음'),
     function(){ defOf(k).t = t; });
 }
-// 그 당번을 서면 그날 근무를 어떻게 보나 — 순번에 같이 / 상황 따라 / 근무 안 함
+// 그 당번을 서면 그날 근무를 어떻게 보나 — 순번에 같이 / 상황 따라
 function setDutyWork(k, w){
   if (DUTYWORK.indexOf(w) < 0) return;
   var d = defOf(k);
@@ -1094,8 +1160,10 @@ function defOf(k){
   var d = DUTYDEF[k];
   if (typeof d === 'string') d = { t: d, h: 0 };
   if (!d || typeof d !== 'object') d = { t: '', h: 0 };
-  // 옛 값의 뜻을 그대로 옮긴다 — 시각이 있으면 '상황 따라', 없으면 하루를 잡던 것이니 '근무 안 함'
-  if (DUTYWORK.indexOf(d.w) < 0) d.w = DUTYWSEED[k] || (d.t ? 'may' : 'no');
+  // 옛 값의 뜻을 그대로 옮긴다 — 이제는 둘 다 '상황 따라'다.
+  // ★옛 저장본의 'no' 도 여기로 떨어진다 — 시각을 안 적은 채로 '상황 따라'가 되면
+  //   dutyBusy 가 그대로 하루를 잡는다 — 옛 뜻이 그대로 살아 있다
+  if (DUTYWORK.indexOf(d.w) < 0) d.w = DUTYWSEED[k] || 'may';
   DUTYDEF[k] = d;
   return d;
 }
@@ -1436,6 +1504,30 @@ function setStaff(i, v, t){
     + (t && t !== wt ? ' · 출근 ' + t : '')
     + (rl && rl.c !== 'jc' ? ' (' + rl.t + ')' : '') + extra, b);
   if (/안 붙였습니다/.test(extra)) toast(extra.replace(/^ · /, ''));
+}
+// 사람은 그대로 두고 출근 시각만 고친다 — setStaff 로 하면
+// 기록에 '우격조 → 우격조'라는 빈 말이 남는다
+function setStaffTime(i, t){
+  var x = STAFF[i];
+  if (!x || !t || x.t === t) return;
+  var b = whereMap(); snap();
+  var was = x.t;
+  x.t = t;
+  commit('경기과 ' + x.k + (x.n ? ' ' + x.n : '') + ' 출근 '
+    + (was || '없음') + ' → ' + t, b);
+}
+// ★자리 차례 — 배치표 아래 '오늘 경기과' 칸이 이 차례 그대로 뜨다.
+//   마샤이 여럿이면 누가 위인지를 경기과가 정해야 한다 — 기계가 시각으로 짓는 것이 아니다
+function staffOrder(order){
+  if (!order || order.length !== STAFF.length) return null;
+  var next = [], i, j;
+  for (i = 0; i < order.length; i++){
+    j = Number(order[i]);
+    if (!STAFF[j] || next.indexOf(STAFF[j]) >= 0) return null;
+    next.push(STAFF[j]);
+  }
+  for (i = 0; i < next.length; i++) if (next[i] !== STAFF[i]) return next;
+  return null;                                   // 차례가 그대로면 손대지 않는다
 }
 function setDayTag(n, t){
   var was = tagOf(n);
@@ -2071,7 +2163,23 @@ function insertAt(pk, i, nm){
 // ★DAYTAGS 를 가져다 쓰면 안 된다 — 그건 '순번 세우기가 안 건드리는 배지' 목록이지
 //   '자리를 잡아 줘야 하는 사람' 목록이 아니다. 둘은 거의 같지만 같지 않다
 var SEATGROUPTAGS = ['조출', '후출'];
-function seatGroupTag(t){ return SEATGROUPTAGS.indexOf(t) >= 0 || isDupTag(t); }
+// ★없앤 개념은 여기서도 안 받는다 — '1,2'는 중복 근무가 아니라 그냥 두 자리다
+function seatGroupTag(t){ return !goneDup(t) && (SEATGROUPTAGS.indexOf(t) >= 0 || isDupTag(t)); }
+// ★어느 부의 말인지가 정해져 있는 배지 — 조출은 1부만의 말이다.
+//   그날 맨 앞에서 나가는 사람을 조출이라 하니, 2부·3부에는 조출이 없다.
+//   여기에 안 적어 두었더니 '중복근무 차례대로 나열하기'가 2부·3부 줄에도
+//   조출 묶음을 내어, 그 부에는 없는 사람을 부르고 있었다.
+//   빈 목록이면 '어느 부에서든'이다
+var TAGPARTS = { '조출': ['1'] };
+function tagParts(t){ return TAGPARTS[t] || []; }
+// ★한 번 나열한 묶음은 단추에서 내린다 — 줄을 다 세우고 났는데도
+//   단추가 그대로 서 있으면 '아직 안 한 일'처럼 보이고, 두 번 누를게 된다.
+//   사람을 그대로 적어 둔다 — 새로 54를 단 사람이 생기면 명단이 달라져
+//   단추가 다시 뜨면된다. 되돌리기·저장·불러오기는 state() 가 같이 들고 다닌다
+var SGDONE = {};
+function sgNames(names){ return names.slice().sort().join('|'); }
+function sgDoneMark(pk, key, names){ SGDONE[pk + '|' + key] = sgNames(names); }
+function sgIsDone(pk, key, names){ return SGDONE[pk + '|' + key] === sgNames(names); }
 // ★이 사람이 어느 묶음에 드나 — 없으면 ''.
 //   ★자리가 곧 중복 근무다. 도장(TAG)만 보면 안 된다 — 도장은 오늘부터 찍기 시작했고,
 //   그 전에 두 부에 앉혀 둔 사람에게는 없다. 그래서 묶음에 이가 빠졌다.
@@ -2081,8 +2189,12 @@ function seatGroupMark(n){
   var t = dayMark(n);
   if (t && seatGroupTag(t)) return t;                 // 조출·후출·54h·2,3 …
   if (t) return '';                                   // 배치·당번 같은 딴 배지
-  var ps = partsOf(n);
-  return ps.length >= 2 ? ps.join(',') : '';          // 배지가 없어도 두 부에 있으면 중복 근무다
+  // ★자리를 보고 짓는 표시도 dupText 를 거친다 — 여태는 여기서만
+  //   ps.join(',') 을 직접 쓰고 있어서, 없앤다고 한 '1,2'가 이 문으로만 다시 기어 들었다.
+  //   1부·2부를 같이 서는 것은 순번 차례가 한 바퀴 더 돈 것이지 중복 근무가 아니다 —
+  //   그런 사람을 묶음으로 부르면 진짜 중복(2,3·54)과 같은 무게로 읽힌다.
+  //   dupText 는 세 부면 '54', 없앤 짝은 빈 글자를 준다
+  return dupText(partsOf(n));
 }
 // ★중복 표시는 어느 부인지까지 말한다 — '2,3'은 2부와 3부다. 1부 칸에서 부르면 안 된다.
 //   '54h'는 부를 안 말한다(54홀) — 그때는 어느 부에서든 부른다
@@ -2093,7 +2205,7 @@ function dupParts(t){
 // ★묶음 이름이 말하는 부 — '1,3'은 1부와 3부, '54'는 그날 있는 부 전부.
 //   화면이 이 부 색으로 띠를 그어 '무엇이 몇 명인지'를 글 없이 말한다
 function sgParts(key){
-  if (!isDupTag(key)) return [];
+  if (!isDupTag(key)) return tagParts(key);           // 조출은 1부 색
   var d = dupParts(key);
   if (d.length) return d;
   return DAY.map(function(q){ return q.key; });
@@ -2107,7 +2219,8 @@ function sgSub(key){
 // ★차례를 못 박는다 — 54가 먼저, 그 다음 두 부짜리, 그날의 구분은 뒤.
 //   사람이 늘 같은 자리에서 같은 단추를 찾게 한다
 function sgRank(k){ return !isDupTag(k) ? 2 : (sgParts(k).length >= 3 ? 0 : 1); }
-function seatGroups(pk){
+function seatGroups(pk){ return seatGroupsRaw(pk).filter(function(x){ return !sgIsDone(pk, x.key, x.names); }); }
+function seatGroupsRaw(pk){
   var g = [], ix = {};
   function add(key, n){
     if (!(key in ix)) { ix[key] = g.length; g.push({ key: key, label: key, names: [] }); }
@@ -2130,7 +2243,12 @@ function seatGroups(pk){
       var dp = dupParts(m);
       if (dp.length && dp.indexOf(pk) < 0) return;    // '2,3'을 1부 칸에서 부르지 않는다
     }
-    else if (ps.length && ps.indexOf(pk) < 0) return; // 다른 부에만 있다
+    else {
+      // ★조출은 1부에서만 부른다 — 2부·3부 줄에 끼우면 없는 사람을 부르는 꼴이다
+      var tp = tagParts(m);
+      if (tp.length && tp.indexOf(pk) < 0) return;
+      if (ps.length && ps.indexOf(pk) < 0) return;    // 다른 부에만 있다
+    }
     add(m, n);
   });
   // ★다른 부에만 자리가 있는 사람은 안 부른다 — 여기 앉히면 중복 근무가 된다.
@@ -2141,7 +2259,9 @@ function seatGroups(pk){
   return g;
 }
 function seatGroupNames(pk, key){
-  var g = seatGroups(pk), hit = null;
+  var g = seatGroupsRaw(pk), hit = null;     // ★거른 뒤가 아니라 날것을 본다 —
+                                              //   나열하는 순간에는 아직 '한 것'이 아니고,
+                                              //   나열한 뒤에도 그 명단을 다시 읽을 일이 있다
   g.forEach(function(x){ if (x.key === key) hit = x; });
   return hit ? hit.names.slice() : [];
 }
@@ -2151,9 +2271,18 @@ function seatGroupSeat(pk, i){
   return no;
 }
 function seatGroup(pk, i, key, start){
+  return seatGroupAt(pk, seatGroupSeat(pk, i), key, start);
+}
+// ★자리를 '몇 번'으로 바로 받는 문 — 칸을 누른 것이 아니라
+//   배치표 오른쪽에서 부를 때는 누를 칸이 없다. 사람이 번호를 적는다
+function seatGroupAt(pk, no, key, start){
   var names = seatGroupNames(pk, key);
   if (!names.length) { toast('그 상태로 부를 사람이 없습니다'); return false; }
-  return seatMany(pk, seatGroupSeat(pk, i), names, start);
+  var r = seatMany(pk, no, names, start);
+  // ★되돌리기가 이 자국까지 같이 걷어야 한다 — 그래서 앉힌 뒤에 적는다.
+  //   snap() 은 앉히기 전에 찍혔으니, 되돌리면 자국도 없던 때로 돌아간다
+  if (r !== false){ sgDoneMark(pk, key, names); draftPut(); }   // 다시 그리는 것은 화면이 한다
+  return r;
 }
 // ★순번(사람 번호)을 줄의 자리로 바꾼다 — 인턴 칸은 번호를 안 쓰므로 건너뛴다
 function idxOfSeat(p, no){
@@ -2200,7 +2329,7 @@ function seatMany(pk, from, names, start){
   if (BULK) { BULK.steps++; BULK.changed += k; }
   batchEnd(p.name + ' ' + (nums.length ? nums[0] + '~' + nums[nums.length - 1] + '번에 ' : '')
     + k + '명 앉힘'
-    + (L[0] ? ' · 첫 사람 ' + L[0] : '')
+    + (L[0] ? ' · 선발 ' + L[0] : '')
     + (rest ? ' · 쉬던 ' + rest + '명은 근무로 돌아왔습니다' : '')
     + ' · 순번 세우기는 배지 붙은 이 자리를 안 건드립니다');
   return k > 0;
@@ -2299,9 +2428,16 @@ function joRing(startName){
 //   house : 1·2부 — 배지 없는 하우스캐디. '선발'도 넣는다(선발 본인 자리를 빼면
 //           새 선발을 골라도 그 사람이 안 앉는다)
 //   bu3   : 3부  — '3부' 배지를 단 사람끼리 따로 돈다. 1·2부 순환과 섞이지 않는다
+//   all   : 겨울 통합 — 둘이 한 무리다. 조 순환을 그대로 돌되 소속을 안 가린다
 function lineupKind(pks){
+  if (MERGED) return 'all';
   return (pks.length === 1 && pks[0] === '3') ? 'bu3' : 'house';
 }
+// 오늘 순번을 세울 부 — ★'1','2','3' 을 손으로 적지 않는다.
+//  단부제(부가 하나뿐인 날)에는 없는 부를 찾다가 아무도 못 세운다
+function housePks(){ return DAY.map(function(p){ return p.key; }).filter(function(k){ return k !== '3'; }); }
+function bu3Pks(){ return DAY.map(function(p){ return p.key; }).filter(function(k){ return k === '3'; }); }
+function allPks(){ return DAY.map(function(p){ return p.key; }); }
 // ★3부반은 하우스 셈에 아예 안 든다 — 오늘 배지가 없어도 안 든다.
 // 그래야 시간이 지나고 배지가 지워져도 1·2부에 섞여 들어가지 않는다.
 // 오늘 따로 배지가 붙은 사람(중복 근무·조출 …)은 두 무리 다에서 빠진다 — 그 자리는 사람이 놓는다
@@ -2319,6 +2455,7 @@ function inLineup(n, kind){
   // ★손으로 만든 중복 근무는 관리자가 정한 것이다 — 기계가 흩지 않는다.
   //   여태는 '2,3' 같은 배지가 이 못 노릇을 했는데, 1·2부 짝은 배지가 없다
   if (dupPinned(n)) return false;
+  if (MERGED) return true;                     // ★합친 날에는 소속을 안 가린다 — 한 줄이다
   return (kind === 'bu3') ? isBu3(n) : !isBu3(n);
 }
 // 순번에 왜 못 서는지 한마디로. 배지가 먼저고, 없으면 당번이다
@@ -2568,6 +2705,7 @@ function carryToDate(target, quiet){
     p.roster.forEach(function(r){ r.off = false; });
   });
   var dropped = clearDayMarks(c.opt);           // ★중복 근무·조출·후출은 내일 다시 정한다
+  SGDONE = {};                                  // ★묶음을 다시 정하니 '나열했다'는 자국도 지운다
   LEND = {};                                   // ★빌린 카트는 그날치다 — 내일 다시 빌린다
   var dutyGone = clearDutyDay();               // ★당번도 그날치다 — 내일 다시 세운다
   // ★자리는 그날 정하는 것이다. 어제 자리를 물려주면

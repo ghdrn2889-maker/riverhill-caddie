@@ -1227,6 +1227,7 @@ function bu3Grp(nm){
     + '<button data-bu3="0"' + (on ? '' : ' class="on"') + '>하우스 캐디</button>'
     + '<button data-bu3="1"' + (on ? ' class="on"' : '') + '>3부반</button>'
     + '</div><div class="dnote">'
+    + (MERGED ? '<b>오늘은 합쳐 세우는 날</b>입니다 — 소속과 상관없이 한 줄로 섭니다.<br>' : '')
     + (on ? '<b>3부반</b>입니다 — 순번 세우기에서 <b>3부에만</b> 섭니다. '
             + '1·2부에는 배지가 없어도 안 들어갑니다. 중복 근무나 대기 바꿈으로 1·2부를 뛰는 것은 그대로 됩니다.'
           : '<b>하우스 캐디</b>입니다 — 순번 세우기에서 1·2부에 섭니다.')
@@ -1702,13 +1703,37 @@ function dupRailHTML(){
     + rows + '</div>';
 }
 function lineupBarHTML(){
-  return lineupBar1('선발', seonbal(), '여기부터 조를 돌며 1부·2부가 섭니다',
-      'lnpick', 'lnrun', '선발 고르기', '1·2부 순번 세우기')
-    + lineupBar1('3부 선발', bu3Start(), '여기부터 3부끼리 돕니다',
-      'ln3pick', 'ln3run', '3부 선발 고르기', '3부 순번 세우기')
+  var hp = housePks(), bp = bu3Pks();
+  // ★합친 날에는 줄이 하나다 — 선발도 하나다. 둘을 세워 두면 어느 쪽이 도는지 알 수 없다
+  var bars = MERGED
+    ? lineupBar1('선발', seonbal(), '여기부터 조를 돌며 하우스·3부반이 함께 섭니다',
+        'lnpick', 'lnrunall', '선발 고르기', '순번 세우기')
+    // 부가 하나뿐인 날(단부제)에는 그 부에 맞는 줄만 선다
+    : (hp.length ? lineupBar1('선발', seonbal(),
+          '여기부터 조를 돌며 ' + hp.map(function(k){ return part(k).name; }).join('·') + '가 섭니다',
+          'lnpick', 'lnrun', '선발 고르기',
+          hp.map(function(k){ return part(k).name; }).join('·') + ' 순번 세우기') : '')
+      + (bp.length ? lineupBar1('3부 선발', bu3Start(), '여기부터 3부끼리 돕니다',
+          'ln3pick', 'ln3run', '3부 선발 고르기', '3부 순번 세우기') : '');
+  return mergeBarHTML() + bars
     + dupRailHTML()
     + caughtBar()
     + driftBar();
+}
+// ★겨울 통합 스위치 — 팀이 적은 날 하우스와 3부반을 한 줄로 세운다.
+//  갈라 세우는 것이 늘 하는 일이라 '합치기'만 단추로 둔다. 합친 날에는 그 사실이
+//  줄 전체에 물들어야 해서 띠에 색을 준다 — 안 그러면 켠 줄 모르고 하루를 보낸다
+function mergeBarHTML(){
+  return '<div class="lnbar' + (MERGED ? ' mrg' : '') + '">'
+    + '<span class="lk">순번</span>'
+    + '<span class="lv">' + (MERGED ? '합쳐서 한 줄' : '하우스 · 3부반 따로') + '</span>'
+    + '<span class="lw">' + (MERGED
+        ? '오늘은 조를 돌며 <b>하우스와 3부반이 같이</b> 섭니다 · 이 설정은 <b>오늘만</b>입니다'
+        : '팀이 적어 <b>하우스와 3부반을 같이</b> 돌리는 날이면 합쳐 세우십시오')
+    + '</span>'
+    + '<button data-act="' + (MERGED ? 'mrgoff' : 'mrgon') + '"'
+    + (MERGED ? '' : ' class="go"') + '>'
+    + (MERGED ? '도로 따로 세우기' : '합쳐 세우기') + '</button></div>';
 }
 // 달력을 따라가며 스스로 만든 날 — 무엇이 넘어왔고 무엇이 안 넘어왔는지 적는다
 function caughtBar(){
@@ -2102,8 +2127,11 @@ function railClick(e){
   }
   else if (a === 'lnpick') openSeonbalPick('house');
   else if (a === 'ln3pick') openSeonbalPick('bu3');
-  else if (a === 'lnrun') openLineupPreview(['1', '2']);
-  else if (a === 'ln3run') openLineupPreview(['3']);
+  else if (a === 'lnrun') openLineupPreview(housePks());
+  else if (a === 'ln3run') openLineupPreview(bu3Pks());
+  else if (a === 'lnrunall') openLineupPreview(allPks());
+  else if (a === 'mrgon') { setMerged(true); paint(); }
+  else if (a === 'mrgoff') { setMerged(false); paint(); }
   else if (a === 'ntsend') noticeSend();
   else if (b.hasAttribute('data-ntkind')){
     if (noticeSet('kind', b.getAttribute('data-ntkind'))) { noticeStash(); paint(); }

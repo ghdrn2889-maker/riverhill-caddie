@@ -219,6 +219,12 @@ button,input{font-family:inherit;letter-spacing:inherit;color:inherit}
   background:#f6f8fa;border-bottom:1px solid var(--line2)}
 .lineup .lh b{font-size:13px;font-weight:900}
 .lineup .lh span{font-size:11px;font-weight:820;color:var(--dim)}
+/* 겨울 통합 — 켠 날은 줄 전체가 파랗게 물들어야 하루 내내 보인다 */
+.mrgline{display:flex;align-items:baseline;gap:8px;padding:10px 14px 2px}
+.mrgline b{font-size:13px;font-weight:900;color:var(--sub)}
+.mrgline span{flex:1;min-width:0;font-size:11px;font-weight:800;color:var(--dim)}
+.mrgline.on{background:#eef4fb}
+.mrgline.on b{color:var(--go)}
 .lrow{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:0 14px;
   border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;cursor:pointer}
 .lrow:active{background:#f2f5f8}
@@ -646,6 +652,7 @@ button,input{font-family:inherit;letter-spacing:inherit;color:inherit}
 .lst .row.off .nm{color:#a8b2bc;text-decoration:line-through}
 .lst .row .b{flex:0 0 auto;font-size:10.5px;font-weight:880;border-radius:5px;padding:3px 6px;
   background:#eef1f5;color:var(--dim)}
+.lst .row .b.csb{background:var(--csb);color:var(--csbi)}   /* 선발 — 배치표·근무표와 같은 색 */
 .lst .hd2{padding:13px 18px 6px;font-size:11px;font-weight:900;color:var(--dim);
   background:#f6f8fa;border-top:1px solid var(--line2)}
 /* 창 안에 든 목록은 창 밖으로 넘치지 않게 제 안에서 굴린다 */
