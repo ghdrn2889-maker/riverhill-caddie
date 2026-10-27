@@ -14,6 +14,7 @@
 //   크롤러가 실패한 글을 몇 번 다시 시도하는데, 처음 실패만 알리고 끝나면 성공을 모른다.
 import { loadJSON, saveJSON } from './store.mjs';
 import { broadcastOps } from './push.mjs';
+import { looksLikeBoardPost } from './analyzer.mjs';
 
 const SEEN_FILE = 'board-news-seen.json';
 const KEEP_MS = 14 * 24 * 3600 * 1000;           // 두 주 지난 표시는 걷는다(파일이 끝없이 크지 않게)
@@ -100,9 +101,21 @@ export function compose(full, r, kind = 'new', summary = null) {
   return { title: verb, body: src };
 }
 
+// 배치 소식인가 — 글 자체를 보고 정한다.
+//  ★앱이 돌려준 relevant 를 쓰면 안 된다. 그건 '1번 회원(3부) 기준'의 답이라서
+//   "2부 40팀 배문숙님까지 근무됩니다" 같은 1·2부 커트 공지가 무관으로 나온다(실측 #29426).
+//  ★개인 신청은 뺀다 — "10월 28일 정용만 프리조출 신청합니다", "문태익(12월23,24,25)".
+//   같은 게시판에 올라와도 배치가 바뀐 소식이 아니다. 관리자 폰이 하루 열 번 울리면 안 본다.
+export function isBoardNews(full) {
+  const subj = String((full && full.subject) || '');
+  if (/신청/.test(subj)) return false;
+  if (looksLikeBoardPost(full)) return true;                     // 배치표 사진
+  return /님\s*까지|\d+\s*팀|캔슬|취소|추가|당추|티오프|배치|시간표|번호표|업데이트|변경/.test(subj);
+}
+
 // 이 글로 지금 울릴까 — 보내는 일과 떼어 둔다(시험이 이것만 따로 본다).
-export function shouldAlert(seen, key, r) {
-  if (r && r.relevant === false) return { go: false, why: '잡담' };          // 앱이 일정과 무관하다고 본 글
+export function shouldAlert(seen, key, r, full = null) {
+  if (full && !isBoardNews(full)) return { go: false, why: '배치 소식 아님' };
   if (r && r.adminOnly) return { go: false, why: '못 읽은 글 알림이 이미 감' }; // 같은 글로 두 번 울리지 않게
   const state = r && r.boardReadFailed ? 'fail' : 'ok';
   const was = seen && seen[key] && seen[key].state;
@@ -117,7 +130,7 @@ export async function alertBoardNews(full, r, kind = 'new', extraKey = '') {
     if (!full || !full.id) return { sent: false, why: '글 번호 없음' };
     const key = `${kind}:${full.id}${extraKey ? ':' + extraKey : ''}`;
     const seen = loadSeen();
-    const d = shouldAlert(seen, key, r);
+    const d = shouldAlert(seen, key, r, full);
     if (!d.go) return { sent: false, why: d.why };
     const state = d.state;
     const msg = compose(full, r, kind);

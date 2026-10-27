@@ -1,6 +1,6 @@
 // 새 배치 소식 — 관리자 알림이 어떻게 찍히는지, 같은 글로 두 번 울리지 않는지 본다.
 //  ★보내지는 않는다. 글을 짓는 것(compose)과 울릴지 정하는 것(shouldAlert)만 본다.
-import { compose, shouldAlert } from '../src/boardnews.mjs';
+import { compose, shouldAlert, isBoardNews } from '../src/boardnews.mjs';
 
 let bad = 0;
 const ok = (c, m) => { if (c) console.log('  ok  ' + m); else { bad++; console.log('  X   ' + m); } };
@@ -48,8 +48,36 @@ ok(!shouldAlert(seen, 'new:2', { boardReadFailed: true }).go, '또 실패 → �
 ok(shouldAlert(seen, 'new:2', { rawVerdict: {} }).go, '이번엔 읽었다 → 한 번 더 울린다');
 
 console.log('⑧ 안 울릴 글');
-ok(!shouldAlert({}, 'new:3', { relevant: false }).go, '앱이 잡담이라고 본 글');
 ok(!shouldAlert({}, 'new:4', { adminOnly: true }).go, '\'못 읽은 글\' 알림이 이미 간 글(두 번 안 울림)');
+ok(shouldAlert({}, 'new:5', { relevant: false }, text).go,
+  '앱이 \'3부 기준 무관\'이라 돌려줘도 커트 공지는 울린다(#29426 실측)');
+
+console.log('⑨ 실제 카페 제목 14개(2026-10-26~27)로 거르기');
+const IMG = ['a.jpg'];
+const real = [
+  // [제목, 사진?, 울려야 하나]
+  ['2026년 10월 26일 월요일 배치표입니다', IMG, true],
+  ['2부 배치표입니다 김태리님까지', IMG, true],
+  ['문태익(12월23,24,25)', [], false],
+  ['강성일(12월13,14일)', [], false],
+  ['2부 1팀캔슬 2부배치표입니다', IMG, true],
+  ['10월 27일 정용만 프리조출 신청 하겠습니', [], false],
+  ['우겸조 10월28일 프리찾근 신청합니다.', [], false],
+  ['2026-10-26 업데이트입니다', IMG, true],
+  ['26년10월27일 배치표입니다.', IMG, true],
+  ['10월 29일 정용만 프리휴무 신청합니다', [], false],
+  ['인코스 7:26 캔슬입니다 1부 차은경님까지', [], true],
+  ['우겸조 10월29일 프리찾근 신청합니다.', [], false],
+  ['10월 28일 정용만 프리조출 신청합니다', [], false],
+  ['2부 40팀 배문숙님까지 근무됩니다.', [], true],
+];
+let rang = 0;
+for (const [subject, images, want] of real) {
+  const got = isBoardNews({ subject, images });
+  if (got) rang++;
+  ok(got === want, `${want ? '울림' : '조용'}  ${subject}`);
+}
+console.log(`       → 14건 중 ${rang}건만 관리자 폰이 울린다`);
 
 console.log(bad ? `\n✗ ${bad}군데 어긋났습니다` : '\n✓ 모두 맞습니다');
 process.exit(bad ? 1 : 0);
