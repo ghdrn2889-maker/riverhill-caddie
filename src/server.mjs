@@ -46,6 +46,7 @@ import { sampleBoards } from './kakaobench.mjs';
 import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
 import { reqReady, listMine, addMine, cancelMine } from './dayoffreq.mjs';
 import { sendLost, dropLost, lostKey } from './lostreq.mjs';
+import { alertBoardNews } from './boardnews.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -2427,6 +2428,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   const _noPart3 = _isBoardImg && Array.isArray(readParts) && readParts.length > 0 && !readParts.includes('3');
   if (_noPart3) console.log(`·  [3부 없음] 이 배치표엔 3부 표가 없습니다(실린 부: ${readParts.join('·')}부) — 판독 실패가 아닙니다`);
   if (primaryRet && typeof primaryRet === 'object') {
+    primaryRet.adminOnly = !!out.adminOnly;
     primaryRet.boardReadFailed = _boardReadFailed && !_noPart3;
     // ★대기표가 '어느 날짜 배치표인가'를 알아야 반영 확인이 된다. 판독이 실패해 날짜조차 못 읽었으면
     //  제목에서 뽑는다("2026년 8월 17일 월요일 배치표입니다.") — 실패했을 때일수록 이 값이 필요하다.
@@ -3420,7 +3422,10 @@ startCrawler({
       const full = await fetchArticle(article.id);
       full.writer = full.writer || article.writer || '';
       full.writeDate = full.writeDate || article.writeDate || '';
-      return await notifyForArticle(full, result);   // ★반환 → 크롤러가 boardReadFailed 보고 seen/재시도 판단
+      const r = await notifyForArticle(full, result);   // ★반환 → 크롤러가 boardReadFailed 보고 seen/재시도 판단
+      // ★새 배치 소식 — 관리자 폰으로만. 앱이 읽은 '뒤에' 읽은 내용을 담아 보낸다(src/boardnews.mjs)
+      await alertBoardNews(full, r, 'new');
+      return r;
     } catch (e) {
       console.error('본문 분석 실패, 제목으로 알림:', e.message);
       saveRecent(article, result, null);
@@ -3479,7 +3484,8 @@ async function recheckBoard() {
   try {
     full.writer = full.writer || '';
     // 변동 시에만 회원별 재판독 → 본인 티오프가 바뀌었으면 ⚠️ 강한 알림. (안 바뀐 회원은 dedup이 차단)
-    await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
+    const r = await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
+    await alertBoardNews(full, r, 'revised', fp);       // 관리자에게 '배치표 수정' — 사진 지문마다 한 번
   } catch (e) { console.error('배치표 재판독 오류:', e.message); }
   finally { recheckBusy = false; }
 }
@@ -3506,7 +3512,11 @@ async function recheckPartBoards() {
     console.log(`🔁 ${part}부 배치표 이미지 교체 감지(같은 글 #${w.id}) → 재판독`);
     w.fp = fp; w.at = Date.now(); dirty = true;
     recheckBusy = true;
-    try { full.writer = full.writer || ''; await handleStandalonePartBoard(full, part, {}); }
+    try {
+      full.writer = full.writer || '';
+      const r = await handleStandalonePartBoard(full, part, {});
+      await alertBoardNews(full, r, 'revised', fp);
+    }
     catch (e) { console.error(`${part}부 배치표 재판독 오류:`, e.message); }
     finally { recheckBusy = false; }
   }
