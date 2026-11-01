@@ -2428,7 +2428,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   const _noPart3 = _isBoardImg && Array.isArray(readParts) && readParts.length > 0 && !readParts.includes('3');
   if (_noPart3) console.log(`·  [3부 없음] 이 배치표엔 3부 표가 없습니다(실린 부: ${readParts.join('·')}부) — 판독 실패가 아닙니다`);
   if (primaryRet && typeof primaryRet === 'object') {
-    primaryRet.adminOnly = !!out.adminOnly;
+    primaryRet.adminOnly = !!out.adminOnly && !_noPart3;
     primaryRet.boardReadFailed = _boardReadFailed && !_noPart3;
     // ★대기표가 '어느 날짜 배치표인가'를 알아야 반영 확인이 된다. 판독이 실패해 날짜조차 못 읽었으면
     //  제목에서 뽑는다("2026년 8월 17일 월요일 배치표입니다.") — 실패했을 때일수록 이 값이 필요하다.
@@ -2453,7 +2453,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
   //  ★'판독 실패'라고 부르지 않는다 — 판독기가 아예 안 도는 경우도 여기로 오기 때문이다.
   //   무엇을 못 했는지가 아니라 무엇이 안 됐는지를 적는다: 이 글에서 반영할 값을 못 뽑았다.
   //   (판독기가 안 돌았고 반영할 값도 없는 잡담은 애초에 여기 오지 않는다 — judge.decide가 거른다.)
-  if (out.adminOnly && !opts.noPush && !opts.previewMode) {
+  //  ★3부 없는 날(3부 휴장·샷건)은 못 읽은 게 아니다 — 1·2부는 멀쩡히 읽었다(11/2 #29569 헛경보).
+  if (out.adminOnly && !_noPart3 && !opts.noPush && !opts.previewMode) {
     try {
       await broadcastAdmins({ title: '못 읽은 글 — 확인 필요',
         body: `${full.subject || '새 글'} — 이 글에서 반영할 값을 읽지 못했습니다. 회원에게는 보내지 않았습니다.`,
