@@ -507,7 +507,9 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
       // ★가운데 부는 '다음 부 경계'까지만(번짐 방지). 마지막 부만 우측 여유(margin)로 티오프 안 잘리게.
       const next = sorted[i + 1];
       const x1 = next ? next.x0 : b.x1;
-      const margin = next ? 0.0 : 0.05;
+      // ★3부 없는 날 마지막 부(2부)는 여유를 더 준다 — 경계 추정이 2부 끝을 0.55~0.65로 흔들어(실제 0.63, 11/2 3회 실측)
+      //  0.05로는 IN 칸이 잘린다. 넘친 쪽은 근무표라 순번 없는 이름은 판독이 버린다.
+      const margin = next ? 0.0 : (String(b.part) === '3' ? 0.05 : 0.10);
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
       // ★y1=0.73 — 명단 세로 전체 포착(공지영역 위까지). crop_only가 실제 사용 경계(x0/x1/y1)를 함께 반환.
       const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
@@ -1149,7 +1151,7 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
     //  단 재시도(attempt>0)는 경계 흔들림을 의심해 다시 도는 것이므로, 그때는 반드시 새로 추정한다.
     const bounds = (attempt === 0 && plan) ? plan.entry.bounds : await getPartBoundaries(img);
     if (!bounds || !bounds.length) continue;
-    const sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
+    let sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
     // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
     //  요약은 큰 인쇄 숫자라 안정적. 합본에만 있음. 첫 시도에서 1회만 판독해 재사용.
     if (!Object.keys(cuts).length && sorted.length >= 2) {
@@ -1160,6 +1162,21 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
         try { fs.unlinkSync(sumPath); } catch { /* noop */ }
         if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
       } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
+    }
+    // ★3부 휴장날 — 1·2부만 실린 배치표(2026-11-02 #29569 실측). 경계 추정이 2부 둘째 명단 열이나 근무표를
+    //  '3부'로 헛짚으면, 2부 크롭이 그 앞에서 잘려 2부 티오프표의 IN 칸이 통째로 빠진다(29팀 중 15팀).
+    //  상단 요약에 3부가 없고 1·2부 합이 '총 N팀'과 딱 맞을 때만 3부 자리를 지운다 — 그 영역은 2부 몫으로 돌린다.
+    {
+      const ghost = sorted.filter((b) => String(b.part) === '3');
+      if (ghost.length && cuts.total && !cuts['3'] && cuts['2']) {
+        sorted = sorted.filter((b) => String(b.part) !== '3');
+        const p2 = sorted.find((b) => String(b.part) === '2');
+        if (p2) {
+          const right = Math.max(p2.x1, ...ghost.map((b) => b.x1));
+          sorted = sorted.map((b) => (b === p2 ? { ...b, x1: right } : b));
+        }
+        console.log(`[boardreader] 3부 없는 날(요약 ${Object.entries(cuts).map(([p, n]) => `${p}부 ${n}`).join('·')} = 총 ${cuts.total}팀) → 헛 3부 경계 지움, 2부를 ${p2 ? Math.max(p2.x1, ...ghost.map((b) => b.x1)).toFixed(3) : '-'}까지`);
+      }
     }
     const issues = [];
     const parts = await readPartsOnce(img, sorted, cuts, issues, attempt, reusableParts);

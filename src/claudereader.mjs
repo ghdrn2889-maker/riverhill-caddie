@@ -134,7 +134,10 @@ const BOUNDS_PROMPT = (
   'Read the given local image with the Read tool. It is a Korean golf caddie board (배치표) with sections laid out '
   + 'LEFT to RIGHT: 1부 (roster + morning tee table), 2부 (roster + midday tee table), 3부 (roster + afternoon tee table), '
   + 'then 조편성표 (crew grid on the far right). For EACH 부 that is present, estimate the horizontal span of its '
-  + '[roster + its tee table] as fractions of total width (left=0.0, right=1.0). Output ONLY JSON: '
+  + '[roster + its tee table] as fractions of total width (left=0.0, right=1.0). '
+  + 'Some days a 부 is closed and its section is simply absent (e.g. only 1부 and 2부, then 근무표/조편성표). '
+  + 'Only output a 부 whose own colored header (1부/2부/3부) is printed — never label 근무표/조편성표 or a second roster column as a 부. '
+  + 'Each span must reach the RIGHT edge of that 부\'s tee table, including its IN column. Output ONLY JSON: '
   + '{"parts":[{"part":1,"x0":0.0,"x1":0.24},...]}'
 );
 
@@ -391,8 +394,9 @@ export async function readPartWithClaude(imagePath) {
 //  부별 티오프 행을 세는 것(±2 흔들림)보다 훨씬 신뢰. 합본당 1회. 부별 크롭엔 없어 null(그땐 per-part cut 사용).
 const SUMMARY_PROMPT = (
   'Read the given local image with the Read tool. It is the top summary strip of a Korean golf caddie board (배치표) '
-  + 'showing per-부 team counts, e.g. "1부 21  2부 4  3부 16  총 41팀". '
-  + 'Output ONLY strict JSON mapping each 부 number to its team count: {"counts":{"1":21,"2":4,"3":16}}'
+  + 'showing per-부 team counts, e.g. "1부 21  2부 4  3부 16  총 41팀". A 부 that is not printed is absent — do not invent it. '
+  + 'Output ONLY strict JSON mapping each 부 number to its team count, plus the printed 총 as "total" (0 if not printed): '
+  + '{"counts":{"1":21,"2":4,"3":16},"total":41}'
 );
 
 export async function readSummaryCounts(imagePath) {
@@ -409,6 +413,11 @@ export async function readSummaryCounts(imagePath) {
     const src = j.counts || j;
     const cuts = {};
     for (const k of ['1', '2', '3']) { const n = Number(src[k]); if (n > 0 && n <= 40) cuts[k] = n; }
+    // ★'총 N팀'은 부별 숫자와 맞을 때만 들고 간다 — 부 합과 맞아야 '여기 적힌 부가 전부'라는 증거가 된다.
+    //  숨은 칸(열거 안 됨)으로 붙인다: cuts 를 부 목록으로 훑는 곳이 많다.
+    const total = Number(j.total) || 0;
+    const sum = Object.values(cuts).reduce((s, n) => s + n, 0);
+    if (total > 0 && total === sum) Object.defineProperty(cuts, 'total', { value: total, enumerable: false });
     return Object.keys(cuts).length ? cuts : null;
   } catch { return null; }
 }
