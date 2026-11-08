@@ -47,6 +47,7 @@ import { recordDay as recordKakaoScore } from './kakaoscore.mjs';
 import { reqReady, listMine, addMine, cancelMine } from './dayoffreq.mjs';
 import { sendLost, dropLost, lostKey } from './lostreq.mjs';
 import { alertBoardNews } from './boardnews.mjs';
+import { onClaudeAuthLost } from './claudereader.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -3416,6 +3417,16 @@ async function checkMorningFlush() {
 }
 setInterval(checkMorningFlush, 5 * 60 * 1000); // 5분마다 체크(정확 시각 근처에 1회 발송)
 console.log(`🌅 아침 정정 대기열: 매일 ${MORNING_FLUSH_HOUR}시 발송 예약`);
+
+// ★판독기 로그인 풀림 → 관리자 폰으로. 풀린 동안은 판독마다 걸리니 6시간에 한 번만(재시작해도 이어서 센다).
+onClaudeAuthLost(() => {
+  const st = loadJSON('claude-auth-alert.json', {}) || {};
+  if (Date.now() - (st.at || 0) < 6 * 3600 * 1000) return;
+  saveJSON('claude-auth-alert.json', { at: Date.now() });
+  broadcastOps({ title: '배치표 판독기 로그인이 풀렸습니다',
+    body: '지금은 배치표를 못 읽습니다. Claude 대화창에 "판독기 로그인 풀렸어"라고 알려 주세요.',
+    url: '/', level: 'check', bypassQuiet: true }).catch((e) => console.error('[로그인 풀림 알림]', e.message));
+});
 
 startCrawler({
   onMatch: async (article, result) => {

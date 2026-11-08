@@ -637,6 +637,13 @@ export function shouldRetry({ why, attempt, budgetLeft, on = true }) {
   return budgetLeft > 0;                        // 하루 상한이 남아 있을 때만
 }
 
+// ★로그인 풀림 — 2026-11-07 새벽 서버 Claude 로그인이 풀린 뒤 이틀 동안 배치표를 한 장도 못 읽었다.
+//  풀리면 claude 는 1초 만에 "Not logged in · Please run /login" 한 줄을 정상 종료로 내놓는다.
+//  타임아웃도 오류도 아니라서 '판독 실패'로만 쌓였고, 아무도 원인을 몰랐다. 짧은 답에서 이 말을 잡아 따로 알린다.
+const AUTH_LOST_RE = /Not logged in|Please run \/login|OAuth token (?:has )?expired|Invalid API key|authentication_error/i;
+let _onAuthLost = null;
+export function onClaudeAuthLost(fn) { _onAuthLost = fn; }
+
 async function runClaude(prompt, kind = '기타') {
   try {
     return await runClaudeOnce(prompt, kind, CLAUDE_TIMEOUT_MS, 1);
@@ -671,6 +678,12 @@ function runClaudeOnce(prompt, kind, capMs, attempt) {
     p.on('close', (code) => {
       clearTimeout(timer);
       const ms = Date.now() - t0;
+      if ((out.length < 300 && AUTH_LOST_RE.test(out)) || (err.length < 600 && AUTH_LOST_RE.test(err))) {
+        noteCall(kind, ms, false, { why: 'auth' });
+        console.error('[claude] ★로그인 풀림 — 서버 Claude 를 다시 로그인해야 배치표를 읽습니다');
+        try { if (_onAuthLost) _onAuthLost(); } catch { /* 알림 실패가 판독 흐름을 막지 않게 */ }
+        return reject(new Error('로그인 풀림'));
+      }
       if (code !== 0 && !out.trim()) {
         noteCall(kind, ms, false, { why: `exit${code}`, msg: err.slice(0, 80) });
         return reject(new Error(`claude exit ${code}: ${err.slice(0, 200)}`));
