@@ -168,6 +168,15 @@ async function deliver(userId, { title, body, url, level }, logFile) {
     console.log(`🚫 알림 비발송(${fileOff ? 'push-disabled 파일' : 'PUSH_DISABLED'}): [회원${userId}] ${title}`);
     return 0;
   }
+  // ★관리자만 받기 스위치(2026-11-11 사용자 지시: "김홍구를 제외한 다른 사람들한테 가는 알림은 모두 임시로 막아놔").
+  //  data/push-admin-only 파일이 있으면 1번 회원(김홍구) 말고는 보내지 않는다. 재시작 없이 파일만으로 켜고 끈다.
+  //  막힌 알림은 push-held.jsonl 에 남긴다 — 스위치를 풀 때 누가 무엇을 못 받았는지 보려고.
+  const adminOnly = (() => { try { return fs.existsSync(path.join(DATA_DIR, 'push-admin-only')); } catch { return false; } })();
+  if (adminOnly && Number(userId) !== 1) {
+    console.log(`🔒 관리자만 받기 — 보류: [회원${userId}] ${title}`);
+    logSentPush(userId, { title, body, level }, 0, 0, 'push-held.jsonl');
+    return 0;
+  }
   const subs = getSubscriptions(userId);
   if (!subs.length) {
     console.log(`(회원 ${userId} 구독 기기 없음 — 폰에서 알림 켜기 필요)`);
