@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, appendJSONL } from './store.mjs';
-import { loadSnapshot, kakaoHealth } from './kakaogolf.mjs';
+import { loadSnapshot, kakaoHealth, bookingDashOnly } from './kakaogolf.mjs';
 import { raiseBoardIssue } from './boardalert.mjs';
 
 // 즉시 토글(재시작 불필요). 롤백 = rm data/use-kakao-assist
@@ -29,6 +29,7 @@ import { raiseBoardIssue } from './boardalert.mjs';
 //  · data/use-kakao-assist      전부(옛 파일 스위치)
 //  · data/use-kakao-assist-2    그 부만
 export function assistOn(part = '') {
+  if (bookingDashOnly()) return false;   // ★예약은 대시보드 전용 — 어떤 스위치가 남아 있어도 앱에 얹지 않는다
   const env = String(process.env.KAKAO_ASSIST || '').toLowerCase().trim();
   if (['1', 'true', 'yes', 'all'].includes(env)) return true;                      // 전부(옛 동작 그대로)
   //  부를 고를 때는 반드시 목록으로 적는다("1,2"). '1' 하나는 옛 뜻(=켬)이라 부 번호로 읽으면 안 된다.
@@ -277,7 +278,8 @@ export async function kakaoAssist({ dateISO, part = '3', boardOk = true, teeGrid
 
   // ★어긋남은 무조건 사람에게 — 켜졌든 안 켜졌든. 이게 이 다리의 제일 큰 값어치다.
   //  둘 중 하나가 틀렸는데 어느 쪽인지 기계는 모른다. 모를 때 조용한 게 오늘의 사고였다.
-  if (r.mode === 'conflict') {
+  if (bookingDashOnly()) { /* 대시보드 전용 — 어긋남도 경보로 보내지 않는다(기록은 위에 남았다) */ }
+  else if (r.mode === 'conflict') {
     await raiseBoardIssue({ kind: 'kakao_conflict', part, articleId: `${date}-${part}`,
       note: `${part}부 배치표에는 있는데 카카오 예약엔 없는 칸이 ${(r.boardOnly || []).length}개 (${(r.boardOnly || []).slice(0, 4).join(' ')}). 둘 중 하나가 틀렸습니다 — 원본과 대조해주세요.` });
   } else if (r.mode === 'refuse') {

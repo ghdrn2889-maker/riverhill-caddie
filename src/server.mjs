@@ -38,7 +38,7 @@ import { noteFromText as noteProvisional, boardIsProvisional } from './provision
 import { checkPending, keyFromLabel } from './boardpending.mjs';
 import { kakaoAssist, assistOn, markBoardNoshow } from './kakaobridge.mjs';
 import { internTeesFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee, manualFor as internManualFor, clearIfBoardChanged as clearInternsOnNewBoard } from './interns.mjs';
-import { tick as kakaoGolfTick, kakaoOn } from './kakaogolf.mjs';
+import { tick as kakaoGolfTick, kakaoOn, bookingDashOnly, bookingSource } from './kakaogolf.mjs';
 import { crossTick as teeCrossTick } from './teescross.mjs';
 import { fetchOpen as teeFetchOpen, teescannerOn } from './teescanner.mjs';
 import { buildBoardsView } from './boardsview.mjs';
@@ -3598,10 +3598,10 @@ if (kakaoOn()) {
     kakaoGolfTick({ days: h >= 12 ? 3 : 2,
       fallback: teescannerOn() ? teeFetchOpen : null, fallbackName: '티스캐너' })
       // ★관측이 끝난 다음에 갱신한다 — 방금 본 예약으로 1·2부를 고쳐야 한 틱을 벌 수 있다.
-      .then(() => kakaoUpdateMinorTick())
+      .then(() => (bookingDashOnly() ? null : kakaoUpdateMinorTick()))
       // ★두 판매처 대조 — 카카오 스냅샷이 갓 찍힌 뒤라야 같은 순간을 견준다.
       //  대조가 실패해도 카카오 관측은 이미 끝나 있다(뒤에 붙인 이유).
-      .then(() => teeCrossTick({ days: 2 }).catch((e) => console.error('[티스캐너]', e.message)))
+      .then(() => (bookingSource() === 'teescanner' ? null : teeCrossTick({ days: 2 }).catch((e) => console.error('[티스캐너]', e.message))))
       .catch((e) => console.error('[카카오골프]', e.message));
   };
   setTimeout(kakaoTick, 20000);
@@ -3619,11 +3619,11 @@ if (kakaoOn()) {
     if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
     const h = new Date().getHours();
     if (h < 7 || h >= 24) return;
-    kakaoGolfTick({ from: 3, days: 12 }).catch((e) => console.error('[카카오골프/먼날]', e.message));
+    kakaoGolfTick({ from: 3, days: 12, fallback: teescannerOn() ? teeFetchOpen : null, fallbackName: '티스캐너' }).catch((e) => console.error('[카카오골프/먼날]', e.message));
   };
   setTimeout(kakaoFarTick, 90000);
   setInterval(kakaoFarTick, 60 * 60 * 1000);
-  console.log(`⛳ 카카오골프 예약 관측: ${KAKAO_TICK_MS / 60000}분 간격(07~24시, 오늘+내일치) — 관리자 관측 전용`);
+  console.log(`⛳ 카카오골프 예약 관측: ${KAKAO_TICK_MS / 60000}분 간격(07~24시, 오늘+내일치) — ${bookingDashOnly() ? '순번 계산기 대시보드 전용(앱 연결 끊음)' : '관리자 관측 전용'}${bookingSource() === 'teescanner' ? ' · 티스캐너만' : ''}`);
 
   // ★대조 표본 — 배치표가 그 칸을 실제로 갖게 된 시각을 남긴다.
   //  카카오가 먼저 봤는지 사람이 먼저 알려줬는지는 이 두 시각을 맞대야만 알 수 있다.

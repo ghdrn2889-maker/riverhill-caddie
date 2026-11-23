@@ -42,6 +42,12 @@ const API = 'https://www.kakao.golf/api/golf/booktime';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 export const kakaoOn = () => String(process.env.KAKAO_GOLF || '1') !== '0';
+// ★예약 수집은 '순번 계산기' 대시보드 전용이다(2026-11-23 사용자: "앱과의 연결은 끊고 이 대시보드에만 넣어").
+//  켜져 있는 동안 예약 숫자는 회원 화면·카드·알림·관리자 경보 어디에도 닿지 않는다 — 스냅샷 파일로만 쌓인다.
+//  기본 켬. 앱 연결을 되살리려면 BOOKING_DASH_ONLY=0 (그 뒤에도 부별 assist 스위치가 따로 있어야 얹힌다).
+export const bookingDashOnly = () => String(process.env.BOOKING_DASH_ONLY || '1') !== '0';
+// 어느 창구로 걷나 — 카카오가 11/7부터 403이라 BOOKING_SOURCE=teescanner면 카카오는 아예 안 두드린다.
+export const bookingSource = () => String(process.env.BOOKING_SOURCE || '').toLowerCase().trim();
 
 const toMin = (hhmm) => { const m = String(hhmm).match(/(\d{1,2}):?(\d{2})/); return m ? (+m[1] * 60 + +m[2]) : null; };
 const ymd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -610,8 +616,10 @@ export async function tick({ days = 3, from = 0, fallback = null, fallbackName =
       const prev = loadSnapshot(date);
       let snap;
       try {
-        snap = await bookedFor(date, prev);
+        if (bookingSource() === 'teescanner' && fallback) snap = await bookedFor(date, prev, { openFrom: fallback, sourceName: fallbackName });
+        else snap = await bookedFor(date, prev);
       } catch (e) {
+        if (bookingSource() === 'teescanner') throw e;   // 이미 대타가 주 창구다 — 카카오로 되돌아가지 않는다
         // ★카카오가 멈춘 날 관측이 통째로 비는 게 진짜 손해다. 같은 물량을 파는 다른 창구가 있으면 그걸로 채운다.
         //  (실측: 두 판매처가 8일 493칸 한 칸도 안 어긋났다 — 그래서 대신 채워도 같은 답이다.)
         if (!fallback) throw e;
@@ -667,7 +675,7 @@ export async function tick({ days = 3, from = 0, fallback = null, fallbackName =
       // ★끊긴 걸 모른 채 지나가는 게 제일 나쁘다 — 엔진이 죽었는데 화면은 멀쩡해 보인다.
       //  연속 실패가 쌓이면 관리자에게 한 번 알린다(6시간 중복차단은 boardalert이 처리).
       const h = kakaoHealth();
-      if (h && h.streak >= 6) {
+      if (h && h.streak >= 6 && !bookingDashOnly()) {   // 대시보드 전용이면 경보 대신 대시보드에 상태만
         raiseBoardIssue({ kind: 'kakao_down', part: 3,
           note: `카카오골프 연속 ${h.streak}회 실패 — ${h.lastErr || ''}`.slice(0, 90) });
       }
