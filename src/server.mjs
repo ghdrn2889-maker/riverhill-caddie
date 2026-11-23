@@ -3498,13 +3498,15 @@ startCrawler({
         if (isWatch3) await recheckBoard();
         // ★대바 — 그림은 그대로여도 댓글로 순번이 바뀐다. 같은 글을 다시 처리해 바꿈을 덮어씌운다.
         //  판독은 다시 안 한다(같은 그림은 기억에서). 같은 댓글은 저장된 풀이를 쓰고, 새 댓글만 Claude 가 푼다.
-        if (dabaOn() && !recheckBusy && !boardReadOff()) {
-          recheckBusy = true;
-          try {
-            const full = await fetchArticle(article.id);
-            full.writer = full.writer || article.writer || '';
-            await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
-          } finally { recheckBusy = false; }
+        await runDabaFor(article);
+      } else if (/배치/.test(String(article.subject || ''))) {
+        // ★받아 놓고 아무 일도 안 하는 게 제일 나쁘다 — 오늘·내일 배치표 글 댓글인데 지켜보는 글이 아니면 관리자에게 한 번 알린다.
+        const iso = worklog.labelToISO(String(article.subject || '')) || '';
+        const todayISO = todayISOKST();
+        if (iso && iso >= todayISO && !_unwatchedTold.has(String(article.id))) {
+          _unwatchedTold.add(String(article.id));
+          console.warn(`⚠ [댓글] #${article.id} ${iso} 배치표에 댓글이 달렸는데 지켜보는 글이 아닙니다 — 대바가 반영되지 않습니다`);
+          try { await broadcastOps({ title: '배치표 댓글을 못 따라가고 있습니다', body: `${String(article.subject || '').slice(0, 40)} — 대바 댓글이 앱에 반영되지 않습니다. 확인이 필요합니다.`, url: '/', level: 'check', bypassQuiet: true }); } catch { /* 알림 실패 무시 */ }
         }
       }
     } catch (e) {
@@ -3526,9 +3528,42 @@ startCrawler({
 //  활성 시간대에 현재 배치표 글을 다시 읽어, 이미지가 바뀐 경우에만 재판독→강한 알림.
 const BOARD_RECHECK_MS = Number(process.env.BOARD_RECHECK_MS ?? 90000);
 let recheckBusy = false;
+const _unwatchedTold = new Set();
+// ★대바 반영 — 다른 재판독이 돌고 있으면 버리지 말고 잠시 뒤 다시 한다.
+//  예전엔 그 순간 바쁘면 조용히 건너뛰어서, 다음 댓글이 올 때까지 앞 댓글이 앱에 안 들어갔다.
+async function runDabaFor(article, tries = 0) {
+  if (!dabaOn() || boardReadOff()) return;
+  if (recheckBusy) {
+    if (tries < 15) setTimeout(() => { runDabaFor(article, tries + 1).catch((e) => console.error('대바 재시도 오류:', e.message)); }, 60000);
+    else console.warn(`⚠ [대바] #${article.id} 15분 동안 판독이 바빠 댓글을 못 반영했습니다 — 다음 댓글 때 다시 합니다`);
+    return;
+  }
+  recheckBusy = true;
+  try {
+    const full = await fetchArticle(article.id);
+    full.writer = full.writer || article.writer || '';
+    await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
+  } finally { recheckBusy = false; }
+}
 async function recheckBoard() {
   if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   if (recheckBusy) return;                                 // 재판독이 아직 진행 중이면 이번 틱은 건너뜀
+  // ★3부 없는 날도 본배치표를 지킨다 — boardWatch는 3부를 읽을 때만 채워져서, 겨울(3부 휴장)엔
+  //  같은 글 사진 교체도·댓글 대바도 아무도 안 봤다(11/24 대바 미반영 사고). 1·2부 최신 배치표 글로 채운다.
+  if (!boardWatch || !boardWatch.id || Date.now() - (boardWatch.at || 0) > 18 * 3600 * 1000) {
+    let bp = null;
+    try { bp = loadBoardPartsStore(); } catch { /* 없으면 감시 없음 */ }
+    const bid = bp && bp.articleId ? String(bp.articleId) : '';
+    if (bid && Date.now() - Number(bp.at || 0) < 18 * 3600 * 1000 && !(boardWatch && boardWatch.id === bid)) {
+      try {
+        const f0 = await fetchArticle(bid);
+        boardWatch = { id: bid, fp: await imgFingerprint(f0), dateLabel: bp.dateLabel || '', at: Number(bp.at) || Date.now(), from: '1·2부' };
+        saveJSON(BOARD_WATCH_FILE, boardWatch);
+        console.log(`👀 [배치표 감시] 3부가 없는 배치표라 1·2부 글 #${bid}을 지켜봅니다(사진 교체·댓글 대바)`);
+      } catch (e) { console.error('배치표 감시 시작 실패:', e.message); }
+      return;
+    }
+  }
   if (!boardWatch || !boardWatch.id) return;
   const h = new Date().getHours();
   const aStart = Number(process.env.ACTIVE_START_HOUR ?? 12);
