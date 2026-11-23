@@ -155,6 +155,18 @@ export async function withDaba(article, board) {
   const base = {};
   for (const p of Object.keys(board.parts)) if (Array.isArray(board.parts[p]?.roster) && board.parts[p].roster.length) base[p] = board.parts[p].roster.slice();
   if (!Object.keys(base).length) return board;
+  // ★망가진 판독 위에는 얹지 않는다 — 11/23: 2부 뒷사람 25명이 1~25번에 밀려 들어간 판독에 댓글 번호를 얹어
+  //  엉뚱한 사람끼리 바뀌었다. 명단 가운데 빈 칸이 있거나, 팀 수보다 명단이 짧으면 원본 그대로 둔다.
+  for (const p of Object.keys(base)) {
+    const r = base[p], last = r.map((x) => !!bare(x)).lastIndexOf(true);
+    const holes = r.slice(0, last + 1).filter((x) => !bare(x)).length;
+    const cut = Number(board.parts[p]?.cut) || (board.parts[p]?.tee || []).length || 0;
+    const filled = r.filter((x) => bare(x)).length;
+    if (holes || (cut && filled < cut)) {
+      console.warn(`⚠ [대바] #${article.id} ${p}부 명단이 성치 않아(빈 칸 ${holes} · 명단 ${filled}/${cut}팀) 댓글 반영 안 함 — 원본 그대로`);
+      return board;
+    }
+  }
   const sig = sha(JSON.stringify(base) + '\u0001' + comments.join('\u0002'));
   const hit = _mem.get(String(article.id));
   if (hit && hit.sig === sig) return hit.promise;
