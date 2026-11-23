@@ -1290,6 +1290,15 @@ function renderBoard(bd) {
 }
 
 // 이름 느슨한 일치 — 판독 글자변형(예: 김홍구↔김흥구) 허용. 공백 제거 후 완전일치 또는 같은 길이 1글자 차.
+// ★배치표 칸 "원래(바뀐 사람)"이면 그 칸 사람은 괄호 안이다(대바). "김정미(찾근)"처럼 괄호가 근무 태그면 앞 이름.
+//  서버(boardreader parseCell·judge)와 같은 규칙 — 이걸 몰라 괄호 칸에서 '나'를 못 찾고 순번표가 사라졌다(11/23).
+const CELL_TAG_RE = /^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|연차|반차|월차|격리|54|[123](,[123])*)$/;
+function occName(cell) {
+  const c = String(cell || '').replace(/\s/g, '');
+  const m = c.match(/^([^()]*)\(([^)]*)\)/);
+  if (m && /^[가-힣]{2,4}$/.test(m[2]) && !CELL_TAG_RE.test(m[2])) return m[2];
+  return c.replace(/\(.*?\)/g, '');
+}
 function nameLooseEq(a, b) {
   const na = String(a || '').replace(/\s/g, ''), nb = String(b || '').replace(/\s/g, '');
   if (!na || !nb) return false;
@@ -1317,12 +1326,13 @@ function renderSpareBoard(s, partLabel = '3부') {
   const myName = ((testerAsMember && _boardOwnerName) ? _boardOwnerName : (meState && meState.profile && meState.profile.boardName || '')).trim();
   const norm = (x) => String(x || '').replace(/\s/g, '');
   const mn = norm(myName);
-  let myIdx = mn ? roster.findIndex((nm) => norm(nm) === mn) : -1;   // 정확 일치 우선
-  if (myIdx < 0 && mn) myIdx = roster.findIndex((nm) => nameLooseEq(nm, myName)); // 없으면 1글자 오차 허용
+  let myIdx = mn ? roster.findIndex((nm) => occName(nm) === mn) : -1;   // 정확 일치 우선(괄호 칸은 괄호 안 사람)
+  if (myIdx < 0 && mn) myIdx = roster.findIndex((nm) => nameLooseEq(occName(nm), myName)); // 없으면 1글자 오차 허용
   // 아직 내 이름(프로필)을 못 받았지만 서버 순번이 명단 안이면, 서버 순번을 임시로 신뢰해 리스트를 그린다.
   //  (프로필 로드되면 loadMe가 재렌더 → 이름 기준으로 정밀화). 부팅 레이스로 폴백 뜨던 문제 방지.
   const serverPos = Number(s.myPosition) || 0;
-  const trustByPos = myIdx < 0 && !mn && serverPos >= 1 && roster.length >= serverPos;
+  // ★이름으로 못 찾아도 서버 순번이 명단 안이면 그 순번으로 그린다 — 숫자 요약 화면으로 떨어지지 않게(11/23).
+  const trustByPos = myIdx < 0 && serverPos >= 1 && roster.length >= serverPos;
   const myPos = myIdx >= 0 ? myIdx + 1 : serverPos;
 
   const rowHTML = (p, kind) => {
@@ -1462,8 +1472,8 @@ function boardRounds() {
   const mn = norm(myName);
   const myPosOf = (roster, fallback) => {
     if (!mn) return Number(fallback) || 0;
-    let i = roster.findIndex((nm) => norm(nm) === mn);
-    if (i < 0) i = roster.findIndex((nm) => nameLooseEq(nm, myName));
+    let i = roster.findIndex((nm) => occName(nm) === mn);
+    if (i < 0) i = roster.findIndex((nm) => nameLooseEq(occName(nm), myName));
     return i >= 0 ? i + 1 : (Number(fallback) || 0);
   };
   const rounds = (Array.isArray(t.rounds) ? t.rounds.slice() : []).sort((a, b) => roundOrd(a) - roundOrd(b));
