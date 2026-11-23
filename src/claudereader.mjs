@@ -412,7 +412,8 @@ export async function readSummaryCounts(imagePath) {
     const j = JSON.parse(m[0]);
     const src = j.counts || j;
     const cuts = {};
-    for (const k of ['1', '2', '3']) { const n = Number(src[k]); if (n > 0 && n <= 40) cuts[k] = n; }
+    // ★한 부 60팀까지 — 40으로 막아 '2부 : 44'·'1부 : 44'를 버리고 있었다(11/14·11/15 요약이 통째로 틀린 원인).
+    for (const k of ['1', '2', '3']) { const n = Number(src[k]); if (n > 0 && n <= 60) cuts[k] = n; }
     // ★'총 N팀'은 부별 숫자와 맞을 때만 들고 간다 — 부 합과 맞아야 '여기 적힌 부가 전부'라는 증거가 된다.
     //  숨은 칸(열거 안 됨)으로 붙인다: cuts 를 부 목록으로 훑는 곳이 많다.
     const total = Number(j.total) || 0;

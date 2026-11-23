@@ -267,9 +267,9 @@ const NUMTEAM_CUR_RE = /(?:현재|지금)\s*(\d{1,2})\s*팀(?:\s*(?:까지)?\s*(
 function parseNumericCut(text) {
   const t = String(text || '');
   let m = t.match(NUMPOS_CUT_RE);
-  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 40) return { pos: n }; }
+  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 60) return { pos: n }; }
   m = t.match(NUMTEAM_CUT_RE) || t.match(NUMTEAM_CUR_RE);
-  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 40) return { team: n }; }
+  if (m) { const n = Number(m[1]); if (n >= 1 && n <= 60) return { team: n }; }
   return null;
 }
 
@@ -286,9 +286,9 @@ function parseSpareAnchors(article) {
   const out = [];
   let m;
   SPARE_RE_B.lastIndex = 0;  // (B) 이름→스페어 를 먼저(더 구체적)
-  while ((m = SPARE_RE_B.exec(t))) { const sn = Number(m[3]); if (sn >= 1 && sn <= 40) out.push({ spareNum: sn, display: clean(m[1]), holder: clean(m[2] || m[1]) }); }
+  while ((m = SPARE_RE_B.exec(t))) { const sn = Number(m[3]); if (sn >= 1 && sn <= 60) out.push({ spareNum: sn, display: clean(m[1]), holder: clean(m[2] || m[1]) }); }
   SPARE_RE_A.lastIndex = 0;
-  while ((m = SPARE_RE_A.exec(t))) { const sn = Number(m[1]); if (sn >= 1 && sn <= 40) out.push({ spareNum: sn, display: clean(m[2]), holder: clean(m[3] || m[2]) }); }
+  while ((m = SPARE_RE_A.exec(t))) { const sn = Number(m[1]); if (sn >= 1 && sn <= 60) out.push({ spareNum: sn, display: clean(m[2]), holder: clean(m[3] || m[2]) }); }
   return out;
 }
 // 후보들 중 '명단에 실재하는 홀더'로 컷이 유효 범위인 첫 앵커를 채택 → {cut, holder, spareNum, display} 또는 null.
@@ -309,6 +309,7 @@ function spareAnchorCut(article, roster) {
 //   한 문장 안에 답이 두 개 들어 있으면, 둘이 서로 맞는 쪽을 고르는 게 옳다.
 //  ★괄호 규칙 자체는 그대로 둔다 — "송민지님(박준서)까지"처럼 팀 수가 없는 글에선 여전히 괄호가 답이다.
 //   팀 수가 같이 왔고, 괄호 이름은 어긋나는데 앞 이름이 딱 맞을 때만 앞 이름을 쓴다.
+// ★팀·순번 숫자는 60까지 받는다 — 3부만 보던 시절 40으로 막아 1·2부 커트 공지('2부 46팀 ○○님까지')를 버렸다(11/23 고침).
 const TEAMS_RE = /(\d{1,2})\s*팀/;
 function announcedTeams(article) {
   const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
@@ -389,7 +390,7 @@ function codeReadTextVerdict(article, member, today = null) {
   // "N팀 …님까지 근무" — 부 표기 없이 팀수+커트가 같이 오는 당추 관례(예: "27팀 김기선(김도우)님까지").
   if (!team && pc) {
     const mt = blob.match(/(\d{1,2})\s*팀[^0-9]{0,14}까지/) || blob.match(/(\d{1,2})\s*팀/);
-    if (mt) { const n = Number(mt[1]); if (n >= 1 && n <= 40) team = n; }
+    if (mt) { const n = Number(mt[1]); if (n >= 1 && n <= 60) team = n; }
   }
   // ★이름 없는 숫자 커트("28번까지 근무"·"25팀까지") — 이름 커트가 없어도 감지(사장님 지적).
   const numCut = parseNumericCut(blob);
@@ -929,7 +930,7 @@ export function extractTeamCount(text, member = memberFromEnv()) {
   const m = t.match(re1) || t.match(re2);
   if (!m) return null;
   const n = Number(m[1]);
-  return (n >= 1 && n <= 40) ? n : null;
+  return (n >= 1 && n <= 60) ? n : null;
 }
 
 // 부(部) 표기 없이 순수 'N팀'만 올라오는 실시간 확정팀수 — 3부 단톡/번호표 관례(정용만님이 '15팀','14팀'처럼 올림).
@@ -942,7 +943,7 @@ export function extractBareTeamCount(subject, text, member = memberFromEnv()) {
   const m = s.match(/^\s*(\d{1,2})\s*팀/);                    // 제목이 'N팀'으로 시작(확정팀수 관례)
   if (!m) return null;
   const n = Number(m[1]);
-  return (n >= 1 && n <= 40) ? n : null;
+  return (n >= 1 && n <= 60) ? n : null;
 }
 
 // 표를 못 읽고 '줄 번호'를 매겨버린 오독인가.

@@ -48,6 +48,7 @@ import { reqReady, listMine, addMine, cancelMine } from './dayoffreq.mjs';
 import { sendLost, dropLost, lostKey } from './lostreq.mjs';
 import { alertBoardNews } from './boardnews.mjs';
 import { onClaudeAuthLost } from './claudereader.mjs';
+import { dabaOn } from './daba.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -3453,6 +3454,16 @@ startCrawler({
       if (boardWatch && boardWatch.id && String(boardWatch.id) === String(article.id)) {
         console.log(`💬 댓글 감지(#${article.id}) → 배치표 이미지 재판독으로 확인(소식·알림엔 댓글 미노출)`);
         await recheckBoard();
+        // ★대바 — 그림은 그대로여도 댓글로 순번이 바뀐다. 같은 글을 다시 처리해 바꿈을 덮어씌운다.
+        //  판독은 다시 안 한다(같은 그림은 기억에서). 같은 댓글은 저장된 풀이를 쓰고, 새 댓글만 Claude 가 푼다.
+        if (dabaOn() && !recheckBusy && !boardReadOff()) {
+          recheckBusy = true;
+          try {
+            const full = await fetchArticle(article.id);
+            full.writer = full.writer || article.writer || '';
+            await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
+          } finally { recheckBusy = false; }
+        }
       }
     } catch (e) {
       console.error('댓글→재판독 오류:', e.message);

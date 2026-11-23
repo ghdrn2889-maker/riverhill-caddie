@@ -538,6 +538,54 @@ def main():
     if known:
         name_prompt = NAME_PROMPT + " ★이름은 되도록 다음 캐디 명단에서 골라라(오독 방지). 명단에 없는 새 이름이면 보이는 대로 적어라. 명단: " + ", ".join(known[:150])
 
+    # ── part_bands: 부 구역을 '색 머리띠'로 잰다(판독 호출 0회). ──
+    #  ★왜: 구역을 Claude 눈대중으로 받으면 실행마다 2부 시작을 0.235~0.445로 짚었다(실제 0.314).
+    #   11/17 1부 크롭이 0.26에서 끊겨 1부 티오프표가 통째 빠졌다. 배치표 양식은 매일 같고,
+    #   제목 줄 바로 아래 부 이름 띠의 색이 늘 같다 — 1부 분홍·2부 파랑·3부 보라·근무표 청록.
+    #  반환: {"title_y1": 제목 줄 끝(0~1), "bands": [{"key":"1","x0","x1"},...,{"key":"crew",...}]}
+    #   띠를 못 찾으면 bands=[] — 호출부가 예전 방식으로 물러난다(카톡 조각·옛 양식).
+    if cfg.get("part_bands"):
+        W, H = im.size
+        px = im.convert("RGB").load()
+        REF = {"1": (182, 94, 130), "2": (61, 132, 179), "3": (117, 88, 183), "crew": (44, 108, 115)}
+        def which(p):
+            best, bd = None, 10 ** 9
+            for k, q in REF.items():
+                d = abs(p[0] - q[0]) + abs(p[1] - q[1]) + abs(p[2] - q[2])
+                if d < bd: best, bd = k, d
+            return best if bd <= 60 else None
+        # 제목 줄(남색) 끝 — 왼쪽 10% 지점을 위에서부터 훑는다
+        NAVY = (24, 66, 98)
+        y = 2
+        while y < H * 0.12 and sum(abs(a - b) for a, b in zip(px[W // 10, y], NAVY)) < 60: y += 1
+        title_y1 = y
+        # 띠 행 — 제목 아래 12% 안에서 네 색이 가장 넓게 깔린 행
+        best_row, best_n = None, 0
+        for yy in range(y, min(H, y + int(H * 0.06))):
+            n = sum(1 for x in range(0, W, 3) if which(px[x, yy]))
+            if n > best_n: best_row, best_n = yy, n
+        bands = []
+        if best_row is not None and best_n * 3 >= W * 0.5:
+            runs, cur, start, gap = [], None, 0, 0
+            for x in range(W):
+                k = which(px[x, best_row])
+                if k is None:             # 띠 위 흰 글자('1부')는 건너뛴다 — 짧은 틈은 같은 띠로 본다
+                    gap += 1
+                    if cur is not None and gap > W * 0.02:
+                        runs.append((cur, start, x - gap)); cur = None
+                    continue
+                if k != cur:
+                    if cur is not None: runs.append((cur, start, x - 1 - gap))
+                    cur, start = k, x
+                gap = 0
+            if cur is not None: runs.append((cur, start, W - 1 - gap))
+            for k, a, b in runs:
+                if b - a < W * 0.05: continue   # 한 부 띠는 폭의 1/10을 넘는다 — 부스러기는 버린다
+                bands.append({"key": k, "x0": round(a / W, 4), "x1": round((b + 1) / W, 4)})
+        _emit({"title_y1": round(title_y1 / H, 4), "band_y": round((best_row or 0) / H, 4), "bands": bands,
+               "_ms": int((_time.time() - t0) * 1000)})
+        return
+
     # ── diff_bands: 직전 배치표 그림과 픽셀로 비교해 '구역별로 바뀐 픽셀 수'를 낸다(판독 호출 0회). ──
     #  배치표가 바뀔 땐 통째로 바뀌지 않는다(이름 하나·티오프 하나). 그런데 우리는 매번 1·2·3부를
     #  처음부터 전부 다시 읽어 호출을 태웠고, 멀쩡하던 부를 다시 읽다가 새 오독이 생길 여지도 있었다.

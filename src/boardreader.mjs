@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withDaba } from './daba.mjs';
 import { getPartBoundaries, readPartWithClaude, readColumnRoster, getRosterColumns, readSummaryCounts, readOffList, getCrewColumns, readCrewColumn, claudeBudgetLeft, claudeTimeouts, readPart3Holistic, readRosterVerbatim, readDutyBox, readTeeRows, readHeadcountBox, readHeaderDate } from './claudereader.mjs';
 import { snapStrong, snapName, confirmedCaddies, officialNearCandidates } from './roster.mjs';
 import { DATA_DIR, appendJSONL, loadJSON, saveJSON } from './store.mjs';
@@ -506,13 +507,15 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
     try {
       // ★가운데 부는 '다음 부 경계'까지만(번짐 방지). 마지막 부만 우측 여유(margin)로 티오프 안 잘리게.
       const next = sorted[i + 1];
-      const x1 = next ? next.x0 : b.x1;
+      // ★색 띠로 잰 경계(exact)는 그 부 띠의 오른쪽 끝이 곧 IN 칸 끝이다 — 여유를 거의 안 준다.
+      const x1 = b.exact ? b.x1 : (next ? next.x0 : b.x1);
       // ★3부 없는 날 마지막 부(2부)는 여유를 더 준다 — 경계 추정이 2부 끝을 0.55~0.65로 흔들어(실제 0.63, 11/2 3회 실측)
       //  0.05로는 IN 칸이 잘린다. 넘친 쪽은 근무표라 순번 없는 이름은 판독이 버린다.
-      const margin = next ? 0.0 : (String(b.part) === '3' ? 0.05 : 0.10);
+      const margin = b.exact ? 0.004 : (next ? 0.0 : (String(b.part) === '3' ? 0.05 : 0.10));
+      const lmargin = b.exact ? 0.003 : 0.025;
       const cropPath = path.join(TMP, `part_${b.part}_${Date.now()}_${i}.png`);
       // ★y1=0.73 — 명단 세로 전체 포착(공지영역 위까지). crop_only가 실제 사용 경계(x0/x1/y1)를 함께 반환.
-      const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, y1: 0.73 }, scale: 6 }, 30000);
+      const meta = await runPy({ image: img, crop_only: cropPath, slice: { x0: b.x0, x1, margin, lmargin, y1: 0.73 }, scale: 6 }, 30000);
       // ★3부 홀리스틱 우선(토글) — 명단·티오프를 이 크롭에서 '한 번에' 대응 판독(순번↔시각 어긋남 원천 차단).
       //  부실(명단 심각부족)하면 아래 기존 분할 판독으로 폴백. 티오프 배열은 verdictFromPart이 그대로 소비.
       if (String(b.part) === '3' && useHolisticP3()) {
@@ -522,7 +525,7 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
         //  (실증: 원본 전체이미지 홀리스틱 = 티오프 25개 정확·빠름 / y1:0.73·scale6 = 타임아웃.)
         const holPath = path.join(TMP, `part3hol_${b.part}_${Date.now()}_${i}.png`);
         let holReady = false;
-        try { await runPy({ image: img, crop_only: holPath, slice: { x0: b.x0, x1, margin, y1: 0.98 }, scale: 3 }, 30000); holReady = true; }
+        try { await runPy({ image: img, crop_only: holPath, slice: { x0: b.x0, x1, margin, lmargin, y1: 0.98 }, scale: 3 }, 30000); holReady = true; }
         catch (e) { console.error('[boardreader] 홀리스틱 크롭 오류 → 기본 크롭 사용:', e.message); }
         const holImg = holReady ? holPath : cropPath;
         try {
@@ -671,6 +674,17 @@ async function readPartsOnce(img, sorted, cuts, issues = [], attempt = 0, reusab
 //  경계로 순번열이 통째 누락된 '심각' 부족(예: 커트16에 명단9)만 잡고, 인턴발 1~3 부족은 통과.
 const _rosterFloor = (cut) => Math.max(cut - 4, Math.ceil(cut * 0.6));
 
+// 색 머리띠로 부 구역 재기 — scripts/board_read_local.py part_bands. 실패하면 빈 값(호출부가 예전 방식으로).
+async function pixelPartBands(img) {
+  try {
+    const r = await runPy({ image: img, part_bands: 1 }, 20000);
+    const parts = (r.bands || []).filter((b) => /^[123]$/.test(String(b.key)))
+      .map((b) => ({ part: Number(b.key), x0: Number(b.x0), x1: Number(b.x1), exact: true }));
+    const okOrder = parts.every((b, i) => i === 0 || b.part > parts[i - 1].part);   // 1→2→3 순서가 아니면 안 믿는다
+    return okOrder && parts.length ? { parts, title_y1: Number(r.title_y1) || 0 } : { parts: [], title_y1: 0 };
+  } catch (e) { console.warn('[boardreader] 색 띠 재기 실패 → 예전 방식:', e.message); return { parts: [], title_y1: 0 }; }
+}
+
 // 판독 불량 판정 — 경계 흔들림으로 순번열이 통째 누락돼 '명단 심각부족'일 때.
 //  ★부 머리 중복은 불량 신호가 아니다: (54)·(1,3) 교차근무 캐디는 1부·3부 명단 머리에 '정상적으로' 함께 뜬다.
 //   그래서 '명단 < 커트'(근무자 누락)라는 건전한 불변식만 본다. 붕괴로 한 부가 반쪽만 읽히면 그 부가 커트 미달로 걸린다.
@@ -681,6 +695,15 @@ function boardReadFault(parts, cuts) {
     const rl = (parts[p].roster || []).filter(Boolean).length;
     const floor = _rosterFloor(cut);
     if (cut > 0 && rl < floor) return `${p}부 명단 심각부족(${rl} < ${floor}, 커트 ${cut}) — 순번열 누락`;
+    // ★명단 가운데가 비면 불량 — 11/23 2부는 1~25번(첫째 열)이 통째로 비었는데 '명단 50'으로 채택됐다.
+    //  채워진 수(26~50번 25명)가 커트 23을 넘어서 위 검사를 지나갔다. 빈 칸 수를 따로 센다.
+    const holes = _rosterHoles(parts[p].roster || []);
+    if (holes.length >= 2) return `${p}부 명단 가운데 빈 칸 ${holes.length}개(${holes.slice(0, 4).join(',')}${holes.length > 4 ? '…' : ''}) — 순번열 누락`;
+    // ★요약 팀 수만큼 티오프가 있어야 한다 — 11/17 1부 33팀인데 티오프 0개를 그대로 채택했다.
+    //  요약(cuts)은 총과 맞춰 본 것만 들어온다. 판독기가 센 커트(parts[p].cut)로는 재지 않는다(같은 오독을 두 번 믿는 셈).
+    const sumCut = Number(cuts[p]) || 0;
+    const teeN = (parts[p].tee || parts[p].tees || []).length;
+    if (sumCut > 0 && teeN < sumCut) return `${p}부 티오프 ${teeN}/${sumCut} — 티오프표 누락`;
     // ★티오프 구조 위반(김홍구님 규칙: 한 시각 = OUT·IN 최대 2명). 3명↑ 또는 같은 코스 중복 = 사다리 밀림 오판독 → 재시도.
     const tees = parts[p].tee || parts[p].tees || [];
     const byTime = {};
@@ -1144,23 +1167,42 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
     cuts = { ...plan.entry.cuts };
     console.log(`[증분] 상단 요약 그대로 → 커트 재사용: ${Object.entries(cuts).map(([p, n]) => `${p}부 ${n}`).join(', ')}`);
   }
+  // ★부 구역 = 색 머리띠(판독 호출 0회). 못 찾으면 parts=[] → 예전 눈대중 경계로 물러난다.
+  const px = await pixelPartBands(img);
+  if (px.parts.length) console.log(`[boardreader] 색 띠 경계: ${px.parts.map((b) => `${b.part}부 ${b.x0.toFixed(3)}~${b.x1.toFixed(3)}`).join(' | ')}`);
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (claudeBudgetLeft() <= 0) break;
     const toBefore = claudeTimeouts();
     // 경계는 '레이아웃' 속성 — 안 바뀐 구역이 하나라도 있으면 그림이 직전과 정렬돼 있다는 뜻이라 그대로 쓴다.
     //  단 재시도(attempt>0)는 경계 흔들림을 의심해 다시 도는 것이므로, 그때는 반드시 새로 추정한다.
-    const bounds = (attempt === 0 && plan) ? plan.entry.bounds : await getPartBoundaries(img);
+    // ★색 띠가 잡히면 그것이 경계다 — 매번 같은 자리. 눈대중(Claude)은 띠가 없는 그림(카톡 조각·옛 양식)에서만.
+    const bounds = px.parts.length ? px.parts
+      : (attempt === 0 && plan) ? plan.entry.bounds : await getPartBoundaries(img);
     if (!bounds || !bounds.length) continue;
     let sorted = bounds.slice().sort((a, b) => a.x0 - b.x0);
     // ★커트(근무/스페어 선) 확정 = 상단 요약 팀수("3부 16"). per-part 티오프 판독은 ±2 흔들려(14~16) 커트로 부적합.
     //  요약은 큰 인쇄 숫자라 안정적. 합본에만 있음. 첫 시도에서 1회만 판독해 재사용.
-    if (!Object.keys(cuts).length && sorted.length >= 2) {
+    if (!Object.keys(cuts).length && (sorted.length >= 2 || px.title_y1)) {
       try {
         const sumPath = path.join(TMP, `sum_${Date.now()}.png`);
-        await runPy({ image: img, crop_only: sumPath, slice: { x0: 0.55, x1: 0.90, y1: 0.06, lmargin: 0 }, scale: 6 }, 30000);
-        const sc = await readSummaryCounts(sumPath);
+        // ★제목 줄만 정확히 — 예전 크롭(x 0.55~0.90, y<0.06)은 근무표 머리 '1조 22명 2조 21명'까지 물어
+        //  그 숫자를 부 팀 수로 읽었고(11/16: 실제 1부 27·2부 34 → '1부 22·2부 21·3부 22'), '총 N팀'은 크롭 밖이었다.
+        const sumSlice = px.title_y1 ? { x0: 0.42, x1: 1.0, y1: px.title_y1, lmargin: 0 } : { x0: 0.55, x1: 0.90, y1: 0.06, lmargin: 0 };
+        await runPy({ image: img, crop_only: sumPath, slice: sumSlice, scale: px.title_y1 ? 4 : 6 }, 30000);
+        // ★요약은 맞춰 보고 믿는다 — 부별 합이 '총 N팀'과 같고, 실린 부가 색 띠와 같을 때만.
+        //  틀리면 한 번 더 읽고, 그래도 안 맞으면 요약을 버린다(그 부의 커트는 티오프표에서 센다).
+        const bandKeys = px.parts.map((b) => String(b.part)).sort().join(',');
+        let sc = null;
+        for (let k = 0; k < (px.title_y1 ? 2 : 1); k++) {
+          const r = await readSummaryCounts(sumPath);
+          if (!r) continue;
+          const okTotal = !px.title_y1 || !!r.total;
+          const okParts = !bandKeys || Object.keys(r).sort().join(',') === bandKeys;
+          if (okTotal && okParts) { sc = r; break; }
+          console.warn(`[boardreader] 요약 안 맞음(${Object.entries(r).map(([p, n]) => `${p}부 ${n}`).join('·')}${r.total ? ` = 총 ${r.total}` : ' · 총과 합 다름'}${okParts ? '' : ` · 띠는 ${bandKeys}부`}) — ${k ? '요약 버림' : '다시 읽음'}`);
+        }
         try { fs.unlinkSync(sumPath); } catch { /* noop */ }
-        if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}`); }
+        if (sc) { cuts = sc; console.log(`[boardreader] 요약 커트 확정: ${Object.entries(sc).map(([p, n]) => `${p}부 ${n}`).join(', ')}${sc.total ? ` (총 ${sc.total}팀)` : ''}`); }
       } catch (e) { console.error('[boardreader] 요약 판독 실패:', e.message); }
     }
     // ★3부 휴장날 — 1·2부만 실린 배치표(2026-11-02 #29569 실측). 경계 추정이 2부 둘째 명단 열이나 근무표를
@@ -1406,6 +1448,9 @@ function verdictFromPart(article, member, pd, allParts, offList = [], roleList =
     crossPartNames: [...new Set(cross)],
     assignMap: {},
     myPosition: myPos,
+    // ★배치표에 적힌 번호(대바 빈 칸을 당겨 세기 전). 계산은 myPosition, 사람에게 보일 번호는 이것.
+    myBoardNo: (pd._boardNo && nk && pd._boardNo[nk]) || myPos || null,
+    boardNo: pd._boardNo || null,
     myStatus,
     teeTime: tee ? tee.time : '',
     course: tee ? tee.course : '',
@@ -1473,6 +1518,8 @@ export async function readBoardClaudeVerdict(article, member) {
     _noteReadFault(img, why);
     return null;
   }
+  // ★대바 — 배치표 댓글의 순번 바꿈을 덮어씌운다(src/daba.mjs). 같은 댓글이면 다시 부르지 않는다.
+  board = await withDaba(article, board);
   const part = String(member?.part || '3').replace(/\D/g, '') || '3';
   const pd = board.parts[part];
   // ★여기부터가 '정상'이다 — 판독은 됐고 이 배치표에 그 부가 없을 뿐. 고장 기록을 지운다.
@@ -1541,6 +1588,7 @@ export async function claudeMonitorParts(article, wantParts = ['1', '2']) {
   let board;
   try { board = await _boardCache.get(img); } catch { return null; }
   if (!board || !board.parts) return null;
+  board = await withDaba(article, board);   // ★모니터·1·2부 저장도 대바를 덮어쓴 순번으로
   const out = {};
   for (const p of wantParts) {
     const pd = board.parts[String(p)];
