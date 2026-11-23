@@ -315,7 +315,7 @@ function announcedTeams(article) {
   const t = `${article?.subject || ''} ${article?.text || article?.contentText || article?.content || ''}`;
   const m = t.match(TEAMS_RE);
   const n = m ? Number(m[1]) : 0;
-  return n >= 1 && n <= 40 ? n : 0;
+  return n >= 1 && n <= 60 ? n : 0;
 }
 
 // 커트라인(근무 확정선) 위치를 '괄호 점유자' 기준으로 확정. 명단(교환 후) 우선, 없으면 저장 명단.
@@ -325,6 +325,9 @@ export function resolveCutoff(verdict, article, today = null) {   // export는 �
   const roster = (Array.isArray(verdict.part3Roster) && verdict.part3Roster.length)
     ? verdict.part3Roster
     : (Array.isArray(today?.roster3) ? today.roster3 : []);
+  // ★같은 배치표에 이미 있는 다른 사람으로는 고치지 않는다 — 11/23: 23번 '최인아'(정본에 없는 실존 캐디)를
+  //  1글자 차 '최수아'(27번에 따로 있음)로 고쳐 '최수아님까지 근무'가 됐다.
+  const snapCut = (n) => { const s2 = snapName(n); return (s2 && s2 !== n && roster.some((c) => normRosterName(c).name === s2)) ? n : s2; };
   const pc = parseCutoffText(article);
   if (pc) {
     verdict.cutoffAnnounced = true;
@@ -348,10 +351,10 @@ export function resolveCutoff(verdict, article, today = null) {   // export는 �
     if (cpos > 0) verdict.cutoffPosition = cpos;
     else if (pc.pos != null && !(Number(verdict.cutoffPosition) > 0)) verdict.cutoffPosition = pc.pos;
     // ★이름: 공지 텍스트 오탈자를 확정 사전으로 보정(예: "김도우"→유일 1글자차 확정명 "김동우"). 위치는 위에서 이미 확정.
-    verdict.cutoffName = snapName(who);
+    verdict.cutoffName = snapCut(who);
   } else if (verdict.cutoffAnnounced && verdict.cutoffName) {
     const holder = normRosterName(verdict.cutoffName).name;         // "연승준(서동환)" → 서동환
-    verdict.cutoffName = snapName(holder);                          // 오탈자 보정
+    verdict.cutoffName = snapCut(holder);                          // 오탈자 보정
     if (roster.length && !(Number(verdict.cutoffPosition) > 0)) {
       const cpos = rosterPosOf(roster, holder);
       if (cpos > 0) verdict.cutoffPosition = cpos;
@@ -369,7 +372,7 @@ export function resolveCutoff(verdict, article, today = null) {   // export는 �
     //  되돌리지 못하게(today.mjs teamCount 블록이 이 값을 최우선으로 써 cutLine·근무/스페어를 재계산).
     verdict.teamCount = sa.cut;
     const cutName = canon[sa.cut - 1] || roster[sa.cut - 1] || '';
-    if (cutName) verdict.cutoffName = snapName(normRosterName(cutName).name);
+    if (cutName) verdict.cutoffName = snapCut(normRosterName(cutName).name);
     verdict._cutSource = `스페어앵커(${sa.display} 스페어${sa.spareNum}번→컷${sa.cut})`;
   }
 }
