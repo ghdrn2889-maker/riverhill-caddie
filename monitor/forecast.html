@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>순번 계산기</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#17211d;--sub:#5d6b65;--line:#e1e6e3;--accent:#1f6f5b;--accent-soft:#dcefe8;--work:#1f6f5b;--warn:#b5651d;--me:#fff4d6;--meline:#e0b44a;--off:#c2413a;--early:#8a5cc2;--lead:#2c6cb0;--duty:#7a6a2a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1513;--card:#18201d;--ink:#e6ece9;--sub:#9aa8a2;--line:#27322e;--accent:#5cc3a3;--accent-soft:#1d332c;--work:#5cc3a3;--me:#3a3220;--meline:#c9a043;--off:#e0736c;--early:#b392e0;--lead:#79aee6;--duty:#cdbb73}}
+:root[data-theme="dark"]{--bg:#0f1513;--card:#18201d;--ink:#e6ece9;--sub:#9aa8a2;--line:#27322e;--accent:#5cc3a3;--accent-soft:#1d332c;--work:#5cc3a3;--me:#3a3220;--meline:#c9a043;--off:#e0736c;--early:#b392e0;--lead:#79aee6;--duty:#cdbb73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:16px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+h1{font-size:20px;margin:4px 0 2px}
+.date{color:var(--sub);font-size:13px}
+select{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.parts{display:flex;gap:8px;margin:12px 0 16px}
+.pt{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.pt b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.pt span{font-size:12px;color:var(--sub)}
+.pt.closed b{font-size:15px;color:var(--sub);padding:5px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}
+.card h2 small{font-weight:400;color:var(--sub);font-size:12px;margin-left:6px}
+details.card summary{cursor:pointer;font-weight:700;font-size:15px}
+details.card[open] summary{margin-bottom:10px}
+.mine{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mine div{background:var(--accent-soft);border-radius:8px;padding:10px;text-align:center}
+.mine b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.mine span{font-size:12px;color:var(--sub)}
+.note{font-size:13px;color:var(--sub);margin:10px 0 0}
+.row{display:grid;grid-template-columns:28px 1fr auto 130px;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--line);font-size:14px}
+.row .no{color:var(--sub);text-align:right;font-variant-numeric:tabular-nums}
+.row small{color:var(--sub);font-size:11px;margin-left:6px}
+.row.me{background:var(--me);box-shadow:inset 3px 0 0 var(--meline)}
+.tag.work{font-size:12px;color:var(--work);font-variant-numeric:tabular-nums}
+.ahead{font-size:12px;color:var(--sub)}
+.pr{display:flex;align-items:center;gap:6px}
+.bar{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--warn)}
+.pct{font-size:12px;width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.cutline{text-align:center;margin:6px 0;font-size:12px;color:var(--accent);border-top:2px solid var(--accent);padding-top:4px}
+.app{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.app:last-child{border:0}
+.ak{min-width:62px;font-size:13px;font-weight:600}
+.ak b{margin-left:6px;font-variant-numeric:tabular-nums}
+.an{font-size:14px}
+.an small{color:var(--sub);font-size:11px}
+.ak.off{color:var(--off)}.ak.early{color:var(--early)}.ak.lead{color:var(--lead)}.ak.duty{color:var(--duty)}
+.dbs{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}
+.db{display:flex;gap:6px;font-size:14px}
+.db .no{color:var(--sub);min-width:44px;text-align:right}
+.db .arr{color:var(--sub)}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:center}
+th{color:var(--sub);font-weight:500}
+td:first-child,th:first-child{text-align:left}
+td small{display:block;color:var(--sub);font-size:11px}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.pill.warn{background:transparent;border:1px solid var(--warn);color:var(--warn)}
+.pill.mute{background:transparent;border:1px solid var(--line);color:var(--sub)}
+.tbl{overflow-x:auto}
+.wait{color:var(--sub);font-size:14px;padding:6px 0}
+.src{font-size:12px;color:var(--sub);margin-top:4px}
+.src.bad{color:var(--off)}
+@media (max-width:520px){.row{grid-template-columns:24px 1fr 96px}.row .tag,.row .ahead{display:none}.dbs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="wait">불러오는 중…</div></div>
+<script>
+(function () {
+  var Q = new URLSearchParams(location.search);
+  var K = Q.get('k') || '';
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+  var pctText = function (p) { return p == null ? '-' : (p >= 1 ? Math.round(p) + '%' : '1% 미만'); };
+  function url(name) {
+    var u = '/api/forecast?';
+    if (K) u += 'k=' + encodeURIComponent(K) + '&';
+    if (name) u += 'name=' + encodeURIComponent(name);
+    return u;
+  }
+  function ago(ms) {
+    if (!ms) return '기록 없음';
+    var m = Math.round((Date.now() - ms) / 60000);
+    return m < 1 ? '방금' : m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전';
+  }
+  function dateLine(iso) {
+    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '배치표 없음';
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return m[1] + '년 ' + (+m[2]) + '월 ' + (+m[3]) + '일 ' + WEEK[d.getUTCDay()] + '요일 배치표';
+  }
+
+  function partLine(pt, me) {
+    var h = '';
+    pt.rows.forEach(function (r) {
+      var who = esc(r.occ) + (r.holder ? '<small>' + esc(r.holder) + ' 자리</small>' : '') + (r.tag ? '<small>' + esc(r.tag) + '</small>' : '');
+      var st = '', bar = '';
+      if (r.work) st = '<span class="tag work">근무 ' + esc(r.tee || '') + '</span>';
+      else if (pt.noProb) st = '<span class="ahead">스페어</span>';
+      else {
+        st = '<span class="ahead">앞 ' + r.ahead + '명</span>';
+        if (r.prob != null) bar = '<div class="bar"><i style="width:' + Math.max(r.prob, 1.5) + '%"></i></div><span class="pct">' + pctText(r.prob) + '</span>';
+      }
+      h += '<div class="row' + (r.occ === me ? ' me' : '') + '"><span class="no">' + r.no + '</span><span class="nm">' + who + '</span>' + st + '<span class="pr">' + bar + '</span></div>';
+      if (r.no === pt.cut) h += '<div class="cutline">확정선 ' + pt.cut + '팀' + (pt.cutoffName ? ' · ' + esc(pt.cutoffName) + '까지 근무' : '') + '</div>';
+    });
+    if (pt.noProb) h += '<p class="note">3부는 가능성을 계산하지 않습니다. 해가 짧아진 9월부터 예약 사이트가 안 여는 칸을 찬 칸으로 세는 문제가 있어 고치는 중입니다.</p>';
+    else h += '<p class="note">가능성 = 지난 ' + pt.probDays + '일 중, 배치표가 올라온 뒤 확정선이 그 칸까지 늘어난 날의 비율입니다. 당일 노쇼·전화 예약은 기록에 없어 실제보다 조금 낮게 나올 수 있습니다.</p>';
+    return h;
+  }
+
+  function render(f) {
+    var me = f.me || '';
+    var h = '<div class="top"><div><h1>순번 계산기</h1><div class="date">' + dateLine(f.boardISO) + (f.daba.length ? ' · 대바 반영' : '') + '</div></div>';
+    h += '<label class="date">누구 자리로 볼까 <select id="who"><option value="">-</option>' + f.names.slice().sort().map(function (n) { return '<option' + (n === me ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></label></div>';
+
+    // 부별 팀 수
+    h += '<div class="parts">' + f.parts.map(function (pt) {
+      return pt.open ? '<div class="pt"><b>' + pt.cut + '</b><span>' + pt.part + '부 팀</span></div>'
+        : '<div class="pt closed"><b>' + esc(pt.why) + '</b><span>' + pt.part + '부</span></div>';
+    }).join('') + '</div>';
+
+    // 내 자리
+    var m = f.mine;
+    if (m) {
+      var third;
+      if (m.work) third = '<div><b>근무</b><span>' + esc(m.tee || '') + '</span></div>';
+      else if (m.noProb) third = '<div><b>-</b><span>3부는 계산 안 함</span></div>';
+      else third = '<div><b>' + pctText(m.prob) + '</b><span>일 될 가능성</span></div>';
+      h += '<div class="card"><h2>내 자리 <small>' + esc(m.occ) + ' · ' + m.part + '부' + (m.holder ? ' · ' + esc(m.holder) + ' 자리로 나옴' : '') + '</small></h2><div class="mine">'
+        + '<div><b>' + m.no + '번</b><span>배치표 번호</span></div>'
+        + (m.work ? '<div><b>' + m.cut + '팀</b><span>확정선</span></div>' : '<div><b>' + (m.ahead != null ? m.ahead + '명' : '-') + '</b><span>내 앞 스페어</span></div>')
+        + third + '</div>';
+      if (!m.work && !m.noProb) {
+        var need = m.no - m.cut, g = f.growth[m.part] || { atLeast: [], n: 0, max: 0 };
+        h += '<p class="note">확정선이 ' + m.cut + '팀에서 ' + m.no + '팀까지 ' + need + '팀 늘어야 차례가 옵니다. 지난 ' + g.n + '일 동안 배치표가 올라온 뒤 ' + m.part + '부는 가장 많이 늘어난 날이 ' + g.max + '팀이었습니다.</p>';
+      }
+      h += '</div>';
+    } else if (me) {
+      h += '<div class="card"><h2>내 자리 <small>' + esc(me) + '</small></h2><div class="wait">오늘 배치표 줄에 이름이 없습니다(휴무·조출이거나 다른 이름으로 올라왔을 수 있음).</div></div>';
+    }
+
+    // 부별 줄 — 내 부는 펼쳐 두고 나머지는 접는다
+    f.parts.filter(function (pt) { return pt.open; }).forEach(function (pt) {
+      var mineHere = m && m.part === pt.part;
+      var title = pt.part + '부 줄 · 일 될 가능성';
+      if (mineHere || (!m && pt.part === '2')) h += '<div class="card"><h2>' + title + ' <small>배치표 뒤 늘어난 팀 수 기록으로 계산</small></h2>' + partLine(pt, me) + '</div>';
+      else h += '<details class="card"><summary>' + title + ' <small style="font-weight:400;color:var(--sub)">' + pt.rows.length + '명 · 확정선 ' + pt.cut + '</small></summary>' + partLine(pt, me) + '</details>';
+    });
+
+    // 신청 현황
+    var A = f.apps || { list: [] };
+    h += '<div class="card"><h2>오늘 신청 현황 <small>' + (A.fromBoardMemory ? '배치표 근무표에서 읽음' : '배치표 칸 표시만(근무표 기억이 다른 날짜)') + '</small></h2>';
+    if (!A.list.length) h += '<div class="wait">읽은 신청이 없습니다.</div>';
+    h += A.list.map(function (g) {
+      return '<div class="app"><div class="ak ' + g.cls + '">' + esc(g.kind) + '<b>' + g.names.length + '</b></div><div class="an">'
+        + g.names.map(function (x) { return esc(x.name) + (x.note ? ' <small>' + esc(x.note) + '</small>' : ''); }).join(' · ') + '</div></div>';
+    }).join('');
+    if (A.headcount && A.headcount.total) h += '<p class="note">배치표 요약 상자: 총원 ' + A.headcount.total + ' · 가용 ' + A.headcount.available + ' · 제외 ' + A.headcount.excluded + ' (요약 숫자는 판독이 한 칸 밀릴 때가 있어 명단 쪽이 더 정확합니다)</p>';
+    h += '</div>';
+
+    // 대바
+    if (f.daba.length) {
+      h += '<div class="card"><h2>대바 <small>칸 번호 · 원래 사람 &rarr; 나오는 사람</small></h2><div class="dbs">'
+        + f.daba.map(function (d) { return '<div class="db"><span class="no">' + d.part + '부 ' + d.no + '</span><span>' + esc(d.holder) + '</span><span class="arr">&rarr;</span><b>' + esc(d.occ) + '</b></div>'; }).join('')
+        + '</div></div>';
+    }
+
+    // 앞으로 며칠
+    var cell = function (x) {
+      if (!x) return '<td>-</td>';
+      if (x.board != null) return '<td><b>' + x.board + '팀</b><small>배치표 확정</small></td>';
+      if (x.closed) return '<td><span class="pill mute">배치표에 없음</span></td>';
+      if (x.skip) return '<td><span class="pill mute">-</span></td>';
+      if (x.thin) return '<td>' + x.booked + '팀 찼음<small>비교할 날 부족</small></td>';
+      return '<td><b>' + x.pred + '팀</b><small>' + x.lo + '~' + x.hi + ' · 지금 ' + x.booked + ' 찼음</small></td>';
+    };
+    h += '<div class="card"><h2>앞으로 며칠 예상 팀 수 <small>지금 예약 + 지난 날들이 같은 시점부터 배치표까지 더 붙은 만큼</small></h2><div class="tbl"><table><tr><th>날짜</th><th>1부</th><th>2부</th></tr>';
+    f.days.forEach(function (d) {
+      var tag = d.none ? ' <span class="pill mute">아직 관측 없음</span>' : d.shifted ? ' <span class="pill warn">시간표 바뀐 날</span>' : '';
+      if (d.none || d.shifted) h += '<tr><td>' + esc(d.label) + tag + '</td><td colspan="2" style="color:var(--sub);font-size:12px">' + (d.shifted ? '그날 티오프 칸이 평소 시간표와 ' + d.shifted + '칸 어긋나 계산하지 않습니다' : '예약 관측이 아직 없습니다') + '</td></tr>';
+      else h += '<tr><td>' + esc(d.label) + '</td>' + cell(d.parts['1']) + cell(d.parts['2']) + '</tr>';
+    });
+    h += '</table></div><p class="note">가운데 숫자는 지난 날들의 중간값, 작은 글씨는 넷 중 둘이 들어온 범위입니다. 3부는 예약 숫자를 고치기 전까지 빼 둡니다.</p>';
+    var s = f.source || {};
+    h += '<div class="src' + (s.streak ? ' bad' : '') + '">예약 수집: ' + esc(s.name || '') + ' · 마지막 성공 ' + ago(s.lastOk) + (s.streak ? ' · 연속 실패 ' + s.streak + '회 ' + esc(s.lastErr || '') : '') + ' · 앱과 연결 안 됨(이 화면 전용)</div></div>';
+
+    // 채점표
+    h += '<div class="card"><h2>계산기 성적 <small>지난 배치표 ' + f.truthDays + '일로 채점 · 예약 수만 보고 배치표 팀 수 맞히기</small></h2><div class="tbl"><table><tr><th>언제 예측했나</th><th>1부 평균 오차</th><th>1부 2팀 이내</th><th>2부 평균 오차</th><th>2부 2팀 이내</th></tr>';
+    f.score.forEach(function (r) {
+      var c = function (o) { return o ? '<td>' + o.mae + '팀</td><td>' + o.within2 + '%</td>' : '<td>-</td><td>-</td>'; };
+      h += '<tr><td>' + esc(r.lbl) + '</td>' + c(r['1']) + c(r['2']) + '</tr>';
+    });
+    h += '</table></div><p class="note">배치표가 새로 올라올 때마다 채점이 늘어납니다.</p></div>';
+
+    document.getElementById('app').innerHTML = h;
+    var sel = document.getElementById('who');
+    if (sel) sel.onchange = function () {
+      var q = new URLSearchParams(location.search);
+      if (sel.value) q.set('name', sel.value); else q.delete('name');
+      history.replaceState(null, '', '?' + q.toString());
+      load(sel.value);
+    };
+  }
+
+  function load(name) {
+    fetch(url(name), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (f) {
+      if (!f || !f.ok) throw new Error((f && f.error) || '불러오지 못했습니다');
+      render(f);
+    }).catch(function (e) {
+      document.getElementById('app').innerHTML = '<div class="card"><h2>순번 계산기</h2><div class="wait">불러오지 못했습니다: ' + esc(e.message) + '</div></div>';
+    });
+  }
+  load(Q.get('name') || '');
+  setInterval(function () { if (!document.hidden) load(new URLSearchParams(location.search).get('name') || ''); }, 5 * 60 * 1000);
+})();
+</script>
+</body>
+</html>

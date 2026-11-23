@@ -34,6 +34,7 @@ import { translateOps, seedPart, tooSmall, markOps, lastOps, logOps } from './op
 import { keyFromLabel } from './boardpending.mjs';   // 수동 인턴은 날짜에 붙는다 — 라벨을 키로 바꾼다
 import { renderDaejo } from '../tools/gen-daejo.mjs';
 import { renderBooking } from '../tools/gen-booking.mjs';
+import { buildForecast } from './forecast.mjs';
 import { internTeesFor, manualFor as internManualFor, setManual as setInternTees, clearManual as clearInternTees, toggle as toggleInternTee } from './interns.mjs';
 
 loadEnv();
@@ -1386,6 +1387,17 @@ app.post('/api/admin/intern-tees', gate, (req, res) => {
   const auto = _autoInternTees(date, part);
   const man = internManualFor(date, part);
   res.json({ ok: true, date, part, auto, manual: man ? man.tees : null, effective: internTeesFor(date, auto, part), source: man ? '수동' : '자동' });
+});
+
+// ── 순번 계산기 ── 스페어 칸마다 일 될 가능성 + 앞으로 며칠 예상 팀 수 + 그날 신청 현황.
+//  ★관리자 화면 전용. 예약 수집은 이 화면에만 쓰인다(회원 앱·알림과 끊어 둠, 2026-11-23).
+app.get('/forecast', gate, (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT_DIR, 'monitor', 'forecast.html')); });
+app.get('/api/forecast', gate, (req, res) => {
+  try {
+    let me = String(req.query.name || '').trim().slice(0, 20);
+    if (!me) { try { me = String((getProfile(1) || {}).board_name || ''); } catch { /* 이름 없이 */ } }
+    res.set('Cache-Control', 'no-store').json(buildForecast({ labelToISO: worklog.labelToISO, me }));
+  } catch (e) { console.error('순번 계산기 오류:', e.message); res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/', gate, (req, res) => { res.set('Cache-Control', 'no-cache'); res.sendFile(path.join(ROOT_DIR, 'monitor', 'index.html')); });

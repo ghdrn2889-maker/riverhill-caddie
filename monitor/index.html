@@ -497,6 +497,7 @@
     <!-- 예약 구성판도 별도 페이지(/booking). 이 링크는 관리자 링크(admin=1)라 '회원 앱에 반영' 버튼이 붙는다.
          예약팀장에게 넘길 때는 admin=1 을 뺀 주소를 준다 — 그러면 연습만 되고 회원 앱은 그대로다. -->
     <a class="tb" id="bookLink" href="/booking" target="_blank" rel="noopener" style="text-decoration:none">✎ 예약 구성판</a>
+    <a class="tb" id="fcLink" href="/forecast" target="_blank" rel="noopener" style="text-decoration:none">순번 계산기</a>
   </nav>
 </header>
 
@@ -1050,6 +1051,7 @@
   var MEMBERS_MS = 5000, mTimer = null, membersBusy = false;
   function apiUrl(pth){ var k = new URLSearchParams(location.search).get('k') || ''; return pth + (k?('?k='+encodeURIComponent(k)):''); }
   (function(){ var a = document.getElementById('daejoLink'); if (a) a.href = apiUrl('/daejo'); })();
+  (function(){ var a = document.getElementById('fcLink'); if (a) a.href = apiUrl('/forecast'); })();
   (function(){
     var b = document.getElementById('bookLink'); if (!b) return;
     var u = apiUrl('/booking');
