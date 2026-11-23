@@ -3487,9 +3487,15 @@ startCrawler({
     //  대신 '배치표가 바뀌었을 수 있다'는 내부 신호로만 사용 — 지금 감시 중인 배치표 이미지를 재판독해,
     //  이미지가 실제로 바뀐 경우에만 정상 경로(피드·알림)로 반영한다(변동 없으면 조용히 무시). 상황판 오염·오알림 방지.
     try {
-      if (boardWatch && boardWatch.id && String(boardWatch.id) === String(article.id)) {
-        console.log(`💬 댓글 감지(#${article.id}) → 배치표 이미지 재판독으로 확인(소식·알림엔 댓글 미노출)`);
-        await recheckBoard();
+      // ★감시 대상 = 3부 정본(boardWatch) 또는 1·2부 최신 배치표 글(board-parts-store).
+      //  예전엔 boardWatch만 봤는데, 그건 3부를 읽을 때만 채워진다 — 3부 휴장날(겨울 내내)엔 비어 있어서
+      //  11/24 배치표에 대바 댓글이 줄줄이 달려도 '새 댓글'만 찍히고 아무것도 안 했다(사용자 11/23 지적).
+      const isWatch3 = !!(boardWatch && boardWatch.id && String(boardWatch.id) === String(article.id));
+      let isLatest12 = false;
+      try { const bp = loadBoardPartsStore(); isLatest12 = !!(bp && bp.articleId && String(bp.articleId) === String(article.id)); } catch { /* 없으면 3부만 */ }
+      if (isWatch3 || isLatest12) {
+        console.log(`💬 댓글 감지(#${article.id}${isWatch3 ? '' : ' · 1·2부 배치표'}) → ${isWatch3 ? '배치표 이미지 재판독으로 확인 + ' : ''}대바 반영(소식·알림엔 댓글 미노출)`);
+        if (isWatch3) await recheckBoard();
         // ★대바 — 그림은 그대로여도 댓글로 순번이 바뀐다. 같은 글을 다시 처리해 바꿈을 덮어씌운다.
         //  판독은 다시 안 한다(같은 그림은 기억에서). 같은 댓글은 저장된 풀이를 쓰고, 새 댓글만 Claude 가 푼다.
         if (dabaOn() && !recheckBusy && !boardReadOff()) {
