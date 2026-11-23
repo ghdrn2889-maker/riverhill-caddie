@@ -85,7 +85,7 @@ export function applyStep(rosters, step, display = {}) {
     const p = String(c.part || '').replace(/\D/g, ''), pos = Number(c.pos), nm = bare(c.name);
     if (!next[p]) return { problem: `${p}부가 이 배치표에 없음` };
     if (!(pos >= 1 && pos <= next[p].length)) return { problem: `${p}부 ${pos}번은 자리 밖(1~${next[p].length})` };
-    if (!nm) { next[p][pos - 1] = ''; continue; }   // 빈 자리 — 번호는 그대로, 셀 때만 뺀다(끝에서)
+    if (!nm || nm === '빈칸') { next[p][pos - 1] = ''; continue; }   // Claude 가 판의 '(빈칸)' 표기를 이름으로 베껴 오기도 한다   // 빈 자리 — 번호는 그대로, 셀 때만 뺀다(끝에서)
     if (!known.has(nm)) return { problem: `명단에 없는 이름 '${c.name}'` };
     next[p][pos - 1] = display[nm] || nm;
   }

@@ -1170,6 +1170,18 @@ export async function readBoardByClaude(imageOrUrl, { known = confirmedCaddies()
   // ★부 구역 = 색 머리띠(판독 호출 0회). 못 찾으면 parts=[] → 예전 눈대중 경계로 물러난다.
   const px = await pixelPartBands(img);
   if (px.parts.length) console.log(`[boardreader] 색 띠 경계: ${px.parts.map((b) => `${b.part}부 ${b.x0.toFixed(3)}~${b.x1.toFixed(3)}`).join(' | ')}`);
+  // ★기억해 둔 판독이 다른 경계로 자른 것이면 쓰지 않는다 — 11/23: 예전 눈대중 경계(2부 0.47~)로 읽은
+  //  '2부 앞 25칸 빈' 결과를 그림이 같다는 이유로 계속 재사용했다. 색 띠가 정답 경계다.
+  if (plan && px.parts.length) {
+    const old = Array.isArray(plan.entry.bounds) ? plan.entry.bounds : [];
+    for (const b of px.parts) {
+      const o = old.find((x) => Number(x.part) === Number(b.part));
+      if (reusableParts[b.part] && (!o || Math.abs(o.x0 - b.x0) > 0.02 || Math.abs(o.x1 - b.x1) > 0.02)) {
+        delete reusableParts[b.part];
+        console.log(`[증분] ${b.part}부 — 기억한 판독의 경계(${o ? `${o.x0}~${o.x1}` : '없음'})가 색 띠와 달라 다시 읽음`);
+      }
+    }
+  }
   for (let attempt = 0; attempt < maxTries; attempt++) {
     if (claudeBudgetLeft() <= 0) break;
     const toBefore = claudeTimeouts();
