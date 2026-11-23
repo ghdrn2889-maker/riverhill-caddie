@@ -144,6 +144,36 @@ td small{display:block;color:var(--sub);font-size:11px}
       h += '<div class="card"><h2>내 자리 <small>' + esc(me) + '</small></h2><div class="wait">오늘 배치표 줄에 이름이 없습니다(휴무·조출이거나 다른 이름으로 올라왔을 수 있음).</div></div>';
     }
 
+    // 앞으로 며칠 내 순번
+    var A2 = f.ahead;
+    if (A2 && A2.list) {
+      h += '<div class="card"><h2>앞으로 며칠 내 순번 <small>' + esc(me) + ' · ' + A2.part + '부 줄 · 예상</small></h2>';
+      if (!A2.list.length) h += '<div class="wait">앞날 예상 팀 수가 아직 없습니다.</div>';
+      else {
+        h += '<div class="tbl"><table><tr><th>날짜</th><th>예상 순번</th><th>예상 팀 수</th><th>일 될 가능성</th></tr>';
+        A2.list.forEach(function (r) {
+          var wide = (r.rankHi - r.rankLo) > 10;
+          var rk = wide ? '<span style="color:var(--sub)">앞날 근무에 따라 갈림</span>' : (r.rank + r.tagged0 + '번' + (r.rankHi > r.rankLo ? '<small>' + (r.rankLo + r.tagged0) + '~' + (r.rankHi + r.tagged0) + '</small>' : ''));
+          if (r.why) { h += '<tr><td>' + esc(r.label) + '</td><td>' + rk + '</td><td colspan="2" style="color:var(--sub);font-size:12px">' + esc(r.why) + ' · 여기서부터는 계산하지 않습니다</td></tr>'; return; }
+          var pill = r.verdict === '근무 유력' ? 'pill' : r.verdict === '반반' ? 'pill warn' : 'pill mute';
+          h += '<tr><td>' + esc(r.label) + '</td><td>' + rk + '</td><td>' + r.pred + '팀<small>' + r.lo + '~' + r.hi + '</small></td><td><span class="' + pill + '">' + esc(r.verdict) + '</span> ' + r.prob + '%</td></tr>';
+        });
+        h += '</table></div>';
+      }
+      var bits = [];
+      bits.push('내일 줄은 오늘 일 못 한 첫 사람 <b>' + esc(A2.start) + '</b>(' + A2.startNo + '번)부터 조 차례대로 돈다고 보고 셉니다');
+      if (A2.workedToday) bits.push('오늘 일했으니 줄 끝으로 돌아갑니다');
+      if (A2.returning && A2.returning.length) bits.push('오늘 휴무였다가 내일 내 앞으로 돌아올 사람 ' + A2.returning.length + '명(' + A2.returning.map(esc).join(', ') + ')을 넣었습니다');
+      bits.push('내일 새로 휴무를 내는 앞사람이 있으면 그만큼 당겨지고, 경기과가 손으로 옮기면 달라집니다');
+      h += '<p class="note">' + bits.join('. ') + '.</p>';
+      var ck = A2.check || {};
+      if (ck.today) h += '<p class="note">어제 예상한 오늘 줄 시작: ' + esc(ck.today.predicted) + ' → 실제 ' + esc(ck.today.actual) + (ck.today.hit ? ' (맞음)' : ' (틀림)') + '</p>';
+      if (ck.days) h += '<p class="note">줄 시작 맞힌 날: ' + ck.hits + ' / ' + ck.days + '일</p>';
+      h += '</div>';
+    } else if (A2 && A2.why) {
+      h += '<div class="card"><h2>앞으로 며칠 내 순번</h2><div class="wait">' + esc(A2.why) + '</div></div>';
+    }
+
     // 부별 줄 — 내 부는 펼쳐 두고 나머지는 접는다
     f.parts.filter(function (pt) { return pt.open; }).forEach(function (pt) {
       var mineHere = m && m.part === pt.part;

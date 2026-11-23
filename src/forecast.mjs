@@ -10,7 +10,7 @@
 //  ★3부는 둘 다 계산하지 않는다 — 해가 짧아진 9월부터 안 여는 칸을 찬 칸으로 센다(고치는 중).
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, loadJSON } from './store.mjs';
+import { DATA_DIR, loadJSON, saveJSON } from './store.mjs';
 import { buildBoardsView } from './boardsview.mjs';
 import { isPartClosed } from './closure.mjs';
 import { loadSnapshot, fixedSlots, holdSlots, flexSlots } from './kakaogolf.mjs';
@@ -223,22 +223,159 @@ export function buildForecast({ labelToISO = () => '', me = '', now = Date.now()
       if (offs.length < 4) { d.parts[p] = { booked: cur.c[p], thin: true }; continue; }
       const o = offs.map((x) => x.off);
       d.parts[p] = { booked: cur.c[p], pred: cur.c[p] + quant(o, 0.5), lo: cur.c[p] + quant(o, 0.25), hi: cur.c[p] + quant(o, 0.75), n: offs.length };
+      Object.defineProperty(d.parts[p], 'raw', { value: o.map((x) => cur.c[p] + x), enumerable: false });
     }
     if (ymd < todayYmd) continue;
     days.push(d);
   }
+
+  const apps = applications(boardISO, views);
+  const ahead = myDaysAhead({ parts, days, me, apps, boardISO });
 
   const h = teeHealth() || {};
   const g = (p) => { const a = (grow[p] || []).map((x) => x.grow); return { n: a.length, max: a.length ? Math.max(...a) : 0, atLeast: [1, 2, 3, 4, 6].map((k) => ({ k, days: a.filter((x) => x >= k).length })) }; };
   return {
     ok: true, at: now, boardISO, me,
     parts, mine, daba,
-    apps: applications(boardISO, views),
-    days,
+    apps,
+    days, ahead,
     growth: { 1: g('1'), 2: g('2') },
     score: scoreTable(H),
     truthDays: Object.keys(H.truth).length,
     source: { name: '티스캐너', lastOk: h.lastOk || 0, streak: h.streak || 0, lastErr: h.lastErr || '' },
     names: [...new Set(parts.flatMap((pt) => (pt.rows || []).map((r) => r.occ)).filter(Boolean))],
   };
+}
+
+// ══ 앞으로 며칠, 내 순번 ═══════════════════════════════════════════════════════
+//  ★규칙(사용자 9/1 확인 + 11/21→22·11/22→23 배치표 두 번 재현):
+//   줄은 조 차례대로 돈다. 다음 날 줄은 '오늘 그 줄에서 일 못 한 첫 사람'부터 시작한다
+//   (11/21 2부 44번 배문숙까지 근무 → 11/22는 45번 김태리부터 / 11/22 43번 강민순까지 → 이지은 휴무라 김민찬부터).
+//  그래서 내일 내 차례 = 오늘 확정선 다음 사람부터 나까지 몇 명인가. 대바는 그날만의 맞바꿈이라 원래 자리(주인)로 센다.
+//  ★배지 붙은 칸(54·2,3·조출·당번…)은 경기과가 그날 사정 보고 놓는다 — 차례 셈에서 뺀다.
+//  모르는 것: 내일 휴무 신청(앞사람이 쉬면 당겨진다), 경기과 손조정. 그래서 '예상'이고, 매일 맞았는지 적어 둔다.
+const CHECK_FILE = 'forecast-check.json';
+function myDaysAhead({ parts, days, me, apps, boardISO }) {
+  if (!me || !boardISO) return null;
+  // 내가 주인인 칸 → 없으면 내가 나오는 칸
+  let pt = null, idx = -1;
+  for (const x of parts) { if (!x.open) continue; const i = x.rows.findIndex((r) => (r.holder || r.occ) === me); if (i >= 0) { pt = x; idx = i; break; } }
+  if (!pt) for (const x of parts) { if (!x.open) continue; const i = x.rows.findIndex((r) => r.occ === me); if (i >= 0) { pt = x; idx = i; break; } }
+  if (!pt) return { why: '오늘 배치표 줄에 이름이 없어 셀 수 없습니다' };
+  const rows = pt.rows;
+  if (rows[idx].tag) return { part: pt.part, why: `오늘 '${rows[idx].tag}' 배지라 차례 셈 밖입니다(경기과가 그날 정함)` };
+  const ringRows = rows.filter((r) => !r.tag);             // 차례대로 도는 사람들(오늘 줄)
+  const nm = (r) => r.holder || r.occ;
+  const cutR = ringRows.filter((r) => r.no <= pt.cut).length;   // 오늘 일한 사람 수(차례 줄 기준)
+  const startRow = ringRows[cutR] || ringRows[0];
+  // ★오늘 쉰 사람(휴무)은 내일 제 자리로 돌아온다 — 줄 끝이 아니라 조 차례 속 자기 자리다.
+  //  그 자리는 예전 배치표 줄에서 '바로 앞에 섰던 사람'으로 찾는다. 휴가·병가는 며칠 이어지기 쉬워 내일 셈에 안 넣는다.
+  const today = ringRows.map(nm);
+  rememberRing(boardISO, pt.part, today);
+  const back = [];
+  for (const g of apps.list || []) if (g.kind === '휴무') for (const x of g.names) if (!today.includes(x.name)) back.push(x.name);
+  const ring = placeReturning(today, back, pt.part, boardISO);
+  const meName = nm(rows[idx]);
+  const meR = ring.indexOf(meName);
+  const startR = ring.indexOf(nm(startRow));
+  const worked = new Set(ringRows.filter((r) => r.no <= pt.cut).map(nm));
+  const L = ring.length;
+  // 내일 줄에서 나까지 몇 번째인가 — 시작점부터 둥글게 센다(오늘 일한 사람은 이미 줄 끝으로 갔다).
+  const order = [];
+  for (let k = 0; k < L; k++) { const n = ring[(startR + k) % L]; if (!worked.has(n)) order.push(n); }
+  for (const n of ringRows.map(nm)) if (worked.has(n)) order.push(n);
+  const rank0 = order.indexOf(meName) + 1;
+  const tagged = rows.filter((r) => r.tag).length;         // 배지 칸은 팀을 먹되 차례는 안 쓴다
+  const ahead = order.slice(0, Math.max(0, rank0 - 1));
+  const out = { part: pt.part, start: nm(startRow), startNo: startRow ? startRow.no : 0,
+    workedToday: worked.has(meName), tagged, ringLen: L, rank: rank0, returning: back.filter((n) => ahead.includes(n)), list: [] };
+  // ★날마다 팀 수가 흔들리는 걸 다음 날로 끌고 간다 — 지난 날들의 팀 수 중 하나를 날마다 뽑아 1000번 돌린다.
+  //  (하루 앞만 보고 0%/100%로 못 박으면, 이틀 뒤부터는 그 흔들림이 다 사라진 거짓 확신이 된다.)
+  const fut = days.filter((d) => d.iso > boardISO);
+  const N = 1000;
+  let seed = 12345;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  let ranks = new Array(N).fill(rank0);
+  for (const d of fut) {
+    const x = d.parts && d.parts[pt.part];
+    const row = { label: d.label, iso: d.iso, tagged0: tagged };
+    if (pt.part === '3') row.why = '3부 팀 수는 계산 안 함';
+    else if (d.none) row.why = '예약 관측 없음';
+    else if (d.shifted) row.why = '시간표 바뀐 날';
+    else if (!x || x.pred == null) row.why = x && x.thin ? '비교할 날 부족' : '예상 팀 수 없음';
+    const sorted = ranks.slice().sort((a, b) => a - b);
+    row.rank = sorted[Math.floor(N / 2)]; row.rankLo = sorted[Math.floor(N * 0.25)]; row.rankHi = sorted[Math.floor(N * 0.75)];
+    if (!row.why) {
+      row.pred = x.pred; row.lo = x.lo; row.hi = x.hi;
+      let work = 0;
+      const next = new Array(N);
+      for (let i = 0; i < N; i++) {
+        const teams = x.raw[Math.floor(rnd() * x.raw.length)];
+        const used = Math.max(0, teams - tagged);          // 배지 칸이 먼저 팀을 먹는다
+        if (ranks[i] <= used) { work++; next[i] = ranks[i] + L - used; } else next[i] = ranks[i] - used;
+      }
+      ranks = next;
+      row.prob = Math.round(work / N * 100);
+      row.verdict = row.prob >= 70 ? '근무 유력' : row.prob >= 30 ? '반반' : '스페어 유력';
+    }
+    out.list.push(row);
+    if (row.why) break;   // 팀 수를 모르는 날을 지나면 그 뒤 순번은 지어낸 것이 된다 — 거기서 멈춘다
+  }
+  out.check = selfCheck(boardISO, pt, ringRows, out);
+  return out;
+}
+
+// 날마다의 차례 줄을 기억한다 — 쉬어서 오늘 줄에 없는 사람이 어디로 돌아올지 찾는 데 쓴다.
+const RING_FILE = 'forecast-rings.json';
+function rememberRing(iso, part, names) {
+  if (!iso || !names.length) return;
+  let st = {};
+  try { st = loadJSON(RING_FILE, {}) || {}; } catch { st = {}; }
+  const k = `${iso}|${part}`;
+  if (JSON.stringify(st[k]) === JSON.stringify(names)) return;
+  st[k] = names;
+  const keys = Object.keys(st).sort();
+  while (keys.length > 40) delete st[keys.shift()];
+  try { saveJSON(RING_FILE, st); } catch { /* 기억 실패는 화면을 막지 않는다 */ }
+}
+function placeReturning(today, back, part, iso) {
+  const ring = today.slice();
+  if (!back.length) return ring;
+  let st = {};
+  try { st = loadJSON(RING_FILE, {}) || {}; } catch { st = {}; }
+  const past = Object.keys(st).filter((k) => k.endsWith(`|${part}`) && k < `${iso}|`).sort().reverse().map((k) => st[k]);
+  for (const n of back) {
+    let at = -1;
+    for (const pl of past) {
+      const i = pl.indexOf(n); if (i < 0) continue;
+      // 그 줄에서 n 바로 앞에 섰던 사람 중 오늘 줄에 있는 사람 뒤에 끼운다
+      for (let j = i - 1; j >= 0 && at < 0; j--) { const q = ring.indexOf(pl[j]); if (q >= 0) at = q + 1; }
+      if (at >= 0) break;
+    }
+    if (at >= 0) ring.splice(at, 0, n); else ring.push(n);   // 어디였는지 모르면 줄 끝에 둔다(화면에 "돌아오는 사람" 수로 드러난다)
+  }
+  return ring;
+}
+
+// 어제 이 화면이 '내일 줄은 누구부터'라고 했는지 적어 두고, 새 배치표가 오면 맞았는지 본다.
+function selfCheck(boardISO, pt, ring, out) {
+  let st = {};
+  try { st = loadJSON(CHECK_FILE, {}) || {}; } catch { st = {}; }
+  const nextISO = (out.list[0] && out.list[0].iso) || '';
+  let dirty = false;
+  if (nextISO && out.start && !st[nextISO]) { st[nextISO] = { part: pt.part, start: out.start, from: boardISO, at: Date.now() }; dirty = true; }
+  const mine = st[boardISO];
+  let res = null;
+  if (mine) {
+    const first = ring[0] ? (ring[0].holder || ring[0].occ) : '';
+    res = { predicted: mine.start, actual: first, hit: mine.start === first, part: mine.part };
+    if (mine.actual !== first) { mine.actual = first; mine.hit = res.hit; dirty = true; }
+  }
+  const hist = Object.entries(st).filter(([, v]) => v && v.actual).map(([k, v]) => ({ iso: k, hit: !!v.hit }));
+  if (dirty) {
+    const keys = Object.keys(st).sort();
+    while (keys.length > 60) delete st[keys.shift()];
+    try { saveJSON(CHECK_FILE, st); } catch { /* 기록 실패는 화면을 막지 않는다 */ }
+  }
+  return { today: res, days: hist.length, hits: hist.filter((x) => x.hit).length };
 }
