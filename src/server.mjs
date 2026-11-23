@@ -49,6 +49,7 @@ import { sendLost, dropLost, lostKey } from './lostreq.mjs';
 import { alertBoardNews } from './boardnews.mjs';
 import { onClaudeAuthLost } from './claudereader.mjs';
 import { dabaOn } from './daba.mjs';
+import { noteClosures } from './closure.mjs';
 import { attachUser, requireAuth, requireAdmin, beginNaverLogin, naverCallback, beginGoogleLogin, googleCallback, logout, soloMode, authConfigured, naverConfigured, googleConfigured, startLoginHandoff, pollLoginHandoffRoute, exchangeLoginHandoff, testerEnter } from './auth.mjs';
 import { setBoardPart, loadBoardPartsStore, boardScope } from './boardparts.mjs';
 import { minorReadFrozen, keptCount } from './minorfreeze.mjs';
@@ -2211,6 +2212,36 @@ async function observeMinorKakao(dateISO) {
   }
 }
 
+// 휴장/재개를 회원 카드에 바로 반영하고 관리자에게 알린다.
+//  닫힘: 그 날짜 카드가 있는 회원은 saveToday 길목에서 휴무(휴장)로 바뀐다.
+//  다시 엶: 카드를 억지로 되돌리지 않는다 — 다음 배치표 판독이 제자리로 채운다(알림으로 사람이 알게).
+async function applyClosures(changes, full) {
+  const ids = [...new Set([1, ...activeMembers().map((m) => m.id)])];
+  for (const c of changes) {
+    const names = [];
+    if (!c.open) {
+      for (const uid of ids) {
+        const rec = loadToday(uid, c.part);
+        if (!rec || worklog.labelToISO(rec.date || '') !== c.iso || rec.status === 'off') continue;
+        saveToday(rec, uid, c.part);
+        names.push(String(rec.name || uid));
+      }
+    }
+    const [, mo, d] = c.iso.split('-').map(Number);
+    const what = c.open ? '휴장 취소(다시 엶)' : '휴장';
+    console.log(`🚫 [휴장] ${mo}/${d} ${c.part}부 ${what} — 카드 ${names.length}명 휴무로 · "${String(full.text || full.subject || '').slice(0, 30)}"`);
+    try {
+      await broadcastOps({
+        title: `${mo}월 ${d}일 ${c.part}부 ${what} 반영`,
+        body: c.open
+          ? `${c.part}부를 다시 열었습니다. 다음 배치표 판독 때 순번이 채워집니다.`
+          : `${c.part}부 카드 ${names.length}명을 휴무로 바꿨습니다${names.length ? `(${names.slice(0, 6).join(', ')}${names.length > 6 ? ' 외' : ''})` : ''}. 출처: ${isKakaoSource(full) ? '카톡' : '카페'} "${String(full.text || full.subject || '').slice(0, 30)}"`,
+        url: '/', level: 'check', bypassQuiet: true,
+      });
+    } catch { /* 알림 실패가 반영을 막지 않는다 */ }
+  }
+}
+
 async function notifyForArticle(full, result = {}, opts = {}) {
   // ★스위치가 꺼져 있으면 여기서 끝난다.
   //   빈 것을 돌려줘야 크롤러가 봤다고 넣고 다시 안 매달린다
@@ -2225,6 +2256,11 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const t = [full.subject, full.text, ...((full.comments || []).map((c) => c.content))].filter(Boolean).join(' ');
     noteProvisional(t, { source: isKakaoSource(full) ? '카톡' : '카페', id: String(full.id || ''), at: Number(full.writeDate) || Date.now() });
   } catch { /* noop */ }
+  // ★부 휴장 — "3부휴장입니다" 한 줄이면 그 날 그 부 카드를 바로 휴무로(배치표를 기다리지 않는다).
+  try {
+    const ch = noteClosures(full, isKakaoSource(full) ? '카톡' : '카페');
+    if (ch.length) await applyClosures(ch, full);
+  } catch (e) { console.error('[휴장] 오류:', e.message); }
 
   // ★단독 부-배치표 라우팅(1·2부) — 3부 경로에 넣으면 오독·정본오염 → 감지 시 전용 처리 후 종료(3부 코드 미진입).
   const _declaredPart = detectDeclaredBoardPart(full);
@@ -2968,7 +3004,7 @@ function composePreview(userId, dayISO, dayW) {
   }
   const t3 = slots['3'];
   if (t3 && t3.status === 'off') {                               // 휴무/휴가/병가/순번 제외
-    const kind = t3.offType === 'sick' ? '병가' : t3.offType === 'vacation' ? '휴가' : (t3.offReason === 'removed' ? '순번 제외' : '휴무');
+    const kind = t3.offType === 'sick' ? '병가' : t3.offType === 'vacation' ? '휴가' : (t3.offReason === 'removed' ? '순번 제외' : t3.offReason === 'closed' ? '3부 휴장' : '휴무');
     return { off: true, title: `${dayW} ${kind}`, body: `${name}님, ${dayW}은 ${kind}로 확인됐습니다.` };
   }
   for (const p of ['3', '1', '2']) {                             // 스페어(먼 순번 포함)

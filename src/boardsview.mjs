@@ -6,6 +6,7 @@
 import { loadJSON } from './store.mjs';
 import { loadBoardPartsStore } from './boardparts.mjs';
 import { internTeesFor } from './interns.mjs';
+import { isPartClosed } from './closure.mjs';
 
 // 인턴 칸 — 티오프는 차지하되 순번은 안 쓰는 자리(배치표의 노란 칸).
 //  ★모니터(검수)와 같은 함수로 뽑는다. 관리자가 손으로 지정한 게 있으면 그게 판독을 이긴다.
@@ -86,5 +87,6 @@ export function buildBoardsView({ labelToISO = () => '' } = {}) {
   // ★배치표에 없는 부는 그날 운영하지 않는 부다(사용자 11/23 "3부가 배치표에 없을 때는 그날 3부 자체를 운영을 안한다").
   //  가장 새 배치표 날짜보다 낡은 부는 '그 배치표에 없던 부' — 어제 3부를 오늘 3부처럼 띄우지 않는다.
   //  (예전엔 낡았다고 도장만 찍어 보여줬다. 3부 휴장날마다 전날 3부가 오늘 화면에 남았다.)
-  return out.filter((b) => !b.stale);
+  //  카톡·카페 '3부 휴장' 소식으로 닫힌 부도 내린다.
+  return out.filter((b) => !b.stale && !isPartClosed(b.targetISO, b.part));
 }

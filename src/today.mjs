@@ -7,6 +7,7 @@ import path from 'node:path';
 import { loadUserJSON, saveUserJSON, userDataDir } from './store.mjs';
 import * as journal from './journal.mjs';
 import { labelToISO } from './worklog.mjs';
+import { isPartClosed } from './closure.mjs';
 
 const FILE = 'today.json';
 
@@ -31,6 +32,13 @@ export function loadToday(userId = 1, part = '3') { return loadUserJSON(userId, 
 //  그래서 길목 하나에서 함께 쓴다.
 // opts.dutyFirm: 이 근태는 사람이 못 박은 것이다(사진 판독이 아니다). 일지가 옛 값을 붙들지 않게 알려 준다.
 export function saveToday(s, userId = 1, part = '3', opts = null) {
+  // ★그 날 그 부가 휴장이면 카드는 '휴무(휴장)'로 고정 — 배치표를 다시 읽어도 근무·스페어로 안 돌아간다.
+  try {
+    const iso = s && labelToISO(s.date || '');
+    if (iso && isPartClosed(iso, part) && s.status !== 'off') {
+      s = { ...s, status: 'off', offReason: 'closed', teeTime: '', course: '', updatedAt: Date.now() };
+    }
+  } catch { /* 휴장 검사가 저장을 막지 않는다 */ }
   saveUserJSON(userId, fileFor(part), s);
   syncJournal(s, userId, part, opts);
 }
