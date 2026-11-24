@@ -514,6 +514,16 @@ function fixMemberPosByRoster(v, member = memberFromEnv(), today = null) {
     return;
   }
   if (rp <= 0) {
+    // ★댓글(대바)로 이 부를 넘기고 떠난 사람 — 오독이 아니다. 이 부와는 상관없어졌다(1·2부만; 카드를 지운다).
+    //  11/25 김홍구: 1부 선발을 넘기고 2부로 갔는데 '이름 안 보임 = 오독 의심'으로 다뤄 1부 2번이 남아 1·2부 둘로 잡혔다.
+    const _dl = (Array.isArray(v.dabaLeft) ? v.dabaLeft : []).map((n) => String(n || '').replace(/\s/g, ''));
+    if (_dl.includes(String(member.name || '').replace(/\s/g, '')) && String(v.part || '') !== '3') {
+      v.myPosition = 0; v.myStatus = 'off'; v.teeTime = ''; v.course = '';
+      v._dabaLeft = true;
+      v._posFixed = '대바 댓글로 이 부를 넘김';
+      delete v._uncertain;
+      return;
+    }
     // ── 회원이 명단에서 '정확히' 안 잡힘. 옛(스테일) 순번으로 근무 오알림을 내보내지 않는 게 핵심. ──
     //  ★비-주회원(interpretForMember)은 v.rosterReliable이 안 실려 undefined → 옛 가드가 아예 발동 못 했다.
     //   그래서 서동환(오독)이 스테일 순번7로 새 근무 오알림을 냈다. 아래는 rosterReliable에 의존하지 않는다.
@@ -1589,7 +1599,8 @@ export async function judge(article, today = null, member = memberFromEnv()) {
     auditTeeGrid(verdict);
     fixMemberPosByRoster(verdict, member, today);   // today = 이전 상태 → '순번에 있었다 사라짐'(off:removed) 감지
   }
-  applyBoardParts(verdict, member);                // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
+  if (verdict && verdict._dabaLeft) return { ...decide(article, verdict, member, { readerRan }), status: 'off', rawVerdict: verdict };   // 댓글로 이 부를 넘김
+  applyBoardParts(verdict, member);               // ★표 헤더(OUT|N부|IN)로 부(部) 이중검증(환각 교정)
   applyRoster(verdict, today, article, member);    // 3부 명단 화이트리스트 정밀 필터
   applySelfCancel(verdict, article, today, member); // ★텍스트 취소("내 이름+취소") → 순번 제외(off:removed), AI 추가 없음
   return { ...decide(article, verdict, member, { readerRan }), rawVerdict: verdict };
@@ -1779,6 +1790,7 @@ export function interpretForMember(article, shared, member, today = null) {
     v.myStatus = 'off'; v.myPosition = 0; v.teeTime = ''; v.course = '';
     return { ...decide(article, v, member), status: 'off', rawVerdict: v };
   }
+  if (v._dabaLeft) return { ...decide(article, v, member), status: 'off', rawVerdict: v };   // 댓글로 이 부를 넘김 — 재해석 없이 끝
   if (v._absent) {
     // ★명단에 이름 없음/오독 의심(fixMemberPosByRoster에서 확정) — 순번·티오프 재해석을 건너뛰고 중립(대기·확인필요)으로
     //  종결. 아래 resolveTeeByGrid/applyRoster가 스테일 순번을 되살리거나 상태를 흔들지 못하게 여기서 끊는다.

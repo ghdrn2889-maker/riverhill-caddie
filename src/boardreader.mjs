@@ -1463,6 +1463,8 @@ function verdictFromPart(article, member, pd, allParts, offList = [], roleList =
     // ★배치표에 적힌 번호(대바 빈 칸을 당겨 세기 전). 계산은 myPosition, 사람에게 보일 번호는 이것.
     myBoardNo: (pd._boardNo && nk && pd._boardNo[nk]) || myPos || null,
     boardNo: pd._boardNo || null,
+    // ★댓글(대바)로 이 부를 떠난 사람들 — 이름이 안 보이는 게 판독 오류가 아니라는 근거(judge 가 본다)
+    dabaLeft: Array.isArray(pd._dabaLeft) ? pd._dabaLeft.slice() : [],
     myStatus,
     teeTime: tee ? tee.time : '',
     course: tee ? tee.course : '',

@@ -3086,6 +3086,20 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
       }
     }
   } catch (e) { /* 정리는 부가기능 — 실패해도 본 처리 계속 */ }
+  // ★댓글(대바)로 이 부를 넘긴 회원 — 이 부와는 상관없어졌다. 카드·근무 기록을 지우고 끝(알림 없음).
+  //  11/25 김홍구: 1부 선발을 넘기고 2부로 갔는데 1부 2번 카드가 남아 1·2부 둘로 잡혔다.
+  if (v._dabaLeft) {
+    const prev = loadToday(userId, part);
+    const bISO = opts.boardISO || worklog.labelToISO(v.dateLabel || '');
+    const pISO = prev ? worklog.labelToISO(prev.date || '') : '';
+    if (prev && (!bISO || !pISO || pISO === bISO)) {
+      clearTodayPart(userId, part);
+      try { if (bISO) worklog.unrecordWorkDay(bISO, part, userId); } catch { /* 무해 */ }
+      try { if (bISO) journal.recordDayStatus(bISO, { status: 'unknown', part, swappedOut: true }, userId); } catch { /* 무해 */ }
+      console.log(`·  [${part}부] ${member.name} 대바 댓글로 ${part}부를 넘김 → ${part}부 카드 지움`);
+    }
+    return { pushed: false };
+  }
   // ★근무표시 게이트 — 조 배치표에 이 회원의 근무표시가 있고, 그 표시가 '이 부'를 명시적으로 안 하면 스킵.
   //  (예: 조하빈 근무표시="3부" → 2부 처리 자체를 안 함. 슬롯·상태·알림 전부 생성 안 됨.)
   //  근무표시가 없거나(회원이 조배치표 밖) 애매하면 개입 안 함(기존 명단 기반 판단에 맡김).

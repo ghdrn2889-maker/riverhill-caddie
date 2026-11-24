@@ -150,7 +150,13 @@ const _mem = new Map();   // 글번호 → { sig, promise }
 // 배치표 판독 결과(board)에 댓글 바꿈을 덮어씌운 새 board 를 돌려준다. 댓글이 없거나 꺼져 있으면 그대로.
 export async function withDaba(article, board) {
   if (!dabaOn() || !board || !board.parts || !article || !article.id) return board;
-  const comments = (article.comments || []).map((c) => String((c && (c.content ?? c.text)) ?? c ?? '').trim()).filter(Boolean);
+  // ★쓴 시각 순서로 편다 — 네이버는 답글을 '원 댓글 바로 밑'에 끼워 준다. 화면 순서대로 얹으면
+  //  나중에 단 답글이 먼저 적용돼 뒤 댓글에 덮인다(11/25 김홍구: 1부 선발 → 2부 3번 → 답글로 2부 8번인데 3번으로 남음).
+  //  시각이 없거나 같으면 원래 순서(정렬은 안정적이다).
+  const ms = (c) => { const d = c && typeof c === 'object' ? c.date : null; const n = typeof d === 'number' ? d : Date.parse(d || ''); return Number.isFinite(n) ? n : null; };
+  const raw = (article.comments || []).map((c, k) => ({ c, k, t: ms(c) }));
+  if (raw.every((x) => x.t != null)) raw.sort((a, b) => (a.t - b.t) || (a.k - b.k));
+  const comments = raw.map(({ c }) => String((c && (c.content ?? c.text)) ?? c ?? '').trim()).filter(Boolean);
   if (!comments.length) return board;
   const base = {};
   for (const p of Object.keys(board.parts)) if (Array.isArray(board.parts[p]?.roster) && board.parts[p].roster.length) base[p] = board.parts[p].roster.slice();
@@ -237,8 +243,15 @@ export async function withDaba(article, board) {
     // 못 부른 댓글이 있으면 기억에서 빼 둔다 — 다음 판독 때 다시 부른다(푼 걸음은 파일에 남아 있다)
     if (log.some((x) => x.status === 'unread')) _mem.delete(id);
     if (!applied) return board;
+    // ★댓글로 이 부를 떠난 사람 — 판독 오류로 이름이 빠진 것과 구별한다(이 사람의 이 부 카드는 지운다).
+    //  11/25 김홍구: 1부 선발을 넘겼는데 '이름이 안 보임 = 오독 의심'으로 다뤄 1부 2번 카드가 그대로 남았다.
+    const leftOf = {};
+    for (const p of Object.keys(cur)) {
+      const now = new Set(cur[p].map((c) => splitCell(c).occ).map(bare).filter(Boolean));
+      leftOf[p] = [...new Set(work[p].map(bare).filter((n) => n && !now.has(n)))];
+    }
     const parts = {};
-    for (const p of Object.keys(board.parts)) parts[p] = cur[p] ? { ...board.parts[p], roster: cur[p], _daba: true, _boardNo: boardNo[p] } : board.parts[p];
+    for (const p of Object.keys(board.parts)) parts[p] = cur[p] ? { ...board.parts[p], roster: cur[p], _daba: true, _boardNo: boardNo[p], _dabaLeft: leftOf[p] || [] } : board.parts[p];
     return { ...board, parts, _daba: { applied, moves, problems: problems.map((x) => ({ text: x.text, problem: x.problem })) } };
   })().catch((e) => { console.error('[대바] 오류 — 원본 그대로:', e.message); _mem.delete(String(article.id)); return board; });
   _mem.set(String(article.id), { sig, promise });
