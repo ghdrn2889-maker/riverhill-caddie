@@ -22,7 +22,7 @@ import { broadcastOps } from './push.mjs';
 // v3: 대바 속 '휴무' = 자리를 내준 쪽(상대의 옛 자리로 간다) — 사용자 11/23
 // v4: 두 사람 '대기바꿈'은 맞바꿈, 번호가 어긋나면 오타로 보고 안 적힌 사람은 안 옮긴다 + doubt — 사용자 11/24
 //     (11/25 배문숙 "배문숙 2부 17번 / 심영운 2부 24번 대기바꿈": 배문숙 옛 자리는 25 — 이수련(24)을 25로 밀어냈다)
-const PROMPT_VER = 'v4';
+const PROMPT_VER = 'v3';   // v4(Claude 에게 맞바꿈 규칙을 더 준 판)는 다른 댓글 풀이를 망가뜨려 되돌림 — 맞바꿈 판정은 코드(plainSwapFix)가 한다
 
 const DIR = path.join(DATA_DIR, 'daba');
 const bare = (s) => String(s || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').trim();
@@ -61,13 +61,10 @@ const PROMPT = (state, comment, outsiders) => [
   '- "A 휴무입니다" with no mover at all: list A in "off" (the program keeps A in any slot nobody else took — a slot is lost only when someone takes it).',
   '- "A님 B 2부 대기 받습니다": A takes B\'s 2부 slot. If A already had a 2부 slot, B takes A\'s old slot (a swap); otherwise B simply leaves that 2부 slot.',
   '- "본인 순번 / 본인 대기": that person keeps that 부 unchanged.',
-  '- "A 2부 17번 / B 2부 24번 대기바꿈": the word 대기바꿈 with exactly two people = A and B EXCHANGE their slots; the numbers only confirm it.',
-  '  If a written number does not match the exchange (e.g. B\'s new slot should be A\'s old 25 but the comment says 24), it is a typo: do the plain exchange, do NOT move anyone the comment does not name, and put a short Korean explanation of the mismatch in "doubt".',
-  'Never move a person the comment does not name, except the occupant pushed out of a slot someone named took (that person goes to the mover\'s old slot).',
   'Whenever someone moves INTO an occupied slot, the previous occupant must go somewhere: into a slot the group vacated (the mover\'s old slot) unless the comment says otherwise. Never leave two people in one 부.',
   'People who are NOT on today\'s line-up (listed below as "Not on the line-up") can enter through a comment: "A B 대기바꿈" where only B is on the line-up means A takes B\'s slot(s) and B leaves; "2부 9번 이지은님" means 이지은 takes 2부 slot 9. Use only names from the line-up or that list.',
   'A slot ends up empty ONLY when someone leaves and nobody takes it — then list that person in "off" and do not invent a replacement.',
-  'Output: {"swap":true|false,"changes":[{"part":"1","pos":5,"name":"강경순"},...],"off":["최수아"],"note":"짧은 한국어 설명","doubt":"번호가 안 맞아 짐작한 것이 있으면 한국어로, 없으면 빈 문자열"}',
+  'Output: {"swap":true|false,"changes":[{"part":"1","pos":5,"name":"강경순"},...],"off":["최수아"],"note":"짧은 한국어 설명"}',
   '"changes" must list EVERY slot whose occupant is different after this comment (including displaced people). Use names exactly as in the line-up, without tags. If the comment is not a line-up change (chat, thanks, question, unclear), reply {"swap":false}.',
   '',
   'Current line-up:',
@@ -128,6 +125,33 @@ export function applyStep(rosters, step, display = {}) {
     for (const x of next[p]) { const b = bare(x); if (!b) continue; if (seen.has(b)) return { problem: `${p}부에 '${b}'가 두 자리` }; seen.add(b); }
   }
   return { rosters: next };
+}
+
+// ★두 사람 '대기바꿈'은 맞바꿈 — 번호가 어긋나도 댓글에 없는 사람은 안 옮긴다(사용자 11/24).
+//  11/25 "배문숙 2부 17번 / 심영운 2부 24번 대기바꿈합니다": 배문숙의 옛 자리는 25인데 24를 그대로 믿어
+//  이수련(24)을 25(박시윤 자리)로 밀어냈다. 24/25 어느 쪽이 오타든 맞바꿈이면 심영운 25 · 이수련 그대로.
+//  ★좁게만 건다: '대기바꿈' + 판 위 이름이 정확히 둘 + 풀이가 댓글에 없는 사람을 '다른 칸으로' 옮길 때만.
+//   (자리를 넘겨 휴무가 되는 것은 옮김이 아니다 — 김상미 댓글의 박시윤 휴무는 그대로 둔다.)
+//  Claude 에게 이 규칙을 더 주는 방식(v4)은 다른 댓글 풀이까지 흔들어 되돌렸다 — 코드가 마지막에 고친다.
+export function plainSwapFix(cur, text, step, official = [], display = {}) {
+  if (!step || !/대기\s*바꿈|대바/.test(String(text || ''))) return step;
+  const flat = String(text).replace(/\s/g, '');
+  const onBoard = [...new Set(Object.values(cur).flat().map(bare).filter(Boolean))];
+  const named = onBoard.filter((n) => flat.includes(n));
+  if (named.length !== 2) return step;
+  const r = applyStep(cur, { ...step, _known: official }, display);
+  if (r.problem) return step;
+  const strays = movesBetween(cur, r.rosters).filter((m) => !named.includes(m.name) && m.from !== '없음' && m.to !== '휴무').map((m) => m.name);
+  if (!strays.length) return step;
+  const [A, B] = named, changes = [];
+  for (const p of Object.keys(cur)) {
+    const ia = cur[p].findIndex((n) => bare(n) === A), ib = cur[p].findIndex((n) => bare(n) === B);
+    if (ia < 0 || ib < 0) continue;
+    changes.push({ part: p, pos: ia + 1, name: B }, { part: p, pos: ib + 1, name: A });
+  }
+  if (!changes.length) return step;
+  const where = changes.map((c) => `${c.name} ${c.part}부 ${c.pos}번`).join(' · ');
+  return { swap: true, changes, off: [], note: `맞바꿈: ${where}`, doubt: `댓글 번호가 맞바꿈과 안 맞아 ${A}·${B} 맞바꿈으로 반영(${where}) — ${strays.join('·')}은 안 옮김` };
 }
 
 // 사람마다 '어디서 어디로' — 화면·기록용
@@ -260,6 +284,7 @@ export async function withDaba(article, board) {
         try { step = JSON.parse(m[0]); } catch { log.push({ i, text: t, status: 'unread' }); continue; }
         store.steps[key] = step;
       }
+      step = plainSwapFix(cur, t, step, official, display);
       // ★풀이가 있으면 받는다 — Claude 는 자리가 비는 풀이에 스스로 swap:false 를 달곤 했다(11/23 실측: 풀이는 정확).
       //  맞는지는 아래 applyStep 이 따진다(두 자리·없는 이름·자리 밖).
       const hasWork = (step.changes || []).length || (step.off || []).length;
