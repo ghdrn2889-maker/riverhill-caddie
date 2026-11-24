@@ -3556,9 +3556,46 @@ async function runDabaFor(article, tries = 0) {
   try {
     const full = await fetchArticle(article.id);
     full.writer = full.writer || article.writer || '';
+    _rememberCmtSig(full);   // 이 댓글 상태는 반영했다 — 댓글 감시가 같은 걸 또 돌리지 않게
     await notifyForArticle(full, { relevant: true, priority: 'high' }, {});
   } finally { recheckBusy = false; }
 }
+
+// ── 댓글 감시(지움·고침) — 크롤러는 댓글 '수가 늘 때'만 안다 ─────────────────
+//  캐디가 댓글을 지우면 = 그 대바 취소. 고치면 = 내용이 바뀐 대바. 둘 다 수가 안 늘어 놓쳤다(사용자 11/24).
+//  지켜보는 배치표 글(3부 정본·1·2부 최신)의 댓글 글자를 1분마다 대조해 달라지면 대바를 다시 얹는다.
+const CMT_SIG_FILE = 'daba-cmtsig.json';
+const _cmtSig = loadJSON(CMT_SIG_FILE, {});
+const _cmtList = (full) => (full.comments || []).map((c) => ({ id: String(c.id ?? ''), t: String(c.content || '').trim() }));
+function _rememberCmtSig(full) {
+  if (!full || !full.id) return;
+  _cmtSig[String(full.id)] = { at: Date.now(), list: _cmtList(full) };
+  for (const k of Object.keys(_cmtSig)) if (Date.now() - (_cmtSig[k].at || 0) > 3 * 86400000) delete _cmtSig[k];
+  saveJSON(CMT_SIG_FILE, _cmtSig);
+}
+async function dabaCommentWatch() {
+  if (!dabaOn() || boardReadOff()) return;
+  if (recheckBusy) return;   // 판독 중이면 다음 분에 — 기준을 안 바꿨으니 놓치지 않는다
+  const ids = new Set();
+  if (boardWatch && boardWatch.id && Date.now() - (boardWatch.at || 0) < 18 * 3600 * 1000) ids.add(String(boardWatch.id));
+  try { const bp = loadBoardPartsStore(); if (bp && bp.articleId && Date.now() - Number(bp.at || 0) < 18 * 3600 * 1000) ids.add(String(bp.articleId)); } catch { /* 없으면 3부만 */ }
+  for (const id of ids) {
+    let full;
+    try { full = await fetchArticle(id); } catch (e) { console.error(`[댓글 감시] #${id} 조회 실패:`, e.message); continue; }
+    const prev = _cmtSig[id];
+    const now = _cmtList(full);
+    if (!prev) { _rememberCmtSig(full); continue; }   // 처음 보는 글 — 기준만 잡는다(반영은 크롤러·첫 판독이 한다)
+    const before = new Map((prev.list || []).map((x) => [x.id, x.t]));
+    const after = new Map(now.map((x) => [x.id, x.t]));
+    const gone = [...before.keys()].filter((k) => !after.has(k)).length;
+    const edited = [...after.keys()].filter((k) => before.has(k) && before.get(k) !== after.get(k)).length;
+    const added = [...after.keys()].filter((k) => !before.has(k)).length;
+    if (!gone && !edited && !added) continue;
+    console.log(`💬 [댓글 감시] #${id} 댓글 바뀜 — 지움 ${gone} · 고침 ${edited} · 새 ${added} → 대바 다시 얹기`);
+    try { await runDabaFor(full); } catch (e) { console.error('[댓글 감시] 대바 반영 오류:', e.message); }
+  }
+}
+setInterval(() => { dabaCommentWatch().catch((e) => console.error('[댓글 감시] 오류:', e.message)); }, Number(process.env.DABA_CMT_WATCH_MS ?? 60000));
 async function recheckBoard() {
   if (boardReadOff()) return;   // ★옛 판독을 끓 때 같이 쉬는다
   if (recheckBusy) return;                                 // 재판독이 아직 진행 중이면 이번 틱은 건너뜀

@@ -49,7 +49,7 @@ export async function fetchArticle(id) {
   const html = art.contentHtml || '';
   const comments = (data.result.comments?.items || [])
     .filter((c) => !c.isDeleted)
-    .map((c) => ({ nick: c.writer?.nick || '', content: c.content || '', date: c.updateDate || null }));
+    .map((c) => ({ id: c.id ?? null, refId: c.refId ?? null, nick: c.writer?.nick || '', content: c.content || '', date: c.updateDate || null }));
 
   return {
     id: String(id),

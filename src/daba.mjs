@@ -146,6 +146,56 @@ function splitCell(cell) {
   return { holder: n, occ: n };
 }
 
+// ── 댓글 줄 세우기 ─────────────────────────────────────────────────────────
+//  ★쓴 시각 순서로 편다 — 네이버는 답글을 '원 댓글 바로 밑'에 끼워 준다. 화면 순서대로 얹으면
+//   나중에 단 답글이 먼저 적용돼 뒤 댓글에 덮인다(11/25 김홍구: 1부 선발 → 2부 3번 → 답글로 2부 8번인데 3번으로 남음).
+//  ★고친 댓글(사용자 11/24): 내용이 같으면(띄어쓰기·'님'·오타 한두 글자, 숫자는 그대로) 처음 쓴 자리를 지킨다.
+//   내용이 바뀌었으면 고친 시각에 새로 쓴 대바로 본다. 그래서 댓글마다 '처음 본 시각·글자'를 기억한다(data/daba/<글>.json cmts).
+//   네이버는 고친 시각만 준다 — 처음 본 시각이 곧 쓴 시각이다(1분마다 보니 거의 같다).
+//  지운 댓글은 목록에서 빠지므로 그 대바도 저절로 빠진다(원본부터 다시 얹는다).
+const _norm = (s) => String(s || '').replace(/님/g, '').replace(/[\s.,·~!?\-─—_=ㅡ:;'"()[\]/|]+/g, '');
+const _digits = (s) => (String(s || '').match(/\d+/g) || []).join(',');
+function _lev(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+export function sameContent(a, b) {
+  const x = _norm(a), y = _norm(b);
+  if (x === y) return true;
+  return _digits(a) === _digits(b) && _lev(x, y) <= 2;
+}
+function orderComments(articleId, list) {
+  const ms = (d) => { const n = typeof d === 'number' ? d : Date.parse(d || ''); return Number.isFinite(n) ? n : null; };
+  const store = articleId ? loadSteps(articleId) : { steps: {} };
+  const mem = store.cmts || {};
+  let dirty = false;
+  const rows = list.map((c, k) => {
+    const text = String((c && (c.content ?? c.text)) ?? c ?? '').trim();
+    const cid = c && typeof c === 'object' && c.id != null ? String(c.id) : '';
+    let t = ms(c && typeof c === 'object' ? c.date : null);
+    if (cid) {
+      const m = mem[cid];
+      if (!m) { mem[cid] = { t, text }; dirty = true; }
+      else if (m.text !== text) {
+        if (sameContent(m.text, text)) mem[cid] = { t: m.t, text };              // 같은 내용 — 처음 자리 그대로
+        else { mem[cid] = { t, text, editedFrom: m.text }; console.log(`✏️ [대바] #${articleId} 댓글 내용이 바뀜 → 고친 시각에 새 대바로: "${text.slice(0, 40)}"`); }
+        dirty = true;
+      }
+      t = mem[cid].t;
+    }
+    return { text, k, t };
+  }).filter((r) => r.text);
+  if (dirty && articleId) saveSteps(articleId, { ...store, cmts: mem });
+  if (rows.every((x) => x.t != null)) rows.sort((a, b) => (a.t - b.t) || (a.k - b.k));
+  return rows.map((r) => r.text);
+}
+
 const _mem = new Map();   // 글번호 → { sig, promise }
 // 배치표 판독 결과(board)에 댓글 바꿈을 덮어씌운 새 board 를 돌려준다. 댓글이 없거나 꺼져 있으면 그대로.
 export async function withDaba(article, board) {
@@ -153,10 +203,7 @@ export async function withDaba(article, board) {
   // ★쓴 시각 순서로 편다 — 네이버는 답글을 '원 댓글 바로 밑'에 끼워 준다. 화면 순서대로 얹으면
   //  나중에 단 답글이 먼저 적용돼 뒤 댓글에 덮인다(11/25 김홍구: 1부 선발 → 2부 3번 → 답글로 2부 8번인데 3번으로 남음).
   //  시각이 없거나 같으면 원래 순서(정렬은 안정적이다).
-  const ms = (c) => { const d = c && typeof c === 'object' ? c.date : null; const n = typeof d === 'number' ? d : Date.parse(d || ''); return Number.isFinite(n) ? n : null; };
-  const raw = (article.comments || []).map((c, k) => ({ c, k, t: ms(c) }));
-  if (raw.every((x) => x.t != null)) raw.sort((a, b) => (a.t - b.t) || (a.k - b.k));
-  const comments = raw.map(({ c }) => String((c && (c.content ?? c.text)) ?? c ?? '').trim()).filter(Boolean);
+  const comments = orderComments(String(article.id), article.comments || []);
   if (!comments.length) return board;
   const base = {};
   for (const p of Object.keys(board.parts)) if (Array.isArray(board.parts[p]?.roster) && board.parts[p].roster.length) base[p] = board.parts[p].roster.slice();

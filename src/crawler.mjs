@@ -112,8 +112,9 @@ export function startCrawler({ onMatch, onComment, onCafeError }) {
     for (const a of articles) {
       const prev = commentCounts[a.id];
       const now = a.commentCount || 0;
-      if (isSched(a) && prev != null && now > prev) {
-        console.log(`💬 새 댓글 ${now - prev}개: ${a.subject}`);
+      // ★줄어도 본다 — 댓글을 지우는 건 그 대바를 취소한다는 뜻이다(사용자 11/24).
+      if (isSched(a) && prev != null && now !== prev) {
+        console.log(now > prev ? `💬 새 댓글 ${now - prev}개: ${a.subject}` : `💬 댓글 ${prev - now}개 지워짐(대바 취소): ${a.subject}`);
         try { await onComment?.(a, prev, now); } catch (e) { console.error('onComment 오류:', e.message); }
       }
       commentCounts[a.id] = now;
