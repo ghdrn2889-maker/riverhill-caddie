@@ -16,9 +16,13 @@ import path from 'node:path';
 import { DATA_DIR, appendJSONL } from './store.mjs';
 import { runClaudeText } from './claudereader.mjs';
 import { confirmedCaddies } from './roster.mjs';
+import { broadcastOps } from './push.mjs';
 
 // 풀이 방식이 바뀌면 올린다 — 예전 풀이를 열쇠로 다시 쓰지 않게
-const PROMPT_VER = 'v3';   // v3: 대바 속 '휴무' = 자리를 내준 쪽(상대의 옛 자리로 간다) — 사용자 11/23
+// v3: 대바 속 '휴무' = 자리를 내준 쪽(상대의 옛 자리로 간다) — 사용자 11/23
+// v4: 두 사람 '대기바꿈'은 맞바꿈, 번호가 어긋나면 오타로 보고 안 적힌 사람은 안 옮긴다 + doubt — 사용자 11/24
+//     (11/25 배문숙 "배문숙 2부 17번 / 심영운 2부 24번 대기바꿈": 배문숙 옛 자리는 25 — 이수련(24)을 25로 밀어냈다)
+const PROMPT_VER = 'v4';
 
 const DIR = path.join(DATA_DIR, 'daba');
 const bare = (s) => String(s || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').trim();
@@ -57,10 +61,13 @@ const PROMPT = (state, comment, outsiders) => [
   '- "A 휴무입니다" with no mover at all: list A in "off" (the program keeps A in any slot nobody else took — a slot is lost only when someone takes it).',
   '- "A님 B 2부 대기 받습니다": A takes B\'s 2부 slot. If A already had a 2부 slot, B takes A\'s old slot (a swap); otherwise B simply leaves that 2부 slot.',
   '- "본인 순번 / 본인 대기": that person keeps that 부 unchanged.',
+  '- "A 2부 17번 / B 2부 24번 대기바꿈": the word 대기바꿈 with exactly two people = A and B EXCHANGE their slots; the numbers only confirm it.',
+  '  If a written number does not match the exchange (e.g. B\'s new slot should be A\'s old 25 but the comment says 24), it is a typo: do the plain exchange, do NOT move anyone the comment does not name, and put a short Korean explanation of the mismatch in "doubt".',
+  'Never move a person the comment does not name, except the occupant pushed out of a slot someone named took (that person goes to the mover\'s old slot).',
   'Whenever someone moves INTO an occupied slot, the previous occupant must go somewhere: into a slot the group vacated (the mover\'s old slot) unless the comment says otherwise. Never leave two people in one 부.',
   'People who are NOT on today\'s line-up (listed below as "Not on the line-up") can enter through a comment: "A B 대기바꿈" where only B is on the line-up means A takes B\'s slot(s) and B leaves; "2부 9번 이지은님" means 이지은 takes 2부 slot 9. Use only names from the line-up or that list.',
   'A slot ends up empty ONLY when someone leaves and nobody takes it — then list that person in "off" and do not invent a replacement.',
-  'Output: {"swap":true|false,"changes":[{"part":"1","pos":5,"name":"강경순"},...],"off":["최수아"],"note":"짧은 한국어 설명"}',
+  'Output: {"swap":true|false,"changes":[{"part":"1","pos":5,"name":"강경순"},...],"off":["최수아"],"note":"짧은 한국어 설명","doubt":"번호가 안 맞아 짐작한 것이 있으면 한국어로, 없으면 빈 문자열"}',
   '"changes" must list EVERY slot whose occupant is different after this comment (including displaced people). Use names exactly as in the line-up, without tags. If the comment is not a line-up change (chat, thanks, question, unclear), reply {"swap":false}.',
   '',
   'Current line-up:',
@@ -259,7 +266,17 @@ export async function withDaba(article, board) {
       if (!step.swap && !hasWork) { log.push({ i, text: t, status: 'skip' }); continue; }
       const r = applyStep(cur, { ...step, _known: official }, display);
       if (r.problem) { log.push({ i, text: t, status: 'problem', problem: r.problem, note: step.note || '' }); continue; }
-      log.push({ i, text: t, status: 'applied', confirmed: i < lastMarker, note: step.note || '', moves: movesBetween(cur, r.rosters) });
+      const doubt = String(step.doubt || '').trim();
+      log.push({ i, text: t, status: 'applied', confirmed: i < lastMarker, note: step.note || '', ...(doubt ? { doubt } : {}), moves: movesBetween(cur, r.rosters) });
+      // ★번호가 어긋나 짐작한 댓글은 사람에게 묻는다 — 한 댓글에 한 번만(사용자 11/24 배문숙 24/25)
+      if (doubt) {
+        store.told = store.told || {};
+        if (!store.told[key]) {
+          store.told[key] = Date.now();
+          console.warn(`   ⚠ [대바] 번호가 어긋나 짐작함: "${t.replace(/\s+/g, ' ').slice(0, 50)}" — ${doubt}`);
+          broadcastOps({ title: '대바 댓글 번호가 어긋납니다', body: `"${t.replace(/\s+/g, ' ').slice(0, 40)}" — ${doubt.slice(0, 80)}. 맞바꿈으로 반영했습니다. 확인해 주세요.`, url: '/', level: 'check', bypassQuiet: true }).catch(() => {});
+        }
+      }
       cur = r.rosters;
     }
     // ★배치표 번호는 그대로 기억한다 — 캐디들은 댓글·대화에서 배치표 번호("40번")를 쓴다(사용자 11/23).
