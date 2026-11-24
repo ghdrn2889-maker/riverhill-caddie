@@ -1762,6 +1762,7 @@ export function interpretForMember(article, shared, member, today = null) {
     crewDuty: shared.crewDuty,             // ★조배치표 근태칸 맵 — 휴무 게이트·54/찾근 판단에 필수(누락 시 게이트 무력화)
     guaranteedWork: shared.guaranteedWork, // ★명단 셀 태그 무조건근무(54/찾근) — 회원 경로에도 반영
     crossPartNames: shared.crossPartNames,
+    dabaLeft: shared.dabaLeft,             // ★댓글로 이 부를 넘긴 사람 — 빠뜨리면 '오독 의심'으로 옛 카드가 남는다(11/25)
     subjectNames: shared.subjectNames,
     note: shared.note,
     confidence: shared.confidence,
