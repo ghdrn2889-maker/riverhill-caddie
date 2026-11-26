@@ -2052,7 +2052,7 @@ function applyRelAdds(dayISO, part, vp, postedAt = 0, fresh = null) {
     const nextR = fresh && fresh[String(Number(part) + 1)] ? fresh[String(Number(part) + 1)].roster : null;
     if (incoming.length < add.length && nextR) {
       const picks = _pickFromNext(nextR, vp.part3Roster, add.length - incoming.length);
-      incoming.push(...picks.map((x) => x.occ));
+      incoming.push(...picks.map((x) => x.cell));   // ★칸째로 올린다 — "강아란(천예영)"이면 그대로(원래 주인(나오는 사람), 사용자 11/26)
       if (picks.length) console.log(`·  [${part}부 팀 추가 보정] 스페어가 모자라 ${Number(part) + 1}부 줄 앞 ${picks.map((x) => x.occ).join('·')} 을(를) 올립니다`);
     }
     while (incoming.length < add.length) incoming.push('');
