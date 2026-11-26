@@ -3086,6 +3086,16 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
       }
     }
   } catch (e) { /* 정리는 부가기능 — 실패해도 본 처리 계속 */ }
+  // ★옛 배치표는 새 카드를 못 덮는다 — 11/26 사고: 11/27 카드가 옛 11/26 글 재판독에 되돌려졌다.
+  try {
+    const bISO0 = opts.boardISO || worklog.labelToISO(v.dateLabel || '');
+    const p0 = loadToday(userId, part);
+    const pISO0 = p0 ? worklog.labelToISO(p0.date || '') : '';
+    if (bISO0 && pISO0 && bISO0 < pISO0) {
+      if (userId === 1) console.log(`·  [${part}부] ${member.name} 카드 안 건드림 — 이 배치표(${bISO0})가 지금 카드(${pISO0})보다 옛날`);
+      return { pushed: false };
+    }
+  } catch { /* 판단 못 하면 예전대로 */ }
   // ★댓글(대바)로 이 부를 넘긴 회원 — 이 부와는 상관없어졌다. 카드·근무 기록을 지우고 끝(알림 없음).
   //  11/25 김홍구: 1부 선발을 넘기고 2부로 갔는데 1부 2번 카드가 남아 1·2부 둘로 잡혔다.
   if (v._dabaLeft) {
@@ -3615,6 +3625,24 @@ async function recheckBoard() {
       return;
     }
   }
+  // ★더 새 배치표가 들어왔으면 그쪽으로 갈아탄다 — 옛 글을 계속 지키면 옛 글 재판독이 새 배치표를 덮는다
+  //  (11/26 사고: 11/27 배치표 #30233 이 들어왔는데 감시는 11/26 #30221 에 남아 90초마다 11/26 으로 되돌렸다).
+  if (boardWatch && boardWatch.id) {
+    let bp = null;
+    try { bp = loadBoardPartsStore(); } catch { /* 없으면 그대로 */ }
+    const wISO = worklog.labelToISO(boardWatch.dateLabel || '') || '';
+    const bid = bp && bp.articleId ? String(bp.articleId) : '';
+    if (bid && bid !== String(boardWatch.id) && bp.targetISO && wISO && bp.targetISO > wISO) {
+      try {
+        const f0 = await fetchArticle(bid);
+        const fp0 = await imgFingerprint(f0);
+        boardWatch = { id: bid, fp: fp0, fps: [fp0], dateLabel: bp.dateLabel || '', at: Date.now(), from: '1·2부' };
+        saveJSON(BOARD_WATCH_FILE, boardWatch);
+        console.log(`👀 [배치표 감시] 더 새 배치표(${bp.targetISO}) #${bid} 로 갈아탑니다 — 옛 글(${wISO})은 더 안 봅니다`);
+      } catch (e) { console.error('배치표 감시 갈아타기 실패:', e.message); }
+      return;
+    }
+  }
   if (!boardWatch || !boardWatch.id) return;
   const h = new Date().getHours();
   const aStart = Number(process.env.ACTIVE_START_HOUR ?? 12);
@@ -3628,8 +3656,12 @@ async function recheckBoard() {
   catch (e) { console.error('배치표 재확인 조회 실패:', e.message); return; }
   const fp = await imgFingerprint(full);
   if (fp === boardWatch.fp) return;                        // 이미지 그대로(콘텐츠 서명 동일) → 재판독 안 함(무비용)
+  // ★이미지 서버가 같은 사진을 두 판(크기·날짜 다름)으로 번갈아 준다(11/26 실측 553389 ↔ 280134) —
+  //  한 번 본 서명이면 교체가 아니다. 이걸 교체로 보면 90초마다 재판독하고 감시도 영영 안 끝난다.
+  const fps = Array.isArray(boardWatch.fps) ? boardWatch.fps : [boardWatch.fp].filter(Boolean);
+  if (fps.includes(fp)) return;
   console.log(`🔁 배치표 이미지 교체 감지(같은 글 #${boardWatch.id}) → 재판독`);
-  boardWatch.fp = fp; boardWatch.at = Date.now();
+  boardWatch.fp = fp; boardWatch.fps = [...fps, fp].slice(-8);
   saveJSON(BOARD_WATCH_FILE, boardWatch);
   recheckBusy = true;
   try {
@@ -3660,8 +3692,10 @@ async function recheckPartBoards() {
     let fp;
     try { fp = await imgFingerprint(full); } catch { continue; }
     if (!fp || fp === w.fp) continue;                      // 이미지 그대로(서명 동일) → 재판독 안 함(무비용)
+    const wfps = Array.isArray(w.fps) ? w.fps : [w.fp].filter(Boolean);
+    if (wfps.includes(fp)) continue;                       // 한 번 본 서명(이미지 서버가 번갈아 주는 판) — 교체 아님
     console.log(`🔁 ${part}부 배치표 이미지 교체 감지(같은 글 #${w.id}) → 재판독`);
-    w.fp = fp; w.at = Date.now(); dirty = true;
+    w.fp = fp; w.fps = [...wfps, fp].slice(-8); dirty = true;
     recheckBusy = true;
     try {
       full.writer = full.writer || '';

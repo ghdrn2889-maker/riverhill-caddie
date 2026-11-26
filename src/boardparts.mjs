@@ -99,6 +99,11 @@ export function setBoardPart(articleId, meta, article, part, data) {
   //  비어 있으면(범위 미상) 아무 부도 폐기하지 않는다: 모르면 안 지운다.
   const scope = Array.isArray(meta.scope) ? meta.scope.map(String) : [];
   let s = loadBoardPartsStore();
+  // ★옛 배치표는 새 배치표를 못 덮는다 — 11/26 사고: 옛 글 재판독이 90초마다 11/27 배치표를 11/26 으로 되돌렸다.
+  if (s && s.parts && newISO && s.targetISO && newISO < s.targetISO && String(s.articleId || '') !== id) {
+    console.log(`·  [board-parts] ${part}부 저장 안 함 — 이 배치표(${newISO} #${id})가 저장된 배치표(${s.targetISO} #${s.articleId})보다 옛날`);
+    return s;
+  }
   if (!s || !s.parts) {
     s = { articleId: id, at: meta.at || Date.now(), targetISO: newISO, dateLabel: meta.dateLabel || '',
       subject: meta.subject || '', image: meta.image || '', url: meta.url || '', article: trimArticle(article), parts: {} };
