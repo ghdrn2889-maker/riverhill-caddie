@@ -1959,30 +1959,83 @@ function fillPostDay(vp, full, part) {
   console.log(`·  [${part}부] 날짜 없는 수정본 → 올린 날(${iso})의 것으로 봅니다: ${String((full && full.subject) || '').slice(0, 40)}`);
 }
 
-// '몇 팀 추가' 소식 — 반영 대신 관리자에게 무엇을 알고 무엇을 모르는지 알린다(같은 날·부·수는 한 번만).
+// ── '몇 팀 추가'만 있는 소식 — 그때만 예약 기록을 살짝 참고한다(사용자 결정 2026-11-26) ──────────
+//  "내일 1부2팀 추가있습니다"에는 누가·몇 시가 없다. 예약 기록은 앱과 끊어 두었지만(대시보드 전용),
+//  이렇게 '불분명한 경우'에만 묻는다: 배치표에 없는데 지금 예약이 찬 칸(판매중으로 본 적 있는 칸만 —
+//  겨울 해 뜨기 전 없는 칸·보류 칸 제외)이 글의 팀 수와 '정확히' 같으면 그 칸들을 끼워 넣고
+//  시각순으로 순번↔티오프를 다시 맞춘다(당추 규칙: 같은 시각은 OUT 먼저). 수가 다르거나 기록이 낡았으면
+//  반영하지 않고 관리자에게 알린다.
+//  ★보정은 data/rel-adds.json 에 따로 둔다 — 본배치표가 대바 댓글로 다시 처리돼도 사라지지 않게.
+//   보정보다 나중에 올라온 배치표(수정본 사진)가 오면 그게 이미 담고 있다고 보고 보정을 내려놓는다.
+const REL_ADDS_FILE = 'rel-adds.json';
+const _pad5 = (t) => { const m = String(t || '').match(/(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''; };
+const _kmin = (k) => { const [h, m] = k.split('|')[0].split(':').map(Number); return h * 60 + m; };
+const _teeCmp = (a, b) => (_kmin(a) - _kmin(b)) || ((a.endsWith('OUT') ? 0 : 1) - (b.endsWith('OUT') ? 0 : 1));
+const _kstISO = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+function bookingExtraKeys(dayISO, part, gridKeys) {
+  let snap;
+  try { snap = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'kakao-board', `${dayISO.replace(/-/g, '')}.json`), 'utf8')); }
+  catch { return { err: '그날 예약 기록이 없음' }; }
+  const age = Date.now() - Number(snap.at || 0);
+  if (!(age >= 0 && age < 40 * 60000)) return { err: `예약 기록이 ${Math.round(age / 60000)}분 전 것이라 낡음` };
+  const ever = new Set(snap.everOpenKeys || []), held = new Set(snap.held || []);
+  const booked = (snap.byPart?.[part] || []).map((x) => (typeof x === 'string' ? x : `${_pad5(x.time)}|${String(x.course || '').toUpperCase()}`));
+  return { keys: [...new Set(booked.filter((k) => !gridKeys.has(k) && ever.has(k) && !held.has(k)))].sort(_teeCmp) };
+}
+// 판독 결과(vp)에 저장된 보정을 얹는다. 얹었으면 true.
+function applyRelAdds(dayISO, part, vp, postedAt = 0) {
+  if (!vp || !dayISO) return false;
+  const all = loadJSON(REL_ADDS_FILE, {});
+  const key = `${dayISO}|${part}`, a = all[key];
+  if (!a) return false;
+  if (postedAt && postedAt > a.at) {
+    delete all[key]; saveJSON(REL_ADDS_FILE, all);
+    console.log(`·  [${part}부 팀 추가 보정] 보정(${a.keys.join(', ')})보다 나중 배치표가 왔습니다 — 그 배치표를 따르고 보정은 내려놓습니다`);
+    return false;
+  }
+  const grid = (vp.teeGrid || []).map((t) => `${_pad5(t.time)}|${String(t.course || '').toUpperCase()}`).filter((k) => !k.startsWith('|'));
+  const have = new Set(grid);
+  const add = a.keys.filter((k) => !have.has(k));
+  if (!add.length) return false;
+  const merged = [...grid, ...add].sort(_teeCmp);
+  vp.teeGrid = merged.map((k, i) => ({ pos: i + 1, time: k.split('|')[0], course: k.split('|')[1] }));
+  vp.teeTimes = [...new Set([...(vp.teeTimes || []).map(_pad5).filter(Boolean), ...add.map((k) => k.split('|')[0])])].sort();
+  vp.cutoffPosition = merged.length; vp.teamCount = merged.length;
+  const r = Array.isArray(vp.part3Roster) ? vp.part3Roster : [];
+  vp.cutoffName = r[merged.length - 1] ? String(r[merged.length - 1]).replace(/\(.*?\)/g, '').trim() : '';
+  console.log(`·  [${part}부 팀 추가 보정] ${a.msg.slice(0, 30)} → ${add.join(', ')} 끼워 넣고 ${merged.length}팀으로 시각순 재매칭`);
+  return true;
+}
 const _relAddTold = new Set();
 async function noteRelativeAdd(full, part, n, txt) {
   if (!(n > 0)) return;
   const t = Number(full && full.writeDate) || Date.now();
-  const postISO = new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
-  const dayISO = /내일/.test(txt) ? new Date(t + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) : postISO;
-  const key = `${dayISO}|${part}|${n}`;
-  if (_relAddTold.has(key)) return;
-  _relAddTold.add(key);
-  let d = null;
-  try { const s = loadBoardPartsStore(); d = s && s.parts && s.parts[part]; if (d && String(d._targetISO || '') !== dayISO) d = null; } catch { /* 없음 */ }
-  let body;
-  if (!d) body = `${dayISO} ${part}부 ${n}팀 추가 소식 — 그날 ${part}부 배치표를 아직 못 읽어 반영 못 함.`;
-  else {
-    const roster = (d.roster || []).filter((x) => String(x || '').trim());
-    const cut = Number(d.cutoffPosition) || Number(d.teamCount) || 0;
-    const spares = roster.slice(cut, cut + n).map((c) => String(c).replace(/\(.*?\)/g, ''));
-    body = spares.length >= n
-      ? `${part}부 ${cut}팀 → ${cut + n}팀이면 스페어 ${spares.join('·')} 근무. 티오프 시각은 글에 없어 반영 안 함 — 수정배치표가 오면 자동 반영.`
-      : `${part}부는 명단 ${roster.length}·컷 ${cut}이라 스페어가 ${roster.length - cut}명 — 늘어난 ${n}팀은 다른 부에서 채워질 것. 누가 들어가는지 몰라 반영 안 함 — 수정배치표가 오면 자동 반영.`;
-  }
-  console.warn(`⚠ [팀 추가 소식] "${txt.replace(/\s+/g, ' ').slice(0, 40)}" → ${body}`);
-  try { await broadcastOps({ title: `${part}부 ${n}팀 추가 소식 — 확인 필요`, body, url: '/', level: 'check', bypassQuiet: true }); } catch { /* 알림 실패 무시 */ }
+  const dayISO = /내일/.test(txt) ? _kstISO(t + 86400000) : _kstISO(t);
+  const tellKey = `${dayISO}|${part}|${n}`;
+  const tell = async (body) => {
+    console.warn(`⚠ [팀 추가 소식] "${txt.replace(/\s+/g, ' ').slice(0, 40)}" → ${body}`);
+    if (_relAddTold.has(tellKey)) return;
+    _relAddTold.add(tellKey);
+    try { await broadcastOps({ title: `${part}부 ${n}팀 추가 소식`, body, url: '/', level: 'check', bypassQuiet: true }); } catch { /* 알림 실패 무시 */ }
+  };
+  let s = null, d = null;
+  try { s = loadBoardPartsStore(); d = s && s.parts && s.parts[part]; if (d && String(d._targetISO || '') !== dayISO) d = null; } catch { /* 없음 */ }
+  if (!d) return tell(`${dayISO} ${part}부 배치표를 아직 못 읽어 반영 못 함.`);
+  const roster = (d.roster || []).filter((x) => String(x || '').trim());
+  const cut = Number(d.cutoffPosition) || Number(d.teamCount) || 0;
+  const gridKeys = new Set((d.teeGrid || []).map((x) => `${_pad5(x.time)}|${String(x.course || '').toUpperCase()}`));
+  if (gridKeys.size !== cut) return tell(`${part}부 티오프 칸(${gridKeys.size})과 팀 수(${cut})가 달라 끼워 넣지 않음 — 수정배치표를 기다립니다.`);
+  const b = bookingExtraKeys(dayISO, part, gridKeys);
+  if (b.err) return tell(`${b.err} — 어느 칸이 늘었는지 몰라 반영 안 함. 수정배치표가 오면 자동 반영.`);
+  if (b.keys.length !== n) return tell(`예약 기록엔 배치표에 없는 찬 칸이 ${b.keys.length}개(${b.keys.join(', ') || '없음'})라 글의 ${n}팀과 안 맞아 반영 안 함.`);
+  const all = loadJSON(REL_ADDS_FILE, {});
+  for (const k of Object.keys(all)) if (k.split('|')[0] < _kstISO(Date.now())) delete all[k];
+  all[`${dayISO}|${part}`] = { at: t, keys: b.keys, n, msg: txt.replace(/\s+/g, ' ').slice(0, 80), articleId: String(s.articleId || '') };
+  saveJSON(REL_ADDS_FILE, all);
+  const fill = roster.slice(cut, cut + n).map((c) => String(c).replace(/\(.*?\)/g, ''));
+  const who = fill.length >= n ? `스페어 ${fill.join('·')} 근무` : `${cut + fill.length + 1}~${cut + n}번은 ${part}부에 스페어가 없어 다른 부에서 올 사람(배치표 수정본을 기다림)${fill.length ? ` · ${fill.join('·')} 근무` : ''}`;
+  await tell(`예약 기록으로 ${b.keys.join(', ')} 칸을 끼워 넣어 ${cut}→${cut + n}팀으로 반영. 앞사람 티오프는 시각순으로 다시 맞춤. ${who}.`);
+  if (s.articleId && /^\d+$/.test(String(s.articleId))) runDabaFor({ id: s.articleId }).catch((e) => console.error('[팀 추가 반영 오류]', e.message));
 }
 
 function partFrozen(part, iso, opts) {
@@ -2008,6 +2061,7 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
   const outP = await judge(full, loadToday(1, part), mp);   // 그 부로만 판독(3부 판독 안 함)
   const vp = outP.rawVerdict || {};
   fillPostDay(vp, full, part);   // ★날짜 없는 수정본 = 올린 날(11/26)
+  applyRelAdds(worklog.labelToISO(vp.dateLabel || '') || '', String(part), vp, Number(full.writeDate) || 0);   // ★'몇 팀 추가' 보정(예약 기록 참고)
   const crewDuty = vp.crewDuty || {};
   const okRoster = Array.isArray(vp.part3Roster) && vp.part3Roster.length > 0;
   // ★시간표만 있는 글이 명단을 통째로 덮지 못하게 한다 ─────────────────────────────
@@ -2688,6 +2742,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
       if (!isFullBoard) fillPostDay(vp, full, p);   // ★날짜 없는 수정본 = 올린 날(11/26)
+      applyRelAdds(worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || '', p, vp, Number(full.writeDate) || 0);   // ★'몇 팀 추가' 보정(예약 기록 참고)
       // ★수정본이 명단을 반토막 내면 못 읽은 것(시간표만 있는 글) — 이 부는 예전 그대로 둔다(8/19 "2부 8팀 시간표" 사고).
       //  잠금이 이 가드를 대신하고 있었다 — 잠금을 풀었으니(11/26) 같은 보호를 여기에도 둔다.
       if (!isFullBoard && Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
