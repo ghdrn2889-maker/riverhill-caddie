@@ -2001,6 +2001,24 @@ function applyRelAdds(dayISO, part, vp, postedAt = 0) {
   vp.teeGrid = merged.map((k, i) => ({ pos: i + 1, time: k.split('|')[0], course: k.split('|')[1] }));
   vp.teeTimes = [...new Set([...(vp.teeTimes || []).map(_pad5).filter(Boolean), ...add.map((k) => k.split('|')[0])])].sort();
   vp.cutoffPosition = merged.length; vp.teamCount = merged.length;
+  // ★늘어난 팀에 들어오는 사람은 '조출 앞'에 선다 — 조출은 늘 그 부 맨 뒤(사용자 11/26).
+  //  스페어가 있으면 그 스페어가, 없으면(다른 부에서 올 사람) 빈 칸이 첫 조출 자리 앞에 끼어든다.
+  //  그러면 조출들은 뒤로 밀리고, 앞에 칸이 늘어난 만큼 티오프는 원래 그대로가 된다.
+  if (Array.isArray(vp.part3Roster)) {
+    const oldCut = merged.length - add.length;
+    const work = vp.part3Roster.slice(0, oldCut), rest = vp.part3Roster.slice(oldCut);
+    const incoming = rest.slice(0, add.length);
+    while (incoming.length < add.length) incoming.push('');
+    let at = work.findIndex((c) => /\(\s*조출\s*\)/.test(String(c || '')));
+    if (at < 0) at = work.length;
+    vp.part3Roster = [...work.slice(0, at), ...incoming, ...work.slice(at), ...rest.slice(add.length)];
+    // 보이는 번호(대바 번호표)도 새 자리로 — 조출들이 옛 번호로 남지 않게
+    if (vp.boardNo && typeof vp.boardNo === 'object') {
+      const bn = {};
+      vp.part3Roster.forEach((c, i) => { const m = String(c || '').match(/\(([가-힣]{2,4})\)/); const occ = m && !/조출|찾근|후출|선발|당번|54/.test(m[1]) ? m[1] : String(c || '').replace(/\(.*?\)/g, '').trim(); if (occ) bn[occ] = i + 1; });
+      vp.boardNo = bn;
+    }
+  }
   const r = Array.isArray(vp.part3Roster) ? vp.part3Roster : [];
   vp.cutoffName = r[merged.length - 1] ? String(r[merged.length - 1]).replace(/\(.*?\)/g, '').trim() : '';
   console.log(`·  [${part}부 팀 추가 보정] ${a.msg.slice(0, 30)} → ${add.join(', ')} 끼워 넣고 ${merged.length}팀으로 시각순 재매칭`);
