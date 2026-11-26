@@ -1959,6 +1959,32 @@ function fillPostDay(vp, full, part) {
   console.log(`·  [${part}부] 날짜 없는 수정본 → 올린 날(${iso})의 것으로 봅니다: ${String((full && full.subject) || '').slice(0, 40)}`);
 }
 
+// '몇 팀 추가' 소식 — 반영 대신 관리자에게 무엇을 알고 무엇을 모르는지 알린다(같은 날·부·수는 한 번만).
+const _relAddTold = new Set();
+async function noteRelativeAdd(full, part, n, txt) {
+  if (!(n > 0)) return;
+  const t = Number(full && full.writeDate) || Date.now();
+  const postISO = new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const dayISO = /내일/.test(txt) ? new Date(t + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) : postISO;
+  const key = `${dayISO}|${part}|${n}`;
+  if (_relAddTold.has(key)) return;
+  _relAddTold.add(key);
+  let d = null;
+  try { const s = loadBoardPartsStore(); d = s && s.parts && s.parts[part]; if (d && String(d._targetISO || '') !== dayISO) d = null; } catch { /* 없음 */ }
+  let body;
+  if (!d) body = `${dayISO} ${part}부 ${n}팀 추가 소식 — 그날 ${part}부 배치표를 아직 못 읽어 반영 못 함.`;
+  else {
+    const roster = (d.roster || []).filter((x) => String(x || '').trim());
+    const cut = Number(d.cutoffPosition) || Number(d.teamCount) || 0;
+    const spares = roster.slice(cut, cut + n).map((c) => String(c).replace(/\(.*?\)/g, ''));
+    body = spares.length >= n
+      ? `${part}부 ${cut}팀 → ${cut + n}팀이면 스페어 ${spares.join('·')} 근무. 티오프 시각은 글에 없어 반영 안 함 — 수정배치표가 오면 자동 반영.`
+      : `${part}부는 명단 ${roster.length}·컷 ${cut}이라 스페어가 ${roster.length - cut}명 — 늘어난 ${n}팀은 다른 부에서 채워질 것. 누가 들어가는지 몰라 반영 안 함 — 수정배치표가 오면 자동 반영.`;
+  }
+  console.warn(`⚠ [팀 추가 소식] "${txt.replace(/\s+/g, ' ').slice(0, 40)}" → ${body}`);
+  try { await broadcastOps({ title: `${part}부 ${n}팀 추가 소식 — 확인 필요`, body, url: '/', level: 'check', bypassQuiet: true }); } catch { /* 알림 실패 무시 */ }
+}
+
 function partFrozen(part, iso, opts) {
   if (!minorReadFrozen(part, iso, opts)) return false;
   if (assistOn(String(part))) return true;
@@ -2594,6 +2620,17 @@ async function notifyForArticle(full, result = {}, opts = {}) {
     const isBoardImg = !!(full.images && full.images.length) && /배치표|시간표|번호표/.test(full.subject || '');
     const txt = `${full.subject || ''} ${full.text || ''}`;
     const chgKw = /당추|당일\s*추가|커트|취소|변경|배정|콜|님\s*까지/.test(txt);
+    // ★"내일 1부2팀 추가있습니다"처럼 '몇 팀 늘었다'만 있는 글 — 누구까지인지·몇 시인지가 없다(11/26 카톡).
+    //  이걸 그냥 판독에 넣으면 '2팀'을 그 부 팀 수로 읽어 거의 전원을 스페어로 만든다. 그래서 반영하지 않고,
+    //  아는 것(지금 커트·스페어 유무·늘어난 수)을 정리해 관리자에게 알린다 — 조용히 버리지 않는다.
+    //  수정배치표 사진이 오면 그건 자동 반영된다(11/26 잠금 해제).
+    if (!isBoardImg && !/님\s*까지/.test(txt)) {
+      const NUM = { 한: 1, 두: 2, 세: 3, 네: 4 };
+      const rm = txt.match(/([12])\s*부\s*(\d+|한|두|세|네)\s*팀\s*(?:추가|당추|더)/);
+      if (rm) {
+        try { await noteRelativeAdd(full, rm[1], NUM[rm[2]] || Number(rm[2]), txt); } catch (e) { console.error('[팀 추가 소식 오류]', e.message); }
+      }
+    }
     const boardTables = Array.isArray(out.rawVerdict?.boardTables) ? out.rawVerdict.boardTables : [];
     if (readParts) console.log(`·  [판독된 부] ${readParts.join('·')}부 — 판독기가 실제로 읽어낸 표`);
     // ★본배치표 = 그날의 정답(2026-08-25 사장님 기준). 리버힐이 카페에 올리는 공식 표이고,
