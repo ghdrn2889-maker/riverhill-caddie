@@ -1946,6 +1946,19 @@ const frozenLog = (part, subject) => console.log(
 //  2026-11-26 사고: 예약 수집을 앱과 끊어(11/11 꺼짐·11/23 대시보드 전용) 카카오 대신 갱신이 멈췄는데
 //  수정배치표 잠금(MINOR_PART_UPDATE=0)은 그대로라 "2부 36팀입니다 김수룡님까지"가 앱에 안 들어갔다.
 //  명단 반토막(시간표만 있는 글) 보호는 판독 뒤 가드가 따로 맡는다.
+// ★날짜가 없는 1·2부 수정본은 '올린 날'의 것이다 — 메뉴 이름부터 '당일 변동사항'이다.
+//  예전엔 날짜를 모르면 '지금 추적 중인 근무일'로 봤다. 저녁에 내일 배치표가 들어온 뒤 그날 낮 글을
+//  다시 처리하면 오늘 2부(36팀)가 내일 2부(46팀)를 덮었다(11/26 시험 중 실측 — 곧바로 되돌림).
+function fillPostDay(vp, full, part) {
+  if (!vp || String(vp.dateLabel || '').trim()) return;
+  const t = Number(full && full.writeDate) || Date.parse((full && full.writeDate) || '');
+  if (!Number.isFinite(t) || t <= 0) return;
+  const iso = new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const [y, m, d] = iso.split('-').map(Number);
+  vp.dateLabel = `${y}년 ${m}월 ${d}일`;
+  console.log(`·  [${part}부] 날짜 없는 수정본 → 올린 날(${iso})의 것으로 봅니다: ${String((full && full.subject) || '').slice(0, 40)}`);
+}
+
 function partFrozen(part, iso, opts) {
   if (!minorReadFrozen(part, iso, opts)) return false;
   if (assistOn(String(part))) return true;
@@ -1968,6 +1981,7 @@ async function handleStandalonePartBoard(full, part, opts = {}) {
   const mp = { name: primary.name, part, commuteMin: primary.commuteMin, teeMin: win.min, teeMax: win.max };
   const outP = await judge(full, loadToday(1, part), mp);   // 그 부로만 판독(3부 판독 안 함)
   const vp = outP.rawVerdict || {};
+  fillPostDay(vp, full, part);   // ★날짜 없는 수정본 = 올린 날(11/26)
   const crewDuty = vp.crewDuty || {};
   const okRoster = Array.isArray(vp.part3Roster) && vp.part3Roster.length > 0;
   // ★시간표만 있는 글이 명단을 통째로 덮지 못하게 한다 ─────────────────────────────
@@ -2636,6 +2650,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
+      if (!isFullBoard) fillPostDay(vp, full, p);   // ★날짜 없는 수정본 = 올린 날(11/26)
       // ★수정본이 명단을 반토막 내면 못 읽은 것(시간표만 있는 글) — 이 부는 예전 그대로 둔다(8/19 "2부 8팀 시간표" 사고).
       //  잠금이 이 가드를 대신하고 있었다 — 잠금을 풀었으니(11/26) 같은 보호를 여기에도 둔다.
       if (!isFullBoard && Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
