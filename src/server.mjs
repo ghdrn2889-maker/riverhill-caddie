@@ -1942,11 +1942,22 @@ function reconcileCrossPartConsistency(dateLabel) {
 const frozenLog = (part, subject) => console.log(
   `·  [${part}부 수정배치표 잠금] 자동 판독 멈춤(MINOR_PART_UPDATE=0) — 본배치표 판독본 ${keptCount(part)}명 유지: ${String(subject || '').slice(0, 40)}`);
 
+// ★잠금은 '카카오가 대신 갱신할 때만' — 잠가 두고 아무도 안 채우면 당일 추가가 통째로 빠진다.
+//  2026-11-26 사고: 예약 수집을 앱과 끊어(11/11 꺼짐·11/23 대시보드 전용) 카카오 대신 갱신이 멈췄는데
+//  수정배치표 잠금(MINOR_PART_UPDATE=0)은 그대로라 "2부 36팀입니다 김수룡님까지"가 앱에 안 들어갔다.
+//  명단 반토막(시간표만 있는 글) 보호는 판독 뒤 가드가 따로 맡는다.
+function partFrozen(part, iso, opts) {
+  if (!minorReadFrozen(part, iso, opts)) return false;
+  if (assistOn(String(part))) return true;
+  console.log(`·  [${part}부 수정배치표] 예약 수집이 앱과 끊겨 있어 잠그지 않고 사진으로 반영합니다`);
+  return false;
+}
+
 async function handleStandalonePartBoard(full, part, opts = {}) {
   const primary = envMember();
   const minorPartOn = ['1', 'true', 'yes'].includes(String(process.env.MINOR_PART_PUSH || '').toLowerCase()) || !!opts.minorOverride;
   // ★판독(judge) 앞에서 막는다 — 뒤에서 막으면 크레딧은 이미 쓴 뒤다.
-  if (minorReadFrozen(part, '', opts)) {
+  if (partFrozen(part, '', opts)) {
     const kept = keptCount(part);
     frozenLog(part, full.subject);
     try { appendJSONL('part-detect.jsonl', { at: Date.now(), kind: 'standalone_board_frozen', part,
@@ -2524,7 +2535,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
             const _fISO = worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '';
             for (const p of ['1', '2']) {
               if (!(mparts[p] && Array.isArray(mparts[p].roster) && mparts[p].roster.length)) continue;
-              if (minorReadFrozen(p, _fISO, opts)) { frozenLog(p, full.subject); continue; }
+              if (partFrozen(p, _fISO, opts)) { frozenLog(p, full.subject); continue; }
               setBoardPart(full.id, meta, full, p, mparts[p]);
             }
             console.log(`·  [모니터 1·2부] Claude 캐시에서 반영(발송 잠금 유지): ${Object.keys(mparts).map((p) => `${p}부 ${mparts[p].roster.length}명`).join(', ')}`);
@@ -2607,7 +2618,7 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       // ★본배치표는 잠금을 지나지 않는다 — 이건 수정본이 아니라 그날의 새 기준이다.
       //  잠금은 원래 "2부 8팀 시간표입니다" 같은 부분 수정본이 본배치표를 덮는 걸 막으려던 것이지,
       //  본배치표 자체를 막으려던 게 아니다. 8/25에 그게 뒤집혀 1·2부가 하루치 낡은 채로 남았다.
-      const _wouldFreeze = minorReadFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts);
+      const _wouldFreeze = partFrozen(p, worklog.labelToISO(out.rawVerdict?.dateLabel || '') || '', opts);
       if (_wouldFreeze && isFullBoard) {
         console.log(`·  [${p}부] 본배치표 — 수정배치표 잠금을 지나갑니다(그날의 새 기준): ${String(full.subject || '').slice(0, 40)}`);
       }
@@ -2625,6 +2636,21 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       const outP = await judge(full, loadToday(1, p), mp);   // 공유 부 판독(비싼 부분, board당 1회)
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
+      // ★수정본이 명단을 반토막 내면 못 읽은 것(시간표만 있는 글) — 이 부는 예전 그대로 둔다(8/19 "2부 8팀 시간표" 사고).
+      //  잠금이 이 가드를 대신하고 있었다 — 잠금을 풀었으니(11/26) 같은 보호를 여기에도 둔다.
+      if (!isFullBoard && Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
+        try {
+          const prev = (loadBoardPartsStore()?.parts || {})[String(p)] || null;
+          const prevN = (prev?.roster || []).filter((x) => String(x || '').trim()).length;
+          const nISO = worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || '';
+          if (prev && prevN >= 5 && String(prev._targetISO || '') === nISO && vp.part3Roster.length < prevN * 0.6) {
+            console.warn(`⚠️ [${p}부 수정배치표] 명단 ${prevN}명 → ${vp.part3Roster.length}명은 줄어든 게 아니라 못 읽은 것 — 이 부는 예전 그대로 둡니다`);
+            raiseBoardIssue({ kind: 'roster_shrink', part: Number(p), was: prevN, now: vp.part3Roster.length, articleId: String(full.id || ''),
+              note: `${p}부 수정배치표 명단이 ${prevN}명에서 ${vp.part3Roster.length}명으로 줄어 보여 반영하지 않았어요 — 대조판에서 확인해주세요.` });
+            continue;
+          }
+        } catch (e) { console.error('[수정배치표 명단 보호 검사 오류]', e.message); }
+      }
       // ★여기는 본배치표(그 근무일 첫 판독)다 — 카카오를 얹지 않는다.
       //  순번·가용/비가용 인원은 사진에만 있다. 베이스는 사진이 만들고, 그 뒤 변동만 카카오가 맡는다.
       if (Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
@@ -3093,6 +3119,12 @@ async function processForMemberPart(userId, member, out, full, opts = {}) {
     const pISO0 = p0 ? worklog.labelToISO(p0.date || '') : '';
     if (bISO0 && pISO0 && bISO0 < pISO0) {
       if (userId === 1) console.log(`·  [${part}부] ${member.name} 카드 안 건드림 — 이 배치표(${bISO0})가 지금 카드(${pISO0})보다 옛날`);
+      return { pushed: false };
+    }
+    // ★같은 날이면 나중에 올라온 글이 이긴다(당일 수정배치표를 본배치표 댓글 재처리가 되돌리지 않게, 11/26)
+    const aNew = String(full?.id || ''), aOld = String(p0?.articleId || '');
+    if (bISO0 && pISO0 === bISO0 && /^\d+$/.test(aNew) && /^\d+$/.test(aOld) && Number(aNew) < Number(aOld)) {
+      if (userId === 1) console.log(`·  [${part}부] ${member.name} 카드 안 건드림 — 같은 날 더 나중 글 #${aOld} 이 반영돼 있음(이번 #${aNew})`);
       return { pushed: false };
     }
   } catch { /* 판단 못 하면 예전대로 */ }

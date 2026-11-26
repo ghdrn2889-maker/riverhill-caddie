@@ -104,6 +104,15 @@ export function setBoardPart(articleId, meta, article, part, data) {
     console.log(`·  [board-parts] ${part}부 저장 안 함 — 이 배치표(${newISO} #${id})가 저장된 배치표(${s.targetISO} #${s.articleId})보다 옛날`);
     return s;
   }
+  // ★같은 근무일이면 나중에 올라온 글이 이긴다 — 본배치표에 대바 댓글이 달려 다시 처리될 때
+  //  그 뒤 올라온 당일 수정배치표(예: "2부 36팀입니다")를 33팀 본배치표로 되돌리지 않게(11/26).
+  //  카페 글 번호는 올라온 순서다. 숫자가 아닌 id(카카오 보조 등)는 이 비교를 안 한다.
+  const prevPart = s && s.parts ? s.parts[String(part)] : null;
+  if (prevPart && newISO && String(prevPart._targetISO || '') === newISO
+      && /^\d+$/.test(id) && /^\d+$/.test(String(prevPart._articleId || '')) && Number(id) < Number(prevPart._articleId)) {
+    console.log(`·  [board-parts] ${part}부 저장 안 함 — 같은 날(${newISO}) 더 나중 글 #${prevPart._articleId} 이 이미 반영돼 있음(이번 #${id})`);
+    return s;
+  }
   if (!s || !s.parts) {
     s = { articleId: id, at: meta.at || Date.now(), targetISO: newISO, dateLabel: meta.dateLabel || '',
       subject: meta.subject || '', image: meta.image || '', url: meta.url || '', article: trimArticle(article), parts: {} };
@@ -141,7 +150,7 @@ export function setBoardPart(articleId, meta, article, part, data) {
   //  날짜라벨이 없는 단독 수정본('2부 시간표 입니다')은 '지금 추적 중인 근무일'의 수정으로 본다 —
   //  단, 형제 부가 살아남았을 때만(방금 전부 폐기했다면 그 근무일 자체가 낡은 것이라 물려받으면 안 된다).
   const stampISO = newISO || (Object.keys(s.parts).length ? (s.targetISO || '') : '');
-  s.parts[String(part)] = { ...data, _at: meta.at || Date.now(), _targetISO: stampISO };
+  s.parts[String(part)] = { ...data, _at: meta.at || Date.now(), _targetISO: stampISO, _articleId: id };
   saveBoardPartsStore(s);
   return s;
 }
