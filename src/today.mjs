@@ -314,7 +314,7 @@ export function applyVerdict(prev, verdict, article, opts = {}) {
   //   (같은 카드 안에서 myPosition과 roster3이 서로 다른 말을 했다).
   const _readAuth = verdict.rosterReliable === true && !!String(verdict.dateLabel || '').trim()
     && (Number(verdict.teamCount) > 0 || Number(verdict.cutoffPosition) > 0);
-  const _authoritative = (_readAuth || !!verdict._adminCorrected) && _newRoster.length >= 9;
+  const _authoritative = (_readAuth || !!verdict._adminCorrected || !!verdict._relAdjusted) && _newRoster.length >= 9;   // _relAdjusted: '몇 팀 추가' 보정으로 사람이 옮겨 간 명단(11/26) — 짧아진 게 오독이 아니다
   //  ★차단 대상 = '더 짧게' 덮는 약한 크롭만(같은 길이=대바 교환 등은 통과, 회귀 최소화).
   const _wouldShrink = _curRoster.length > 0 && !_authoritative && !_dayChanged && _newRoster.length > 0 && _newRoster.length < _curRoster.length;
   if (_wouldShrink) console.log(`·  [프레임보호] 약한 변동(명단 ${_newRoster.length} < 정본 ${_curRoster.length})이 명단·티오프표 프레임을 덮지 않음 — 컷은 공지 앵커로 반영`);

@@ -2021,6 +2021,7 @@ function applyRelAdds(dayISO, part, vp, postedAt = 0, fresh = null) {
       const drop = new Set(picks.map((x) => x.cell));
       vp.part3Roster = vp.part3Roster.filter((c) => !drop.has(String(c)));
       vp.dabaLeft = [...new Set([...(vp.dabaLeft || []), ...picks.map((x) => x.occ)])];
+      vp._relAdjusted = true;
       const cut = Number(vp.cutoffPosition) || Number(vp.teamCount) || 0;
       vp.cutoffName = cut && vp.part3Roster[cut - 1] ? _occOf(vp.part3Roster[cut - 1]) : vp.cutoffName;
       _rebuildBoardNo(vp);
@@ -2058,6 +2059,7 @@ function applyRelAdds(dayISO, part, vp, postedAt = 0, fresh = null) {
     while (incoming.length < add.length) incoming.push('');
     let at = work.findIndex((c) => /\(\s*조출\s*\)/.test(String(c || '')));
     if (at < 0) at = work.length;
+    vp._relAdjusted = true;
     vp.part3Roster = [...work.slice(0, at), ...incoming, ...work.slice(at), ...rest.slice(rest.slice(0, add.length).filter((x) => String(x || '').trim()).length)];
     _rebuildBoardNo(vp);
   }
