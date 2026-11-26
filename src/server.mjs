@@ -1982,10 +1982,51 @@ function bookingExtraKeys(dayISO, part, gridKeys) {
   const booked = (snap.byPart?.[part] || []).map((x) => (typeof x === 'string' ? x : `${_pad5(x.time)}|${String(x.course || '').toUpperCase()}`));
   return { keys: [...new Set(booked.filter((k) => !gridKeys.has(k) && ever.has(k) && !held.has(k)))].sort(_teeCmp) };
 }
-// 판독 결과(vp)에 저장된 보정을 얹는다. 얹었으면 true.
-function applyRelAdds(dayISO, part, vp, postedAt = 0) {
+// 칸에서 실제로 나오는 사람 — "강아란(천예영)"=천예영, "김민찬(조출)"=김민찬
+const _TAGW = /^(찾근|조출|후출|정출|선발|당번|프리|벌당|배치|콜|정근|휴무|휴가|병가|54h?|[\d,.]+)$/;
+const _occOf = (c) => { const s = String(c || ''); const m = s.match(/\(([^)]*)\)/); const base = s.replace(/\(.*$/, '').trim(); return m && /^[가-힣]{2,4}$/.test(m[1].trim()) && !_TAGW.test(m[1].trim()) ? m[1].trim() : base; };
+// ★다음 부에서 끌어올 사람(8/6 사용자 규칙 B): 다음 부 줄 앞에서부터 가용한 사람 — 이미 이 부에 있는 사람·
+//  여러 부 표시(54·1,2 등)·당번은 건너뛴다. 같은 판(본배치표+대바)에서 고르니 몇 번을 다시 돌려도 같은 사람이다.
+function _pickFromNext(nextRoster, thisRoster, k) {
+  const here = new Set((thisRoster || []).map(_occOf).filter(Boolean));
+  const out = [];
+  for (const c of nextRoster || []) {
+    if (out.length >= k) break;
+    const occ = _occOf(c);
+    if (!occ || here.has(occ)) continue;
+    if (/\(\s*(?:\d|54|당번|벌당)/.test(String(c))) continue;
+    out.push({ cell: String(c), occ });
+  }
+  return out;
+}
+function _rebuildBoardNo(vp) {
+  if (!vp.boardNo || typeof vp.boardNo !== 'object') return;
+  const bn = {};
+  (vp.part3Roster || []).forEach((c, i) => { const o = _occOf(c); if (o) bn[o] = i + 1; });
+  vp.boardNo = bn;
+}
+// 판독 결과(vp)에 저장된 보정을 얹는다. fresh = 같은 판의 1·2부 명단(대바 반영) — 부 사이 이동에 쓴다.
+function applyRelAdds(dayISO, part, vp, postedAt = 0, fresh = null) {
   if (!vp || !dayISO) return false;
   const all = loadJSON(REL_ADDS_FILE, {});
+  // ── 이 부가 '내준 부'인 경우(2부 ← 1부 보정): 1부로 올라간 사람을 이 부 줄에서 뺀다(뒤 사람이 당겨지고 스페어가 근무로).
+  const up = all[`${dayISO}|${Number(part) - 1}`];
+  if (up && !(postedAt && postedAt > up.at) && fresh && fresh[String(Number(part) - 1)] && Array.isArray(vp.part3Roster)) {
+    const r1 = fresh[String(Number(part) - 1)].roster || [];
+    const cut1 = Number(fresh[String(Number(part) - 1)].cutoffPosition) || Number(fresh[String(Number(part) - 1)].teamCount) || 0;
+    const spares1 = r1.slice(cut1).filter((x) => String(x || '').trim()).length;
+    const need = Math.max(0, up.keys.length - spares1);
+    const picks = _pickFromNext(vp.part3Roster, r1, need);
+    if (picks.length) {
+      const drop = new Set(picks.map((x) => x.cell));
+      vp.part3Roster = vp.part3Roster.filter((c) => !drop.has(String(c)));
+      vp.dabaLeft = [...new Set([...(vp.dabaLeft || []), ...picks.map((x) => x.occ)])];
+      const cut = Number(vp.cutoffPosition) || Number(vp.teamCount) || 0;
+      vp.cutoffName = cut && vp.part3Roster[cut - 1] ? _occOf(vp.part3Roster[cut - 1]) : vp.cutoffName;
+      _rebuildBoardNo(vp);
+      console.log(`·  [${part}부 팀 추가 보정] ${picks.map((x) => x.occ).join('·')} → ${Number(part) - 1}부로 올라감 — ${part}부 줄 당겨짐`);
+    }
+  }
   const key = `${dayISO}|${part}`, a = all[key];
   if (!a) return false;
   if (postedAt && postedAt > a.at) {
@@ -2002,25 +2043,26 @@ function applyRelAdds(dayISO, part, vp, postedAt = 0) {
   vp.teeTimes = [...new Set([...(vp.teeTimes || []).map(_pad5).filter(Boolean), ...add.map((k) => k.split('|')[0])])].sort();
   vp.cutoffPosition = merged.length; vp.teamCount = merged.length;
   // ★늘어난 팀에 들어오는 사람은 '조출 앞'에 선다 — 조출은 늘 그 부 맨 뒤(사용자 11/26).
-  //  스페어가 있으면 그 스페어가, 없으면(다른 부에서 올 사람) 빈 칸이 첫 조출 자리 앞에 끼어든다.
+  //  스페어가 있으면 그 스페어, 모자라면 다음 부 줄 앞사람(8/6 규칙 B), 그래도 없으면 빈 칸이 첫 조출 앞에 낀다.
   //  그러면 조출들은 뒤로 밀리고, 앞에 칸이 늘어난 만큼 티오프는 원래 그대로가 된다.
   if (Array.isArray(vp.part3Roster)) {
     const oldCut = merged.length - add.length;
     const work = vp.part3Roster.slice(0, oldCut), rest = vp.part3Roster.slice(oldCut);
-    const incoming = rest.slice(0, add.length);
+    const incoming = rest.slice(0, add.length).filter((x) => String(x || '').trim());
+    const nextR = fresh && fresh[String(Number(part) + 1)] ? fresh[String(Number(part) + 1)].roster : null;
+    if (incoming.length < add.length && nextR) {
+      const picks = _pickFromNext(nextR, vp.part3Roster, add.length - incoming.length);
+      incoming.push(...picks.map((x) => x.occ));
+      if (picks.length) console.log(`·  [${part}부 팀 추가 보정] 스페어가 모자라 ${Number(part) + 1}부 줄 앞 ${picks.map((x) => x.occ).join('·')} 을(를) 올립니다`);
+    }
     while (incoming.length < add.length) incoming.push('');
     let at = work.findIndex((c) => /\(\s*조출\s*\)/.test(String(c || '')));
     if (at < 0) at = work.length;
-    vp.part3Roster = [...work.slice(0, at), ...incoming, ...work.slice(at), ...rest.slice(add.length)];
-    // 보이는 번호(대바 번호표)도 새 자리로 — 조출들이 옛 번호로 남지 않게
-    if (vp.boardNo && typeof vp.boardNo === 'object') {
-      const bn = {};
-      vp.part3Roster.forEach((c, i) => { const m = String(c || '').match(/\(([가-힣]{2,4})\)/); const occ = m && !/조출|찾근|후출|선발|당번|54/.test(m[1]) ? m[1] : String(c || '').replace(/\(.*?\)/g, '').trim(); if (occ) bn[occ] = i + 1; });
-      vp.boardNo = bn;
-    }
+    vp.part3Roster = [...work.slice(0, at), ...incoming, ...work.slice(at), ...rest.slice(rest.slice(0, add.length).filter((x) => String(x || '').trim()).length)];
+    _rebuildBoardNo(vp);
   }
   const r = Array.isArray(vp.part3Roster) ? vp.part3Roster : [];
-  vp.cutoffName = r[merged.length - 1] ? String(r[merged.length - 1]).replace(/\(.*?\)/g, '').trim() : '';
+  vp.cutoffName = r[merged.length - 1] ? _occOf(r[merged.length - 1]) : '';
   console.log(`·  [${part}부 팀 추가 보정] ${a.msg.slice(0, 30)} → ${add.join(', ')} 끼워 넣고 ${merged.length}팀으로 시각순 재매칭`);
   return true;
 }
@@ -2760,7 +2802,8 @@ async function notifyForArticle(full, result = {}, opts = {}) {
       // ★board 레벨 부별 순번표 저장 — 모니터 판독검증·배치표 검수가 3부처럼 1·2부도 보고 고치게(재판독 0).
       const vp = outP.rawVerdict || {};
       if (!isFullBoard) fillPostDay(vp, full, p);   // ★날짜 없는 수정본 = 올린 날(11/26)
-      applyRelAdds(worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || '', p, vp, Number(full.writeDate) || 0);   // ★'몇 팀 추가' 보정(예약 기록 참고)
+      let _fresh12 = null; try { _fresh12 = await claudeMonitorParts(full, ['1', '2']); } catch { /* 없으면 부 사이 이동 안 함 */ }
+      applyRelAdds(worklog.labelToISO(vp.dateLabel || out.rawVerdict?.dateLabel || '') || '', p, vp, Number(full.writeDate) || 0, _fresh12);   // ★'몇 팀 추가' 보정(예약 기록 참고)
       // ★수정본이 명단을 반토막 내면 못 읽은 것(시간표만 있는 글) — 이 부는 예전 그대로 둔다(8/19 "2부 8팀 시간표" 사고).
       //  잠금이 이 가드를 대신하고 있었다 — 잠금을 풀었으니(11/26) 같은 보호를 여기에도 둔다.
       if (!isFullBoard && Array.isArray(vp.part3Roster) && vp.part3Roster.length) {
